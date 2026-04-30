@@ -1,0 +1,7 @@
+<view class="player-picker">
+  <input class="input" placeholder="搜索球员" value="{{keyword}}" bindinput="onInput" />
+  <view wx:for="{{players}}" wx:key="element" class="option" data-index="{{index}}" bindtap="onSelect">
+    <text>{{item.name || item.webName || '-'}}</text>
+    <text class="muted">{{item.team || item.position || ''}}</text>
+  </view>
+</view>

@@ -1,0 +1,32 @@
+<view class="page">
+  <view class="section live-hero">
+    <view>
+      <view class="eyebrow">LIVE CENTRE</view>
+      <view class="title">实时</view>
+      <view class="subtitle">比赛进行时追踪球队、比赛和联赛。</view>
+    </view>
+    <view class="gw-pill">GW {{event || '-'}}</view>
+  </view>
+
+  <view class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenCard" data-url="{{cards[0].url}}">
+    <view>
+      <view class="strip-label">{{entryId ? '当前球队' : '需要绑定球队'}}</view>
+      <view wx:if="{{entryId}}" class="strip-value">Entry #{{entryId}}</view>
+      <view wx:else class="strip-value">先选择 FPL Entry ID</view>
+    </view>
+    <text class="strip-action">{{entryId ? '查看' : '绑定'}}</text>
+  </view>
+
+  <view wx:for="{{cards}}" wx:key="url" class="card live-card" data-url="{{item.url}}" bindtap="onOpenCard">
+    <view>
+      <view class="card-meta">{{item.meta}}</view>
+      <view class="card-title">{{item.title}}</view>
+      <view class="card-desc">{{item.description}}</view>
+    </view>
+    <view class="card-side">
+      <text class="status-pill">{{item.status}}</text>
+      <text class="open-arrow">›</text>
+    </view>
+  </view>
+  <bottomNavBar active="live" />
+</view>

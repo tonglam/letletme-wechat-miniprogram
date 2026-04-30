@@ -1,0 +1,32 @@
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.filter-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  background: #ffffff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  box-sizing: border-box;
+}
+
+.filter-button {
+  flex-shrink: 0;
+  height: 72rpx;
+  margin: 0;
+  padding: 0 18rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #344054;
+  font-size: 24rpx;
+  line-height: 72rpx;
+}
+
+.filter-button.primary {
+  background: #111827;
+  color: #ffffff;
+}

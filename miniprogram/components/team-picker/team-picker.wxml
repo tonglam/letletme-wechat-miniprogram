@@ -1,0 +1,3 @@
+<picker mode="selector" range="{{names}}" bindchange="onChange">
+  <view class="picker">{{value || '选择球队'}}</view>
+</picker>

@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="section">
+    <view class="title">球员数据</view>
+    <view class="subtitle">搜索球员并进入详情。</view>
+  </view>
+
+  <view class="section">
+    <filter-bar keyword="{{keyword}}" placeholder="搜索球员" bind:search="onSearch" bind:reset="onRetry" />
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载球员" />
+  <view wx:else class="section card">
+    <app-empty-state wx:if="{{displayedPlayers.length === 0}}" title="暂无球员" description="调整搜索词或稍后刷新" />
+    <player-row wx:for="{{displayedPlayers}}" wx:key="code" player="{{item}}" showPrice="{{true}}" bind:open="onOpenPlayer" />
+  </view>
+  <bottomNavBar />
+</view>

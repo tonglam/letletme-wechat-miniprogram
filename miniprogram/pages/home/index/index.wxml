@@ -1,0 +1,144 @@
+<view class="page">
+  <view class="home-header section">
+    <view class="title">{{entry.entryName || entry.teamName || 'LetLetMe'}}</view>
+    <view class="subtitle">{{entry.playerName || '绑定球队后开始'}}</view>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载首页数据" />
+
+  <block wx:else>
+    <view wx:if="{{noticeText}}" class="notice-strip section">
+      <text class="notice-icon">i</text>
+      <text class="notice-text">{{noticeText}}</text>
+      <view class="notice-close" catchtap="onCloseNotice">×</view>
+    </view>
+
+    <view class="section">
+      <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
+    </view>
+
+    <view class="deadline-card section">
+      <view class="deadline-top">
+        <view>
+          <view class="deadline-label">GW{{nextGw || '-' }} Deadline</view>
+          <view class="deadline-time">{{deadline || '等待赛程更新'}}</view>
+        </view>
+        <view class="gw-pill">Current GW{{gw || '-'}}</view>
+      </view>
+      <view class="countdown">
+        <view class="countdown-item">
+          <text class="countdown-value">{{countdown.days}}</text>
+          <text class="countdown-label">天</text>
+        </view>
+        <view class="countdown-item">
+          <text class="countdown-value">{{countdown.hours}}</text>
+          <text class="countdown-label">时</text>
+        </view>
+        <view class="countdown-item">
+          <text class="countdown-value">{{countdown.minutes}}</text>
+          <text class="countdown-label">分</text>
+        </view>
+        <view class="countdown-item">
+          <text class="countdown-value">{{countdown.seconds}}</text>
+          <text class="countdown-label">秒</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section card price-card">
+      <view class="price-head">
+        <view>
+          <view class="section-title">身价变化</view>
+          <view class="section-subtitle">今日上涨 / 下跌</view>
+        </view>
+        <view class="section-link" catchtap="onOpenPriceChanges">更多</view>
+      </view>
+      <view class="price-groups">
+        <view class="price-group price-rise">
+          <view class="price-group-head">
+            <text>上涨</text>
+            <text class="price-count">{{priceRises.length}}</text>
+          </view>
+          <view wx:if="{{priceRises.length === 0}}" class="price-empty">暂无上涨</view>
+          <view wx:for="{{priceRises}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
+            <view class="price-player">
+              <view class="price-name-line">
+                <text wx:if="{{item.position}}" class="position-badge">{{item.position}}</text>
+                <text class="price-name">{{item.name}}</text>
+              </view>
+              <text class="price-team">{{item.team}}</text>
+            </view>
+            <view class="price-values">
+              <text class="price-current price-up">{{item.newPrice}}</text>
+              <text class="price-change price-up">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="price-group price-fall">
+          <view class="price-group-head">
+            <text>下跌</text>
+            <text class="price-count">{{priceFalls.length}}</text>
+          </view>
+          <view wx:if="{{priceFalls.length === 0}}" class="price-empty">暂无下跌</view>
+          <view wx:for="{{priceFalls}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
+            <view class="price-player">
+              <view class="price-name-line">
+                <text wx:if="{{item.position}}" class="position-badge">{{item.position}}</text>
+                <text class="price-name">{{item.name}}</text>
+              </view>
+              <text class="price-team">{{item.team}}</text>
+            </view>
+            <view class="price-values">
+              <text class="price-current price-down">{{item.newPrice}}</text>
+              <text class="price-change price-down">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{gameweekStats.length > 0}}" class="section card gw-stats-card">
+      <view class="gw-stats-head">
+        <view class="section-title">GW{{gw || '-'}} 数据</view>
+      </view>
+      <view class="gw-stats-grid">
+        <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
+          <text class="gw-stat-label">{{item.label}}</text>
+          <text class="gw-stat-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section card fixture-card">
+      <view class="fixture-head">
+        <view class="section-title">GW{{selectedFixtureGw || nextGw || '-'}} 赛程</view>
+        <view class="fixture-stepper">
+          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw">
+            <text decode="{{true}}">&lt;</text>
+          </view>
+          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw">
+            <text decode="{{true}}">&gt;</text>
+          </view>
+        </view>
+      </view>
+      <app-loading wx:if="{{fixtureLoading}}" text="加载赛程" />
+      <app-empty-state wx:elif="{{fixtureRows.length === 0}}" title="暂无赛程" description="稍后刷新查看最新赛程" />
+      <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
+        <view class="fixture-team home-team">
+          <text class="team-name">{{item.homeName}}</text>
+          <text wx:if="{{item.homeDifficulty}}" class="difficulty difficulty-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
+        </view>
+        <view class="fixture-center">
+          <text class="fixture-vs">vs</text>
+          <text class="fixture-time">{{item.kickoffLabel}}</text>
+        </view>
+        <view class="fixture-team away-team">
+          <text class="team-name">{{item.awayName}}</text>
+          <text wx:if="{{item.awayDifficulty}}" class="difficulty difficulty-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+  <bottomNavBar active="home" />
+</view>

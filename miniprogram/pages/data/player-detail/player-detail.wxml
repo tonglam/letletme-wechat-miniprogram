@@ -1,0 +1,17 @@
+<view class="page">
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载球员详情" />
+  <view wx:else class="section card">
+    <view class="title">{{player.name || '球员详情'}}</view>
+    <view class="subtitle">{{player.team || ''}} {{player.position || ''}}</view>
+    <view class="detail-row">
+      <text>总分</text>
+      <text>{{player.totalPoints || '-'}}</text>
+    </view>
+    <view class="detail-row">
+      <text>价格</text>
+      <text>{{player.price || '-'}}</text>
+    </view>
+  </view>
+  <bottomNavBar />
+</view>

@@ -1,0 +1,5 @@
+<view class="filter-bar">
+  <input class="filter-input" placeholder="{{placeholder}}" value="{{keyword}}" confirm-type="search" bindinput="onInput" bindconfirm="onConfirm" />
+  <button class="filter-button primary" size="mini" bindtap="onSubmit">{{actionText}}</button>
+  <button class="filter-button" size="mini" bindtap="onReset">重置</button>
+</view>

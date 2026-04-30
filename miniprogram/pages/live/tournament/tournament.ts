@@ -1,0 +1,554 @@
+import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
+import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
+import type { LiveTournamentRow } from "../../../models/live";
+import type { TournamentOption } from "../../../models/tournament";
+import { routes } from "../../../config/routes";
+import { goToEntrySearch } from "../../../utils/navigation";
+import {
+  filterTournamentRowsByOwnership,
+  filterTournamentRowsByTeamExposure,
+  getTournamentTeamOptions,
+  type TournamentCaptainMode,
+  type TournamentOwnershipScope,
+  type TournamentTeamOption
+} from "../../../services/live-tournament";
+
+type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
+
+const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
+const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
+
+interface SortOption {
+  key: SortKey;
+  label: string;
+}
+
+interface DisplayTournamentRow extends LiveTournamentRow {
+  visibleRank: number;
+  displayLive: string;
+  displayNet: string;
+  displayTotal: string;
+  metaText: string;
+}
+
+interface OwnershipPlayerOption {
+  element: number;
+  name: string;
+  meta: string;
+  teamShortName: string;
+  teamName: string;
+  position: string;
+}
+
+interface LiveTournamentData {
+  loading: boolean;
+  error: string;
+  event: number;
+  maxGw: number;
+  entryId?: number;
+  keyword: string;
+  tournaments: TournamentOption[];
+  tournamentNames: string[];
+  selectedTournamentIndex: number;
+  selectedTournament?: TournamentOption;
+  rows: DisplayTournamentRow[];
+  displayedRows: DisplayTournamentRow[];
+  sortOptions: SortOption[];
+  sortKey: SortKey;
+  sortDesc: boolean;
+  filteredCount: number;
+  ownershipExpanded: boolean;
+  ownershipScope: TournamentOwnershipScope;
+  ownershipCaptainMode: TournamentCaptainMode;
+  ownershipPlayers: OwnershipPlayerOption[];
+  ownershipTeamOptions: TournamentTeamOption[];
+  ownershipTeamNames: string[];
+  selectedOwnershipTeamIndex: number;
+  selectedOwnershipTeam: TournamentTeamOption | null;
+  ownershipPositionOptions: string[];
+  selectedOwnershipPositionIndex: number;
+  selectedOwnershipPosition: string;
+  ownershipAvailablePlayers: OwnershipPlayerOption[];
+  ownershipAvailablePlayerNames: string[];
+  selectedOwnershipPlayers: OwnershipPlayerOption[];
+  ownershipPlayerNames: string[];
+  ownershipSummary: string;
+  teamExposureExpanded: boolean;
+  teamExposureScope: TournamentOwnershipScope;
+  teamExposureTeams: TournamentTeamOption[];
+  teamExposureTeamNames: string[];
+  selectedTeamExposureIndex: number;
+  selectedTeamExposure: TournamentTeamOption | null;
+  teamExposureCount: number;
+  teamExposureSummary: string;
+  pageSize: number;
+  hasMore: boolean;
+  lastUpdated: string;
+  columns: Array<{ key: string; label: string }>;
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function textValue(value: unknown, fallback = "-"): string {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return String(value);
+}
+
+function formatTime(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
+  const livePoints = numberValue(row.livePoints);
+  const liveNetPoints = numberValue(row.liveNetPoints, livePoints);
+  const totalPoints = numberValue(row.liveTotalPoints ?? row.totalPoints);
+  const transferCost = numberValue(row.transferCost);
+  const played = numberValue(row.played);
+  const toPlay = numberValue(row.toPlay);
+  const chip = textValue(row.chip, "无");
+  const captain = textValue(row.captainName, "无队长");
+
+  return {
+    ...row,
+    livePoints,
+    liveNetPoints,
+    totalPoints,
+    transferCost,
+    overallRank: row.overallRank ?? row.rank,
+    visibleRank: 0,
+    displayLive: `${livePoints}`,
+    displayNet: `${liveNetPoints}`,
+    displayTotal: `${totalPoints}`,
+    metaText: `队长 ${captain} · 开卡 ${chip} · 剁手 ${transferCost} · ${played}/${played + toPlay}`
+  };
+}
+
+function sortRows(rows: DisplayTournamentRow[], key: SortKey, desc: boolean): DisplayTournamentRow[] {
+  const direction = desc ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    if (key === "entryName") {
+      return textValue(a.entryName, "").localeCompare(textValue(b.entryName, "")) * direction;
+    }
+    const fallback = key === "overallRank" ? Number.MAX_SAFE_INTEGER : 0;
+    const left = numberValue(a[key], fallback);
+    const right = numberValue(b[key], fallback);
+    const compared = left === right ? numberValue(a.entry, Number.MAX_SAFE_INTEGER) - numberValue(b.entry, Number.MAX_SAFE_INTEGER) : left - right;
+    return compared * direction;
+  });
+}
+
+function formatTeamName(team: TournamentTeamOption): string {
+  return `${team.name}${team.shortName === team.name ? "" : ` (${team.shortName})`}`;
+}
+
+function collectOwnershipPlayers(rows: DisplayTournamentRow[]): OwnershipPlayerOption[] {
+  const players = new Map<number, OwnershipPlayerOption>();
+  rows.forEach((row) => {
+    (row.picks || []).forEach((pick) => {
+      const element = numberValue(pick.element);
+      if (!element || players.has(element)) {
+        return;
+      }
+      const teamShortName = pick.teamShortName || "";
+      const teamName = pick.team || teamShortName;
+      const position = pick.elementTypeName || pick.position || "未知";
+      players.set(element, {
+        element,
+        name: pick.webName || pick.name || `#${element}`,
+        meta: `${teamShortName}${position ? ` · ${position}` : ""}`,
+        teamShortName,
+        teamName,
+        position
+      });
+    });
+  });
+  return [...players.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function collectOwnershipPositions(players: OwnershipPlayerOption[], selectedTeam?: TournamentTeamOption | null): string[] {
+  if (!selectedTeam) {
+    return [];
+  }
+  return [...new Set(players
+    .filter((player) => player.teamShortName === selectedTeam.shortName)
+    .map((player) => player.position)
+    .filter((position) => position))]
+    .sort();
+}
+
+function filterOwnershipPlayers(
+  players: OwnershipPlayerOption[],
+  selectedTeam?: TournamentTeamOption | null,
+  selectedPosition = ""
+): OwnershipPlayerOption[] {
+  if (!selectedTeam || !selectedPosition) {
+    return [];
+  }
+  return players.filter((player) => (
+    player.teamShortName === selectedTeam.shortName
+    && player.position === selectedPosition
+  ));
+}
+
+Page({
+  data: {
+    loading: false,
+    error: "",
+    event: 0,
+    maxGw: 1,
+    entryId: undefined,
+    keyword: "",
+    tournaments: [],
+    tournamentNames: [],
+    selectedTournamentIndex: 0,
+    selectedTournament: undefined,
+    rows: [],
+    displayedRows: [],
+    sortOptions: [
+      { key: "livePoints", label: "GW得分" },
+      { key: "liveNetPoints", label: "GW净分" },
+      { key: "transferCost", label: "扣分" },
+      { key: "played", label: "已上场" },
+      { key: "totalPoints", label: "总分" },
+      { key: "overallRank", label: "总排名" },
+      { key: "entryName", label: "球队" }
+    ],
+    sortKey: "livePoints",
+    sortDesc: true,
+    filteredCount: 0,
+    ownershipExpanded: false,
+    ownershipScope: "any",
+    ownershipCaptainMode: "any",
+    ownershipPlayers: [],
+    ownershipTeamOptions: [],
+    ownershipTeamNames: [],
+    selectedOwnershipTeamIndex: 0,
+    selectedOwnershipTeam: null,
+    ownershipPositionOptions: [],
+    selectedOwnershipPositionIndex: 0,
+    selectedOwnershipPosition: "",
+    ownershipAvailablePlayers: [],
+    ownershipAvailablePlayerNames: [],
+    selectedOwnershipPlayers: [],
+    ownershipPlayerNames: [],
+    ownershipSummary: "未筛选",
+    teamExposureExpanded: false,
+    teamExposureScope: "any",
+    teamExposureTeams: [],
+    teamExposureTeamNames: [],
+    selectedTeamExposureIndex: 0,
+    selectedTeamExposure: null,
+    teamExposureCount: 1,
+    teamExposureSummary: "未筛选",
+    pageSize: 20,
+    hasMore: false,
+    lastUpdated: "",
+    columns: [
+      { key: "rank", label: "序" },
+      { key: "entryName", label: "球队" },
+      { key: "livePoints", label: "GW" },
+      { key: "totalPoints", label: "总分" }
+    ]
+  } as LiveTournamentData,
+
+  onLoad() {
+    const app = getApp<IAppOption>();
+    const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
+    this.loadTournaments();
+  },
+
+  onPullDownRefresh() {
+    this.loadRows().finally(() => wx.stopPullDownRefresh());
+  },
+
+  onReachBottom() {
+    this.loadMore();
+  },
+
+  async loadTournaments() {
+    const entryId = this.data.entryId;
+    if (!entryId) {
+      this.setData({ error: "请先选择 FPL 球队" });
+      return;
+    }
+
+    this.setData({ loading: true, error: "" });
+    try {
+      const tournaments = await getEntryPointsRaceTournament(entryId);
+      const storedId = wx.getStorageSync(SELECTED_TOURNAMENT_ID_KEY);
+      const storedIndex = tournaments.findIndex((tournament) => String(tournament.id) === String(storedId));
+      const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
+      const selectedTournament = tournaments[selectedTournamentIndex];
+      this.setData({
+        tournaments,
+        tournamentNames: tournaments.map((tournament) => tournament.name),
+        selectedTournamentIndex,
+        selectedTournament
+      });
+      this.persistSelectedTournament(selectedTournament);
+      await this.loadRows();
+    } catch (error) {
+      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+    } finally {
+      this.setData({ loading: false });
+    }
+  },
+
+  async loadRows() {
+    const selected = this.data.selectedTournament;
+    if (!selected) {
+      this.setData({ rows: [], displayedRows: [], hasMore: false });
+      return;
+    }
+
+    this.setData({ loading: true, error: "" });
+    try {
+      const rows = this.data.keyword
+      ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword)
+      : await getLivePointsByTournament(selected.id, this.data.event);
+      this.applyRows(rows.map(normalizeRow), true);
+    } catch (error) {
+      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+    } finally {
+      this.setData({ loading: false });
+    }
+  },
+
+  applyRows(rows: DisplayTournamentRow[], resetPage: boolean) {
+    const teamOptions = getTournamentTeamOptions(rows);
+    const selectedTeamExposure = this.data.selectedTeamExposure
+      ? teamOptions.find((team) => team.shortName === this.data.selectedTeamExposure?.shortName)
+      : null;
+    const ownershipPlayers = collectOwnershipPlayers(rows);
+    const selectedOwnershipTeam = this.data.selectedOwnershipTeam
+      ? teamOptions.find((team) => team.shortName === this.data.selectedOwnershipTeam?.shortName)
+      : null;
+    const ownershipPositionOptions = collectOwnershipPositions(ownershipPlayers, selectedOwnershipTeam);
+    const selectedOwnershipPosition = ownershipPositionOptions.includes(this.data.selectedOwnershipPosition)
+      ? this.data.selectedOwnershipPosition
+      : "";
+    const ownershipAvailablePlayers = filterOwnershipPlayers(ownershipPlayers, selectedOwnershipTeam, selectedOwnershipPosition);
+    let filteredRows = filterTournamentRowsByOwnership(rows, {
+      playerIds: this.data.selectedOwnershipPlayers.map((player) => player.element),
+      scope: this.data.ownershipScope,
+      captainMode: this.data.ownershipCaptainMode
+    }) as DisplayTournamentRow[];
+    filteredRows = filterTournamentRowsByTeamExposure(filteredRows, {
+      teamShortName: selectedTeamExposure?.shortName || "",
+      exactCount: this.data.teamExposureCount,
+      scope: this.data.teamExposureScope
+    }) as DisplayTournamentRow[];
+    const sortedRows = sortRows(filteredRows, this.data.sortKey, this.data.sortDesc).map((row, index) => ({
+      ...row,
+      visibleRank: index + 1
+    }));
+    const nextSize = resetPage ? this.data.pageSize : this.data.displayedRows.length + this.data.pageSize;
+    this.setData({
+      rows,
+      displayedRows: sortedRows.slice(0, nextSize),
+      filteredCount: sortedRows.length,
+      hasMore: sortedRows.length > nextSize,
+      ownershipPlayers,
+      ownershipTeamOptions: teamOptions,
+      ownershipTeamNames: teamOptions.map(formatTeamName),
+      selectedOwnershipTeam,
+      selectedOwnershipTeamIndex: selectedOwnershipTeam ? teamOptions.findIndex((team) => team.shortName === selectedOwnershipTeam.shortName) : 0,
+      ownershipPositionOptions,
+      selectedOwnershipPosition,
+      selectedOwnershipPositionIndex: selectedOwnershipPosition ? ownershipPositionOptions.findIndex((position) => position === selectedOwnershipPosition) : 0,
+      ownershipAvailablePlayers,
+      ownershipAvailablePlayerNames: ownershipAvailablePlayers.map((player) => player.name),
+      ownershipPlayerNames: this.data.selectedOwnershipPlayers.map((player) => `${player.name}${player.meta ? ` (${player.meta})` : ""}`),
+      ownershipSummary: this.data.selectedOwnershipPlayers.length
+        ? this.data.selectedOwnershipPlayers.map((player) => player.name).join("、")
+        : "未筛选",
+      teamExposureTeams: teamOptions,
+      teamExposureTeamNames: teamOptions.map(formatTeamName),
+      selectedTeamExposure,
+      selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
+      teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
+      lastUpdated: formatTime(new Date())
+    });
+  },
+
+  persistSelectedTournament(selected?: TournamentOption) {
+    if (!selected) {
+      return;
+    }
+    wx.setStorageSync(SELECTED_TOURNAMENT_ID_KEY, selected.id);
+    wx.setStorageSync(SELECTED_TOURNAMENT_NAME_KEY, selected.name);
+  },
+
+  onKeyword(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    this.setData({ keyword: event.detail.keyword });
+  },
+
+  onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    if (event) {
+      this.setData({ keyword: event.detail.keyword });
+    }
+    this.loadRows();
+  },
+
+  onResetSearch() {
+    this.setData({ keyword: "" });
+    this.loadRows();
+  },
+
+  onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    this.setData({ event: event.detail.value });
+    this.loadRows();
+  },
+
+  onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    const selectedTournamentIndex = Number(event.detail.value);
+    const selectedTournament = this.data.tournaments[selectedTournamentIndex];
+    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [] });
+    this.persistSelectedTournament(selectedTournament);
+    this.loadRows();
+  },
+
+  onSortTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { key: SortKey }>) {
+    const sortKey = event.currentTarget.dataset.key;
+    const sortDesc = this.data.sortKey === sortKey ? !this.data.sortDesc : sortKey !== "overallRank" && sortKey !== "entryName";
+    this.setData({ sortKey, sortDesc });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onToggleOwnership() {
+    this.setData({ ownershipExpanded: !this.data.ownershipExpanded });
+  },
+
+  onOwnershipScopeTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { scope: TournamentOwnershipScope }>) {
+    this.setData({ ownershipScope: event.currentTarget.dataset.scope });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onOwnershipCaptainTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { mode: TournamentCaptainMode }>) {
+    this.setData({ ownershipCaptainMode: event.currentTarget.dataset.mode });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onOwnershipTeamChange(event: WechatMiniprogram.PickerChange) {
+    const selectedOwnershipTeamIndex = Number(event.detail.value);
+    const selectedOwnershipTeam = this.data.ownershipTeamOptions[selectedOwnershipTeamIndex];
+    const ownershipPositionOptions = collectOwnershipPositions(this.data.ownershipPlayers, selectedOwnershipTeam);
+    this.setData({
+      selectedOwnershipTeamIndex,
+      selectedOwnershipTeam,
+      ownershipPositionOptions,
+      selectedOwnershipPositionIndex: 0,
+      selectedOwnershipPosition: "",
+      ownershipAvailablePlayers: [],
+      ownershipAvailablePlayerNames: []
+    });
+  },
+
+  onOwnershipPositionChange(event: WechatMiniprogram.PickerChange) {
+    const selectedOwnershipPositionIndex = Number(event.detail.value);
+    const selectedOwnershipPosition = this.data.ownershipPositionOptions[selectedOwnershipPositionIndex] || "";
+    const ownershipAvailablePlayers = filterOwnershipPlayers(
+      this.data.ownershipPlayers,
+      this.data.selectedOwnershipTeam,
+      selectedOwnershipPosition
+    );
+    this.setData({
+      selectedOwnershipPositionIndex,
+      selectedOwnershipPosition,
+      ownershipAvailablePlayers,
+      ownershipAvailablePlayerNames: ownershipAvailablePlayers.map((player) => player.name)
+    });
+  },
+
+  onOwnershipPlayerChange(event: WechatMiniprogram.PickerChange) {
+    const player = this.data.ownershipAvailablePlayers[Number(event.detail.value)];
+    if (!player || this.data.selectedOwnershipPlayers.some((selected) => selected.element === player.element)) {
+      return;
+    }
+    this.setData({ selectedOwnershipPlayers: [...this.data.selectedOwnershipPlayers, player] });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onRemoveOwnershipPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { element: string }>) {
+    const element = Number(event.currentTarget.dataset.element);
+    this.setData({ selectedOwnershipPlayers: this.data.selectedOwnershipPlayers.filter((player) => player.element !== element) });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onClearOwnershipFilter() {
+    this.setData({
+      selectedOwnershipPlayers: [],
+      ownershipScope: "any",
+      ownershipCaptainMode: "any",
+      selectedOwnershipTeamIndex: 0,
+      selectedOwnershipTeam: null,
+      selectedOwnershipPositionIndex: 0,
+      selectedOwnershipPosition: "",
+      ownershipAvailablePlayers: [],
+      ownershipAvailablePlayerNames: []
+    });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onToggleTeamExposure() {
+    this.setData({ teamExposureExpanded: !this.data.teamExposureExpanded });
+  },
+
+  onTeamExposureScopeTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { scope: TournamentOwnershipScope }>) {
+    this.setData({ teamExposureScope: event.currentTarget.dataset.scope });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onTeamExposureTeamChange(event: WechatMiniprogram.PickerChange) {
+    const selectedTeamExposureIndex = Number(event.detail.value);
+    const selectedTeamExposure = this.data.teamExposureTeams[selectedTeamExposureIndex];
+    this.setData({ selectedTeamExposureIndex, selectedTeamExposure });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onTeamExposureCountTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { count: string }>) {
+    this.setData({ teamExposureCount: Number(event.currentTarget.dataset.count) });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onClearTeamExposureFilter() {
+    this.setData({
+      selectedTeamExposureIndex: 0,
+      selectedTeamExposure: null,
+      teamExposureCount: 1,
+      teamExposureScope: "any"
+    });
+    this.applyRows(this.data.rows, true);
+  },
+
+  loadMore() {
+    if (!this.data.hasMore) {
+      return;
+    }
+    this.applyRows(this.data.rows, false);
+  },
+
+  onOpenEntry(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { entry: string }>) {
+    const entry = Number(event.currentTarget.dataset.entry);
+    if (!Number.isFinite(entry) || entry <= 0) {
+      return;
+    }
+    wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
+  },
+
+  onRetry() {
+    this.loadTournaments();
+  },
+
+  onChooseEntry() {
+    goToEntrySearch();
+  }
+});

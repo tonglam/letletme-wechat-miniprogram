@@ -1,0 +1,8 @@
+.picker {
+  min-height: 72rpx;
+  padding: 18rpx 20rpx;
+  background: #ffffff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  box-sizing: border-box;
+}

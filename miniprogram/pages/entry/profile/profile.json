@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "球队资料",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-loading": "../../../components/app-loading/app-loading",
+    "app-error-state": "../../../components/app-error-state/app-error-state",
+    "entry-card": "../../../components/entry-card/entry-card"
+  }
+}

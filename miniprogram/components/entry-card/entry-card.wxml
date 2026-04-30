@@ -1,0 +1,36 @@
+<view class="entry-card">
+  <view wx:if="{{entry && (entry.entry || entry.entryId || entry.entryName || entry.teamName)}}" class="{{rich ? 'entry-content entry-content-rich' : 'entry-content'}}" bindtap="onOpen">
+    <view class="entry-main">
+      <view class="entry-head">
+        <view class="entry-name-block">
+          <view class="entry-title">{{entry.entryName || entry.teamName || '已选择球队'}}</view>
+          <view class="entry-subtitle">{{entry.playerName || ''}}</view>
+        </view>
+        <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">切换</button>
+      </view>
+
+      <view wx:if="{{rich && entryMetaText}}" class="entry-meta-line">{{entryMetaText}}</view>
+
+      <view wx:if="{{rich}}" class="entry-stat-grid">
+        <view wx:for="{{statRows}}" wx:key="label" class="entry-stat">
+          <text class="entry-stat-label">{{item.label}}</text>
+          <text class="entry-stat-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+    
+    <view wx:if="{{!rich}}" class="entry-meta">
+      <text wx:if="{{entry.totalPoints}}">{{entry.totalPoints}} pts</text>
+      <text wx:elif="{{entry.entry || entry.entryId}}">#{{entry.entry || entry.entryId}}</text>
+    </view>
+  </view>
+
+  <view wx:else class="entry-empty" bindtap="onChange">
+    <view>
+      <view class="entry-title">未选择球队</view>
+      <view class="entry-subtitle">输入 FPL Entry ID 开始使用</view>
+    </view>
+    <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">绑定</button>
+  </view>
+  <button wx:if="{{!rich && !compact}}" class="entry-action" size="mini" bindtap="onChange">切换</button>
+</view>

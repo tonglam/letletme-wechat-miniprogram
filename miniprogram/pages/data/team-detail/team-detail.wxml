@@ -1,0 +1,13 @@
+<view class="page">
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载球队详情" />
+  <view wx:else class="section card">
+    <view class="title">{{team.name || '球队详情'}}</view>
+    <view class="subtitle">{{team.shortName || ''}}</view>
+    <view class="detail-row">
+      <text>强度</text>
+      <text>{{team.strength || '-'}}</text>
+    </view>
+  </view>
+  <bottomNavBar />
+</view>

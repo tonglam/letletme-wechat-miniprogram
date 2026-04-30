@@ -1,0 +1,6 @@
+<picker mode="selector" range="{{options}}" value="{{selectedIndex}}" bindchange="onPickerChange">
+  <view class="gw-picker">
+    <text>{{label}}</text>
+    <text class="gw-picker-action">切换</text>
+  </view>
+</picker>

@@ -1,0 +1,145 @@
+<view class="page">
+  <view class="section">
+    <view class="title">身价变化</view>
+    <view class="subtitle">查看每日涨跌，或选择球员查看身价历史。</view>
+  </view>
+
+  <view class="section mode-tabs">
+    <view class="mode-tab {{activeMode === 'daily' ? 'active' : ''}}" data-mode="daily" bindtap="onModeChange">每日变化</view>
+    <view class="mode-tab {{activeMode === 'player' ? 'active' : ''}}" data-mode="player" bindtap="onModeChange">球员历史</view>
+  </view>
+
+  <block wx:if="{{activeMode === 'daily'}}">
+    <view class="section card control-card">
+      <view>
+        <view class="field-label">变化日期</view>
+        <view class="field-help">选择日期后自动刷新当日涨跌。</view>
+      </view>
+      <picker mode="date" value="{{changeDate}}" bindchange="onDateChange">
+        <view class="date-picker">
+          <text>{{changeDate}}</text>
+          <text class="picker-action">切换</text>
+        </view>
+      </picker>
+    </view>
+
+    <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+    <app-loading wx:elif="{{loading}}" text="加载身价变化" />
+    <view wx:else class="price-columns section">
+      <view class="card price-panel rise-panel">
+        <view class="panel-head">
+          <text>上涨</text>
+          <text class="panel-count">{{riseChanges.length}}</text>
+        </view>
+        <app-empty-state wx:if="{{riseChanges.length === 0}}" title="暂无上涨" description="这一天没有球员涨价" />
+        <view wx:for="{{riseChanges}}" wx:key="element" class="price-change-row">
+          <view class="change-main">
+            <view class="change-player">{{item.name || item.playerName || '-'}}</view>
+            <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
+          </view>
+          <view class="change-side">
+            <text class="price-arrow">{{item.priceText}}</text>
+            <text class="movement rise">{{item.changeText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="card price-panel fall-panel">
+        <view class="panel-head">
+          <text>下跌</text>
+          <text class="panel-count">{{fallChanges.length}}</text>
+        </view>
+        <app-empty-state wx:if="{{fallChanges.length === 0}}" title="暂无下跌" description="这一天没有球员降价" />
+        <view wx:for="{{fallChanges}}" wx:key="element" class="price-change-row">
+          <view class="change-main">
+            <view class="change-player">{{item.name || item.playerName || '-'}}</view>
+            <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
+          </view>
+          <view class="change-side">
+            <text class="price-arrow">{{item.priceText}}</text>
+            <text class="movement fall">{{item.changeText}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="section card picker-card">
+      <view class="picker-head">
+        <view>
+          <view class="field-label">选择球员</view>
+          <view class="field-help">可按球队、位置或名字筛选。</view>
+        </view>
+        <button wx:if="{{selectedPlayer}}" class="clear-button" size="mini" plain bindtap="onClearSelectedPlayer">清除</button>
+      </view>
+
+      <view class="filter-grid">
+        <picker mode="selector" range="{{teamOptionNames}}" value="{{selectedTeamIndex}}" bindchange="onTeamFilterChange">
+          <view class="filter-picker">{{teamOptionNames[selectedTeamIndex] || '全部球队'}}</view>
+        </picker>
+        <picker mode="selector" range="{{positionOptionNames}}" value="{{selectedPositionIndex}}" bindchange="onPositionFilterChange">
+          <view class="filter-picker">{{positionOptionNames[selectedPositionIndex] || '全部位置'}}</view>
+        </picker>
+      </view>
+
+      <view class="search-box">
+        <input class="search-input" placeholder="搜索球员、球队或位置" value="{{playerKeyword}}" bindinput="onPlayerKeywordInput" />
+        <view wx:if="{{playerKeyword}}" class="search-clear" catchtap="onClearPlayerKeyword">×</view>
+      </view>
+
+      <view wx:if="{{selectedPlayer}}" class="selected-player">
+        <view>
+          <view class="selected-name">{{selectedPlayer.name}}</view>
+          <view class="selected-meta">{{selectedPlayer.teamName || selectedPlayer.team || ''}} · {{selectedPlayer.position || ''}}</view>
+        </view>
+        <view class="selected-price">当前 {{selectedPlayer.priceText || '-'}}</view>
+      </view>
+
+      <app-error-state wx:if="{{playersError}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
+      <app-loading wx:elif="{{playerLoading}}" text="加载球员列表" />
+      <view wx:else>
+        <view wx:if="{{!playerListReady}}" class="player-list-placeholder">请选择球队和位置后显示球员列表。</view>
+        <view wx:elif="{{!playerListVisible}}" class="player-list-placeholder">已选择球员。调整筛选或清除当前球员后可重新选择。</view>
+        <block wx:else>
+          <view class="result-count">显示 {{filteredPlayers.length}} / {{filteredPlayerCount}} 名球员</view>
+          <app-empty-state wx:if="{{filteredPlayers.length === 0}}" title="暂无球员" description="调整搜索、球队或位置筛选" />
+          <view wx:for="{{filteredPlayers}}" wx:key="element" class="player-option {{selectedPlayer && selectedPlayer.element === item.element ? 'selected' : ''}}" data-index="{{index}}" bindtap="onSelectPlayer">
+            <view class="player-option-main">
+              <view class="player-option-name">{{item.name}}</view>
+              <view class="player-option-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
+            </view>
+            <view class="player-option-side">{{item.priceText}}</view>
+          </view>
+        </block>
+      </view>
+    </view>
+
+    <view class="section card history-card">
+      <view class="panel-head">
+        <text>身价历史</text>
+        <text wx:if="{{historyRows.length}}" class="panel-count">{{historyRows.length}}</text>
+      </view>
+
+      <view wx:if="{{!selectedPlayer}}" class="history-placeholder">选择一个球员后显示历史身价变化。</view>
+      <app-error-state wx:elif="{{historyError}}" message="{{historyError}}" bind:retry="onRetryHistory" />
+      <app-loading wx:elif="{{historyLoading}}" text="加载球员身价历史" />
+      <app-empty-state wx:elif="{{historyRows.length === 0}}" title="暂无历史" description="该球员暂时没有身价变化记录" />
+      <view wx:else>
+        <view wx:for="{{historyRows}}" wx:key="changeDate" class="history-row">
+          <view class="history-main">
+            <view class="history-date">{{item.changeDateText || item.changeDate}}</view>
+            <view class="history-price">{{item.priceText}}</view>
+            <view wx:if="{{item.transferText}}" class="history-transfer">{{item.transferText}}</view>
+          </view>
+          <view class="history-side">
+            <text class="history-movement {{item.movementClass}}">{{item.movementText}}</text>
+            <text class="history-change {{item.movementClass}}">{{item.changeText}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <bottomNavBar active="data" />
+</view>

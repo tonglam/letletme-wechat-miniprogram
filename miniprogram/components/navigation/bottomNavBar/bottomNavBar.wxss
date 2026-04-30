@@ -1,0 +1,4 @@
+/* bottomNavBar styles */
+.bottomNavBar {
+  margin-top: 50px;
+}

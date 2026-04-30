@@ -1,0 +1,32 @@
+.fixture-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 96rpx;
+  padding: 8rpx 12rpx;
+  border-radius: 8rpx;
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.home-away {
+  opacity: 0.8;
+}
+
+.difficulty-easy {
+  background: #16a34a;
+}
+
+.difficulty-medium {
+  background: #667085;
+}
+
+.difficulty-hard {
+  background: #dc2626;
+}
+
+.difficulty-very-hard {
+  background: #7f1d1d;
+}

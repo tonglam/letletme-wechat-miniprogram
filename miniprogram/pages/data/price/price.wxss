@@ -1,0 +1,275 @@
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12rpx;
+  padding: 8rpx;
+  background: #e5e7eb;
+  border-radius: 8rpx;
+}
+
+.mode-tab {
+  height: 72rpx;
+  border-radius: 6rpx;
+  color: #475467;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 72rpx;
+  text-align: center;
+}
+
+.mode-tab.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 8rpx 18rpx rgba(17, 24, 39, 0.08);
+}
+
+.control-card,
+.picker-head,
+.date-picker,
+.panel-head,
+.price-change-row,
+.selected-player,
+.player-option,
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field-label {
+  color: #111827;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.field-help {
+  margin-top: 6rpx;
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.date-picker {
+  min-width: 250rpx;
+  height: 72rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d0d5dd;
+  border-radius: 8rpx;
+  color: #111827;
+  font-size: 24rpx;
+  box-sizing: border-box;
+}
+
+.picker-action {
+  margin-left: 20rpx;
+  color: #2563eb;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.price-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20rpx;
+}
+
+.price-panel {
+  padding-bottom: 8rpx;
+}
+
+.panel-head {
+  margin-bottom: 14rpx;
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.panel-count {
+  min-width: 44rpx;
+  height: 36rpx;
+  padding: 0 10rpx;
+  border-radius: 999rpx;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 22rpx;
+  line-height: 36rpx;
+  text-align: center;
+}
+
+.price-change-row,
+.history-row {
+  padding: 20rpx 0;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.change-main,
+.history-main,
+.player-option-main {
+  min-width: 0;
+  padding-right: 18rpx;
+}
+
+.change-player,
+.player-option-name,
+.selected-name,
+.history-date {
+  overflow: hidden;
+  color: #111827;
+  font-size: 26rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-meta,
+.player-option-meta,
+.selected-meta,
+.history-transfer {
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: #667085;
+  font-size: 22rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-side,
+.history-side {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.price-arrow,
+.history-price {
+  display: block;
+  color: #344054;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.movement,
+.history-movement,
+.history-change {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.rise,
+.movement-rise {
+  color: #047857;
+}
+
+.fall,
+.movement-fall {
+  color: #be123c;
+}
+
+.movement-flat {
+  color: #667085;
+}
+
+.picker-card {
+  padding-bottom: 8rpx;
+}
+
+.clear-button {
+  flex-shrink: 0;
+  margin: 0;
+  color: #475467;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+
+.filter-picker,
+.search-input {
+  height: 72rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d0d5dd;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #111827;
+  font-size: 24rpx;
+  line-height: 72rpx;
+  box-sizing: border-box;
+}
+
+.filter-picker {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-box {
+  position: relative;
+  margin-top: 14rpx;
+}
+
+.search-input {
+  width: 100%;
+  padding-right: 72rpx;
+}
+
+.search-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 72rpx;
+  height: 72rpx;
+  color: #667085;
+  font-size: 36rpx;
+  line-height: 68rpx;
+  text-align: center;
+}
+
+.selected-player {
+  margin-top: 18rpx;
+  padding: 18rpx 20rpx;
+  border: 1rpx solid #bae6fd;
+  border-radius: 8rpx;
+  background: #f0f9ff;
+}
+
+.selected-price,
+.player-option-side {
+  flex-shrink: 0;
+  color: #2563eb;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.result-count {
+  padding: 18rpx 0 6rpx;
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.player-option {
+  padding: 20rpx 0;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.player-option.selected {
+  margin: 0 -12rpx;
+  padding-right: 12rpx;
+  padding-left: 12rpx;
+  border-radius: 8rpx;
+  background: #eff6ff;
+}
+
+.history-card {
+  padding-bottom: 8rpx;
+}
+
+.history-placeholder,
+.player-list-placeholder {
+  padding: 28rpx 0 12rpx;
+  color: #667085;
+  font-size: 24rpx;
+  text-align: center;
+}

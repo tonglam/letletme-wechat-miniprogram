@@ -1,0 +1,4 @@
+<view class="fixture-chip {{difficultyClass}}">
+  <text>{{opponent || '-'}}</text>
+  <text wx:if="{{homeAway}}" class="home-away">{{homeAway}}</text>
+</view>

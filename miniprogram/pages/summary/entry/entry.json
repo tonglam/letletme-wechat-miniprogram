@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "球队总结",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-loading": "../../../components/app-loading/app-loading",
+    "app-error-state": "../../../components/app-error-state/app-error-state",
+    "app-empty-state": "../../../components/app-empty-state/app-empty-state",
+    "gw-picker": "../../../components/gw-picker/gw-picker"
+  }
+}

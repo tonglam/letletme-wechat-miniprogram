@@ -1,0 +1,36 @@
+{
+  "pages": [
+    "pages/home/index/index",
+    "pages/live/index/index",
+    "pages/data/index/index",
+    "pages/entry/search/search",
+    "pages/entry/profile/profile",
+    "pages/live/entry/entry",
+    "pages/live/match/match",
+    "pages/live/tournament/tournament",
+    "pages/data/players/players",
+    "pages/data/player-detail/player-detail",
+    "pages/data/teams/teams",
+    "pages/data/team-detail/team-detail",
+    "pages/data/price/price",
+    "pages/data/selections/selections",
+    "pages/summary/entry/entry",
+    "pages/summary/tournament/tourment",
+    "pages/summary/gameweek/gameweek"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "LetLetMe",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f6f8",
+    "backgroundTextStyle": "dark"
+  },
+  "usingComponents": {
+    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar",
+    "van-action-sheet": "@vant/weapp/action-sheet/index"
+  },
+  "style": "v2",
+  "componentFramework": "glass-easel",
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}

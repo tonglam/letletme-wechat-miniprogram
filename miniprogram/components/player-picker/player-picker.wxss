@@ -1,0 +1,22 @@
+.input {
+  height: 72rpx;
+  padding: 0 20rpx;
+  background: #ffffff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  box-sizing: border-box;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #eef2f7;
+  font-size: 26rpx;
+}
+
+.muted {
+  color: #667085;
+  font-size: 22rpx;
+}

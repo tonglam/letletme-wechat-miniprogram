@@ -1,0 +1,57 @@
+<view class="page selections-page">
+  <view class="section selections-header">
+    <view class="header-copy">
+      <view class="title">阵容选择</view>
+      <view class="subtitle">{{headerSubtitle || '联赛选择率、队长和转会趋势'}}</view>
+    </view>
+    <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+  </view>
+
+  <view class="section card control-card">
+    <view>
+      <view class="field-label">联赛</view>
+      <view class="field-help">{{totalEntriesText || '选择联赛查看数据'}}</view>
+    </view>
+    <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+      <view class="picker-value">{{selectedTournamentName || '请选择联赛'}}</view>
+    </picker>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loadingTournaments}}" text="加载联赛" />
+
+  <block wx:else>
+    <view class="section tab-strip">
+      <view wx:for="{{tabs}}" wx:key="key" class="tab-item {{activeTab === item.key ? 'tab-active' : ''}}" data-tab="{{item.key}}" catchtap="onTabTap">
+        {{item.label}}
+      </view>
+    </view>
+
+    <app-loading wx:if="{{loadingStats}}" text="加载阵容选择" />
+    <view wx:else class="section card stat-card">
+      <app-empty-state wx:if="{{visibleRows.length === 0}}" title="暂无阵容选择数据" description="切换联赛或 GW 后重试" />
+      <view wx:else>
+        <view wx:for="{{visibleRows}}" wx:key="id" class="stat-row">
+          <view class="rank-badge">{{item.rank}}</view>
+          <view class="stat-main">
+            <view class="stat-top">
+              <text class="player-name">{{item.name}}</text>
+              <text class="player-meta">{{item.meta}}</text>
+            </view>
+            <view class="bar-track">
+              <view class="bar-fill tab-{{activeTab}}" style="{{item.barStyle}}"></view>
+            </view>
+          </view>
+          <view class="stat-side">
+            <text class="primary-value">{{item.primaryValue}}</text>
+            <text class="side-label">{{item.primaryLabel}}</text>
+            <text class="secondary-value">{{item.secondaryValue}}</text>
+            <text class="side-label">{{item.secondaryLabel}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <bottomNavBar active="data" />
+</view>

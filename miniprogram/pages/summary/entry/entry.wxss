@@ -1,0 +1,264 @@
+.summary-page {
+  padding-bottom: 132rpx;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.header-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.header-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 64rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid #d0d5dd;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #344054;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.summary-card {
+  margin-bottom: 18rpx;
+}
+
+.tab-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8rpx;
+  padding: 8rpx;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 58rpx;
+  border-radius: 6rpx;
+  color: #667085;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.tab-active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.metric-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-card {
+  min-width: 0;
+  padding: 18rpx;
+  border: 1rpx solid #eef2f7;
+  border-radius: 8rpx;
+  background: #f8fafc;
+}
+
+.metric-label,
+.row-meta {
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.metric-value {
+  display: block;
+  margin-top: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.metric-value-bad,
+.cost-bad {
+  color: #be123c;
+}
+
+.section-title-small {
+  margin-bottom: 14rpx;
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.summary-row,
+.squad-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 72rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.summary-row:last-child,
+.squad-row:last-child {
+  border-bottom: 0;
+}
+
+.squad-row-bench {
+  opacity: 0.72;
+}
+
+.row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.row-title,
+.history-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.row-value {
+  flex-shrink: 0;
+  color: #111827;
+  font-size: 25rpx;
+  font-weight: 800;
+}
+
+.squad-meta {
+  display: grid;
+  grid-template-columns: 72rpx 58rpx 58rpx 72rpx;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.position-badge,
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36rpx;
+  border-radius: 6rpx;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+
+.position-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.role-starter {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.role-bench {
+  background: #f3f4f6;
+  color: #667085;
+}
+
+.mini-stat,
+.points-stat {
+  color: #344054;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.points-stat {
+  color: #111827;
+  font-weight: 900;
+}
+
+.transfer-card {
+  margin-bottom: 16rpx;
+}
+
+.transfer-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10rpx;
+  align-items: center;
+  padding-bottom: 14rpx;
+  border-bottom: 1rpx solid #eef2f7;
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.transfer-count,
+.transfer-cost {
+  text-align: right;
+}
+
+.empty-line {
+  padding: 18rpx 0 4rpx;
+  color: #667085;
+  font-size: 24rpx;
+}
+
+.move-card {
+  margin-top: 14rpx;
+  padding: 16rpx;
+  border: 1rpx solid #eef2f7;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.move-text {
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.history-card {
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.history-card:last-child {
+  border-bottom: 0;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10rpx;
+  margin-top: 12rpx;
+  color: #475467;
+  font-size: 22rpx;
+  line-height: 1.4;
+}

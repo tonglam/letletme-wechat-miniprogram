@@ -1,0 +1,86 @@
+<view class="page tournament-summary-page">
+  <view class="section summary-header">
+    <view class="header-copy">
+      <view class="title">联赛总结</view>
+      <view class="subtitle">{{selectedTournamentName || '选择联赛'}} · {{headerSubtitle || '当前赛季'}}</view>
+    </view>
+    <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+  </view>
+
+  <view class="section card control-card">
+    <view class="field-label">联赛</view>
+    <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+      <view class="picker-value">{{selectedTournamentName || '请选择联赛'}}</view>
+    </picker>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载联赛总结" />
+
+  <block wx:else>
+    <view class="section tab-strip">
+      <view class="tab-item {{showOverview ? 'tab-active' : ''}}" data-tab="overview" catchtap="onTabTap">总览</view>
+      <view class="tab-item {{showRankings ? 'tab-active' : ''}}" data-tab="rankings" catchtap="onTabTap">排名</view>
+      <view class="tab-item {{showMetrics ? 'tab-active' : ''}}" data-tab="metrics" catchtap="onTabTap">指标</view>
+    </view>
+
+    <view wx:if="{{showOverview}}" class="section">
+      <app-empty-state wx:if="{{!hasOverview}}" title="暂无联赛总结" />
+      <block wx:else>
+        <view wx:if="{{overviewStats.length}}" class="card summary-card">
+          <view class="section-title-small">我的表现</view>
+          <view class="metric-grid">
+            <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
+              <text class="metric-label">{{item.label}}</text>
+              <text class="metric-value">{{item.value}}</text>
+            </view>
+          </view>
+        </view>
+        <view wx:if="{{tournamentStats.length}}" class="card summary-card">
+          <view class="section-title-small">赛事信息</view>
+          <view class="metric-grid">
+            <view wx:for="{{tournamentStats}}" wx:key="label" class="metric-card">
+              <text class="metric-label">{{item.label}}</text>
+              <text class="metric-value">{{item.value}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showRankings}}" class="section">
+      <app-empty-state wx:if="{{!hasRankings}}" title="暂无排名数据" />
+      <view wx:else class="card ranking-card">
+        <view class="section-title-small">本轮排名</view>
+        <view wx:for="{{rankingRows}}" wx:key="id" class="ranking-row {{item.isMine ? 'ranking-row-active' : ''}}">
+          <view class="rank-badge">#{{item.rank}}</view>
+          <view class="ranking-main">
+            <view class="ranking-title">{{item.entryName}}</view>
+            <view class="ranking-subtitle">{{item.playerName}}</view>
+            <view class="ranking-meta">OR {{item.overallRank}} · {{item.chip}}</view>
+          </view>
+          <view class="ranking-score">
+            <view class="score-main">{{item.points}}</view>
+            <view class="score-sub">净 {{item.netPoints}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{showMetrics}}" class="section">
+      <app-empty-state wx:if="{{!hasMetrics}}" title="暂无指标数据" />
+      <view wx:else class="card summary-card">
+        <view class="section-title-small">累计指标</view>
+        <view class="metric-grid">
+          <view wx:for="{{entryMetricStats}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value">{{item.value}}</text>
+            <text wx:if="{{item.meta}}" class="metric-meta">{{item.meta}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <bottomNavBar active="summary" />
+</view>

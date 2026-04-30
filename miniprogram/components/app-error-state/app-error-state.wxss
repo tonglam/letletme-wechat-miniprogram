@@ -1,0 +1,13 @@
+.error {
+  padding: 48rpx 24rpx;
+  text-align: center;
+}
+
+.error-message {
+  color: #b42318;
+  font-size: 26rpx;
+}
+
+.error-action {
+  margin-top: 24rpx;
+}

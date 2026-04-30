@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="section">
+    <view class="title">球队数据</view>
+    <view class="subtitle">选择球队查看详情。</view>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载球队" />
+  <view wx:else class="section card">
+    <app-empty-state wx:if="{{teams.length === 0}}" title="暂无球队" />
+    <view wx:for="{{teams}}" wx:key="id" class="team-row" data-team="{{item.id}}" bindtap="onOpenTeam">
+      <text>{{item.name}}</text>
+      <text class="muted">{{item.shortName || ''}}</text>
+    </view>
+  </view>
+  <bottomNavBar />
+</view>

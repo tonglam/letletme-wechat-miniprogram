@@ -1,0 +1,99 @@
+<view class="page summary-page">
+  <view class="section summary-header">
+    <view>
+      <view class="title">GW{{event}} 总结</view>
+      <view class="subtitle">总览、梦之队、高分球员和转会趋势</view>
+    </view>
+    <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载 GW 总结" />
+
+  <block wx:else>
+    <view class="section tab-strip">
+      <view class="tab-item {{showSummary ? 'tab-active' : ''}}" data-tab="summary" catchtap="onTabTap">总览</view>
+      <view class="tab-item {{showDreamTeam ? 'tab-active' : ''}}" data-tab="dreamTeam" catchtap="onTabTap">梦之队</view>
+      <view class="tab-item {{showElite ? 'tab-active' : ''}}" data-tab="elite" catchtap="onTabTap">高分</view>
+      <view class="tab-item {{showTransfers ? 'tab-active' : ''}}" data-tab="transfers" catchtap="onTabTap">转会</view>
+    </view>
+
+    <view wx:if="{{showSummary}}" class="section card">
+      <app-empty-state wx:if="{{!hasSummary}}" title="暂无总览" description="下拉刷新或切换 GW 后再试" />
+      <block wx:else>
+        <view class="metric-grid">
+          <view wx:for="{{summaryStats}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value">{{item.value}}</text>
+            <text wx:if="{{item.meta}}" class="metric-meta">{{item.meta}}</text>
+          </view>
+        </view>
+        <view wx:if="{{chipRows.length}}" class="subsection">
+          <view class="section-title-small">开卡情况</view>
+          <view wx:for="{{chipRows}}" wx:key="id" class="summary-row">
+            <view>
+              <view class="row-title">{{item.title}}</view>
+              <view class="row-meta">{{item.meta}}</view>
+            </view>
+            <text class="row-value">{{item.value}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showDreamTeam}}" class="section">
+      <app-empty-state wx:if="{{!hasDreamTeam}}" title="暂无梦之队" />
+      <block wx:else>
+        <view wx:for="{{dreamTeamGroups}}" wx:key="id" class="card summary-card">
+          <view class="section-title-small">{{item.title}}</view>
+          <view wx:if="{{item.rows.length === 0}}" class="list-empty">{{item.emptyText}}</view>
+          <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="id" class="summary-row">
+            <view class="row-main">
+              <view class="row-title">{{row.title}}</view>
+              <view wx:if="{{row.meta}}" class="row-meta">{{row.meta}}</view>
+            </view>
+            <text class="row-value">{{row.value}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showElite}}" class="section card">
+      <app-empty-state wx:if="{{!hasElite}}" title="暂无高分球员" />
+      <block wx:else>
+        <view wx:for="{{eliteRows}}" wx:key="id" class="summary-row">
+          <view class="row-main">
+            <view class="row-title">{{index + 1}}. {{item.title}}</view>
+            <view wx:if="{{item.description}}" class="row-meta">{{item.description}}</view>
+          </view>
+          <text class="row-value">{{item.value}}</text>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showTransfers}}" class="section transfer-grid">
+      <view class="card transfer-card">
+        <view class="section-title-small">转入最多</view>
+        <app-empty-state wx:if="{{transfersInRows.length === 0}}" title="暂无转入" />
+        <block wx:else>
+          <view wx:for="{{transfersInRows}}" wx:key="id" class="summary-row">
+            <view class="row-title">{{index + 1}}. {{item.title}}</view>
+            <text class="row-value row-value-good">{{item.value}}</text>
+          </view>
+        </block>
+      </view>
+      <view class="card transfer-card">
+        <view class="section-title-small">转出最多</view>
+        <app-empty-state wx:if="{{transfersOutRows.length === 0}}" title="暂无转出" />
+        <block wx:else>
+          <view wx:for="{{transfersOutRows}}" wx:key="id" class="summary-row">
+            <view class="row-title">{{index + 1}}. {{item.title}}</view>
+            <text class="row-value row-value-bad">{{item.value}}</text>
+          </view>
+        </block>
+      </view>
+    </view>
+  </block>
+
+  <bottomNavBar active="summary" />
+</view>

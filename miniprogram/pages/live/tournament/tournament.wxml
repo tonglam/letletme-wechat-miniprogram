@@ -1,0 +1,136 @@
+<view class="page">
+  <view class="section">
+    <view class="row">
+      <view>
+        <view class="title">实时联赛</view>
+        <view class="subtitle">{{selectedTournament.name || '选择球队后加载联赛'}} · 更新 {{lastUpdated || '-'}}</view>
+      </view>
+      <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+    </view>
+  </view>
+
+  <view class="section picker-card">
+    <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+      <view class="picker-inner">
+        <view>
+          <view class="picker-label">联赛</view>
+          <view class="picker-value">{{selectedTournament.name || '请选择联赛'}}</view>
+        </view>
+        <text class="picker-arrow">切换</text>
+      </view>
+    </picker>
+  </view>
+
+  <view class="section">
+    <filter-bar keyword="{{keyword}}" placeholder="搜索球队/玩家" actionText="查询" bind:search="onKeyword" bind:submit="onSearch" bind:reset="onResetSearch" />
+  </view>
+
+  <view class="section sort-tabs">
+    <view
+      wx:for="{{sortOptions}}"
+      wx:key="key"
+      class="sort-tab {{sortKey === item.key ? 'active' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onSortTap"
+    >{{item.label}}{{sortKey === item.key ? (sortDesc ? ' ↓' : ' ↑') : ''}}</view>
+  </view>
+
+  <view class="section filter-panel">
+    <view class="filter-header" bindtap="onToggleOwnership">
+      <view>
+        <view class="filter-title">球员持有</view>
+        <view class="filter-summary">{{ownershipSummary}}</view>
+      </view>
+      <text class="filter-toggle">{{ownershipExpanded ? '收起' : '展开'}}</text>
+    </view>
+    <view wx:if="{{ownershipExpanded}}" class="filter-body">
+      <view class="ownership-picker-grid">
+        <picker mode="selector" range="{{ownershipTeamNames}}" value="{{selectedOwnershipTeamIndex}}" bindchange="onOwnershipTeamChange">
+          <view class="filter-picker">{{selectedOwnershipTeam ? selectedOwnershipTeam.name : '先选球队'}}</view>
+        </picker>
+        <picker mode="selector" range="{{ownershipPositionOptions}}" value="{{selectedOwnershipPositionIndex}}" bindchange="onOwnershipPositionChange">
+          <view class="filter-picker {{selectedOwnershipTeam ? '' : 'disabled'}}">{{selectedOwnershipPosition || '再选位置'}}</view>
+        </picker>
+      </view>
+      <picker mode="selector" range="{{ownershipAvailablePlayerNames}}" bindchange="onOwnershipPlayerChange">
+        <view class="filter-picker {{selectedOwnershipPosition ? '' : 'disabled'}}">{{selectedOwnershipPosition ? '选择球员' : '先选择球队和位置'}}</view>
+      </picker>
+      <view wx:if="{{selectedOwnershipPlayers.length}}" class="selected-tags">
+        <view
+          wx:for="{{selectedOwnershipPlayers}}"
+          wx:key="element"
+          class="selected-tag"
+          data-element="{{item.element}}"
+          bindtap="onRemoveOwnershipPlayer"
+        >{{item.name}}{{item.meta ? ' · ' + item.meta : ''}} ×</view>
+      </view>
+      <view class="segmented">
+        <view class="segment {{ownershipScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onOwnershipScopeTap">全部</view>
+        <view class="segment {{ownershipScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onOwnershipScopeTap">首发</view>
+        <view class="segment {{ownershipScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onOwnershipScopeTap">替补</view>
+      </view>
+      <view class="segmented">
+        <view class="segment {{ownershipCaptainMode === 'any' ? 'active' : ''}}" data-mode="any" bindtap="onOwnershipCaptainTap">任意</view>
+        <view class="segment {{ownershipCaptainMode === 'captain' ? 'active' : ''}}" data-mode="captain" bindtap="onOwnershipCaptainTap">队长</view>
+        <view class="segment {{ownershipCaptainMode === 'vice' ? 'active' : ''}}" data-mode="vice" bindtap="onOwnershipCaptainTap">副队</view>
+      </view>
+      <view wx:if="{{selectedOwnershipPlayers.length}}" class="filter-clear" bindtap="onClearOwnershipFilter">清除球员持有筛选</view>
+    </view>
+  </view>
+
+  <view class="section filter-panel">
+    <view class="filter-header" bindtap="onToggleTeamExposure">
+      <view>
+        <view class="filter-title">球队人数</view>
+        <view class="filter-summary">{{teamExposureSummary}}</view>
+      </view>
+      <text class="filter-toggle">{{teamExposureExpanded ? '收起' : '展开'}}</text>
+    </view>
+    <view wx:if="{{teamExposureExpanded}}" class="filter-body">
+      <picker mode="selector" range="{{teamExposureTeamNames}}" value="{{selectedTeamExposureIndex}}" bindchange="onTeamExposureTeamChange">
+        <view class="filter-picker">{{selectedTeamExposure ? selectedTeamExposure.name : '选择球队'}}</view>
+      </picker>
+      <view class="segmented count-segmented">
+        <view class="segment {{teamExposureCount === 1 ? 'active' : ''}}" data-count="1" bindtap="onTeamExposureCountTap">1人</view>
+        <view class="segment {{teamExposureCount === 2 ? 'active' : ''}}" data-count="2" bindtap="onTeamExposureCountTap">2人</view>
+        <view class="segment {{teamExposureCount === 3 ? 'active' : ''}}" data-count="3" bindtap="onTeamExposureCountTap">3人</view>
+      </view>
+      <view class="segmented">
+        <view class="segment {{teamExposureScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onTeamExposureScopeTap">全部</view>
+        <view class="segment {{teamExposureScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onTeamExposureScopeTap">首发</view>
+        <view class="segment {{teamExposureScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onTeamExposureScopeTap">替补</view>
+      </view>
+      <view wx:if="{{selectedTeamExposure}}" class="filter-clear" bindtap="onClearTeamExposureFilter">清除球队人数筛选</view>
+    </view>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载实时联赛" />
+  <view wx:else class="section">
+    <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>
+    <app-empty-state wx:if="{{displayedRows.length === 0}}" title="暂无联赛数据" description="确认球队已加入联赛或调整筛选" />
+    <block wx:else>
+      <view
+        wx:for="{{displayedRows}}"
+        wx:key="entry"
+        class="card tournament-row"
+        data-entry="{{item.entry}}"
+        bindtap="onOpenEntry"
+      >
+        <view class="tournament-rank">#{{item.visibleRank}}</view>
+        <view class="tournament-main">
+          <view class="tournament-title">{{item.entryName || '-'}}</view>
+          <view class="tournament-subtitle">{{item.playerName || ''}}</view>
+          <view class="tournament-meta">{{item.metaText}}</view>
+        </view>
+        <view class="tournament-score">
+          <view class="score-main">{{item.displayLive}}</view>
+          <view class="score-sub">净 {{item.displayNet}}</view>
+          <view class="score-sub">总 {{item.displayTotal}}</view>
+        </view>
+      </view>
+      <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore">加载更多</view>
+    </block>
+  </view>
+  <bottomNavBar active="live" />
+</view>

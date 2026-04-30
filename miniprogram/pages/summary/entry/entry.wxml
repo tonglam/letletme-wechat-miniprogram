@@ -1,0 +1,138 @@
+<view class="page summary-page">
+  <view class="section summary-header">
+    <view class="header-text">
+      <view class="title">{{headerTitle}}</view>
+      <view class="subtitle">{{headerSubtitle || '球队数据'}}</view>
+    </view>
+    <view class="header-actions">
+      <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+    </view>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载球队数据" />
+
+  <block wx:else>
+    <view class="section card summary-card">
+      <view class="metric-grid metric-grid-three">
+        <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
+          <text class="metric-label">{{item.label}}</text>
+          <text class="metric-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section card summary-card">
+      <view class="metric-grid">
+        <view wx:for="{{eventStats}}" wx:key="label" class="metric-card">
+          <text class="metric-label">{{item.label}}</text>
+          <text class="metric-value metric-value-{{item.tone}}">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section tab-strip">
+      <view class="tab-item {{showSquad ? 'tab-active' : ''}}" data-tab="squad" catchtap="onTabTap">阵容</view>
+      <view class="tab-item {{showTransfer ? 'tab-active' : ''}}" data-tab="transfer" catchtap="onTabTap">转会</view>
+      <view class="tab-item {{showChips ? 'tab-active' : ''}}" data-tab="chips" catchtap="onTabTap">开卡</view>
+      <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap">历史</view>
+    </view>
+
+    <view wx:if="{{showSquad}}" class="section card">
+      <app-empty-state wx:if="{{!hasSquad}}" title="暂无阵容数据" />
+      <block wx:else>
+        <view wx:for="{{squadRows}}" wx:key="id" class="squad-row {{item.bench ? 'squad-row-bench' : ''}}">
+          <view class="row-main">
+            <view class="row-title">{{item.name}}</view>
+            <view class="row-meta">{{item.teamName}}</view>
+          </view>
+          <view class="squad-meta">
+            <text class="position-badge">{{item.position}}</text>
+            <text class="mini-stat">{{item.minutes}}'</text>
+            <text class="points-stat">{{item.points}}</text>
+            <text class="role-badge {{item.bench ? 'role-bench' : 'role-starter'}}">{{item.role}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showTransfer}}" class="section">
+      <app-empty-state wx:if="{{!hasTransfers}}" title="暂无转会历史" />
+      <block wx:else>
+        <view wx:for="{{transferRows}}" wx:key="id" class="card transfer-card">
+          <view class="transfer-head">
+            <text class="transfer-gw">{{item.gameweek}}</text>
+            <text class="transfer-count">转会 {{item.transfers}}</text>
+            <text class="transfer-cost {{item.hasCost ? 'cost-bad' : ''}}">扣分 {{item.cost}}</text>
+          </view>
+          <view wx:if="{{item.moves.length === 0}}" class="empty-line">{{item.emptyText}}</view>
+          <view wx:for="{{item.moves}}" wx:for-item="move" wx:key="id" class="move-card">
+            <view class="move-text">{{move.text}}</view>
+            <view class="row-meta">{{move.costText}}</view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{showChips}}" class="section">
+      <view class="card summary-card">
+        <view class="metric-grid">
+          <view wx:for="{{chipSummaryStats}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value">{{item.value}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="card summary-card">
+        <view class="section-title-small">开卡统计</view>
+        <app-empty-state wx:if="{{chipCountRows.length === 0}}" title="暂无开卡" />
+        <view wx:for="{{chipCountRows}}" wx:key="id" class="summary-row">
+          <view class="row-title">{{item.label}}</view>
+          <text class="row-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view class="card summary-card">
+        <view class="section-title-small">使用记录</view>
+        <app-empty-state wx:if="{{chipUsageRows.length === 0}}" title="暂无使用记录" />
+        <view wx:for="{{chipUsageRows}}" wx:key="id" class="summary-row">
+          <view class="row-title">{{item.label}}</view>
+          <text class="row-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{showHistory}}" class="section">
+      <view class="card summary-card">
+        <view class="section-title-small">GW 历史</view>
+        <app-empty-state wx:if="{{historyRows.length === 0}}" title="暂无历史" />
+        <view wx:for="{{historyRows}}" wx:key="id" class="history-card">
+          <view class="history-title">{{item.gameweek}}</view>
+          <view class="history-grid">
+            <text>得分 {{item.eventPoints}}</text>
+            <text>净分 {{item.eventNetPoints}}</text>
+            <text>GW排名 {{item.eventRank}}</text>
+            <text>总分 {{item.overallPoints}}</text>
+            <text>总排名 {{item.overallRank}}</text>
+            <text>转会 {{item.eventTransfers}}</text>
+            <text>扣分 {{item.eventTransfersCost}}</text>
+            <text>身价 {{item.teamValue}}</text>
+            <text>余额 {{item.bank}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="card summary-card">
+        <view class="section-title-small">赛季历史</view>
+        <app-empty-state wx:if="{{seasonHistoryRows.length === 0}}" title="暂无赛季历史" />
+        <view wx:for="{{seasonHistoryRows}}" wx:key="id" class="summary-row">
+          <view class="row-main">
+            <view class="row-title">{{item.order}}. {{item.season}}</view>
+            <view class="row-meta">总排名 {{item.overallRank}}</view>
+          </view>
+          <text class="row-value">{{item.totalPoints}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <bottomNavBar active="summary" />
+</view>

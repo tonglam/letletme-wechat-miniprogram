@@ -1,0 +1,19 @@
+.gw-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 64rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid #d0d5dd;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.gw-picker-action {
+  color: #667085;
+  font-size: 22rpx;
+  font-weight: 700;
+}

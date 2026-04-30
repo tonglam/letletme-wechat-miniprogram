@@ -1,0 +1,249 @@
+.picker-card {
+  overflow: hidden;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.picker-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22rpx 24rpx;
+}
+
+.picker-label {
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.picker-value {
+  margin-top: 6rpx;
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.picker-arrow {
+  flex-shrink: 0;
+  color: #047857;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.sort-tabs {
+  display: flex;
+  gap: 12rpx;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.sort-tab {
+  flex-shrink: 0;
+  padding: 12rpx 18rpx;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #344054;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.sort-tab.active {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.filter-panel {
+  overflow: hidden;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 22rpx 24rpx;
+}
+
+.filter-title {
+  color: #111827;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.filter-summary {
+  max-width: 520rpx;
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: #667085;
+  font-size: 22rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-toggle {
+  flex-shrink: 0;
+  color: #047857;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.filter-body {
+  padding: 0 24rpx 22rpx;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.filter-picker {
+  margin-top: 18rpx;
+  padding: 18rpx 20rpx;
+  border: 1rpx solid #d1d5db;
+  border-radius: 8rpx;
+  background: #f9fafb;
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.filter-picker.disabled {
+  color: #98a2b3;
+}
+
+.ownership-picker-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12rpx;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.selected-tag {
+  max-width: 100%;
+  padding: 10rpx 14rpx;
+  overflow: hidden;
+  border-radius: 8rpx;
+  background: #ecfdf3;
+  color: #027a48;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8rpx;
+  margin-top: 16rpx;
+  padding: 6rpx;
+  border-radius: 8rpx;
+  background: #f3f4f6;
+}
+
+.segment {
+  min-width: 0;
+  padding: 12rpx 8rpx;
+  border-radius: 6rpx;
+  color: #475467;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.segment.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1rpx 4rpx rgba(17, 24, 39, 0.08);
+}
+
+.filter-clear {
+  margin-top: 16rpx;
+  color: #b42318;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: right;
+}
+
+.result-count {
+  margin-bottom: 14rpx;
+  color: #667085;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.tournament-row {
+  display: grid;
+  grid-template-columns: 72rpx 1fr 112rpx;
+  gap: 18rpx;
+  align-items: center;
+  margin-bottom: 16rpx;
+  border: 1rpx solid #eef2f7;
+}
+
+.tournament-rank {
+  color: #047857;
+  font-size: 26rpx;
+  font-weight: 900;
+}
+
+.tournament-main {
+  min-width: 0;
+}
+
+.tournament-title,
+.tournament-subtitle,
+.tournament-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-title {
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.tournament-subtitle {
+  margin-top: 4rpx;
+  color: #344054;
+  font-size: 22rpx;
+}
+
+.tournament-meta {
+  margin-top: 8rpx;
+  color: #667085;
+  font-size: 21rpx;
+}
+
+.tournament-score {
+  text-align: right;
+}
+
+.score-main {
+  color: #111827;
+  font-size: 34rpx;
+  font-weight: 900;
+}
+
+.score-sub {
+  margin-top: 4rpx;
+  color: #667085;
+  font-size: 20rpx;
+}
+
+.load-more {
+  padding: 22rpx;
+  color: #047857;
+  font-size: 24rpx;
+  font-weight: 800;
+  text-align: center;
+}

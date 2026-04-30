@@ -1,0 +1,11 @@
+<view class="bottomNavBar">
+
+  <van-tabbar active="{{activeName}}" bind:change="onChange" safe-area-inset-bottom="{{true}}" placeholder="{{true}}">
+    <van-tabbar-item name="live" icon="fire-o">实时</van-tabbar-item>
+    <van-tabbar-item name="summary" icon="medal-o">统计</van-tabbar-item>
+    <van-tabbar-item name="data" icon="bar-chart-o">数据</van-tabbar-item>
+  </van-tabbar>
+
+  <van-action-sheet round show="{{show}}" actions="{{actions}}" bind:close="onClose" bind:select="onSelect" />
+
+</view>

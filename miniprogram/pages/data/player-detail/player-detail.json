@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "球员详情",
+  "usingComponents": {
+    "app-loading": "../../../components/app-loading/app-loading",
+    "app-error-state": "../../../components/app-error-state/app-error-state"
+  }
+}

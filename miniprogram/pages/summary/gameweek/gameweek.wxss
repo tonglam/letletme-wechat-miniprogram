@@ -1,0 +1,151 @@
+.summary-page {
+  padding-bottom: 132rpx;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.tab-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8rpx;
+  padding: 8rpx;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 58rpx;
+  border-radius: 6rpx;
+  color: #667085;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.tab-active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12rpx;
+}
+
+.metric-card {
+  min-width: 0;
+  padding: 18rpx;
+  border: 1rpx solid #eef2f7;
+  border-radius: 8rpx;
+  background: #f8fafc;
+}
+
+.metric-label,
+.row-meta,
+.list-empty {
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.metric-value {
+  display: block;
+  margin-top: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.metric-meta {
+  display: block;
+  margin-top: 6rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #667085;
+  font-size: 21rpx;
+}
+
+.subsection {
+  margin-top: 26rpx;
+}
+
+.summary-card {
+  margin-bottom: 18rpx;
+}
+
+.section-title-small {
+  margin-bottom: 14rpx;
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 72rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.summary-row:last-child {
+  border-bottom: 0;
+}
+
+.row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.row-value {
+  flex-shrink: 0;
+  color: #111827;
+  font-size: 25rpx;
+  font-weight: 800;
+}
+
+.row-value-good {
+  color: #15803d;
+}
+
+.row-value-bad {
+  color: #be123c;
+}
+
+.list-empty {
+  padding: 22rpx 0;
+  text-align: center;
+}
+
+.transfer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18rpx;
+}
+
+.transfer-card {
+  min-width: 0;
+}

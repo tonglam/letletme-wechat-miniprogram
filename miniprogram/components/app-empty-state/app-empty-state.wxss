@@ -1,0 +1,20 @@
+.empty {
+  padding: 56rpx 24rpx;
+  text-align: center;
+  color: #667085;
+}
+
+.empty-title {
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.empty-description {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+}
+
+.empty-action {
+  margin-top: 24rpx;
+}

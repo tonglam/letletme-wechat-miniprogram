@@ -1,0 +1,58 @@
+<view class="page">
+  <view class="match-header">
+    <view>
+      <view class="title">实时比赛</view>
+      <view class="subtitle">按状态查看比分、时间和关键事件</view>
+    </view>
+    <view class="match-count">
+      <text class="match-count-number">{{matches.length}}</text>
+      <text class="match-count-label">{{activeStatusLabel}}</text>
+    </view>
+  </view>
+
+  <view class="status-tabs">
+    <view
+      wx:for="{{statusOptions}}"
+      wx:key="key"
+      class="status-tab {{status === item.key ? 'active' : ''}}"
+      data-status="{{item.key}}"
+      bindtap="onStatusTap"
+    >{{item.label}}</view>
+  </view>
+
+  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载比赛" />
+  <view wx:else class="match-content">
+    <app-empty-state wx:if="{{matches.length === 0}}" title="暂无比赛" description="切换状态或下拉刷新查看比赛数据" />
+    <view wx:for="{{groups}}" wx:key="title" class="match-group">
+      <view class="group-title">{{item.title}}</view>
+      <view wx:for="{{item.matches}}" wx:for-item="match" wx:key="matchId" class="match-card {{match.statusClass}}">
+        <view class="match-card-head">
+          <view class="status-pill">{{match.statusText}}</view>
+        </view>
+
+        <view class="scoreboard">
+          <view class="team-side">
+            <view class="team-name">{{match.homeTeamDisplay || '-'}}</view>
+          </view>
+          <view class="scoreline">
+            <view class="score">{{match.scoreText}}</view>
+            <view wx:if="{{match.minuteText}}" class="minute">{{match.minuteText}}</view>
+          </view>
+          <view class="team-side away">
+            <view class="team-name">{{match.awayTeamDisplay || '-'}}</view>
+          </view>
+        </view>
+
+        <view wx:if="{{match.eventSummary.length > 0}}" class="event-list">
+          <view class="event-title">关键事件</view>
+          <view wx:for="{{match.eventSummary}}" wx:for-item="event" wx:key="label" class="event-row">
+            <text class="event-label">{{event.label}}</text>
+            <text class="event-value">{{event.value}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <bottomNavBar active="live" />
+</view>
