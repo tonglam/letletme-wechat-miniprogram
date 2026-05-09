@@ -6,9 +6,9 @@ export const DEFAULT_SEASON = "2526";
 const GRAPHQL_ENDPOINT_OVERRIDE_KEY = "letletme_graphql_endpoint_override";
 
 const GRAPHQL_ENDPOINTS: Record<MiniProgramEnv, string> = {
-  develop: "http://127.0.0.1:4000/graphql",
-  trial: "https://www.letletme.top/api/graphql",
-  release: "https://www.letletme.top/api/graphql"
+  develop: "http://localhost:4000/graphql",
+  trial: "https://api.letletme.top/graphql",
+  release: "https://api.letletme.top/graphql"
 };
 
 export function getMiniProgramEnv(): MiniProgramEnv {

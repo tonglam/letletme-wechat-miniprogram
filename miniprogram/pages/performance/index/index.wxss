@@ -1,0 +1,271 @@
+/* Header */
+.perf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.perf-actions {
+  display: flex;
+  gap: 16rpx;
+  padding-top: 6rpx;
+  flex-shrink: 0;
+}
+
+.perf-btn {
+  padding: 10rpx 22rpx;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 24rpx;
+  border-radius: 6rpx;
+  font-weight: 600;
+}
+
+.perf-btn-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+/* Score Card */
+.score-card {
+  background: #111827;
+  color: #ffffff;
+  padding: 28rpx;
+}
+
+.score-body {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+}
+
+.score-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+}
+
+.score-ring-good { background: #166534; }
+.score-ring-avg  { background: #92400e; }
+.score-ring-poor { background: #991b1b; }
+.score-ring-none { background: #374151; }
+
+.score-number {
+  font-size: 48rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-denom {
+  font-size: 20rpx;
+  opacity: 0.55;
+  margin-top: 4rpx;
+}
+
+.score-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.score-grade-lbl {
+  font-size: 32rpx;
+  font-weight: 700;
+  margin-bottom: 16rpx;
+}
+
+.score-grade-good { color: #4ade80; }
+.score-grade-avg  { color: #fbbf24; }
+.score-grade-poor { color: #f87171; }
+.score-grade-none { color: #9ca3af; }
+
+.score-bar-track {
+  height: 12rpx;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6rpx;
+  overflow: hidden;
+  margin-bottom: 14rpx;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 6rpx;
+}
+
+.score-fill-good { background: #4ade80; }
+.score-fill-avg  { background: #fbbf24; }
+.score-fill-poor { background: #f87171; }
+.score-fill-none { background: #4b5563; }
+
+.score-time {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Section heading */
+.card-heading {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 20rpx;
+}
+
+/* Metrics */
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.metric-label {
+  font-size: 26rpx;
+  width: 150rpx;
+  flex-shrink: 0;
+}
+
+.metric-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  min-width: 0;
+}
+
+.metric-bar-track {
+  flex: 1;
+  height: 10rpx;
+  background: #f3f4f6;
+  border-radius: 5rpx;
+  overflow: hidden;
+}
+
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 5rpx;
+}
+
+.metric-fill-good { background: #22c55e; }
+.metric-fill-avg  { background: #f59e0b; }
+.metric-fill-poor { background: #ef4444; }
+.metric-fill-none { background: #d1d5db; }
+
+.metric-value {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #111827;
+  width: 96rpx;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.metric-badge {
+  font-size: 20rpx;
+  font-weight: 700;
+  padding: 4rpx 10rpx;
+  border-radius: 4rpx;
+  flex-shrink: 0;
+  text-align: center;
+  min-width: 44rpx;
+}
+
+.metric-badge-good { background: #dcfce7; color: #166534; }
+.metric-badge-avg  { background: #fef3c7; color: #92400e; }
+.metric-badge-poor { background: #fee2e2; color: #991b1b; }
+.metric-badge-none { background: #f3f4f6; color: #6b7280; }
+
+/* Env */
+.env-row {
+  display: flex;
+  align-items: center;
+}
+
+.env-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.env-key {
+  font-size: 24rpx;
+}
+
+.env-val {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #111827;
+}
+
+.env-div {
+  width: 1rpx;
+  height: 28rpx;
+  background: #e5e7eb;
+  margin: 0 28rpx;
+}
+
+/* API Table */
+.api-summary {
+  font-size: 22rpx;
+  margin-bottom: 16rpx;
+}
+
+.api-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.api-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.api-name {
+  flex: 1;
+  font-size: 24rpx;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 16rpx;
+}
+
+.api-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.api-ms {
+  font-size: 22rpx;
+  font-weight: 700;
+  padding: 4rpx 10rpx;
+  border-radius: 4rpx;
+  min-width: 80rpx;
+  text-align: center;
+}
+
+.api-count {
+  font-size: 22rpx;
+  min-width: 48rpx;
+  text-align: right;
+}
+
+/* Misc */
+.perf-hint {
+  font-size: 26rpx;
+  padding: 8rpx 0 16rpx;
+}

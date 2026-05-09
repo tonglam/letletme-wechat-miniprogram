@@ -19,7 +19,16 @@ interface CurrentEventInfoResponse {
 }
 
 export async function getCurrentEventAndDeadline(): Promise<CurrentEventDeadline> {
-  const data = await graphqlRequest<CurrentEventInfoResponse>(CURRENT_EVENT_INFO);
+  const data = await graphqlRequest<CurrentEventInfoResponse>(CURRENT_EVENT_INFO, {}, {
+    getCacheExpiry: (res) => {
+      const deadline = (res as CurrentEventInfoResponse).currentEventInfo?.nextUtcDeadline;
+      if (deadline) {
+        const expiresAt = new Date(deadline).getTime();
+        return expiresAt > Date.now() ? expiresAt : Date.now() + 3600_000;
+      }
+      return Date.now() + 3600_000;
+    }
+  });
   const info = data.currentEventInfo;
   return {
     currentEvent: info?.currentEvent,
@@ -84,7 +93,9 @@ export async function getNextFixture(event?: number): Promise<Fixture[]> {
   if (!event) {
     return [];
   }
-  const data = await graphqlRequest<EventFixturesResponse>(EVENT_FIXTURES, { eventId: event });
+  const data = await graphqlRequest<EventFixturesResponse>(EVENT_FIXTURES, { eventId: event }, {
+    cacheTtl: 30 * 60 * 1000
+  });
   return (data.eventFixtures || []).map((f) => ({
     id: f.id,
     event,
@@ -104,7 +115,9 @@ export async function getNextFixture(event?: number): Promise<Fixture[]> {
 }
 
 export async function getMiniProgramNotice(): Promise<string> {
-  const data = await graphqlRequest<MiniProgramNoticeResponse>(MINI_PROGRAM_NOTICE);
+  const data = await graphqlRequest<MiniProgramNoticeResponse>(MINI_PROGRAM_NOTICE, {}, {
+    cacheTtl: 3600 * 1000
+  });
   return data.miniProgramNotice || "";
 }
 
@@ -147,7 +160,9 @@ interface EntryLeaguesResponse {
 }
 
 export async function getTeamList(_season: string): Promise<TeamOption[]> {
-  const data = await graphqlRequest<TeamsResponse>(TEAMS);
+  const data = await graphqlRequest<TeamsResponse>(TEAMS, {}, {
+    cacheTtl: 24 * 3600 * 1000
+  });
   return (data.teams || []).map((team) => ({
     id: team.id,
     name: team.name,
@@ -171,6 +186,8 @@ export async function getAllLeagueName(_season: string): Promise<string[]> {
     return [];
   }
 
-  const data = await graphqlRequest<EntryLeaguesResponse>(ENTRY_LEAGUES, { entryId });
+  const data = await graphqlRequest<EntryLeaguesResponse>(ENTRY_LEAGUES, { entryId }, {
+    cacheTtl: 3600 * 1000
+  });
   return [...new Set((data.entryLeagues || []).map((league) => league.name).filter(Boolean))];
 }

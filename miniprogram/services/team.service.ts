@@ -22,7 +22,9 @@ interface TeamResponse {
 }
 
 export async function getTeamSummary(teamId: number | string, _season: string): Promise<TeamSummary> {
-  const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) });
+  const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) }, {
+    cacheTtl: 24 * 3600 * 1000
+  });
   if (!data.team) {
     throw new Error(`No team found with id ${teamId}`);
   }

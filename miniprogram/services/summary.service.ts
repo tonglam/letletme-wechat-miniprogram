@@ -2,8 +2,8 @@ import { graphqlRequest } from "./graphql.service";
 import type { GameweekOverallSummary } from "../models/summary";
 
 const EVENT_OVERALL_RESULT = `
-  query EventOverallResult($season: Int!) {
-    eventOverallResult(season: $season) {
+  query EventOverallResult {
+    eventOverallResult {
       event
       averageScore
       highestScore
@@ -368,9 +368,7 @@ export async function getEntryTeamStatsTransfers(entry: number): Promise<EntryGa
 }
 
 export async function getGameweekOverallSummary(event: number): Promise<GameweekOverallSummary> {
-  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {
-    season: getCurrentSeasonKey()
-  });
+  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {});
   const result = pickEventOverallResult(data.eventOverallResult, event);
   if (!result) {
     throw new Error(`No GW summary found for GW${event}`);
@@ -379,9 +377,7 @@ export async function getGameweekOverallSummary(event: number): Promise<Gameweek
 }
 
 export async function getGameweekStatsForHome(event: number): Promise<GameweekOverallSummary | undefined> {
-  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {
-    season: getCurrentSeasonKey()
-  });
+  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {});
   return pickEventOverallResult(data.eventOverallResult, event);
 }
 
@@ -405,17 +401,6 @@ export async function getEventOverallTransfers(event: number): Promise<unknown> 
 
 export function refreshEventOverallSummary(event: number): Promise<unknown> {
   return getGameweekOverallSummary(event);
-}
-
-function getCurrentSeasonKey(date = new Date()): number {
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
-
-  if (month >= 8) {
-    return Number(`${String(year).slice(-2)}${String(year + 1).slice(-2)}`);
-  }
-
-  return Number(`${String(year - 1).slice(-2)}${String(year).slice(-2)}`);
 }
 
 function pickEventOverallResult(

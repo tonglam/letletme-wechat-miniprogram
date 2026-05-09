@@ -10,6 +10,8 @@ export const storageKeys = {
   selectedDataSelectionsTournamentName: "data-selections-tournamentName",
   selectedSummaryTournamentId: "summary-tournamentId",
   selectedSummaryTournamentName: "summary-tournamentName",
+  apiSessionToken: "api-session-token",
+  apiSessionExpiresAt: "api-session-expires-at",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",
   lastTeamId: "stat-team",

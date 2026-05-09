@@ -3,7 +3,7 @@ import type { PlayerValue, PlayerValueChange } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 
 const PLAYER_VALUES = `
-  query GetPlayerValues($changeDate: Date) {
+  query GetPlayerValues($changeDate: Date!) {
     playerValues(changeDate: $changeDate) {
       playerId
       playerName
@@ -26,8 +26,8 @@ const PLAYER_VALUES = `
 `;
 
 const PLAYER_VALUE_HISTORY = `
-  query GetPlayerValueHistory($playerId: Int!, $limit: Int) {
-    playerValueHistory(playerId: $playerId, limit: $limit) {
+  query GetPlayerValueHistory($playerId: Int!) {
+    playerValueHistory(playerId: $playerId) {
       playerId
       changeDate
       oldValue
@@ -190,7 +190,7 @@ export async function getPlayerValueByDate(changeDate: string): Promise<PlayerVa
 }
 
 export async function getPlayerValueByElement(element: number): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element, limit: 100 });
+  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element });
   return (data.playerValueHistory || []).map((item) => enrichPriceChange({
     element: item.playerId,
     playerId: item.playerId,
@@ -205,11 +205,11 @@ export async function getPlayerValueByElement(element: number): Promise<PlayerVa
   }));
 }
 
-export async function getPlayerValues(): Promise<PlayerValue[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, {});
+export async function getPlayerValues(changeDate: string): Promise<PlayerValue[]> {
+  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) });
   return data.playerValues || [];
 }
 
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
-  return changeDate ? getPlayerValueByDate(changeDate) : getPlayerValues();
+  return changeDate ? getPlayerValueByDate(changeDate) : getPlayerValues(changeDate || new Date().toISOString().slice(0, 10).replace(/-/g, ""));
 }

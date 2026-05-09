@@ -2,6 +2,7 @@ import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
 import { setEntryId, clearEntryScopedStorage } from "../../../utils/storage";
 import { switchToHome } from "../../../utils/navigation";
+import { refreshWechatApiSession } from "../../../services/auth.service";
 
 interface EntrySearchData {
   manualEntryId: string;
@@ -79,6 +80,7 @@ Page({
     setEntryId(entryId);
     clearEntryScopedStorage();
     getApp<IAppOption>().globalData.entryId = entryId;
+    refreshWechatApiSession(entryId).catch(() => {});
     switchToHome();
   }
 });

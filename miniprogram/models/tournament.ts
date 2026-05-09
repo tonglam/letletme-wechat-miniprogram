@@ -24,8 +24,6 @@ export interface TournamentSelectionPlayer {
 }
 
 export interface TournamentSelectionStats {
-  eventId: number;
-  tournamentId: number;
   totalEntries: number;
   mostSelectedPlayers: TournamentSelectionPlayer[];
   captainSelect: TournamentSelectionPlayer[];

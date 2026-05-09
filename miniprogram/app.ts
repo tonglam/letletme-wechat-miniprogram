@@ -1,6 +1,8 @@
 import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
+import { refreshWechatApiSession } from "./services/auth.service";
+import { recordLaunch } from "./utils/perf";
 
 App<IAppOption>({
   globalData: {
@@ -10,15 +12,50 @@ App<IAppOption>({
     nextGw: 0,
     utcDeadline: "",
     deadline: "",
-    entryId: undefined
+    entryId: undefined,
+    openid: undefined
   },
 
+  _pendingInit: null as Promise<void> | null,
+
   async onLaunch() {
+    const launchStart = Date.now();
     this.globalData.entryId = getEntryId();
+    this.requirePrivacyAndLogin();
     await this.initAppData();
+    recordLaunch(Date.now() - launchStart);
+  },
+
+  requirePrivacyAndLogin() {
+    wx.requirePrivacyAuthorize({
+      success: () => {
+        this.doLogin();
+      },
+      fail: () => {
+        this.doLogin();
+      },
+    });
+  },
+
+  doLogin() {
+    refreshWechatApiSession(this.globalData.entryId).catch(() => {});
   },
 
   async initAppData() {
+    if (this._pendingInit) {
+      return this._pendingInit;
+    }
+
+    const promise = this._initAppDataInner();
+    this._pendingInit = promise;
+    try {
+      return await promise;
+    } finally {
+      this._pendingInit = null;
+    }
+  },
+
+  async _initAppDataInner() {
     try {
       const current = await getCurrentEventAndDeadline();
       const gw = Number(current.gw || current.event || current.currentEvent || 0);

@@ -58,8 +58,6 @@ const GET_TOURNAMENT_SUMMARY = `
 const GET_TOURNAMENT_SELECTION_STATS = `
   query TournamentSelectionStats($tournamentId: Int!, $eventId: Int!, $limit: Int) {
     tournamentSelectionStats(tournamentId: $tournamentId, eventId: $eventId, limit: $limit) {
-      eventId
-      tournamentId
       totalEntries
       mostSelectedPlayers {
         id

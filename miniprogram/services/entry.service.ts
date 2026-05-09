@@ -135,7 +135,9 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
 }
 
 export async function getEntryInfo(entry: number): Promise<EntryInfo> {
-  const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry });
+  const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
+    cacheTtl: 3600 * 1000
+  });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {
     throw new Error(`No FPL team found with Entry ID ${entry}`);
@@ -144,7 +146,9 @@ export async function getEntryInfo(entry: number): Promise<EntryInfo> {
 }
 
 export async function getEntryLeagueInfo(entry: number): Promise<EntryLeague[]> {
-  const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry });
+  const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
+    cacheTtl: 3600 * 1000
+  });
   return (data.entryLeagues || []).map((league) => ({
     id: league.id,
     name: league.name

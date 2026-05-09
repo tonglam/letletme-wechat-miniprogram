@@ -1,0 +1,80 @@
+<view class="page">
+
+  <!-- Header -->
+  <view class="section">
+    <view class="perf-header">
+      <view>
+        <view class="title">性能监控</view>
+        <view class="subtitle">应用运行性能分析</view>
+      </view>
+      <view class="perf-actions">
+        <view class="perf-btn" catchtap="onRefresh">刷新</view>
+        <view class="perf-btn perf-btn-danger" catchtap="onClear">清除</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Score Card -->
+  <view class="section card score-card">
+    <view class="score-body">
+      <view class="score-ring score-ring-{{scoreGrade}}">
+        <text class="score-number">{{hasData ? score : '--'}}</text>
+        <text class="score-denom">/100</text>
+      </view>
+      <view class="score-info">
+        <view class="score-grade-lbl score-grade-{{scoreGrade}}">{{scoreLabel}}</view>
+        <view class="score-bar-track">
+          <view class="score-bar-fill score-fill-{{scoreGrade}}" style="width: {{hasData ? score : 0}}%"></view>
+        </view>
+        <view class="score-time">更新于 {{updatedAt}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Key Metrics -->
+  <view class="section card">
+    <view class="card-heading">关键指标</view>
+    <view wx:if="{{metrics.length === 0}}" class="perf-hint muted">使用应用后指标将在此显示</view>
+    <view wx:for="{{metrics}}" wx:key="key" class="metric-row">
+      <view class="metric-label muted">{{item.label}}</view>
+      <view class="metric-right">
+        <view class="metric-bar-track">
+          <view class="metric-bar-fill metric-fill-{{item.rating}}" style="width: {{item.barWidth}}%"></view>
+        </view>
+        <view class="metric-value">{{item.displayValue}}</view>
+        <view class="metric-badge metric-badge-{{item.rating}}">{{item.ratingLabel}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Runtime Environment -->
+  <view class="section card">
+    <view class="card-heading">运行环境</view>
+    <view class="env-row">
+      <view class="env-item">
+        <text class="muted env-key">网络</text>
+        <text class="env-val">{{networkType}}</text>
+      </view>
+      <view class="env-div"></view>
+      <view class="env-item">
+        <text class="muted env-key">系统</text>
+        <text class="env-val">{{system}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- API Breakdown -->
+  <view class="section card">
+    <view class="card-heading">API 接口</view>
+    <view class="muted api-summary">共 {{totalApiCalls}} 次请求，按平均耗时排序</view>
+    <view wx:if="{{apiGroups.length === 0}}" class="perf-hint muted">暂无记录</view>
+    <view wx:for="{{apiGroups}}" wx:key="name" class="api-row">
+      <view class="api-name">{{item.name}}</view>
+      <view class="api-right">
+        <view class="api-ms metric-badge-{{item.rating}}">{{item.avgMs}}ms</view>
+        <view class="api-count muted">×{{item.count}}</view>
+      </view>
+    </view>
+  </view>
+
+</view>

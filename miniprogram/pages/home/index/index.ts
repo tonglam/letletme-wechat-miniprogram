@@ -83,23 +83,24 @@ Page({
   } as HomeData,
 
   countdownTimer: undefined as number | undefined,
+  _initialLoadDone: false,
 
   async onLoad() {
-    if (this.ensureEntryBound()) {
-      await this.ensureAppDataReady();
-      this.syncAppState();
-      this.loadPage();
-      this.startCountdown();
-    }
+    if (!this.ensureEntryBound()) return;
+    this._initialLoadDone = true;
+    await this.ensureAppDataReady();
+    this.syncAppState();
+    this.loadPage();
+    this.startCountdown();
   },
 
   async onShow() {
-    if (this.ensureEntryBound()) {
-      await this.ensureAppDataReady();
-      this.syncAppState();
-      this.loadPage();
-      this.startCountdown();
-    }
+    if (!this.ensureEntryBound()) return;
+    if (!this._initialLoadDone) return;
+    await this.ensureAppDataReady();
+    this.syncAppState();
+    this.loadPage();
+    this.startCountdown();
   },
 
   onUnload() {
@@ -158,7 +159,7 @@ Page({
 
       const [fixtures, priceChanges, gameweekStats] = await Promise.all([
         getNextFixture(fixtureGw).catch(() => [] as Fixture[]),
-        getPlayerValues().catch(() => [] as PlayerValue[]),
+        getPlayerValues(new Date().toISOString().slice(0, 10).replace(/-/g, "")).catch(() => [] as PlayerValue[]),
         getGameweekStatsForHome(currentGw).catch(() => undefined)
       ]);
       const priceGroups = mapHomePriceChanges(priceChanges);

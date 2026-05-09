@@ -9,6 +9,8 @@ interface NavMenu {
   show: boolean;
 }
 
+const PERF_ENTRY_ID = 15702;
+
 const MENU_MAP: Record<string, NavMenu> = {
   live: {
     pages: [
@@ -50,13 +52,19 @@ const MENU_MAP: Record<string, NavMenu> = {
       球队数据: "/pages/data/teams/teams"
     },
     show: true
+  },
+  perf: {
+    pages: [],
+    url: { 性能监控: "/pages/performance/index/index" },
+    show: false
   }
 };
 
 const ROUTE_GROUPS = [
   { prefix: "/pages/live/", active: "live" },
   { prefix: "/pages/summary/", active: "summary" },
-  { prefix: "/pages/data/", active: "data" }
+  { prefix: "/pages/data/", active: "data" },
+  { prefix: "/pages/performance/", active: "perf" }
 ];
 
 function getCurrentRoute(): string {
@@ -84,22 +92,30 @@ Component({
     activeName: "",
     show: false,
     actions: [] as NavAction[],
-    navName: ""
+    navName: "",
+    showPerf: false
   },
 
   lifetimes: {
     attached() {
+      this.syncPerfVisibility();
       this.setActiveFromRoute();
     }
   },
 
   pageLifetimes: {
     show() {
+      this.syncPerfVisibility();
       this.setActiveFromRoute();
     }
   },
 
   methods: {
+    syncPerfVisibility() {
+      const entryId = getApp<IAppOption>().globalData.entryId;
+      this.setData({ showPerf: entryId === PERF_ENTRY_ID });
+    },
+
     setActiveFromRoute() {
       const activeName = getActiveName(getCurrentRoute()) || this.properties.active || "";
       this.setData({ activeName });
