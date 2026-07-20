@@ -1,8 +1,5 @@
 import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
-import { setEntryId, clearEntryScopedStorage } from "../../../utils/storage";
-import { switchToHome } from "../../../utils/navigation";
-import { refreshWechatApiSession } from "../../../services/auth.service";
 
 interface EntrySearchData {
   manualEntryId: string;
@@ -65,8 +62,7 @@ Page({
     try {
       const entry = await getEntryInfo(entryId);
       this.setData(mapPreviewData(entry, entryId));
-      wx.showToast({ title: "绑定成功", icon: "success" });
-      this.saveEntry(entry.entryId || entry.entry || entryId);
+      wx.showToast({ title: "已找到球队", icon: "success" });
     } catch (error) {
       this.setData({
         error: error instanceof Error ? error.message : "无法验证 Entry ID"
@@ -76,13 +72,6 @@ Page({
     }
   },
 
-  saveEntry(entryId: number) {
-    setEntryId(entryId);
-    clearEntryScopedStorage();
-    getApp<IAppOption>().globalData.entryId = entryId;
-    refreshWechatApiSession(entryId).catch(() => {});
-    switchToHome();
-  }
 });
 
 function mapPreviewData(entry: EntryInfo, fallbackEntryId: number): Partial<EntrySearchData> {

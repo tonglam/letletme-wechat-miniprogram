@@ -38,7 +38,9 @@ The old home page did these things:
 
 ## 3. Auth And Entry Binding Rule
 
-WeChat owns Mini Program authentication. The app does not control login identity, session ownership, or WeChat auth state.
+The web account service owns Mini Program authentication. The client only
+exchanges a short-lived `wx.login()` code for a web-issued bearer session and
+does not control identity, session ownership, or FPL entry binding.
 
 The product-level identity for LetLetMe is the user's FPL Entry ID. Therefore:
 
@@ -46,7 +48,8 @@ The product-level identity for LetLetMe is the user's FPL Entry ID. Therefore:
 - If no Entry ID is bound, home must not behave as a usable dashboard.
 - The app must force the user into `pages/entry/search/search` to bind an Entry ID.
 - After binding succeeds, the app can return to the tab home page.
-- This is not WeChat auth; it is app-level team binding.
+- FPL entry ownership is a web-only team-name challenge; the Mini Program
+  inherits only the verified entry returned in the web profile.
 - Pages that require an entry should use the same guard or show an action that routes to binding.
 
 ## 4. New Home Current State

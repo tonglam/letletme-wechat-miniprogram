@@ -17,7 +17,7 @@ export function goToEntrySearch(): void {
 }
 
 export function forceEntryBinding(): void {
-  wx.reLaunch({ url: routes.entrySearch });
+  wx.reLaunch({ url: routes.accountLink });
 }
 
 export function goToEntryProfile(entryId?: number): void {

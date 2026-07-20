@@ -5,9 +5,13 @@ import {
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
+import { storagePrefixes } from "../config/storage-keys";
 
 interface GraphQLError {
   message?: string;
+  extensions?: {
+    code?: string;
+  };
 }
 
 interface GraphQLResponse<T> {
@@ -16,6 +20,7 @@ interface GraphQLResponse<T> {
 }
 
 interface CacheEntry {
+  requestKey: string;
   data: unknown;
   expiresAt: number;
 }
@@ -26,7 +31,6 @@ export interface GraphQLOptions {
 }
 
 const inFlightRequests = new Map<string, Promise<unknown>>();
-const CACHE_PREFIX = "gql:";
 
 function extractOpName(query: string): string {
   const match = /(?:query|mutation)\s+(\w+)/i.exec(query);
@@ -34,21 +38,44 @@ function extractOpName(query: string): string {
 }
 
 function hashKey(str: string): string {
-  let hash = 0;
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    const code = str.charCodeAt(i);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
   }
-  return Math.abs(hash).toString(36);
+  return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
+}
+
+export function buildGraphQLRequestCacheKey(
+  query: string,
+  variables: Record<string, unknown>,
+  token: string | null
+): string {
+  const audience = token ? `session:${hashKey(token)}` : "public";
+  return `${audience}::${query}::${JSON.stringify(variables)}`;
+}
+
+function getStorageCacheKey(requestKey: string, token: string | null): string {
+  const prefix = token
+    ? storagePrefixes.graphqlSessionCache
+    : storagePrefixes.graphqlPublicCache;
+  return `${prefix}${hashKey(requestKey)}`;
+}
+
+function isUnauthenticated(body: GraphQLResponse<unknown> | undefined): boolean {
+  return Boolean(body?.errors?.some((error) => error.extensions?.code === "UNAUTHENTICATED"));
 }
 
 function makeRequest<T>(
   query: string,
   variables: Record<string, unknown>,
-  retryOnUnauthorized = true
+  retryOnUnauthorized = true,
+  token = getApiSessionToken()
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const endpoint = getGraphQLEndpoint();
-    const token = getApiSessionToken();
     const header: Record<string, string> = {
       "content-type": "application/json"
     };
@@ -66,10 +93,11 @@ function makeRequest<T>(
       header,
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
-        if (response.statusCode === 401 && retryOnUnauthorized) {
+        const body = response.data;
+        if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
           clearApiSession();
           refreshWechatApiSession()
-            .then(() => makeRequest<T>(query, variables, false))
+            .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))
             .then(resolve)
             .catch(reject);
           return;
@@ -80,7 +108,6 @@ function makeRequest<T>(
           return;
         }
 
-        const body = response.data;
         const errorMessage = body?.errors?.map((error) => error.message).filter(Boolean).join("; ");
         if (errorMessage) {
           reject(new Error(errorMessage));
@@ -106,7 +133,8 @@ export function graphqlRequest<T>(
   variables: Record<string, unknown> = {},
   options?: GraphQLOptions
 ): Promise<T> {
-  const key = `${query}::${JSON.stringify(variables)}`;
+  const token = getApiSessionToken();
+  const key = buildGraphQLRequestCacheKey(query, variables, token);
 
   const inFlight = inFlightRequests.get(key) as Promise<T> | undefined;
   if (inFlight) {
@@ -115,9 +143,9 @@ export function graphqlRequest<T>(
 
   if (options?.cacheTtl != null || options?.getCacheExpiry) {
     try {
-      const cacheKey = CACHE_PREFIX + hashKey(key);
+      const cacheKey = getStorageCacheKey(key, token);
       const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
-      if (cached && Date.now() < cached.expiresAt) {
+      if (cached && cached.requestKey === key && Date.now() < cached.expiresAt) {
         return Promise.resolve(cached.data as T);
       }
       try { wx.removeStorageSync(cacheKey); } catch {}
@@ -127,15 +155,18 @@ export function graphqlRequest<T>(
   const t0 = Date.now();
   const opName = extractOpName(query);
 
-  const request = makeRequest<T>(query, variables).then((data) => {
+  const request = makeRequest<T>(query, variables, true, token).then((data) => {
     recordApi(opName, Date.now() - t0, true);
-    if (options?.cacheTtl != null || options?.getCacheExpiry) {
+    if (
+      (options?.cacheTtl != null || options?.getCacheExpiry)
+      && getApiSessionToken() === token
+    ) {
       try {
-        const cacheKey = CACHE_PREFIX + hashKey(key);
+        const cacheKey = getStorageCacheKey(key, token);
         const expiresAt = options?.getCacheExpiry
           ? options.getCacheExpiry(data)
           : Date.now() + (options?.cacheTtl ?? 0);
-        wx.setStorageSync(cacheKey, { data, expiresAt });
+        wx.setStorageSync(cacheKey, { requestKey: key, data, expiresAt });
       } catch {}
     }
     return data;

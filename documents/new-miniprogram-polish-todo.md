@@ -70,7 +70,7 @@
 ### `pages/home/index`
 
 - [x] Use `documents/home-page-polish-plan.md` as the source plan for home polish.
-- [x] Treat WeChat auth and FPL Entry ID binding as separate concepts; WeChat owns auth, LetLetMe requires team binding.
+- [x] Treat web-owned Mini Program auth and FPL entry binding as separate concepts; the client inherits only a web-verified entry.
 - [x] Force unbound users from home to `pages/entry/search/search`; home should not be usable without a bound Entry ID.
 - [x] Preserve old home behavior: entry title, GW, change-entry action, notice, deadline countdown, next fixtures, and refresh-on-deadline-finish.
 - [x] Extend `Fixture` model for old backend fields: `teamId`, `againstTeamId`, `teamName`, `againstTeamName`, `teamShortName`, `againstTeamShortName`.
