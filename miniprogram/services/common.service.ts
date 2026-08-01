@@ -5,7 +5,9 @@ import { storageKeys } from "../config/storage-keys";
 const CURRENT_EVENT_INFO = `
   query CurrentEventInfo {
     currentEventInfo {
+      season
       currentEvent
+      nextEvent
       nextUtcDeadline
     }
   }
@@ -13,7 +15,9 @@ const CURRENT_EVENT_INFO = `
 
 interface CurrentEventInfoResponse {
   currentEventInfo: {
-    currentEvent: number;
+    season: string;
+    currentEvent: number | null;
+    nextEvent: number | null;
     nextUtcDeadline: string | null;
   } | null;
 }
@@ -30,10 +34,13 @@ export async function getCurrentEventAndDeadline(): Promise<CurrentEventDeadline
     }
   });
   const info = data.currentEventInfo;
+  const gw = info?.currentEvent ?? info?.nextEvent ?? undefined;
   return {
-    currentEvent: info?.currentEvent,
-    event: info?.currentEvent,
-    gw: info?.currentEvent,
+    season: info?.season,
+    currentEvent: info?.currentEvent ?? undefined,
+    nextEvent: info?.nextEvent ?? undefined,
+    event: gw,
+    gw,
     utcDeadline: info?.nextUtcDeadline ?? undefined,
     deadline: info?.nextUtcDeadline ?? undefined
   };

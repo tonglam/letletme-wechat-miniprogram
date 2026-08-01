@@ -3,6 +3,7 @@ export interface CurrentEventDeadline {
   gw?: number;
   event?: number;
   currentEvent?: number;
+  nextEvent?: number;
   utcDeadline?: string;
   deadline?: string;
 }
