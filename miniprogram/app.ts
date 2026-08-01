@@ -2,6 +2,8 @@ import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
 import { refreshWechatApiSession } from "./services/auth.service";
+import { MiniProgramLinkRequiredError } from "./services/auth-session";
+import { routes } from "./config/routes";
 import { recordLaunch } from "./utils/perf";
 import { resolveEventContext } from "./utils/event-context";
 
@@ -39,7 +41,18 @@ App<IAppOption>({
   },
 
   doLogin() {
-    refreshWechatApiSession(this.globalData.entryId).catch(() => {});
+    // Restore the valid 30-day session immediately. A successful background
+    // WeChat login rotates it; transient/network failures leave it usable.
+    this.globalData.entryId = getEntryId();
+    refreshWechatApiSession().then((session) => {
+      if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
+        this.globalData.entryId = session.profile.fplEntryId;
+      }
+    }).catch((error) => {
+      if (error instanceof MiniProgramLinkRequiredError) {
+        wx.reLaunch({ url: routes.accountLink });
+      }
+    });
   },
 
   async initAppData() {

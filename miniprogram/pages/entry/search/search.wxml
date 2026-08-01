@@ -1,7 +1,7 @@
 <view class="page">
   <view class="entry-hero section">
-    <view class="title">绑定 FPL 球队</view>
-    <view class="subtitle">微信只负责登录身份；使用应用前必须绑定你的 FPL Entry ID。</view>
+    <view class="title">查看 FPL 球队</view>
+    <view class="subtitle">账户绑定只能在 LetLetMe 网页端通过球队名称验证完成。</view>
   </view>
 
   <view class="bind-card section">
@@ -29,7 +29,7 @@
       </view>
     </view>
     <button class="primary-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onValidateAndSaveEntry">
-      {{buttonText}}
+      验证球队
     </button>
   </view>
 

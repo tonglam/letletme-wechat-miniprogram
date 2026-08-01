@@ -18,9 +18,15 @@ export function clearEntryScopedStorage(): void {
     storageKeys.selectedKnockoutName,
     storageKeys.selectedStatLeagueId,
     storageKeys.selectedStatLeagueName,
+    storageKeys.selectedDataSelectionsTournamentId,
+    storageKeys.selectedDataSelectionsTournamentName,
     storageKeys.selectedSummaryTournamentId,
     storageKeys.selectedSummaryTournamentName
-  ].forEach((key) => wx.removeStorageSync(key));
+  ].forEach((key) => {
+    try {
+      wx.removeStorageSync(key);
+    } catch {}
+  });
 }
 
 export function clearEntryId(): void {
