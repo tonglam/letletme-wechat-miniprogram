@@ -3,6 +3,7 @@ import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
 import { refreshWechatApiSession } from "./services/auth.service";
 import { recordLaunch } from "./utils/perf";
+import { resolveEventContext } from "./utils/event-context";
 
 App<IAppOption>({
   globalData: {
@@ -58,13 +59,13 @@ App<IAppOption>({
   async _initAppDataInner() {
     try {
       const current = await getCurrentEventAndDeadline();
-      const gw = Number(current.gw || current.event || current.currentEvent || 0);
+      const eventContext = resolveEventContext(current.currentEvent, current.nextEvent);
       const utcDeadline = String(current.utcDeadline || current.deadline || "");
 
       this.globalData.season = String(current.season || "");
-      this.globalData.gw = gw;
-      this.globalData.lastGw = Math.max(gw - 1, 0);
-      this.globalData.nextGw = gw + 1;
+      this.globalData.gw = eventContext.gw;
+      this.globalData.lastGw = eventContext.lastGw;
+      this.globalData.nextGw = eventContext.nextGw;
       this.globalData.utcDeadline = utcDeadline;
       this.globalData.deadline = formatDeadline(utcDeadline);
     } catch {
