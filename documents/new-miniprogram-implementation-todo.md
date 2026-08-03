@@ -103,7 +103,7 @@
 - [ ] Verify every `app.json` page path opens.
 - [ ] Verify tab navigation.
 - [ ] Verify child navigation with query params.
-- [ ] Verify request-domain whitelist.
+- [ ] Verify the WeChat request-domain whitelist contains `https://www.letletme.top` before release; `api.letletme.top` is internal-only.
 - [ ] Verify loading, empty, error, retry states.
 - [x] Verify no sample quickstart page/code remains.
 - [x] Verify no new packages were added.

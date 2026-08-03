@@ -1,0 +1,49 @@
+name: Signed WeChat Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Mini Program version
+        required: true
+        type: string
+      description:
+        description: Upload description
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: wechat-release
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint && npm run typecheck && npm test && npm run package:check
+      - name: Upload signed package
+        env:
+          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
+          WECHAT_PRIVATE_KEY: ${{ secrets.WECHAT_PRIVATE_KEY }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DESCRIPTION: ${{ inputs.description }}
+        run: |
+          test -n "$WECHAT_APPID"
+          test -n "$WECHAT_PRIVATE_KEY"
+          key_file=$(mktemp)
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s' "$WECHAT_PRIVATE_KEY" > "$key_file"
+          npx --yes miniprogram-ci@2.1.5 upload \
+            --pp . \
+            --pkp "$key_file" \
+            --appid "$WECHAT_APPID" \
+            --uv "$RELEASE_VERSION" \
+            --ud "$RELEASE_DESCRIPTION"

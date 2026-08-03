@@ -18,7 +18,7 @@ The app is built with native WeChat Mini Program pages, components, WXML, WXSS, 
 - TypeScript
 - WXML and WXSS
 - Vant Weapp components
-- GraphQL over `wx.request`
+- GraphQL over `wx.request`, using a web-issued hashed bearer session
 - ESLint and TypeScript checks
 
 ## Project Structure
@@ -58,13 +58,28 @@ The app selects the GraphQL endpoint from the Mini Program runtime environment:
 - `trial`: production LetLetMe GraphQL proxy
 - `release`: production LetLetMe GraphQL proxy
 
-For development testing, the endpoint can be overridden through the storage key managed by `miniprogram/config/env.ts`.
+For development testing, the endpoints can be overridden through the storage keys managed by `miniprogram/config/env.ts`. Trial and release builds always use the checked-in HTTPS endpoints and ignore local overrides.
+
+Production authentication is owned by `letletme-web`: the Mini Program calls
+`https://www.letletme.top/api/miniprogram` for WeChat/email-link login and sends
+the returned bearer token to `https://www.letletme.top/api/graphql`. Login never
+accepts a client-supplied `fplEntryId`; only an entry verified by the website
+team-name challenge is inherited into the profile. Add `www.letletme.top` to
+the WeChat request-domain allowlist in the Mini Program admin console before
+releasing a build; the API origin is no longer a client endpoint.
+
+Sessions last at most 30 days and each successful login rotates the active
+token for that user/device. Explicit sign-out calls the web session `DELETE`
+route before clearing local credentials; expired or nearly expired credentials
+are removed locally and never sent to GraphQL.
 
 ## Checks
 
 ```bash
 npm run typecheck
 npm run lint
+npm test
+npm run package:check
 ```
 
 ## Security Notes
