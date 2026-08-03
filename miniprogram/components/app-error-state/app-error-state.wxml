@@ -5,8 +5,8 @@
     <view class="error-signal error-signal-three"></view>
     <view class="error-mark">!</view>
   </view>
-  <view wx:if="{{eyebrow}}" class="error-eyebrow">{{eyebrow}}</view>
+  <view class="error-eyebrow">{{eyebrow || '加载未完成'}}</view>
   <view class="error-message">{{message}}</view>
-  <view wx:if="{{description}}" class="error-description">{{description}}</view>
+  <view class="error-description">{{description || '请稍后重试，当前页面不会丢失已有内容。'}}</view>
   <button class="error-action" hover-class="error-action-hover" bindtap="onRetry">{{retryText}}</button>
 </view>

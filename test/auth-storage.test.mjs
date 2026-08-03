@@ -55,7 +55,7 @@ test("remote sign-out failure retains the credential so revocation can be retrie
     };
     globalThis.getApp = () => ({ globalData: { entryId: 123 } });
 
-    await assert.rejects(logoutMiniProgramSession(), /offline/);
+    await assert.rejects(logoutMiniProgramSession(), /网络连接失败/);
     assert.deepEqual(removed, []);
   } finally {
     globalThis.wx = previousWx;

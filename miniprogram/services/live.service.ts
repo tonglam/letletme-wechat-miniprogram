@@ -136,154 +136,60 @@ export async function getLivePointsByEntry(entry: number, event: number): Promis
   };
 }
 
-const LIVE_MATCHES = `
+export const LIVE_MATCHES_QUERY = `
   query LiveMatches {
     liveMatches {
       nextEvent {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
-        homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
-        awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
+        ...LiveMatchFields
       }
       notStarted {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
-        homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
-        awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
+        ...LiveMatchFields
       }
       playing {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
+        ...LiveMatchFields
         homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
         awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
       }
       finished {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
+        ...LiveMatchFields
         homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
         awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
       }
     }
+  }
+
+  fragment LiveMatchFields on LiveMatchData {
+    matchId
+    minutes
+    homeTeamName
+    homeTeamShortName
+    homeScore
+    awayTeamName
+    awayTeamShortName
+    awayScore
+    kickoffTime
+    playStatus
+  }
+
+  fragment LiveMatchPlayerFields on ElementEventResultData {
+    webName
+    teamShortName
+    goalsScored
+    assists
+    redCards
+    yellowCards
+    penaltiesSaved
+    penaltiesMissed
+    saves
+    bonus
   }
 `;
 
@@ -336,13 +242,13 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     awayScore: match.awayScore,
     kickoffTime: match.kickoffTime,
     playStatus: match.playStatus.toLowerCase(),
-    homeTeamDataList: match.homeTeamDataList,
-    awayTeamDataList: match.awayTeamDataList
+    homeTeamDataList: match.homeTeamDataList || [],
+    awayTeamDataList: match.awayTeamDataList || []
   };
 }
 
 export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
-  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES);
+  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY);
   const result = data.liveMatches;
   switch (status) {
     case "playing":
@@ -402,18 +308,18 @@ interface TournamentLivePointsResponse {
   };
 }
 
-function numericId(value: number | string, label: string): number {
+function numericId(value: number | string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`Invalid ${label}: ${value}`);
+    throw new Error("页面参数无效，请返回后重试");
   }
   return parsed;
 }
 
 export async function getLivePointsByTournament(tournamentId: number | string, event: number): Promise<LiveTournamentRow[]> {
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
-    tournamentId: numericId(tournamentId, "tournamentId"),
-    eventId: numericId(event, "eventId")
+    tournamentId: numericId(tournamentId),
+    eventId: numericId(event)
   });
   return mapTournamentLiveRows(data.calcLivePointsForTournament.results);
 }
