@@ -1,7 +1,3 @@
-.page {
-  padding-bottom: 168rpx;
-}
-
 .match-header {
   display: flex;
   align-items: flex-start;

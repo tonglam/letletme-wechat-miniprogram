@@ -1,5 +1,10 @@
 <wxs module="pos">
-  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  var map = {
+    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
+    DEF: 'pos-def', DEFENDER: 'pos-def',
+    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
+    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
+  };
   function cls(p) {
     if (!p) return '';
     var key = String(p).toUpperCase();
@@ -7,7 +12,7 @@
   }
   module.exports = { cls: cls };
 </wxs>
-<view class="page summary-page">
+<view class="page">
   <view class="section summary-header">
     <view class="header-text">
       <view class="title">{{headerTitle}}</view>

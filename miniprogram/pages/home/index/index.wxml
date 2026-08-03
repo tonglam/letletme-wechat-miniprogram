@@ -1,5 +1,10 @@
 <wxs module="pos">
-  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  var map = {
+    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
+    DEF: 'pos-def', DEFENDER: 'pos-def',
+    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
+    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
+  };
   function cls(p) {
     if (!p) return '';
     var key = String(p).toUpperCase();
@@ -35,7 +40,7 @@
         </view>
         <view class="gw-pill-dark">Current GW{{gw || '-'}}</view>
       </view>
-      <view class="countdown">
+      <view wx:if="{{utcDeadline}}" class="countdown">
         <view class="countdown-item">
           <text class="countdown-value">{{countdown.days}}</text>
           <text class="countdown-label">天</text>
@@ -53,9 +58,10 @@
           <text class="countdown-label">秒</text>
         </view>
       </view>
+      <view wx:else class="deadline-empty">赛程更新后显示倒计时</view>
     </view>
 
-    <view class="section card price-card">
+    <view wx:if="{{priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
       <view class="price-head">
         <view>
           <view class="section-title">身价变化</view>
@@ -136,7 +142,7 @@
       <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
         <view class="fixture-team home-team">
           <text class="team-name">{{item.homeName}}</text>
-          <text wx:if="{{item.homeDifficulty}}" class="difficulty difficulty-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
+          <text wx:if="{{item.homeDifficulty}}" class="fdr fdr-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
         </view>
         <view class="fixture-center">
           <text class="fixture-vs">vs</text>
@@ -144,7 +150,7 @@
         </view>
         <view class="fixture-team away-team">
           <text class="team-name">{{item.awayName}}</text>
-          <text wx:if="{{item.awayDifficulty}}" class="difficulty difficulty-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
+          <text wx:if="{{item.awayDifficulty}}" class="fdr fdr-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
         </view>
       </view>
     </view>

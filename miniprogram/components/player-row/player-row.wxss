@@ -43,20 +43,17 @@
   font-weight: 600;
 }
 
+/* Captain / vice-captain marker — plum board, electric letter */
 .role-badge {
   flex-shrink: 0;
   margin-left: 10rpx;
   padding: 2rpx 8rpx;
   border-radius: 6rpx;
+  background: var(--plum, #38003c);
+  color: var(--electric, #00ff85);
   font-size: 18rpx;
   font-weight: 800;
   line-height: 28rpx;
-}
-
-/* Captain / vice-captain marker — plum board, electric letter */
-.role-badge {
-  background: var(--plum, #38003c);
-  color: var(--electric, #00ff85);
 }
 
 .player-meta {

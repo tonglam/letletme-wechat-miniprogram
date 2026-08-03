@@ -13,7 +13,7 @@
   <app-loading wx:elif="{{loading}}" text="加载实时分数" />
   <block wx:else>
     <view class="section live-summary">
-      <view class="score-card scoreboard primary">
+      <view class="score-card scoreboard">
         <view class="score-label">实时总分</view>
         <view class="score">{{total}}</view>
         <view class="score-sub">更新 {{lastUpdated || '-'}}</view>

@@ -408,7 +408,7 @@ function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {
     return selected;
   }, undefined);
 
-  return [
+  const rows = [
     {
       key: "highestScore",
       label: "最高分",
@@ -430,6 +430,9 @@ function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {
       value: topChip ? `${formatChipName(topChip.chipName)} ${formatCompactNumber(topChip.numberPlayed)}` : "-"
     }
   ];
+
+  // Preseason / empty GW: drop placeholder rows so the section hides entirely
+  return rows.filter((row) => row.value !== "-" && row.value !== "");
 }
 
 function formatTopScorer(summary: GameweekOverallSummary): string {
