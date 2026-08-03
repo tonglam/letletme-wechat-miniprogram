@@ -62,11 +62,11 @@ For development testing, the endpoints can be overridden through the storage key
 
 Production authentication is owned by `letletme-web`: the Mini Program calls
 `https://www.letletme.top/api/miniprogram` for WeChat/email-link login and sends
-the returned bearer token to GraphQL. Login never accepts a client-supplied
-`fplEntryId`; only an entry verified by the website team-name challenge is
-inherited into the profile. Add both `www.letletme.top` and
-`api.letletme.top` to the WeChat request-domain allowlist in the Mini Program
-admin console before releasing a build.
+the returned bearer token to `https://www.letletme.top/api/graphql`. Login never
+accepts a client-supplied `fplEntryId`; only an entry verified by the website
+team-name challenge is inherited into the profile. Add `www.letletme.top` to
+the WeChat request-domain allowlist in the Mini Program admin console before
+releasing a build; the API origin is no longer a client endpoint.
 
 Sessions last at most 30 days and each successful login rotates the active
 token for that user/device. Explicit sign-out calls the web session `DELETE`
