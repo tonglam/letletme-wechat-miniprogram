@@ -14,15 +14,15 @@
   flex-shrink: 0;
   min-width: 112rpx;
   padding: 14rpx 16rpx;
-  border: 1rpx solid #d6dae3;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  background: var(--card, #ffffff);
   text-align: center;
 }
 
 .match-count-number {
   display: block;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 34rpx;
   font-weight: 900;
   line-height: 40rpx;
@@ -31,7 +31,7 @@
 .match-count-label {
   display: block;
   margin-top: 2rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
   font-weight: 700;
 }
@@ -45,16 +45,16 @@
   gap: 8rpx;
   margin: 0 -4rpx 24rpx;
   padding: 8rpx 4rpx;
-  background: #f5f6f8;
+  background: var(--bg, #f9f8f4);
 }
 
 .status-tab {
   min-width: 0;
   padding: 16rpx 6rpx;
-  border: 1rpx solid #d9dee8;
-  border-radius: 8rpx;
-  background: #ffffff;
-  color: #475467;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 10rpx;
+  background: var(--card, #ffffff);
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   font-weight: 800;
   line-height: 28rpx;
@@ -62,9 +62,9 @@
 }
 
 .status-tab.active {
-  border-color: #111827;
-  background: #111827;
-  color: #ffffff;
+  border-color: var(--plum, #38003c);
+  background: var(--plum, #38003c);
+  color: var(--chalk, #f9f7f2);
 }
 
 .match-content {
@@ -77,38 +77,39 @@
 
 .group-title {
   margin: 0 0 14rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 2rpx;
 }
 
 .match-card {
   position: relative;
   margin-bottom: 18rpx;
   padding: 22rpx;
-  border: 1rpx solid #e4e9f2;
-  border-left: 8rpx solid #98a2b3;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.05);
+  border: 1rpx solid var(--line, #ddd4de);
+  border-left: 8rpx solid var(--muted-ink, #6e5a72);
+  border-radius: 16rpx;
+  background: var(--card, #ffffff);
+  box-shadow: 0 2rpx 8rpx rgba(56, 0, 60, 0.04);
   box-sizing: border-box;
 }
 
+/* Status edge colours — aligned to web semantics */
 .match-card.status-playing {
-  border-left-color: #16a34a;
+  border-left-color: var(--green-ink, #008545);
 }
 
 .match-card.status-finished {
-  border-left-color: #475467;
+  border-left-color: var(--muted-ink, #6e5a72);
 }
 
 .match-card.status-waiting {
-  border-left-color: #2563eb;
+  border-left-color: var(--info, #82208a);
 }
 
 .match-card.status-next {
-  border-left-color: #f59e0b;
+  border-left-color: var(--warning, #924a07);
 }
 
 .match-card-head {
@@ -122,34 +123,34 @@
   flex-shrink: 0;
   padding: 6rpx 12rpx;
   border-radius: 8rpx;
-  background: #eef2f7;
-  color: #344054;
+  background: var(--track, #f1efe9);
+  color: var(--ink, #301333);
   font-size: 20rpx;
   font-weight: 900;
   line-height: 28rpx;
 }
 
 .status-playing .status-pill {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--accent-tint, #dcf6ea);
+  color: var(--green-ink, #008545);
 }
 
 .status-finished .status-pill {
-  background: #f2f4f7;
-  color: #475467;
+  background: var(--track, #f1efe9);
+  color: var(--muted-ink, #6e5a72);
 }
 
 .status-waiting .status-pill {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: #f0e3f2;
+  color: var(--info, #82208a);
 }
 
 .status-next .status-pill {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-tint, #f6ead9);
+  color: var(--warning, #924a07);
 }
 
-.scoreboard {
+.scoregrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 132rpx minmax(0, 1fr);
   align-items: center;
@@ -169,7 +170,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 900;
   line-height: 36rpx;
@@ -178,14 +179,14 @@
 .scoreline {
   min-height: 84rpx;
   padding: 8rpx 6rpx;
-  border-radius: 8rpx;
-  background: #f8fafc;
+  border-radius: 10rpx;
+  background: var(--track, #f1efe9);
   box-sizing: border-box;
   text-align: center;
 }
 
 .score {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 36rpx;
   font-weight: 900;
   line-height: 44rpx;
@@ -193,7 +194,7 @@
 
 .minute {
   margin-top: 2rpx;
-  color: #16a34a;
+  color: var(--green-ink, #008545);
   font-size: 20rpx;
   font-weight: 900;
   line-height: 26rpx;
@@ -202,12 +203,12 @@
 .event-list {
   margin-top: 20rpx;
   padding-top: 16rpx;
-  border-top: 1rpx solid #eef2f7;
+  border-top: 1rpx solid var(--line, #ddd4de);
 }
 
 .event-title {
   margin-bottom: 8rpx;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 22rpx;
   font-weight: 900;
 }
@@ -224,12 +225,12 @@
 .event-label {
   flex-shrink: 0;
   width: 72rpx;
-  color: #344054;
+  color: var(--ink, #301333);
   font-weight: 900;
 }
 
 .event-value {
   min-width: 0;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   word-break: break-all;
 }

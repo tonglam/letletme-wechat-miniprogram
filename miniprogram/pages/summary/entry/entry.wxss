@@ -28,10 +28,10 @@
   flex-shrink: 0;
   min-height: 64rpx;
   padding: 0 22rpx;
-  border: 1rpx solid #d0d5dd;
-  border-radius: 8rpx;
-  background: #ffffff;
-  color: #344054;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 10rpx;
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -40,14 +40,14 @@
   margin-bottom: 18rpx;
 }
 
+/* Tab strip — web Tabs pattern */
 .tab-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8rpx;
   padding: 8rpx;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .tab-item {
@@ -55,15 +55,16 @@
   align-items: center;
   justify-content: center;
   min-height: 58rpx;
-  border-radius: 6rpx;
-  color: #667085;
+  border-radius: 8rpx;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .tab-active {
-  background: #111827;
-  color: #ffffff;
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
+  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
 }
 
 .metric-grid {
@@ -79,14 +80,13 @@
 .metric-card {
   min-width: 0;
   padding: 18rpx;
-  border: 1rpx solid #eef2f7;
-  border-radius: 8rpx;
-  background: #f8fafc;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .metric-label,
 .row-meta {
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
 }
 
@@ -96,19 +96,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 30rpx;
   font-weight: 800;
 }
 
 .metric-value-bad,
 .cost-bad {
-  color: #be123c;
+  color: var(--danger, #c9183f);
 }
 
 .section-title-small {
   margin-bottom: 14rpx;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -121,7 +121,7 @@
   gap: 18rpx;
   min-height: 72rpx;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .summary-row:last-child,
@@ -143,14 +143,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 25rpx;
   font-weight: 700;
 }
 
 .row-value {
   flex-shrink: 0;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 25rpx;
   font-weight: 800;
 }
@@ -164,6 +164,7 @@
   text-align: center;
 }
 
+/* Layout-only badge shells — colours come from global pos-*/role-* classes */
 .position-badge,
 .role-badge {
   display: inline-flex;
@@ -175,30 +176,24 @@
   font-weight: 800;
 }
 
-.position-badge {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
 .role-starter {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--accent-tint, #dcf6ea);
+  color: var(--green-ink, #008545);
 }
 
 .role-bench {
-  background: #f3f4f6;
-  color: #667085;
+  background: var(--track, #f1efe9);
+  color: var(--muted-ink, #6e5a72);
 }
 
 .mini-stat,
 .points-stat {
-  color: #344054;
+  color: var(--ink, #301333);
   font-size: 22rpx;
   font-weight: 700;
 }
 
 .points-stat {
-  color: #111827;
   font-weight: 900;
 }
 
@@ -212,8 +207,8 @@
   gap: 10rpx;
   align-items: center;
   padding-bottom: 14rpx;
-  border-bottom: 1rpx solid #eef2f7;
-  color: #111827;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -225,20 +220,20 @@
 
 .empty-line {
   padding: 18rpx 0 4rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
 }
 
 .move-card {
   margin-top: 14rpx;
   padding: 16rpx;
-  border: 1rpx solid #eef2f7;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  background: var(--card, #ffffff);
 }
 
 .move-text {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1.45;
@@ -246,7 +241,7 @@
 
 .history-card {
   padding: 18rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .history-card:last-child {
@@ -258,7 +253,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10rpx;
   margin-top: 12rpx;
-  color: #475467;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   line-height: 1.4;
 }

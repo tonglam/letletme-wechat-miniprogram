@@ -9,14 +9,14 @@
   gap: 20rpx;
 }
 
+/* Tab strip — web Tabs pattern */
 .tab-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8rpx;
   padding: 8rpx;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .tab-item {
@@ -24,15 +24,16 @@
   align-items: center;
   justify-content: center;
   min-height: 58rpx;
-  border-radius: 6rpx;
-  color: #667085;
+  border-radius: 8rpx;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .tab-active {
-  background: #111827;
-  color: #ffffff;
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
+  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
 }
 
 .metric-grid {
@@ -44,15 +45,14 @@
 .metric-card {
   min-width: 0;
   padding: 18rpx;
-  border: 1rpx solid #eef2f7;
-  border-radius: 8rpx;
-  background: #f8fafc;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .metric-label,
 .row-meta,
 .list-empty {
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
 }
 
@@ -62,7 +62,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 30rpx;
   font-weight: 800;
 }
@@ -73,7 +73,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 21rpx;
 }
 
@@ -87,7 +87,7 @@
 
 .section-title-small {
   margin-bottom: 14rpx;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -99,7 +99,7 @@
   gap: 18rpx;
   min-height: 72rpx;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .summary-row:last-child {
@@ -115,24 +115,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 25rpx;
   font-weight: 700;
 }
 
 .row-value {
   flex-shrink: 0;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 25rpx;
   font-weight: 800;
 }
 
 .row-value-good {
-  color: #15803d;
+  color: var(--green-ink, #008545);
 }
 
 .row-value-bad {
-  color: #be123c;
+  color: var(--danger, #c9183f);
 }
 
 .list-empty {

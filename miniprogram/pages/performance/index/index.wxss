@@ -14,22 +14,20 @@
 
 .perf-btn {
   padding: 10rpx 22rpx;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--track, #f1efe9);
+  color: var(--ink, #301333);
   font-size: 24rpx;
-  border-radius: 6rpx;
+  border-radius: 8rpx;
   font-weight: 600;
 }
 
 .perf-btn-danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--danger-tint, #fbe3e9);
+  color: var(--danger, #c9183f);
 }
 
-/* Score Card */
+/* Score Card — scoreboard panel */
 .score-card {
-  background: #111827;
-  color: #ffffff;
   padding: 28rpx;
 }
 
@@ -50,10 +48,10 @@
   flex-shrink: 0;
 }
 
-.score-ring-good { background: #166534; }
-.score-ring-avg  { background: #92400e; }
-.score-ring-poor { background: #991b1b; }
-.score-ring-none { background: #374151; }
+.score-ring-good { background: rgba(0, 209, 109, 0.25); }
+.score-ring-avg  { background: rgba(251, 191, 36, 0.25); }
+.score-ring-poor { background: rgba(201, 24, 63, 0.35); }
+.score-ring-none { background: rgba(249, 247, 242, 0.12); }
 
 .score-number {
   font-size: 48rpx;
@@ -78,10 +76,10 @@
   margin-bottom: 16rpx;
 }
 
-.score-grade-good { color: #4ade80; }
+.score-grade-good { color: var(--electric, #00ff85); }
 .score-grade-avg  { color: #fbbf24; }
 .score-grade-poor { color: #f87171; }
-.score-grade-none { color: #9ca3af; }
+.score-grade-none { color: rgba(249, 247, 242, 0.6); }
 
 .score-bar-track {
   height: 12rpx;
@@ -96,21 +94,21 @@
   border-radius: 6rpx;
 }
 
-.score-fill-good { background: #4ade80; }
+.score-fill-good { background: var(--electric, #00ff85); }
 .score-fill-avg  { background: #fbbf24; }
 .score-fill-poor { background: #f87171; }
-.score-fill-none { background: #4b5563; }
+.score-fill-none { background: rgba(249, 247, 242, 0.3); }
 
 .score-time {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(249, 247, 242, 0.45);
 }
 
 /* Section heading */
 .card-heading {
   font-size: 26rpx;
   font-weight: 700;
-  color: #111827;
+  color: var(--ink, #301333);
   margin-bottom: 20rpx;
 }
 
@@ -120,7 +118,7 @@
   align-items: center;
   gap: 16rpx;
   padding: 18rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .metric-row:last-child {
@@ -145,7 +143,7 @@
 .metric-bar-track {
   flex: 1;
   height: 10rpx;
-  background: #f3f4f6;
+  background: var(--track, #f1efe9);
   border-radius: 5rpx;
   overflow: hidden;
 }
@@ -155,15 +153,15 @@
   border-radius: 5rpx;
 }
 
-.metric-fill-good { background: #22c55e; }
+.metric-fill-good { background: var(--cta, #00d16d); }
 .metric-fill-avg  { background: #f59e0b; }
-.metric-fill-poor { background: #ef4444; }
-.metric-fill-none { background: #d1d5db; }
+.metric-fill-poor { background: var(--danger, #c9183f); }
+.metric-fill-none { background: var(--line, #ddd4de); }
 
 .metric-value {
   font-size: 24rpx;
   font-weight: 600;
-  color: #111827;
+  color: var(--ink, #301333);
   width: 96rpx;
   text-align: right;
   flex-shrink: 0;
@@ -173,16 +171,16 @@
   font-size: 20rpx;
   font-weight: 700;
   padding: 4rpx 10rpx;
-  border-radius: 4rpx;
+  border-radius: 6rpx;
   flex-shrink: 0;
   text-align: center;
   min-width: 44rpx;
 }
 
-.metric-badge-good { background: #dcfce7; color: #166534; }
-.metric-badge-avg  { background: #fef3c7; color: #92400e; }
-.metric-badge-poor { background: #fee2e2; color: #991b1b; }
-.metric-badge-none { background: #f3f4f6; color: #6b7280; }
+.metric-badge-good { background: var(--accent-tint, #dcf6ea); color: var(--green-ink, #008545); }
+.metric-badge-avg  { background: var(--warning-tint, #f6ead9); color: var(--warning, #924a07); }
+.metric-badge-poor { background: var(--danger-tint, #fbe3e9); color: var(--danger, #c9183f); }
+.metric-badge-none { background: var(--track, #f1efe9); color: var(--muted-ink, #6e5a72); }
 
 /* Env */
 .env-row {
@@ -203,13 +201,13 @@
 .env-val {
   font-size: 24rpx;
   font-weight: 600;
-  color: #111827;
+  color: var(--ink, #301333);
 }
 
 .env-div {
   width: 1rpx;
   height: 28rpx;
-  background: #e5e7eb;
+  background: var(--line, #ddd4de);
   margin: 0 28rpx;
 }
 
@@ -224,7 +222,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .api-row:last-child {
@@ -235,7 +233,7 @@
 .api-name {
   flex: 1;
   font-size: 24rpx;
-  color: #374151;
+  color: var(--muted-ink, #6e5a72);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -253,7 +251,7 @@
   font-size: 22rpx;
   font-weight: 700;
   padding: 4rpx 10rpx;
-  border-radius: 4rpx;
+  border-radius: 6rpx;
   min-width: 80rpx;
   text-align: center;
 }

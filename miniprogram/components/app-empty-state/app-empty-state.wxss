@@ -1,11 +1,11 @@
 .empty {
   padding: 56rpx 24rpx;
   text-align: center;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
 }
 
 .empty-title {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 30rpx;
   font-weight: 600;
 }
@@ -17,4 +17,6 @@
 
 .empty-action {
   margin-top: 24rpx;
+  color: var(--green-ink, #008545);
+  font-weight: 600;
 }

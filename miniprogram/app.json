@@ -20,10 +20,10 @@
     "pages/performance/index/index"
   ],
   "window": {
-    "navigationBarTextStyle": "black",
+    "navigationBarTextStyle": "white",
     "navigationBarTitleText": "LetLetMe",
-    "navigationBarBackgroundColor": "#ffffff",
-    "backgroundColor": "#f5f6f8",
+    "navigationBarBackgroundColor": "#1d0520",
+    "backgroundColor": "#f9f8f4",
     "backgroundTextStyle": "dark"
   },
   "__usePrivacyCheck__": true,

@@ -13,14 +13,14 @@
 }
 
 .field-label {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 26rpx;
   font-weight: 700;
 }
 
 .field-help {
   margin-top: 6rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
 }
 
@@ -29,9 +29,9 @@
   height: 72rpx;
   padding: 0 20rpx;
   overflow: hidden;
-  border: 1rpx solid #d0d5dd;
-  border-radius: 8rpx;
-  color: #111827;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  color: var(--ink, #301333);
   font-size: 24rpx;
   line-height: 72rpx;
   text-overflow: ellipsis;
@@ -44,14 +44,14 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 8rpx;
   padding: 8rpx;
-  background: #e5e7eb;
-  border-radius: 8rpx;
+  background: var(--track, #f1efe9);
+  border-radius: 12rpx;
 }
 
 .tab-item {
   height: 68rpx;
-  border-radius: 6rpx;
-  color: #475467;
+  border-radius: 8rpx;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
   font-weight: 700;
   line-height: 68rpx;
@@ -59,9 +59,9 @@
 }
 
 .tab-active {
-  background: #ffffff;
-  color: #111827;
-  box-shadow: 0 8rpx 18rpx rgba(17, 24, 39, 0.08);
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
+  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
 }
 
 .stat-card {
@@ -72,7 +72,7 @@
 .stat-row {
   min-height: 104rpx;
   padding: 18rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .stat-row:last-child {
@@ -82,7 +82,7 @@
 .rank-badge {
   flex-shrink: 0;
   width: 56rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   font-weight: 800;
   text-align: left;
@@ -97,7 +97,7 @@
 .player-name {
   min-width: 0;
   overflow: hidden;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 26rpx;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -107,7 +107,7 @@
 .player-meta {
   flex-shrink: 0;
   margin-left: 12rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
 }
 
@@ -116,26 +116,27 @@
   margin-top: 16rpx;
   overflow: hidden;
   border-radius: 999rpx;
-  background: #eef2f7;
+  background: var(--track, #f1efe9);
 }
 
+/* Bar fills — web semantic hues (selection=info, captain=warning, in=success, out=danger) */
 .bar-fill {
   height: 100%;
   min-width: 8rpx;
   border-radius: 999rpx;
-  background: #2563eb;
+  background: var(--info, #82208a);
 }
 
 .tab-captain {
-  background: #d97706;
+  background: var(--warning, #924a07);
 }
 
 .tab-transfersIn {
-  background: #059669;
+  background: var(--green-ink, #008545);
 }
 
 .tab-transfersOut {
-  background: #dc2626;
+  background: var(--danger, #c9183f);
 }
 
 .stat-side {
@@ -147,21 +148,21 @@
 .primary-value,
 .secondary-value {
   display: block;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 800;
 }
 
 .secondary-value {
   margin-top: 6rpx;
-  color: #475467;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
 }
 
 .side-label {
   display: block;
   margin-top: 2rpx;
-  color: #98a2b3;
+  color: var(--muted-ink, #6e5a72);
   font-size: 18rpx;
   font-weight: 700;
 }

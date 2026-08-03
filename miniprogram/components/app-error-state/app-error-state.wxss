@@ -4,10 +4,12 @@
 }
 
 .error-message {
-  color: #b42318;
+  color: var(--danger, #c9183f);
   font-size: 26rpx;
 }
 
 .error-action {
   margin-top: 24rpx;
+  color: var(--green-ink, #008545);
+  font-weight: 600;
 }

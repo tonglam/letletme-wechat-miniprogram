@@ -1,3 +1,12 @@
+<wxs module="pos">
+  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  function cls(p) {
+    if (!p) return '';
+    var key = String(p).toUpperCase();
+    return map[key] || '';
+  }
+  module.exports = { cls: cls };
+</wxs>
 <view class="player-row {{player.statusClass || ''}}" bindtap="onOpen">
   <view class="player-main">
     <view class="player-title-line">
@@ -6,7 +15,7 @@
     </view>
     <view class="player-meta">
       <text wx:if="{{showTeam}}">{{player.team || player.teamShortName || ''}}</text>
-      <text wx:if="{{player.position || player.elementTypeName}}"> · {{player.position || player.elementTypeName}}</text>
+      <text wx:if="{{player.position || player.elementTypeName}}" class="pos-badge {{pos.cls(player.position || player.elementTypeName)}} player-pos">{{player.position || player.elementTypeName}}</text>
       <text wx:if="{{showLiveMeta && player.metaText}}"> · {{player.metaText}}</text>
     </view>
   </view>

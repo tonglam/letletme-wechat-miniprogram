@@ -31,7 +31,7 @@
           <view class="status-pill">{{match.statusText}}</view>
         </view>
 
-        <view class="scoreboard">
+        <view class="scoregrid">
           <view class="team-side">
             <view class="team-name">{{match.homeTeamDisplay || '-'}}</view>
           </view>

@@ -11,7 +11,7 @@
 }
 
 .label {
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
 }
 
@@ -19,4 +19,5 @@
   margin-top: 8rpx;
   font-size: 34rpx;
   font-weight: 700;
+  color: var(--ink, #301333);
 }

@@ -3,19 +3,19 @@
   align-items: center;
   justify-content: space-between;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
 }
 
 .player-row.live-playing {
-  background: linear-gradient(90deg, rgba(22, 163, 74, 0.08), rgba(255, 255, 255, 0));
+  background: linear-gradient(90deg, rgba(0, 209, 109, 0.12), rgba(255, 255, 255, 0));
 }
 
 .player-row.live-partial {
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0));
+  background: linear-gradient(90deg, rgba(146, 74, 7, 0.1), rgba(255, 255, 255, 0));
 }
 
 .player-row.live-finished {
-  color: #475467;
+  color: var(--muted-ink, #6e5a72);
 }
 
 .player-row.live-blank {
@@ -38,7 +38,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 600;
 }
@@ -53,33 +53,40 @@
   line-height: 28rpx;
 }
 
+/* Captain / vice-captain marker — plum board, electric letter */
 .role-badge {
-  background: #111827;
-  color: #ffffff;
+  background: var(--plum, #38003c);
+  color: var(--electric, #00ff85);
 }
 
 .player-meta {
+  display: flex;
+  align-items: center;
   margin-top: 6rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
+}
+
+.player-pos {
+  margin-left: 10rpx;
 }
 
 .player-side {
   flex-shrink: 0;
   min-width: 104rpx;
-  color: #2563eb;
+  color: var(--green-ink, #008545);
   font-size: 24rpx;
-  font-weight: 600;
+  font-weight: 700;
   text-align: right;
 }
 
 .status-text {
   display: block;
   margin-top: 6rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
   font-weight: 500;
 }
