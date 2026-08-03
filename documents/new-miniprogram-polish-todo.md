@@ -319,7 +319,7 @@
 - [ ] Verify actual backend response shape for player/team/price/fixture GraphQL operations.
 - [ ] Verify actual backend response shape for summary GraphQL operations.
 - [ ] Update model interfaces and service normalizers after response-shape verification.
-- [ ] Confirm request domain whitelist includes `https://letletme.top`.
+- [ ] Confirm request domain allowlist includes `https://www.letletme.top`.
 
 ## WeChat DevTools And Device Verification
 
