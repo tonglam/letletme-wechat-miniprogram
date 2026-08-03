@@ -164,7 +164,7 @@ export async function getPlayerInfoByCode(code: number | string, _season?: strin
   const playerId = Number(code);
   const data = await graphqlRequest<PlayerResponse>(PLAYER, { id: playerId });
   if (!data.player) {
-    throw new Error(`No player found with id ${code}`);
+    throw new Error("没有找到这名球员，请返回后重试");
   }
   return mapPlayerDetail(data.player);
 }
@@ -184,7 +184,7 @@ export async function getPlayerDetailByElement(element: number): Promise<PlayerD
   });
   const detail = data.playerDetail;
   if (!detail) {
-    throw new Error(`No player detail found with id ${element}`);
+    throw new Error("这名球员的详情暂时不可用，请稍后重试");
   }
 
   return {

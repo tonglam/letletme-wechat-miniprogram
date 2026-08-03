@@ -26,7 +26,7 @@ export async function getTeamSummary(teamId: number | string, _season: string): 
     cacheTtl: 24 * 3600 * 1000
   });
   if (!data.team) {
-    throw new Error(`No team found with id ${teamId}`);
+    throw new Error("没有找到这支球队，请返回后重试");
   }
 
   return {

@@ -141,7 +141,7 @@ export async function getEntryInfo(entry: number, forceRefresh = false): Promise
   });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {
-    throw new Error(`No FPL team found with Entry ID ${entry}`);
+    throw new Error("没有找到这个 FPL 球队，请检查 Entry ID");
   }
   return result;
 }

@@ -2,6 +2,10 @@ import { getMiniProgramApiBase, REQUEST_TIMEOUT_MS } from "../config/env";
 import { storageKeys, storagePrefixes } from "../config/storage-keys";
 import { clearEntryScopedStorage } from "../utils/storage";
 import { recordApi } from "../utils/perf";
+import {
+  authApiErrorMessage,
+  networkErrorMessage
+} from "../utils/request-error";
 import { isStoredSessionUsable, MiniProgramLinkRequiredError } from "./auth-session";
 
 export interface MiniProgramProfile {
@@ -60,15 +64,15 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       success(response) {
         if (response.statusCode < 200 || response.statusCode >= 300 || !response.data?.success) {
           recordApi(`auth:${path}`, Date.now() - t0, false);
-          reject(new Error(response.data?.error || `请求失败（${response.statusCode}）`));
+          reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
           return;
         }
         recordApi(`auth:${path}`, Date.now() - t0, true);
         resolve(response.data);
       },
-      fail() {
+      fail(error) {
         recordApi(`auth:${path}`, Date.now() - t0, false);
-        reject(new Error("网络连接失败，请检查网络后重试"));
+        reject(new Error(networkErrorMessage(error)));
       }
     });
   });
@@ -76,7 +80,7 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
 
 function asSession(response: ApiResponse): ApiSession {
   if (!response.token || !response.expiresAt || !response.profile) {
-    throw new Error("Account session response is incomplete");
+    throw new Error("登录响应不完整，请重新进入小程序");
   }
   return {
     token: response.token,
@@ -184,11 +188,11 @@ export async function logoutMiniProgramSession(): Promise<void> {
       success(response) {
         recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
         if (response.statusCode >= 200 && response.statusCode < 300) resolve();
-        else reject(new Error(response.data?.error || "Sign out failed"));
+        else reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
       },
       fail(error) {
         recordApi("auth:/session", Date.now() - t0, false);
-        reject(new Error(error.errMsg || "Sign out network request failed"));
+        reject(new Error(networkErrorMessage(error)));
       }
     });
   });

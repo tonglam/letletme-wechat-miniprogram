@@ -6,6 +6,11 @@ import {
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
 import { storagePrefixes } from "../config/storage-keys";
+import {
+  graphQLErrorMessage,
+  httpErrorMessage,
+  networkErrorMessage
+} from "../utils/request-error";
 
 interface GraphQLError {
   message?: string;
@@ -57,25 +62,8 @@ function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
   memoryCache.set(cacheKey, entry);
 }
 
-function toUserFriendlyError(error: { errMsg?: string } | undefined): Error {
-  const message = error?.errMsg || "";
-  if (message.includes("timeout")) {
-    return new Error("网络超时，请稍后重试");
-  }
-  if (message.includes("abort")) {
-    return new Error("请求已取消");
-  }
-  return new Error("网络连接失败，请检查网络后重试");
-}
-
 function toHttpError(statusCode: number): Error {
-  if (statusCode >= 500) {
-    return new Error("服务器繁忙，请稍后重试");
-  }
-  if (statusCode === 404) {
-    return new Error("请求的内容不存在");
-  }
-  return new Error(`请求失败（${statusCode}）`);
+  return new Error(httpErrorMessage(statusCode));
 }
 
 function extractOpName(query: string): string {
@@ -154,9 +142,8 @@ function makeRequest<T>(
           return;
         }
 
-        const errorMessage = body?.errors?.map((error) => error.message).filter(Boolean).join("; ");
-        if (errorMessage) {
-          reject(new Error(errorMessage));
+        if (body?.errors?.length) {
+          reject(new Error(graphQLErrorMessage(body.errors)));
           return;
         }
 
@@ -168,7 +155,7 @@ function makeRequest<T>(
         resolve(body.data);
       },
       fail(error) {
-        reject(toUserFriendlyError(error));
+        reject(new Error(networkErrorMessage(error)));
       }
     });
   });
