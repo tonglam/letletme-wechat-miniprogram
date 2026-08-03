@@ -141,7 +141,7 @@ export async function getEntryInfo(entry: number, forceRefresh = false): Promise
   });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {
-    throw new Error(`No FPL team found with Entry ID ${entry}`);
+    throw new Error("没有找到这个 FPL 球队，请检查 Entry ID");
   }
   return result;
 }
@@ -222,8 +222,11 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
-export async function getEntryEventTransfers(entry: number, event: number): Promise<EntryTransfer[]> {
-  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry });
+export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
+  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    cacheTtl: 30 * 60 * 1000,
+    forceRefresh
+  });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);
   if (!gw) {
     return [];
@@ -240,8 +243,11 @@ export async function getEntryEventTransfers(entry: number, event: number): Prom
   }));
 }
 
-export async function getEntryAllTransfers(entry: number): Promise<EntryTransfer[]> {
-  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry });
+export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
+  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    cacheTtl: 30 * 60 * 1000,
+    forceRefresh
+  });
   return (data.entryTransferHistory || []).flatMap((gw) => gw.transfers.map((t) => ({
     event: t.event,
     playerIn: t.elementInWebName,

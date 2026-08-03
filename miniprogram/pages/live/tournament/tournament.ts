@@ -44,6 +44,7 @@ interface OwnershipPlayerOption {
 interface LiveTournamentData {
   loading: boolean;
   error: string;
+  hasContent: boolean;
   emptyState: LiveTournamentEmptyState;
   emptyEyebrow: string;
   emptyTitle: string;
@@ -211,6 +212,7 @@ Page({
   data: {
     loading: false,
     error: "",
+    hasContent: false,
     emptyState: "",
     emptyEyebrow: "",
     emptyTitle: "",
@@ -277,15 +279,17 @@ Page({
     ]
   } as LiveTournamentData,
 
-  onLoad() {
+  async onLoad() {
     const app = getApp<IAppOption>();
+    // Wait for the shared launch data so a cold open never falls back to GW1.
+    await app.initAppData();
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
-    this.loadTournaments();
+    this.loadTournaments(false);
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadRows() : this.loadTournaments();
+    const task = this.data.tournaments.length ? this.loadRows(true) : this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -293,7 +297,7 @@ Page({
     this.loadMore();
   },
 
-  async loadTournaments() {
+  async loadTournaments(forceRefresh = false) {
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({
@@ -323,7 +327,7 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(entryId);
+      const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -351,15 +355,20 @@ Page({
         emptyState: ""
       });
       this.persistSelectedTournament(selectedTournament);
-      await this.loadRows();
+      await this.loadRows(forceRefresh);
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+      const message = error instanceof Error ? error.message : "实时联赛加载失败";
+      if (this.data.hasContent) {
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
       this.setData({ loading: false });
     }
   },
 
-  async loadRows() {
+  async loadRows(forceRefresh = false) {
     const selected = this.data.selectedTournament;
     if (!selected) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
@@ -369,11 +378,18 @@ Page({
     this.setData({ loading: true, error: "" });
     try {
       const rows = this.data.keyword
-      ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword)
-      : await getLivePointsByTournament(selected.id, this.data.event);
+      ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword, forceRefresh)
+      : await getLivePointsByTournament(selected.id, this.data.event, forceRefresh);
       this.applyRows(rows.map(normalizeRow), true);
+      this.setData({ hasContent: true });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+      const message = error instanceof Error ? error.message : "实时联赛加载失败";
+      if (this.data.hasContent) {
+        // Background refresh failure: keep the stale rows, surface a toast.
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
       this.setData({ loading: false });
     }
@@ -474,16 +490,16 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
-    this.loadRows();
+    this.setData({ event: event.detail.value, hasContent: false });
+    this.loadRows(false);
   },
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const selectedTournamentIndex = Number(event.detail.value);
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
-    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [] });
+    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [], hasContent: false });
     this.persistSelectedTournament(selectedTournament);
-    this.loadRows();
+    this.loadRows(false);
   },
 
   onSortTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { key: SortKey }>) {
@@ -616,10 +632,10 @@ Page({
 
   onRetry() {
     if (this.data.tournaments.length === 0) {
-      this.loadTournaments();
+      this.loadTournaments(true);
       return;
     }
-    this.loadRows();
+    this.loadRows(true);
   },
 
   onChooseEntry() {
@@ -631,12 +647,12 @@ Page({
       forceEntryBinding();
       return;
     }
-    this.loadTournaments();
+    this.loadTournaments(true);
   },
 
   onEmptyResultsAction() {
     if (!this.data.resultsFiltered) {
-      this.loadRows();
+      this.loadRows(true);
       return;
     }
 

@@ -2,6 +2,10 @@ import { graphqlRequest } from "./graphql.service";
 import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRow } from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
 
+// Live data moves during matches but the upstream only updates periodically;
+// 30s keeps rapid tab/page revisits instant without masking real changes.
+const LIVE_CACHE_TTL_MS = 30 * 1000;
+
 const CALC_LIVE_POINTS_BY_ENTRY = `
   query CalcLivePointsByEntry($eventId: Int!, $entryId: Int!) {
     calcLivePointsByEntry(eventId: $eventId, entryId: $entryId) {
@@ -115,8 +119,11 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
   }));
 }
 
-export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
-  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry });
+export async function getLivePointsByEntry(entry: number, event: number, forceRefresh = false): Promise<LiveEntryResult> {
+  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry }, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.calcLivePointsByEntry;
   if (!result) {
     throw new Error("实时分数暂时不可用，请稍后重试");
@@ -136,154 +143,60 @@ export async function getLivePointsByEntry(entry: number, event: number): Promis
   };
 }
 
-const LIVE_MATCHES = `
+export const LIVE_MATCHES_QUERY = `
   query LiveMatches {
     liveMatches {
       nextEvent {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
-        homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
-        awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
+        ...LiveMatchFields
       }
       notStarted {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
-        homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
-        awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
-        }
+        ...LiveMatchFields
       }
       playing {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
+        ...LiveMatchFields
         homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
         awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
       }
       finished {
-        matchId
-        minutes
-        homeTeamName
-        homeTeamShortName
-        homeScore
-        awayTeamName
-        awayTeamShortName
-        awayScore
-        kickoffTime
-        playStatus
+        ...LiveMatchFields
         homeTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
         awayTeamDataList {
-          webName
-          teamShortName
-          goalsScored
-          assists
-          redCards
-          yellowCards
-          penaltiesSaved
-          penaltiesMissed
-          saves
-          bonus
+          ...LiveMatchPlayerFields
         }
       }
     }
+  }
+
+  fragment LiveMatchFields on LiveMatchData {
+    matchId
+    minutes
+    homeTeamName
+    homeTeamShortName
+    homeScore
+    awayTeamName
+    awayTeamShortName
+    awayScore
+    kickoffTime
+    playStatus
+  }
+
+  fragment LiveMatchPlayerFields on ElementEventResultData {
+    webName
+    teamShortName
+    goalsScored
+    assists
+    redCards
+    yellowCards
+    penaltiesSaved
+    penaltiesMissed
+    saves
+    bonus
   }
 `;
 
@@ -336,13 +249,16 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     awayScore: match.awayScore,
     kickoffTime: match.kickoffTime,
     playStatus: match.playStatus.toLowerCase(),
-    homeTeamDataList: match.homeTeamDataList,
-    awayTeamDataList: match.awayTeamDataList
+    homeTeamDataList: match.homeTeamDataList || [],
+    awayTeamDataList: match.awayTeamDataList || []
   };
 }
 
-export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
-  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES);
+export async function getLiveMatchByStatus(status: string, forceRefresh = false): Promise<LiveMatch[]> {
+  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, {}, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.liveMatches;
   switch (status) {
     case "playing":
@@ -402,18 +318,21 @@ interface TournamentLivePointsResponse {
   };
 }
 
-function numericId(value: number | string, label: string): number {
+function numericId(value: number | string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`Invalid ${label}: ${value}`);
+    throw new Error("页面参数无效，请返回后重试");
   }
   return parsed;
 }
 
-export async function getLivePointsByTournament(tournamentId: number | string, event: number): Promise<LiveTournamentRow[]> {
+export async function getLivePointsByTournament(tournamentId: number | string, event: number, forceRefresh = false): Promise<LiveTournamentRow[]> {
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
-    tournamentId: numericId(tournamentId, "tournamentId"),
-    eventId: numericId(event, "eventId")
+    tournamentId: numericId(tournamentId),
+    eventId: numericId(event)
+  }, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
   });
   return mapTournamentLiveRows(data.calcLivePointsForTournament.results);
 }
@@ -421,8 +340,9 @@ export async function getLivePointsByTournament(tournamentId: number | string, e
 export async function searchLivePointsByTournament(
   tournamentId: number | string,
   event: number,
-  keyword: string
+  keyword: string,
+  forceRefresh = false
 ): Promise<LiveTournamentRow[]> {
-  const rows = await getLivePointsByTournament(tournamentId, event);
+  const rows = await getLivePointsByTournament(tournamentId, event, forceRefresh);
   return filterTournamentLiveRows(rows, keyword);
 }

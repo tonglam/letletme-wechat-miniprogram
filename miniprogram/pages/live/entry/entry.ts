@@ -16,6 +16,7 @@ interface LiveEntryData {
   error: string;
   transfersError: string;
   emptyState: boolean;
+  hasContent: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -58,6 +59,7 @@ Page({
     error: "",
     transfersError: "",
     emptyState: false,
+    hasContent: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -76,9 +78,11 @@ Page({
     transfers: []
   } as LiveEntryData,
 
-  onLoad(options?: Record<string, string | undefined>) {
+  async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
     const routeEntry = Number(options?.entry);
+    // Wait for the shared launch data so a cold open never falls back to GW1.
+    await app.initAppData();
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       event: currentGw,
@@ -102,19 +106,21 @@ Page({
     this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData(_refreshCache: boolean) {
+  async loadData(forceRefresh: boolean) {
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
 
+    // Stale-while-revalidate: once content exists it stays on screen during
+    // refreshes; only the very first load blanks into the loading state.
     this.setData({ loading: true, error: "", transfersError: "", emptyState: false });
     try {
       let transfersError = "";
       const [result, transfers] = await Promise.all([
-        getLivePointsByEntry(entryId, this.data.event),
-        getEntryEventTransfers(entryId, this.data.event).catch((error) => {
+        getLivePointsByEntry(entryId, this.data.event, forceRefresh),
+        getEntryEventTransfers(entryId, this.data.event, forceRefresh).catch((error) => {
           transfersError = error instanceof Error ? error.message : "本周转会加载失败";
           return [] as EntryTransfer[];
         })
@@ -147,11 +153,18 @@ Page({
         managers,
         transfers: transfers.map(normalizeTransfer),
         transfersError,
-        lastUpdated: formatTime(new Date())
+        lastUpdated: formatTime(new Date()),
+        hasContent: true
       });
       this._loadedAt = Date.now();
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+      const message = error instanceof Error ? error.message : "实时球队加载失败";
+      if (this.data.hasContent) {
+        // Background refresh failure: keep the stale view, surface a toast.
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
       this.setData({ loading: false });
     }
@@ -163,7 +176,7 @@ Page({
   },
 
   onRetry() {
-    this.loadData(false);
+    this.loadData(true);
   },
 
   onChooseEntry() {

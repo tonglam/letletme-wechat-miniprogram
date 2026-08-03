@@ -375,7 +375,7 @@ export async function getGameweekOverallSummary(event: number): Promise<Gameweek
   const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {});
   const result = pickEventOverallResult(data.eventOverallResult, event);
   if (!result) {
-    throw new Error(`No GW summary found for GW${event}`);
+    throw new Error(`GW${event} 暂时还没有总结数据`);
   }
   return enrichGameweekSummaryPlayers(result);
 }
