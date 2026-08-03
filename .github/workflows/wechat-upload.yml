@@ -41,7 +41,11 @@ jobs:
           key_file=$(mktemp)
           trap 'rm -f "$key_file"' EXIT
           printf '%s' "$WECHAT_PRIVATE_KEY" > "$key_file"
-          npx --yes miniprogram-ci@2.1.5 upload \
+          # miniprogram-ci loads Less at runtime; install both in the same npx sandbox.
+          npx --yes \
+            --package=miniprogram-ci@2.1.5 \
+            --package=less@4.2.2 \
+            miniprogram-ci upload \
             --pp . \
             --pkp "$key_file" \
             --appid "$WECHAT_APPID" \
