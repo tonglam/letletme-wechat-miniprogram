@@ -25,7 +25,7 @@ test("release endpoints ignore local storage overrides", () => {
       letletme_graphql_endpoint_override: "https://attacker.invalid/graphql",
       letletme_web_miniprogram_api_override: "https://attacker.invalid/api"
     });
-    assert.equal(getGraphQLEndpoint(), "https://api.letletme.top/graphql");
+    assert.equal(getGraphQLEndpoint(), "https://www.letletme.top/api/graphql");
     assert.equal(getMiniProgramApiBase(), "https://www.letletme.top/api/miniprogram");
     setGraphQLEndpointOverride("https://attacker.invalid/graphql");
     assert.deepEqual(writes, []);
