@@ -165,10 +165,27 @@ export function getApiSessionToken(): string | null {
   }
   if (!sessionMemory) return null;
   if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
-    clearApiSession();
+    clearExpiredSession();
     return null;
   }
   return sessionMemory.token || null;
+}
+
+/**
+ * Session-expiry cleanup. Unlike clearApiSession, the entry binding is
+ * kept: the account is the same person and the imminent single-flight
+ * refresh re-asserts the binding authoritatively — wiping it here would
+ * flash the account-link empty state on pages that open before the
+ * refresh lands.
+ */
+function clearExpiredSession(): void {
+  sessionMemory = undefined;
+  clearStoredGraphQLSessionCache();
+  [storageKeys.apiSessionToken, storageKeys.apiSessionExpiresAt].forEach((key) => {
+    try {
+      wx.removeStorageSync(key);
+    } catch {}
+  });
 }
 
 export async function logoutMiniProgramSession(): Promise<void> {

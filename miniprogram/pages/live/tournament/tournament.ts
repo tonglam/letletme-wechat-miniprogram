@@ -1,5 +1,6 @@
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
+import { getPendingSessionRefresh } from "../../../services/auth.service";
 import type { LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
@@ -285,6 +286,14 @@ Page({
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
     await app.initAppData();
+    if (!app.globalData.entryId) {
+      // No stored binding yet: give the in-flight cold-start login a chance
+      // to hydrate the account before falling to the link empty state.
+      const pending = getPendingSessionRefresh();
+      if (pending) {
+        try { await pending; } catch {}
+      }
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
     this.loadTournaments(false);
@@ -349,12 +358,18 @@ Page({
       const storedIndex = tournaments.findIndex((tournament) => String(tournament.id) === String(storedId));
       const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
       const selectedTournament = tournaments[selectedTournamentIndex];
+      // A league switch — including the refreshed list dropping the current
+      // one — is a new result context: never show the previous league's rows
+      // under the newly selected league after a failed reload.
+      const selectionChanged = !this.data.selectedTournament
+        || String(this.data.selectedTournament.id) !== String(selectedTournament.id);
       this.setData({
         tournaments,
         tournamentNames: tournaments.map((tournament) => tournament.name),
         selectedTournamentIndex,
         selectedTournament,
-        emptyState: ""
+        emptyState: "",
+        ...(selectionChanged ? { hasContent: false, rows: [], displayedRows: [] } : {})
       });
       this.persistSelectedTournament(selectedTournament);
       await this.loadRows(forceRefresh);

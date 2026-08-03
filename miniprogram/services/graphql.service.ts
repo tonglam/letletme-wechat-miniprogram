@@ -29,6 +29,8 @@ interface CacheEntry {
   requestKey: string;
   data: unknown;
   expiresAt: number;
+  /** Fetch time of the cached payload; absent in entries persisted by older builds. */
+  storedAt?: number;
 }
 
 export interface GraphQLOptions {
@@ -46,6 +48,9 @@ const inFlightRequests = new Map<string, Promise<unknown>>();
 const memoryCache = new Map<string, CacheEntry>();
 const MEMORY_CACHE_LIMIT = 120;
 
+/** requestKey -> fetch time of the payload most recently served from cache. */
+const servedFromCache = new Map<string, number>();
+
 function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefined {
   const entry = memoryCache.get(cacheKey);
   if (!entry || entry.requestKey !== requestKey) return undefined;
@@ -53,6 +58,7 @@ function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefi
     memoryCache.delete(cacheKey);
     return undefined;
   }
+  servedFromCache.set(requestKey, entry.storedAt ?? Date.now());
   return entry.data;
 }
 
@@ -72,6 +78,7 @@ function readCacheEntry(cacheKey: string, requestKey: string): unknown | undefin
     const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
     if (cached && cached.requestKey === requestKey && Date.now() < cached.expiresAt) {
       writeMemoryCache(cacheKey, cached);
+      servedFromCache.set(requestKey, cached.storedAt ?? Date.now());
       return cached.data;
     }
     try { wx.removeStorageSync(cacheKey); } catch {}
@@ -106,6 +113,16 @@ export function buildGraphQLRequestCacheKey(
 ): string {
   const audience = token ? `session:${hashKey(token)}` : "public";
   return `${audience}::${query}::${JSON.stringify(variables)}`;
+}
+
+/**
+ * Fetch time of the payload if the last serve for this request came from
+ * cache, else undefined. Lets callers age-label cached data honestly
+ * instead of stamping it as just-fetched.
+ */
+export function getServedCacheStoredAt(query: string, variables: Record<string, unknown>): number | undefined {
+  const key = buildGraphQLRequestCacheKey(query, variables, getApiSessionToken());
+  return servedFromCache.get(key);
 }
 
 function getStorageCacheKey(requestKey: string, token: string | null): string {
@@ -232,9 +249,16 @@ export function graphqlRequest<T>(
         const expiresAt = options?.getCacheExpiry
           ? options.getCacheExpiry(data)
           : Date.now() + (options?.cacheTtl ?? 0);
-        const entry: CacheEntry = { requestKey: key, data, expiresAt };
+        const entry: CacheEntry = { requestKey: key, data, expiresAt, storedAt: Date.now() };
         writeMemoryCache(cacheKey, entry);
-        wx.setStorageSync(cacheKey, entry);
+        servedFromCache.delete(key);
+        // Sub-minute caches stay process-local: they would be expired by the
+        // next launch anyway, and keeping large live payloads (full
+        // tournament pick lists) out of storage avoids accumulating one
+        // persisted key per tournament/gameweek combination.
+        if (expiresAt - Date.now() > 60 * 1000) {
+          wx.setStorageSync(cacheKey, entry);
+        }
       } catch {}
     }
     return data;

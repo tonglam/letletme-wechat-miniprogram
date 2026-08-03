@@ -1,5 +1,6 @@
 import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntry } from "../../../services/live.service";
+import { getPendingSessionRefresh } from "../../../services/auth.service";
 import type { LivePlayerRow } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
@@ -81,15 +82,24 @@ Page({
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
     const routeEntry = Number(options?.entry);
+    const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
     await app.initAppData();
+    if (!app.globalData.entryId && !hasRouteEntry) {
+      // No stored binding yet: give the in-flight cold-start login a chance
+      // to hydrate the account before falling to the link empty state.
+      const pending = getPendingSessionRefresh();
+      if (pending) {
+        try { await pending; } catch {}
+      }
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: Number.isFinite(routeEntry) && routeEntry > 0 ? routeEntry : app.globalData.entryId
+      entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
     });
     this.loadData(false);
   },
@@ -136,6 +146,9 @@ Page({
       const total = numberValue(result.liveTotalPoints ?? result.total);
       const netPoints = numberValue(result.liveNetPoints ?? livePoints);
       const transferCost = numberValue(result.transferCost);
+      // A cache serve keeps its original fetch time: the "updated" label and
+      // the onShow refresh clock must reflect the data's real age.
+      const fetchedAt = result.servedStoredAt || Date.now();
       this.setData({
         total,
         livePoints,
@@ -155,10 +168,10 @@ Page({
         managers,
         transfers: transfers.map(normalizeTransfer),
         transfersError,
-        lastUpdated: formatTime(new Date()),
+        lastUpdated: formatTime(new Date(fetchedAt)),
         hasContent: true
       });
-      this._loadedAt = Date.now();
+      this._loadedAt = fetchedAt;
     } catch (error) {
       const message = error instanceof Error ? error.message : "实时球队加载失败";
       if (this.data.hasContent) {

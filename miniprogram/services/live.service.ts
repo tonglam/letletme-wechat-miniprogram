@@ -1,4 +1,4 @@
-import { graphqlRequest } from "./graphql.service";
+import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
 import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRow } from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
 
@@ -120,7 +120,8 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
 }
 
 export async function getLivePointsByEntry(entry: number, event: number, forceRefresh = false): Promise<LiveEntryResult> {
-  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry }, {
+  const variables = { eventId: event, entryId: entry };
+  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
     cacheTtl: LIVE_CACHE_TTL_MS,
     forceRefresh
   });
@@ -139,7 +140,8 @@ export async function getLivePointsByEntry(entry: number, event: number, forceRe
     chip: result.chip,
     played: result.played,
     toPlay: result.toPlay,
-    pickList: mapGraphQLPickList(result.pickList)
+    pickList: mapGraphQLPickList(result.pickList),
+    servedStoredAt: getServedCacheStoredAt(CALC_LIVE_POINTS_BY_ENTRY, variables)
   };
 }
 
