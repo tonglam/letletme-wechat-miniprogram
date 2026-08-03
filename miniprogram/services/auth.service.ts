@@ -109,6 +109,11 @@ function clearStoredGraphQLSessionCache(): void {
 // to any out-of-band storage write.
 let sessionMemory: { token: string; expiresAt: string } | null | undefined;
 
+// Bumped on every session clear so a login round trip that was in flight
+// before a logout (or an expiry purge) can never re-store a credential
+// afterwards.
+let sessionEpoch = 0;
+
 function storeApiSession(session: ApiSession): ApiSession {
   const previousToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
   const previousEntryId = Number(wx.getStorageSync(storageKeys.entryId));
@@ -126,6 +131,9 @@ function storeApiSession(session: ApiSession): ApiSession {
   sessionMemory = { token: session.token, expiresAt: session.expiresAt };
   wx.setStorageSync(storageKeys.apiSessionToken, session.token);
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
+  // Every persisted session carries a freshly fetched authoritative profile,
+  // so the 24h revalidation throttle keys off this write.
+  wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
   if (nextEntryId) {
     wx.setStorageSync(storageKeys.entryId, nextEntryId);
     try {
@@ -143,6 +151,7 @@ function storeApiSession(session: ApiSession): ApiSession {
 }
 
 export function clearApiSession(): void {
+  sessionEpoch += 1;
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   clearEntryScopedStorage();
@@ -201,6 +210,7 @@ export async function logoutMiniProgramSession(): Promise<void> {
 
 /** Uses only web-owned identity. FPL entry IDs are inherited from the verified account. */
 async function performWechatSessionRefresh(): Promise<ApiSession> {
+  const epoch = sessionEpoch;
   const code = await loginCode();
   const response = await requestWebAuth("/wechat/login", {
     code,
@@ -212,6 +222,11 @@ async function performWechatSessionRefresh(): Promise<ApiSession> {
     // still-valid session for offline resilience.
     clearApiSession();
     throw new MiniProgramLinkRequiredError();
+  }
+  if (epoch !== sessionEpoch) {
+    // A logout or session clear landed while the login round trip was in
+    // flight — do not resurrect a credential afterwards.
+    throw new Error("登录状态已变更，请重试");
   }
   return storeApiSession(asSession(response));
 }

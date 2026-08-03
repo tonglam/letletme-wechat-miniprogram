@@ -212,14 +212,20 @@ Page({
   },
 
   async refreshPlayerMode(): Promise<void> {
-    await this.ensurePlayersLoaded();
+    // An empty directory is transient: pull-to-refresh must refetch it even
+    // though the attempt completed (playersLoaded) — the wxml retry button
+    // keys off `playersLoaded && players.length === 0`.
+    await this.ensurePlayersLoaded(this.data.playersLoaded && this.data.players.length === 0);
     if (this.data.selectedPlayer?.element) {
       await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
     }
   },
 
   async ensurePlayersLoaded(forceRefresh = false): Promise<void> {
-    if (this.data.playersLoaded || this.data.playerLoading) {
+    if (this.data.playerLoading) {
+      return;
+    }
+    if (this.data.playersLoaded && !forceRefresh) {
       return;
     }
 
@@ -230,9 +236,7 @@ Page({
       const teamOptions = buildTeamOptions(sortedPlayers);
       this.setData({
         players: sortedPlayers,
-        // An empty directory is a transient backend state, not "loaded":
-        // keep the door open for the next ensure/retry to refetch.
-        playersLoaded: sortedPlayers.length > 0,
+        playersLoaded: true,
         teamOptions,
         teamOptionNames: teamOptions.map((option) => option.label)
       });

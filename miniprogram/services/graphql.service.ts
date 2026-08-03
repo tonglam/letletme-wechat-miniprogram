@@ -129,6 +129,14 @@ function makeRequest<T>(
       success(response) {
         const body = response.data;
         if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
+          const currentToken = getApiSessionToken();
+          if (currentToken && currentToken !== token) {
+            // The session rotated while this request was in flight (e.g. the
+            // background profile revalidation stored a fresh token): retry
+            // with the current credential instead of clearing it.
+            makeRequest<T>(query, variables, false, currentToken).then(resolve).catch(reject);
+            return;
+          }
           clearApiSession();
           refreshWechatApiSession()
             .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))

@@ -78,19 +78,24 @@ App<IAppOption>({
    * A valid session can outlive the web-side binding: the user may change or
    * unlink their verified FPL entry while the 30-day token keeps working.
    * Re-fetch the authoritative profile in the background at most once per
-   * 24h so such changes propagate without blocking cold starts.
-   * storeApiSession applies the fresh entry binding (and clears stale
-   * caches) when the profile changed.
+   * 24h (storeApiSession stamps every persisted session, so fresh logins and
+   * 401 recoveries count too) without blocking cold starts.
    */
   revalidateSessionProfile() {
     const lastChecked = Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
     if (lastChecked && Date.now() - lastChecked < 24 * 60 * 60 * 1000) {
       return;
     }
+    const boundEntryAtStart = this.globalData.entryId;
     refreshWechatApiSession().then((session) => {
-      wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
-      if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
-        this.globalData.entryId = session.profile.fplEntryId;
+      // storeApiSession has applied the fresh binding to globalData and
+      // cleared stale caches. If the binding actually changed, the open page
+      // is still showing the previously bound team — rebuild it.
+      const nextEntry = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
+        ? session.profile.fplEntryId
+        : undefined;
+      if (nextEntry !== boundEntryAtStart) {
+        this.reloadCurrentPageForEntryChange();
       }
     }).catch((error) => {
       if (error instanceof MiniProgramLinkRequiredError) {
@@ -98,6 +103,23 @@ App<IAppOption>({
       }
       // Network failures keep the stored binding and retry on a later launch.
     });
+  },
+
+  /** Rebuild the visible page after the authoritative entry binding changed. */
+  reloadCurrentPageForEntryChange() {
+    try {
+      const pages = getCurrentPages();
+      const current = pages[pages.length - 1];
+      if (!current || !current.route) {
+        return;
+      }
+      const url = `/${current.route}`;
+      // Never yank an in-progress account-link flow.
+      if (url === routes.accountLink) {
+        return;
+      }
+      wx.reLaunch({ url });
+    } catch {}
   },
 
   async initAppData() {

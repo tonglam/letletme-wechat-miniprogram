@@ -9,7 +9,7 @@ import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/su
 import { routes } from "../../../config/routes";
 import { forceEntryBinding, goToEntryProfile, navigateTo } from "../../../utils/navigation";
 import { clearEntryId, clearEntryScopedStorage } from "../../../utils/storage";
-import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
+import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
 
@@ -169,7 +169,7 @@ Page({
       const [entry, fixtures, priceChanges, gameweekStats] = await Promise.all([
         getEntryInfo(entryId, forceRefresh).catch(() => undefined as EntryInfo | undefined),
         fixtureTask,
-        getPlayerValues(new Date().toISOString().slice(0, 10).replace(/-/g, ""), forceRefresh).catch(() => [] as PlayerValue[]),
+        getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]),
         getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined)
       ]);
       if (!entry) {

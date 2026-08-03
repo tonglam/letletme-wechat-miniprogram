@@ -1,6 +1,7 @@
 import { graphqlRequest } from "./graphql.service";
 import type { PlayerValue, PlayerValueChange } from "../models/player";
 import { formatPrice } from "../utils/fpl";
+import { formatDateKey } from "../utils/date";
 
 const PLAYER_VALUES = `
   query GetPlayerValues($changeDate: Date!) {
@@ -192,7 +193,9 @@ function localTodayKey(): string {
 
 /** Past dates are immutable; today's board moves once or twice a day. */
 function priceCacheTtl(changeDate: string): number {
-  return toDateKey(changeDate) === localTodayKey() ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const key = toDateKey(changeDate) || "";
+  // An unexpected future date gets the short TTL too — never the 24h one.
+  return key >= localTodayKey() ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
 }
 
 export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
@@ -224,5 +227,5 @@ export async function getPlayerValues(changeDate: string, forceRefresh = false):
 }
 
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
-  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || localTodayKey().replace(/-/g, ""), true);
+  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || formatDateKey(), true);
 }
