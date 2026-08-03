@@ -51,6 +51,16 @@ const MEMORY_CACHE_LIMIT = 120;
 /** requestKey -> fetch time of the payload most recently served from cache. */
 const servedFromCache = new Map<string, number>();
 
+function recordServedFromCache(requestKey: string, storedAt: number): void {
+  if (servedFromCache.size >= MEMORY_CACHE_LIMIT) {
+    // Same bounding policy as the L1 cache it mirrors: request keys embed the
+    // full query text and variables, so the map must not grow for the whole
+    // process lifetime as distinct cached entries are revisited.
+    servedFromCache.clear();
+  }
+  servedFromCache.set(requestKey, storedAt);
+}
+
 function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefined {
   const entry = memoryCache.get(cacheKey);
   if (!entry || entry.requestKey !== requestKey) return undefined;
@@ -58,7 +68,7 @@ function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefi
     memoryCache.delete(cacheKey);
     return undefined;
   }
-  servedFromCache.set(requestKey, entry.storedAt ?? Date.now());
+  recordServedFromCache(requestKey, entry.storedAt ?? Date.now());
   return entry.data;
 }
 
@@ -78,7 +88,7 @@ function readCacheEntry(cacheKey: string, requestKey: string): unknown | undefin
     const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
     if (cached && cached.requestKey === requestKey && Date.now() < cached.expiresAt) {
       writeMemoryCache(cacheKey, cached);
-      servedFromCache.set(requestKey, cached.storedAt ?? Date.now());
+      recordServedFromCache(requestKey, cached.storedAt ?? Date.now());
       return cached.data;
     }
     try { wx.removeStorageSync(cacheKey); } catch {}
@@ -122,7 +132,11 @@ export function buildGraphQLRequestCacheKey(
  */
 export function getServedCacheStoredAt(query: string, variables: Record<string, unknown>): number | undefined {
   const key = buildGraphQLRequestCacheKey(query, variables, getApiSessionToken());
-  return servedFromCache.get(key);
+  const storedAt = servedFromCache.get(key);
+  // Single-consumer bookkeeping: the caller stamps its result right after the
+  // serve, so the entry is consumed here rather than retained.
+  servedFromCache.delete(key);
+  return storedAt;
 }
 
 function getStorageCacheKey(requestKey: string, token: string | null): string {

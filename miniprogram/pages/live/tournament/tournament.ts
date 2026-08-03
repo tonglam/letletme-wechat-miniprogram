@@ -346,6 +346,9 @@ Page({
           selectedTournament: undefined,
           rows: [],
           displayedRows: [],
+          // The content context is gone: a later failed recheck must surface
+          // the full-page error/empty state, not a toast over a blank view.
+          hasContent: false,
           emptyState: "tournaments",
           emptyEyebrow: "联赛待就绪",
           emptyTitle: "当前球队还没有可查看的联赛",

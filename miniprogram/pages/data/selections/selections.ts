@@ -107,7 +107,9 @@ Page({
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadStats() : this.loadTournaments();
+    // Explicit refresh gestures bypass the tournament-list cache: a cached
+    // empty list must not keep claiming "no leagues" after the user joins one.
+    const task = this.data.tournaments.length ? this.loadStats() : this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -118,7 +120,7 @@ Page({
     }
   },
 
-  async loadTournaments(): Promise<void> {
+  async loadTournaments(forceRefresh = false): Promise<void> {
     if (!this.data.entryId) {
       this.setData({
         loadingTournaments: false,
@@ -145,7 +147,7 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(this.data.entryId);
+      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh);
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -241,7 +243,7 @@ Page({
 
   onRetry() {
     if (this.data.tournaments.length === 0) {
-      this.loadTournaments();
+      this.loadTournaments(true);
       return;
     }
     this.loadStats();
@@ -252,7 +254,7 @@ Page({
       forceEntryBinding();
       return;
     }
-    this.loadTournaments();
+    this.loadTournaments(true);
   }
 });
 
