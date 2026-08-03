@@ -29,6 +29,32 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint && npm run typecheck && npm test && npm run package:check
+      - name: Install upload tooling
+        run: npm install --no-save --no-package-lock miniprogram-ci@2.1.5 less@4.2.2
+      - name: Build Mini Program npm packages
+        run: |
+          node <<'NODE'
+          const path = require('node:path')
+          const ci = require('miniprogram-ci')
+
+          async function main() {
+            const result = await ci.packNpmManually({
+              packageJsonPath: path.resolve('package.json'),
+              miniprogramNpmDistDir: path.resolve('miniprogram')
+            })
+            const packageCount =
+              (result.miniProgramPackNum ?? 0) + (result.otherNpmPackNum ?? 0)
+            if (packageCount === 0) {
+              throw new Error('Mini Program npm build produced no packages')
+            }
+            console.log(`Built ${packageCount} Mini Program npm packages`)
+          }
+
+          main().catch(error => {
+            console.error(error)
+            process.exit(1)
+          })
+          NODE
       - name: Upload signed package
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
@@ -41,13 +67,11 @@ jobs:
           key_file=$(mktemp)
           trap 'rm -f "$key_file"' EXIT
           printf '%s' "$WECHAT_PRIVATE_KEY" > "$key_file"
-          # miniprogram-ci loads Less at runtime; install both in the same npx sandbox.
-          npx --yes \
-            --package=miniprogram-ci@2.1.5 \
-            --package=less@4.2.2 \
-            miniprogram-ci upload \
+          ./node_modules/.bin/miniprogram-ci upload \
             --pp . \
             --pkp "$key_file" \
             --appid "$WECHAT_APPID" \
             --uv "$RELEASE_VERSION" \
-            --ud "$RELEASE_DESCRIPTION"
+            --ud "$RELEASE_DESCRIPTION" \
+            --use-project-config true \
+            --enable-es6 true
