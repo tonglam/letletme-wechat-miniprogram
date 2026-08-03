@@ -19,12 +19,22 @@
       <view class="subtitle">{{headerSubtitle || '球队数据'}}</view>
     </view>
     <view class="header-actions">
-      <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+      <gw-picker wx:if="{{emptyState !== 'entry'}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
   </view>
 
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队数据" />
+  <view wx:elif="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="{{emptyEyebrow}}"
+      title="{{emptyTitle}}"
+      description="{{emptyDescription}}"
+      actionText="{{emptyActionText}}"
+      featured="{{true}}"
+      bind:action="onEmptyAction"
+    />
+  </view>
 
   <block wx:else>
     <view class="section card summary-card">
@@ -53,7 +63,13 @@
     </view>
 
     <view wx:if="{{showSquad}}" class="section card">
-      <app-empty-state wx:if="{{!hasSquad}}" title="暂无阵容数据" />
+      <app-empty-state
+        wx:if="{{!hasSquad}}"
+        title="GW{{event}} 阵容还没公布"
+        description="球队阵容同步后，首发和替补会显示在这里"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <block wx:else>
         <view wx:for="{{squadRows}}" wx:key="id" class="squad-row {{item.bench ? 'squad-row-bench' : ''}}">
           <view class="row-main">
@@ -71,7 +87,8 @@
     </view>
 
     <view wx:if="{{showTransfer}}" class="section">
-      <app-empty-state wx:if="{{!hasTransfers}}" title="暂无转会历史" />
+      <app-error-state wx:if="{{transferError}}" message="{{transferError}}" bind:retry="onRetry" />
+      <app-empty-state wx:elif="{{!hasTransfers}}" title="还没有转会记录" description="产生转会后会按比赛周显示在这里" />
       <block wx:else>
         <view wx:for="{{transferRows}}" wx:key="id" class="card transfer-card">
           <view class="transfer-head">
@@ -99,7 +116,7 @@
       </view>
       <view class="card summary-card">
         <view class="section-title-small">开卡统计</view>
-        <app-empty-state wx:if="{{chipCountRows.length === 0}}" title="暂无开卡" />
+        <app-empty-state wx:if="{{chipCountRows.length === 0}}" title="本赛季还没有开卡" description="使用特殊卡后会计入这里" />
         <view wx:for="{{chipCountRows}}" wx:key="id" class="summary-row">
           <view class="row-title">{{item.label}}</view>
           <text class="row-value">{{item.value}}</text>
@@ -107,7 +124,7 @@
       </view>
       <view class="card summary-card">
         <view class="section-title-small">使用记录</view>
-        <app-empty-state wx:if="{{chipUsageRows.length === 0}}" title="暂无使用记录" />
+        <app-empty-state wx:if="{{chipUsageRows.length === 0}}" title="还没有特殊卡使用记录" description="首次使用后会显示比赛周与卡片类型" />
         <view wx:for="{{chipUsageRows}}" wx:key="id" class="summary-row">
           <view class="row-title">{{item.label}}</view>
           <text class="row-value">{{item.value}}</text>
@@ -118,7 +135,7 @@
     <view wx:if="{{showHistory}}" class="section">
       <view class="card summary-card">
         <view class="section-title-small">GW 历史</view>
-        <app-empty-state wx:if="{{historyRows.length === 0}}" title="暂无历史" />
+        <app-empty-state wx:if="{{historyRows.length === 0}}" title="本赛季还没有 GW 历史" description="完成一个比赛周后会开始累计记录" />
         <view wx:for="{{historyRows}}" wx:key="id" class="history-card">
           <view class="history-title">{{item.gameweek}}</view>
           <view class="history-grid">
@@ -136,7 +153,7 @@
       </view>
       <view class="card summary-card">
         <view class="section-title-small">赛季历史</view>
-        <app-empty-state wx:if="{{seasonHistoryRows.length === 0}}" title="暂无赛季历史" />
+        <app-empty-state wx:if="{{seasonHistoryRows.length === 0}}" title="还没有往季记录" description="参加过的完整赛季会显示在这里" />
         <view wx:for="{{seasonHistoryRows}}" wx:key="id" class="summary-row">
           <view class="row-main">
             <view class="row-title">{{item.order}}. {{item.season}}</view>

@@ -1,10 +1,12 @@
 import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
-import { goToEntrySearch } from "../../../utils/navigation";
+import { forceEntryBinding } from "../../../utils/navigation";
 
 interface EntryProfileData {
   loading: boolean;
   error: string;
+  emptyState: boolean;
+  entryId?: number;
   entry: EntryInfo;
 }
 
@@ -12,26 +14,28 @@ Page({
   data: {
     loading: false,
     error: "",
+    emptyState: false,
+    entryId: undefined,
     entry: {}
   } as EntryProfileData,
 
   onLoad(options: Record<string, string | undefined>) {
     const entryId = Number(options.entry || getApp<IAppOption>().globalData.entryId);
+    this.setData({ entryId });
     this.loadEntry(entryId);
   },
 
   onPullDownRefresh() {
-    const entryId = Number(getApp<IAppOption>().globalData.entryId);
-    this.loadEntry(entryId).finally(() => wx.stopPullDownRefresh());
+    this.loadEntry(Number(this.data.entryId)).finally(() => wx.stopPullDownRefresh());
   },
 
   async loadEntry(entryId: number) {
     if (!Number.isFinite(entryId) || entryId <= 0) {
-      this.setData({ error: "未选择球队" });
+      this.setData({ loading: false, error: "", emptyState: true, entry: {} });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", emptyState: false, entryId });
     try {
       const entry = await getEntryInfo(entryId);
       this.setData({ entry });
@@ -43,11 +47,14 @@ Page({
   },
 
   onRetry() {
-    const entryId = Number(getApp<IAppOption>().globalData.entryId);
-    this.loadEntry(entryId);
+    this.loadEntry(Number(this.data.entryId));
+  },
+
+  onLinkAccount() {
+    forceEntryBinding();
   },
 
   onChangeEntry() {
-    goToEntrySearch();
+    forceEntryBinding();
   }
 });

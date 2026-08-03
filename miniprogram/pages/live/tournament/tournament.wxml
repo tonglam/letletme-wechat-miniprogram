@@ -3,13 +3,13 @@
     <view class="row">
       <view>
         <view class="title">实时联赛</view>
-        <view class="subtitle">{{selectedTournament.name || '选择球队后加载联赛'}} · 更新 {{lastUpdated || '-'}}</view>
+        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '关联账户后加载联赛' : '联赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') : ''}}</view>
       </view>
-      <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+      <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
   </view>
 
-  <view class="section picker-card">
+  <view wx:if="{{tournaments.length}}" class="section picker-card">
     <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
       <view class="picker-inner">
         <view>
@@ -21,11 +21,11 @@
     </picker>
   </view>
 
-  <view class="section">
+  <view wx:if="{{tournaments.length}}" class="section">
     <filter-bar keyword="{{keyword}}" placeholder="搜索球队/玩家" actionText="查询" bind:search="onKeyword" bind:submit="onSearch" bind:reset="onResetSearch" />
   </view>
 
-  <view class="section sort-tabs">
+  <view wx:if="{{tournaments.length}}" class="section sort-tabs">
     <view
       wx:for="{{sortOptions}}"
       wx:key="key"
@@ -35,7 +35,7 @@
     >{{item.label}}{{sortKey === item.key ? (sortDesc ? ' ↓' : ' ↑') : ''}}</view>
   </view>
 
-  <view class="section filter-panel">
+  <view wx:if="{{tournaments.length}}" class="section filter-panel">
     <view class="filter-header" bindtap="onToggleOwnership">
       <view>
         <view class="filter-title">球员持有</view>
@@ -78,7 +78,7 @@
     </view>
   </view>
 
-  <view class="section filter-panel">
+  <view wx:if="{{tournaments.length}}" class="section filter-panel">
     <view class="filter-header" bindtap="onToggleTeamExposure">
       <view>
         <view class="filter-title">球队人数</view>
@@ -106,9 +106,25 @@
 
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载实时联赛" />
+  <view wx:elif="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="{{emptyEyebrow}}"
+      title="{{emptyTitle}}"
+      description="{{emptyDescription}}"
+      actionText="{{emptyActionText}}"
+      featured="{{true}}"
+      bind:action="onEmptyAction"
+    />
+  </view>
   <view wx:else class="section">
     <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>
-    <app-empty-state wx:if="{{displayedRows.length === 0}}" title="暂无联赛数据" description="确认球队已加入联赛或调整筛选" />
+    <app-empty-state
+      wx:if="{{displayedRows.length === 0}}"
+      title="{{resultsEmptyTitle}}"
+      description="{{resultsEmptyDescription}}"
+      actionText="{{resultsEmptyActionText}}"
+      bind:action="onEmptyResultsAction"
+    />
     <block wx:else>
       <view
         wx:for="{{displayedRows}}"

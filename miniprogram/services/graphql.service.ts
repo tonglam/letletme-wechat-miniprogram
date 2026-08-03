@@ -28,9 +28,55 @@ interface CacheEntry {
 export interface GraphQLOptions {
   cacheTtl?: number;
   getCacheExpiry?: (data: unknown) => number;
+  /** Skip the cache read (fresh result still re-populates the cache). */
+  forceRefresh?: boolean;
 }
 
 const inFlightRequests = new Map<string, Promise<unknown>>();
+
+// L1 in-process cache in front of the persisted storage cache. Entries are
+// keyed by the same storage key, so a token change naturally orphans old
+// session entries (they expire by TTL and vanish on restart).
+const memoryCache = new Map<string, CacheEntry>();
+const MEMORY_CACHE_LIMIT = 120;
+
+function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefined {
+  const entry = memoryCache.get(cacheKey);
+  if (!entry || entry.requestKey !== requestKey) return undefined;
+  if (Date.now() >= entry.expiresAt) {
+    memoryCache.delete(cacheKey);
+    return undefined;
+  }
+  return entry.data;
+}
+
+function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
+  if (memoryCache.size >= MEMORY_CACHE_LIMIT) {
+    memoryCache.clear();
+  }
+  memoryCache.set(cacheKey, entry);
+}
+
+function toUserFriendlyError(error: { errMsg?: string } | undefined): Error {
+  const message = error?.errMsg || "";
+  if (message.includes("timeout")) {
+    return new Error("网络超时，请稍后重试");
+  }
+  if (message.includes("abort")) {
+    return new Error("请求已取消");
+  }
+  return new Error("网络连接失败，请检查网络后重试");
+}
+
+function toHttpError(statusCode: number): Error {
+  if (statusCode >= 500) {
+    return new Error("服务器繁忙，请稍后重试");
+  }
+  if (statusCode === 404) {
+    return new Error("请求的内容不存在");
+  }
+  return new Error(`请求失败（${statusCode}）`);
+}
 
 function extractOpName(query: string): string {
   const match = /(?:query|mutation)\s+(\w+)/i.exec(query);
@@ -104,7 +150,7 @@ function makeRequest<T>(
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(new Error(`GraphQL request failed: ${response.statusCode}`));
+          reject(toHttpError(response.statusCode));
           return;
         }
 
@@ -115,14 +161,14 @@ function makeRequest<T>(
         }
 
         if (!body || body.data === undefined || body.data === null) {
-          reject(new Error("GraphQL response missing data"));
+          reject(new Error("数据加载失败，请稍后重试"));
           return;
         }
 
         resolve(body.data);
       },
       fail(error) {
-        reject(new Error(error.errMsg || "GraphQL network request failed"));
+        reject(toUserFriendlyError(error));
       }
     });
   });
@@ -141,11 +187,17 @@ export function graphqlRequest<T>(
     return inFlight;
   }
 
-  if (options?.cacheTtl != null || options?.getCacheExpiry) {
+  const skipCacheRead = options?.forceRefresh === true;
+  if (!skipCacheRead && (options?.cacheTtl != null || options?.getCacheExpiry)) {
+    const cacheKey = getStorageCacheKey(key, token);
+    const fromMemory = readMemoryCache(cacheKey, key);
+    if (fromMemory !== undefined) {
+      return Promise.resolve(fromMemory as T);
+    }
     try {
-      const cacheKey = getStorageCacheKey(key, token);
       const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
       if (cached && cached.requestKey === key && Date.now() < cached.expiresAt) {
+        writeMemoryCache(cacheKey, cached);
         return Promise.resolve(cached.data as T);
       }
       try { wx.removeStorageSync(cacheKey); } catch {}
@@ -166,7 +218,9 @@ export function graphqlRequest<T>(
         const expiresAt = options?.getCacheExpiry
           ? options.getCacheExpiry(data)
           : Date.now() + (options?.cacheTtl ?? 0);
-        wx.setStorageSync(cacheKey, { requestKey: key, data, expiresAt });
+        const entry: CacheEntry = { requestKey: key, data, expiresAt };
+        writeMemoryCache(cacheKey, entry);
+        wx.setStorageSync(cacheKey, entry);
       } catch {}
     }
     return data;

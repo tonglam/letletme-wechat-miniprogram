@@ -21,6 +21,7 @@ interface PricePageData {
   players: PlayerOption[];
   filteredPlayers: PlayerOption[];
   filteredPlayerCount: number;
+  playersLoaded: boolean;
   playerListReady: boolean;
   playerListVisible: boolean;
   selectedPlayer: PlayerOption | null;
@@ -143,6 +144,7 @@ Page({
     players: [],
     filteredPlayers: [],
     filteredPlayerCount: 0,
+    playersLoaded: false,
     playerListReady: false,
     playerListVisible: false,
     selectedPlayer: null,
@@ -167,7 +169,7 @@ Page({
   onPullDownRefresh() {
     const task = this.data.activeMode === "player"
       ? this.refreshPlayerMode()
-      : this.loadDailyChanges();
+      : this.loadDailyChanges(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -197,10 +199,10 @@ Page({
     this.loadDailyChanges();
   },
 
-  async loadDailyChanges(): Promise<void> {
+  async loadDailyChanges(forceRefresh = false): Promise<void> {
     this.setData({ loading: true, error: "" });
     try {
-      const changes = await getPlayerValueByDate(this.data.changeDate);
+      const changes = await getPlayerValueByDate(this.data.changeDate, forceRefresh);
       this.setData(splitChanges(changes));
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });
@@ -212,12 +214,12 @@ Page({
   async refreshPlayerMode(): Promise<void> {
     await this.ensurePlayersLoaded();
     if (this.data.selectedPlayer?.element) {
-      await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
+      await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
     }
   },
 
   async ensurePlayersLoaded(): Promise<void> {
-    if (this.data.players.length > 0 || this.data.playerLoading) {
+    if (this.data.playersLoaded || this.data.playerLoading) {
       return;
     }
 
@@ -228,6 +230,7 @@ Page({
       const teamOptions = buildTeamOptions(sortedPlayers);
       this.setData({
         players: sortedPlayers,
+        playersLoaded: true,
         teamOptions,
         teamOptionNames: teamOptions.map((option) => option.label)
       });
@@ -277,8 +280,22 @@ Page({
   },
 
   onRetryPlayers() {
-    this.setData({ players: [] });
+    this.setData({ players: [], playersLoaded: false });
     this.ensurePlayersLoaded();
+  },
+
+  onClearPlayerFilters() {
+    this.setData({
+      playerKeyword: "",
+      teamFilter: ALL_VALUE,
+      positionFilter: ALL_VALUE,
+      selectedTeamIndex: 0,
+      selectedPositionIndex: 0,
+      filteredPlayers: [],
+      filteredPlayerCount: 0,
+      playerListReady: false,
+      playerListVisible: false
+    });
   },
 
   onRetryHistory() {
@@ -323,10 +340,10 @@ Page({
     this.loadSelectedPlayerHistory(player.element);
   },
 
-  async loadSelectedPlayerHistory(playerId: number): Promise<void> {
+  async loadSelectedPlayerHistory(playerId: number, forceRefresh = false): Promise<void> {
     this.setData({ historyLoading: true, historyError: "" });
     try {
-      const historyRows = await getPlayerValueByElement(playerId);
+      const historyRows = await getPlayerValueByElement(playerId, forceRefresh);
       this.setData({ historyRows: historyRows.sort(sortByChangeDateDesc) });
     } catch (error) {
       this.setData({ historyError: error instanceof Error ? error.message : "球员身价历史加载失败" });

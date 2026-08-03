@@ -170,7 +170,10 @@ export async function getPlayerInfoByCode(code: number | string, _season?: strin
 }
 
 export async function getPlayersByElementType(_elementType: number | string): Promise<PlayerOption[]> {
-  const data = await graphqlRequest<PlayersResponse>(PLAYERS, { limit: 600, offset: 0 });
+  // The 600-row player directory changes slowly (names/teams/positions are
+  // stable; prices move once daily), so a 6h TTL is safe and avoids pulling
+  // the full list on every visit to the price page's player mode.
+  const data = await graphqlRequest<PlayersResponse>(PLAYERS, { limit: 600, offset: 0 }, { cacheTtl: 6 * 60 * 60 * 1000 });
   return (data.players || []).map(mapPlayer);
 }
 

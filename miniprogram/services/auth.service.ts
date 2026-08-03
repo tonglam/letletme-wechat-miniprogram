@@ -1,6 +1,7 @@
 import { getMiniProgramApiBase, REQUEST_TIMEOUT_MS } from "../config/env";
 import { storageKeys, storagePrefixes } from "../config/storage-keys";
 import { clearEntryScopedStorage } from "../utils/storage";
+import { recordApi } from "../utils/perf";
 import { isStoredSessionUsable, MiniProgramLinkRequiredError } from "./auth-session";
 
 export interface MiniProgramProfile {
@@ -32,9 +33,9 @@ function loginCode(): Promise<string> {
     wx.login({
       success: ({ code }) => {
         if (code) resolve(code);
-        else reject(new Error("wx.login did not return a code"));
+        else reject(new Error("微信登录失败，请重试"));
       },
-      fail: (error) => reject(new Error(error.errMsg || "wx.login failed"))
+      fail: () => reject(new Error("微信登录失败，请重试"))
     });
   });
 }
@@ -48,6 +49,7 @@ function getDeviceId(): string {
 }
 
 function requestWebAuth(path: string, data: Record<string, unknown>): Promise<ApiResponse> {
+  const t0 = Date.now();
   return new Promise((resolve, reject) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}${path}`,
@@ -57,13 +59,16 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         if (response.statusCode < 200 || response.statusCode >= 300 || !response.data?.success) {
-          reject(new Error(response.data?.error || `Account request failed: ${response.statusCode}`));
+          recordApi(`auth:${path}`, Date.now() - t0, false);
+          reject(new Error(response.data?.error || `请求失败（${response.statusCode}）`));
           return;
         }
+        recordApi(`auth:${path}`, Date.now() - t0, true);
         resolve(response.data);
       },
-      fail(error) {
-        reject(new Error(error.errMsg || "Account network request failed"));
+      fail() {
+        recordApi(`auth:${path}`, Date.now() - t0, false);
+        reject(new Error("网络连接失败，请检查网络后重试"));
       }
     });
   });
@@ -92,6 +97,14 @@ function clearStoredGraphQLSessionCache(): void {
   } catch {}
 }
 
+// In-memory mirror of the persisted session so hot paths (every GraphQL
+// request) never hit synchronous storage. `undefined` = unknown, re-read
+// storage on next access; `null` = storage was checked and has no session.
+// clearApiSession resets to `undefined` (not `null`) so the next read
+// reconciles with storage — one extra sync read per sign-out, and resilient
+// to any out-of-band storage write.
+let sessionMemory: { token: string; expiresAt: string } | null | undefined;
+
 function storeApiSession(session: ApiSession): ApiSession {
   const previousToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
   const previousEntryId = Number(wx.getStorageSync(storageKeys.entryId));
@@ -106,6 +119,7 @@ function storeApiSession(session: ApiSession): ApiSession {
     clearEntryScopedStorage();
   }
 
+  sessionMemory = { token: session.token, expiresAt: session.expiresAt };
   wx.setStorageSync(storageKeys.apiSessionToken, session.token);
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
   if (nextEntryId) {
@@ -125,6 +139,7 @@ function storeApiSession(session: ApiSession): ApiSession {
 }
 
 export function clearApiSession(): void {
+  sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   clearEntryScopedStorage();
   [storageKeys.apiSessionToken, storageKeys.apiSessionExpiresAt, storageKeys.entryId]
@@ -139,14 +154,17 @@ export function clearApiSession(): void {
 }
 
 export function getApiSessionToken(): string | null {
-  const token = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
-  const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
-  if (!token && !expiresAt) return null;
-  if (!isStoredSessionUsable(token, expiresAt)) {
+  if (sessionMemory === undefined) {
+    const token = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
+    const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
+    sessionMemory = token || expiresAt ? { token: token || "", expiresAt: expiresAt || "" } : null;
+  }
+  if (!sessionMemory) return null;
+  if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
     clearApiSession();
     return null;
   }
-  return token ?? null;
+  return sessionMemory.token || null;
 }
 
 export async function logoutMiniProgramSession(): Promise<void> {
@@ -156,6 +174,7 @@ export async function logoutMiniProgramSession(): Promise<void> {
     return;
   }
 
+  const t0 = Date.now();
   await new Promise<void>((resolve, reject) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}/session`,
@@ -163,10 +182,12 @@ export async function logoutMiniProgramSession(): Promise<void> {
       header: { Authorization: `Bearer ${token}` },
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
+        recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
         if (response.statusCode >= 200 && response.statusCode < 300) resolve();
         else reject(new Error(response.data?.error || "Sign out failed"));
       },
       fail(error) {
+        recordApi("auth:/session", Date.now() - t0, false);
         reject(new Error(error.errMsg || "Sign out network request failed"));
       }
     });
@@ -175,7 +196,7 @@ export async function logoutMiniProgramSession(): Promise<void> {
 }
 
 /** Uses only web-owned identity. FPL entry IDs are inherited from the verified account. */
-export async function refreshWechatApiSession(): Promise<ApiSession> {
+async function performWechatSessionRefresh(): Promise<ApiSession> {
   const code = await loginCode();
   const response = await requestWebAuth("/wechat/login", {
     code,
@@ -189,6 +210,27 @@ export async function refreshWechatApiSession(): Promise<ApiSession> {
     throw new MiniProgramLinkRequiredError();
   }
   return storeApiSession(asSession(response));
+}
+
+let pendingRefresh: Promise<ApiSession> | null = null;
+
+/**
+ * Single-flight session refresh: concurrent callers (e.g. several requests
+ * failing with 401 at once) share one wx.login + /wechat/login round trip.
+ */
+export function refreshWechatApiSession(): Promise<ApiSession> {
+  if (pendingRefresh) {
+    return pendingRefresh;
+  }
+  const refresh = performWechatSessionRefresh();
+  pendingRefresh = refresh;
+  const release = () => {
+    if (pendingRefresh === refresh) {
+      pendingRefresh = null;
+    }
+  };
+  refresh.then(release, release);
+  return refresh;
 }
 
 export async function startMiniProgramEmailLink(email: string): Promise<void> {

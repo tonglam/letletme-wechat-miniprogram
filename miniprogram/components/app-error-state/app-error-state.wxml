@@ -1,4 +1,12 @@
 <view class="error">
+  <view class="error-visual" aria-hidden="{{true}}">
+    <view class="error-signal error-signal-one"></view>
+    <view class="error-signal error-signal-two"></view>
+    <view class="error-signal error-signal-three"></view>
+    <view class="error-mark">!</view>
+  </view>
+  <view wx:if="{{eyebrow}}" class="error-eyebrow">{{eyebrow}}</view>
   <view class="error-message">{{message}}</view>
-  <button class="error-action" size="mini" bindtap="onRetry">{{retryText}}</button>
+  <view wx:if="{{description}}" class="error-description">{{description}}</view>
+  <button class="error-action" hover-class="error-action-hover" bindtap="onRetry">{{retryText}}</button>
 </view>

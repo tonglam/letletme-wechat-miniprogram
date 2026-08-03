@@ -1,9 +1,10 @@
 import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
-import { refreshWechatApiSession } from "./services/auth.service";
+import { getApiSessionToken, refreshWechatApiSession } from "./services/auth.service";
 import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
+import { storagePrefixes } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import { resolveEventContext } from "./utils/event-context";
 
@@ -27,6 +28,19 @@ App<IAppOption>({
     this.requirePrivacyAndLogin();
     await this.initAppData();
     recordLaunch(Date.now() - launchStart);
+    this.purgeExpiredGraphQLCache();
+  },
+
+  onError(error: string) {
+    console.error("[app] uncaught error:", error);
+  },
+
+  onUnhandledRejection(event: { reason?: unknown }) {
+    console.error("[app] unhandled rejection:", event && event.reason);
+  },
+
+  onPageNotFound() {
+    wx.reLaunch({ url: routes.home });
   },
 
   requirePrivacyAndLogin() {
@@ -41,9 +55,13 @@ App<IAppOption>({
   },
 
   doLogin() {
-    // Restore the valid 30-day session immediately. A successful background
-    // WeChat login rotates it; transient/network failures leave it usable.
+    // A still-valid 30-day session needs no login round trip: the local
+    // entry binding is restored from storage, and a later 401 triggers the
+    // single-flight refresh path in graphql.service.
     this.globalData.entryId = getEntryId();
+    if (getApiSessionToken()) {
+      return;
+    }
     refreshWechatApiSession().then((session) => {
       if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
         this.globalData.entryId = session.profile.fplEntryId;
@@ -84,5 +102,25 @@ App<IAppOption>({
     } catch {
       // Keep launch resilient when shared app data is temporarily unavailable.
     }
+  },
+
+  /** Drop expired gql:* cache rows once per launch, off the critical path. */
+  purgeExpiredGraphQLCache() {
+    setTimeout(() => {
+      try {
+        const { keys } = wx.getStorageInfoSync();
+        const now = Date.now();
+        keys
+          .filter((key) => key.startsWith(storagePrefixes.graphqlCache))
+          .forEach((key) => {
+            try {
+              const entry = wx.getStorageSync(key) as { expiresAt?: number } | undefined;
+              if (!entry || typeof entry.expiresAt !== "number" || now >= entry.expiresAt) {
+                wx.removeStorageSync(key);
+              }
+            } catch {}
+          });
+      } catch {}
+    }, 0);
   }
 });

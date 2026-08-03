@@ -23,7 +23,13 @@
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载比赛" />
   <view wx:else class="match-content">
-    <app-empty-state wx:if="{{matches.length === 0}}" title="暂无比赛" description="切换状态或下拉刷新查看比赛数据" />
+    <app-empty-state
+      wx:if="{{matches.length === 0}}"
+      title="当前没有{{activeStatusLabel}}的比赛"
+      description="{{emptyDescription}}"
+      actionText="重新加载"
+      bind:action="onRetry"
+    />
     <view wx:for="{{groups}}" wx:key="title" class="match-group">
       <view class="group-title">{{item.title}}</view>
       <view wx:for="{{item.matches}}" wx:for-item="match" wx:key="matchId" class="match-card {{match.statusClass}}">

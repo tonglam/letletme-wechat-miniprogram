@@ -134,9 +134,10 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
   return entry ? [entry] : [];
 }
 
-export async function getEntryInfo(entry: number): Promise<EntryInfo> {
+export async function getEntryInfo(entry: number, forceRefresh = false): Promise<EntryInfo> {
   const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
-    cacheTtl: 3600 * 1000
+    cacheTtl: 3600 * 1000,
+    forceRefresh
   });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {

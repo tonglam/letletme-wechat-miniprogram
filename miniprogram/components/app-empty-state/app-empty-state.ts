@@ -1,8 +1,12 @@
 Component({
   properties: {
+    eyebrow: {
+      type: String,
+      value: ""
+    },
     title: {
       type: String,
-      value: "暂无数据"
+      value: "这里还没有内容"
     },
     description: {
       type: String,
@@ -11,6 +15,10 @@ Component({
     actionText: {
       type: String,
       value: ""
+    },
+    featured: {
+      type: Boolean,
+      value: false
     }
   },
 

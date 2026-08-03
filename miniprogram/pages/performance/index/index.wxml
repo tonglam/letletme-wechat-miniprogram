@@ -14,8 +14,17 @@
     </view>
   </view>
 
+  <view wx:if="{{!hasData}}" class="section">
+    <app-empty-state
+      eyebrow="等待样本"
+      title="还没有可分析的性能数据"
+      description="先浏览几个数据页面，再回到这里下拉刷新；启动与接口耗时会自动汇总"
+      featured="{{true}}"
+    />
+  </view>
+
   <!-- Score Card -->
-  <view class="section scoreboard score-card">
+  <view wx:if="{{hasData}}" class="section scoreboard score-card">
     <view class="score-body">
       <view class="score-ring score-ring-{{scoreGrade}}">
         <text class="score-number">{{hasData ? score : '--'}}</text>
@@ -32,9 +41,8 @@
   </view>
 
   <!-- Key Metrics -->
-  <view class="section card">
+  <view wx:if="{{hasData}}" class="section card">
     <view class="card-heading">关键指标</view>
-    <view wx:if="{{metrics.length === 0}}" class="perf-hint muted">使用应用后指标将在此显示</view>
     <view wx:for="{{metrics}}" wx:key="key" class="metric-row">
       <view class="metric-label muted">{{item.label}}</view>
       <view class="metric-right">
@@ -64,10 +72,10 @@
   </view>
 
   <!-- API Breakdown -->
-  <view class="section card">
+  <view wx:if="{{hasData}}" class="section card">
     <view class="card-heading">API 接口</view>
     <view class="muted api-summary">共 {{totalApiCalls}} 次请求，按平均耗时排序</view>
-    <view wx:if="{{apiGroups.length === 0}}" class="perf-hint muted">暂无记录</view>
+    <app-empty-state wx:if="{{apiGroups.length === 0}}" title="还没有 API 请求样本" description="打开一个需要加载数据的页面后再回来查看" />
     <view wx:for="{{apiGroups}}" wx:key="name" class="api-row">
       <view class="api-name">{{item.name}}</view>
       <view class="api-right">

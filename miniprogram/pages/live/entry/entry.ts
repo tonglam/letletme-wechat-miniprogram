@@ -2,7 +2,7 @@ import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntry } from "../../../services/live.service";
 import type { LivePlayerRow } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
-import { goToEntrySearch } from "../../../utils/navigation";
+import { forceEntryBinding } from "../../../utils/navigation";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 
@@ -14,6 +14,8 @@ interface SummaryTile {
 interface LiveEntryData {
   loading: boolean;
   error: string;
+  transfersError: string;
+  emptyState: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -54,6 +56,8 @@ Page({
   data: {
     loading: false,
     error: "",
+    transfersError: "",
+    emptyState: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -84,6 +88,16 @@ Page({
     this.loadData(false);
   },
 
+  onShow() {
+    // Live scores go stale quickly: refresh when returning to the page after
+    // 30s+, but keep tab switches within that window instant.
+    if (this._loadedAt && Date.now() - this._loadedAt >= 30 * 1000) {
+      this.loadData(false);
+    }
+  },
+
+  _loadedAt: 0,
+
   onPullDownRefresh() {
     this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
@@ -91,15 +105,19 @@ Page({
   async loadData(_refreshCache: boolean) {
     const entryId = this.data.entryId;
     if (!entryId) {
-      this.setData({ error: "请先选择 FPL 球队" });
+      this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", transfersError: "", emptyState: false });
     try {
+      let transfersError = "";
       const [result, transfers] = await Promise.all([
         getLivePointsByEntry(entryId, this.data.event),
-        getEntryEventTransfers(entryId, this.data.event).catch(() => [] as EntryTransfer[])
+        getEntryEventTransfers(entryId, this.data.event).catch((error) => {
+          transfersError = error instanceof Error ? error.message : "本周转会加载失败";
+          return [] as EntryTransfer[];
+        })
       ]);
       const players = (result.players || result.pickList || []).map(normalizePlayer);
       const managers = players.filter((player) => numberValue(player.elementType) === 5);
@@ -128,8 +146,10 @@ Page({
         bench,
         managers,
         transfers: transfers.map(normalizeTransfer),
+        transfersError,
         lastUpdated: formatTime(new Date())
       });
+      this._loadedAt = Date.now();
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
     } finally {
@@ -147,6 +167,6 @@ Page({
   },
 
   onChooseEntry() {
-    goToEntrySearch();
+    forceEntryBinding();
   }
 });

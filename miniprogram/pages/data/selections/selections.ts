@@ -4,8 +4,10 @@ import {
 } from "../../../services/tournament.service";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
+import { forceEntryBinding } from "../../../utils/navigation";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
+type SelectionsEmptyState = "" | "entry" | "tournaments";
 
 interface SelectionRow {
   id: string;
@@ -28,6 +30,13 @@ interface SelectionsData {
   loadingTournaments: boolean;
   loadingStats: boolean;
   error: string;
+  emptyState: SelectionsEmptyState;
+  emptyEyebrow: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyActionText: string;
+  statsEmptyTitle: string;
+  statsEmptyDescription: string;
   entryId?: number;
   event: number;
   maxGw: number;
@@ -60,6 +69,13 @@ Page({
     loadingTournaments: false,
     loadingStats: false,
     error: "",
+    emptyState: "",
+    emptyEyebrow: "",
+    emptyTitle: "",
+    emptyDescription: "",
+    emptyActionText: "",
+    statsEmptyTitle: "本轮还没有选择率数据",
+    statsEmptyDescription: "GW 数据同步后会显示联赛内的阵容趋势",
     entryId: undefined,
     event: 1,
     maxGw: 1,
@@ -91,7 +107,8 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadStats().finally(() => wx.stopPullDownRefresh());
+    const task = this.data.tournaments.length ? this.loadStats() : this.loadTournaments();
+    task.finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -104,7 +121,13 @@ Page({
   async loadTournaments(): Promise<void> {
     if (!this.data.entryId) {
       this.setData({
-        error: "请先绑定 Entry ID",
+        loadingTournaments: false,
+        error: "",
+        emptyState: "entry",
+        emptyEyebrow: "需要账户",
+        emptyTitle: "先关联你的 LetLetMe 账户",
+        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，无需再次输入 Entry ID。",
+        emptyActionText: "去关联账户",
         tournaments: [],
         tournamentNames: [],
         visibleRows: []
@@ -112,7 +135,15 @@ Page({
       return;
     }
 
-    this.setData({ loadingTournaments: true, error: "" });
+    this.setData({
+      loadingTournaments: true,
+      error: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: ""
+    });
     try {
       const tournaments = await getEntryPointsRaceTournament(this.data.entryId);
       if (tournaments.length === 0) {
@@ -120,7 +151,12 @@ Page({
           tournaments: [],
           tournamentNames: [],
           selectedTournamentName: "",
-          error: "暂无可用联赛"
+          visibleRows: [],
+          emptyState: "tournaments",
+          emptyEyebrow: "联赛待就绪",
+          emptyTitle: "当前球队还没有可查看的联赛",
+          emptyDescription: "加入一个积分联赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyActionText: "重新检查"
         });
         return;
       }
@@ -134,7 +170,8 @@ Page({
         tournaments,
         tournamentNames: tournaments.map((item) => item.name),
         selectedTournamentIndex,
-        selectedTournamentName: selectedTournament.name
+        selectedTournamentName: selectedTournament.name,
+        emptyState: ""
       });
       await this.loadStats();
     } catch (error) {
@@ -193,9 +230,12 @@ Page({
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
     const activeTab = String(event.currentTarget.dataset.tab || "selected") as SelectionTab;
+    const emptyCopy = selectionEmptyCopy(activeTab, this.data.event);
     this.setData({
       activeTab,
-      visibleRows: getRowsForTab(this.data, activeTab)
+      visibleRows: getRowsForTab(this.data, activeTab),
+      statsEmptyTitle: emptyCopy.title,
+      statsEmptyDescription: emptyCopy.description
     });
   },
 
@@ -205,6 +245,14 @@ Page({
       return;
     }
     this.loadStats();
+  },
+
+  onEmptyAction() {
+    if (this.data.emptyState === "entry") {
+      forceEntryBinding();
+      return;
+    }
+    this.loadTournaments();
   }
 });
 
@@ -218,6 +266,7 @@ function mapSelectionStats(
   const captainRows = mapPercentRows(stats?.captainSelect || [], "Captain", "EO");
   const transferInRows = mapTransferRows(stats?.mostTransferIn || [], "In", "Count");
   const transferOutRows = mapTransferRows(stats?.mostTransferOut || [], "Out", "Count");
+  const emptyCopy = selectionEmptyCopy(activeTab, event);
   const nextData = {
     selectedTournamentName: tournament.name,
     headerSubtitle: `${tournament.name} · GW${event}`,
@@ -230,7 +279,34 @@ function mapSelectionStats(
 
   return {
     ...nextData,
-    visibleRows: getRowsForTab(nextData, activeTab)
+    visibleRows: getRowsForTab(nextData, activeTab),
+    statsEmptyTitle: emptyCopy.title,
+    statsEmptyDescription: emptyCopy.description
+  };
+}
+
+function selectionEmptyCopy(tab: SelectionTab, event: number): { title: string; description: string } {
+  if (tab === "captain") {
+    return {
+      title: `GW${event} 还没有队长趋势`,
+      description: "联赛成员提交阵容后会显示队长选择"
+    };
+  }
+  if (tab === "transfersIn") {
+    return {
+      title: `GW${event} 还没有转入趋势`,
+      description: "联赛内产生转会后会显示热门转入"
+    };
+  }
+  if (tab === "transfersOut") {
+    return {
+      title: `GW${event} 还没有转出趋势`,
+      description: "联赛内产生转会后会显示热门转出"
+    };
+  }
+  return {
+    title: `GW${event} 还没有选择率数据`,
+    description: "联赛成员提交阵容后会显示球员选择率"
   };
 }
 
@@ -288,15 +364,15 @@ function mapTransferRows(players: TournamentSelectionPlayer[], primaryLabel: str
   });
 }
 
-function positionLabel(position: string): string {
-  const normalized = position.toUpperCase();
+function positionLabel(position?: string): string {
+  const normalized = (position || "").toUpperCase();
   const map: Record<string, string> = {
     GOALKEEPER: "GKP",
     DEFENDER: "DEF",
     MIDFIELDER: "MID",
     FORWARD: "FWD"
   };
-  return map[normalized] || position;
+  return map[normalized] || position || "";
 }
 
 function formatPercent(value?: number): string {

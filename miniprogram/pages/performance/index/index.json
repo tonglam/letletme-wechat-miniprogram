@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "性能监控",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-empty-state": "../../../components/app-empty-state/app-empty-state"
+  }
 }

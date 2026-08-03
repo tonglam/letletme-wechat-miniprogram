@@ -1,10 +1,12 @@
 import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
+import { routes } from "../../../config/routes";
 
 Page({
   data: {
     loading: false,
     error: "",
+    emptyState: false,
     teamId: "",
     team: undefined as TeamSummary | undefined
   },
@@ -16,11 +18,11 @@ Page({
 
   async loadData() {
     if (!this.data.teamId) {
-      this.setData({ error: "缺少球队 ID" });
+      this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", emptyState: false });
     try {
       const team = await getTeamSummary(this.data.teamId, getApp<IAppOption>().globalData.season);
       this.setData({ team });
@@ -33,5 +35,9 @@ Page({
 
   onRetry() {
     this.loadData();
+  },
+
+  onBackToTeams() {
+    wx.redirectTo({ url: routes.dataTeams });
   }
 });

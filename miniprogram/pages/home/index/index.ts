@@ -7,7 +7,7 @@ import type { EntryInfo } from "../../../models/entry";
 import type { PlayerValue } from "../../../models/player";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
-import { forceEntryBinding, goToEntryProfile, goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { forceEntryBinding, goToEntryProfile, navigateTo } from "../../../utils/navigation";
 import { clearEntryId, clearEntryScopedStorage } from "../../../utils/storage";
 import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
@@ -16,6 +16,7 @@ import { formatPrice } from "../../../utils/fpl";
 interface HomeData {
   loading: boolean;
   fixtureLoading: boolean;
+  fixtureError: string;
   error: string;
   entry: EntryInfo;
   fixtureRows: HomeFixtureRow[];
@@ -65,6 +66,7 @@ Page({
   data: {
     loading: false,
     fixtureLoading: false,
+    fixtureError: "",
     error: "",
     entry: {},
     fixtureRows: [],
@@ -84,6 +86,7 @@ Page({
 
   countdownTimer: undefined as number | undefined,
   _initialLoadDone: false,
+  _lastLoadAt: 0,
 
   async onLoad() {
     if (!this.ensureEntryBound()) return;
@@ -99,7 +102,11 @@ Page({
     if (!this._initialLoadDone) return;
     await this.ensureAppDataReady();
     this.syncAppState();
-    this.loadPage();
+    // Returning to the tab within a minute keeps the already-loaded data;
+    // pull-to-refresh and the deadline rollover still force a reload.
+    if (Date.now() - this._lastLoadAt >= 60 * 1000) {
+      this.loadPage();
+    }
     this.startCountdown();
   },
 
@@ -134,7 +141,7 @@ Page({
     await app.initAppData();
   },
 
-  async loadPage() {
+  async loadPage(forceRefresh = false) {
     const app = getApp<IAppOption>();
     const entryId = app.globalData.entryId;
     if (!entryId) {
@@ -151,21 +158,30 @@ Page({
     try {
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
-      const entry = await getEntryInfo(entryId).catch(() => undefined as EntryInfo | undefined);
+      // entryInfo no longer gates the independent fixtures/prices/stats
+      // requests — all four run in parallel; a missing entry still falls
+      // back to the binding flow below.
+      let fixtureError = "";
+      const fixtureTask = getNextFixture(fixtureGw, forceRefresh).catch((error) => {
+        fixtureError = error instanceof Error ? error.message : "赛程加载失败";
+        return [] as Fixture[];
+      });
+      const [entry, fixtures, priceChanges, gameweekStats] = await Promise.all([
+        getEntryInfo(entryId, forceRefresh).catch(() => undefined as EntryInfo | undefined),
+        fixtureTask,
+        getPlayerValues(new Date().toISOString().slice(0, 10).replace(/-/g, ""), forceRefresh).catch(() => [] as PlayerValue[]),
+        getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined)
+      ]);
       if (!entry) {
         this.handleMissingEntry();
         return;
       }
-
-      const [fixtures, priceChanges, gameweekStats] = await Promise.all([
-        getNextFixture(fixtureGw).catch(() => [] as Fixture[]),
-        getPlayerValues(new Date().toISOString().slice(0, 10).replace(/-/g, "")).catch(() => [] as PlayerValue[]),
-        getGameweekStatsForHome(currentGw).catch(() => undefined)
-      ]);
       const priceGroups = mapHomePriceChanges(priceChanges);
 
+      this._lastLoadAt = Date.now();
       this.setData({
         fixtureRows: fixtures.map(mapFixtureRow),
+        fixtureError,
         priceRises: priceGroups.rises,
         priceFalls: priceGroups.falls,
         gameweekStats: mapHomeGameweekStats(gameweekStats),
@@ -195,7 +211,7 @@ Page({
     try {
       await refreshEventAndDeadline().catch(() => undefined);
       await getApp<IAppOption>().initAppData();
-      await this.loadPage();
+      await this.loadPage(true);
       this.syncAppState();
       this.startCountdown();
       wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
@@ -260,7 +276,7 @@ Page({
   },
 
   onChangeEntry() {
-    goToEntrySearch();
+    forceEntryBinding();
   },
 
   onOpenEntry() {
@@ -297,13 +313,22 @@ Page({
   },
 
   async loadFixtureGw(event: number) {
-    this.setData({ fixtureLoading: true, selectedFixtureGw: event });
+    this.setData({ fixtureLoading: true, fixtureError: "", selectedFixtureGw: event });
     try {
-      const fixtures = await getNextFixture(event).catch(() => [] as Fixture[]);
+      const fixtures = await getNextFixture(event);
       this.setData({ fixtureRows: fixtures.map(mapFixtureRow) });
+    } catch (error) {
+      this.setData({
+        fixtureRows: [],
+        fixtureError: error instanceof Error ? error.message : "赛程加载失败"
+      });
     } finally {
       this.setData({ fixtureLoading: false });
     }
+  },
+
+  onRetryFixtures() {
+    this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw);
   }
 });
 

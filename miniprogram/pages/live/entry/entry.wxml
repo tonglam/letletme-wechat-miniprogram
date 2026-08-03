@@ -5,12 +5,22 @@
         <view class="title">实时球队</view>
         <view class="subtitle">Entry #{{entryId || '-'}}</view>
       </view>
-      <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+      <gw-picker wx:if="{{!emptyState}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
   </view>
 
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载实时分数" />
+  <view wx:elif="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="需要账户"
+      title="先关联你的 LetLetMe 账户"
+      description="关联后会自动读取你在网站端已验证的 FPL 球队，并显示实时阵容"
+      actionText="去关联账户"
+      featured="{{true}}"
+      bind:action="onChooseEntry"
+    />
+  </view>
   <block wx:else>
     <view class="section live-summary">
       <view class="score-card scoreboard">
@@ -43,7 +53,13 @@
 
     <view class="section card">
       <view class="section-heading">阵容</view>
-      <app-empty-state wx:if="{{starters.length === 0 && bench.length === 0 && managers.length === 0}}" title="暂无球员数据" description="下拉刷新或稍后再试" />
+      <app-empty-state
+        wx:if="{{starters.length === 0 && bench.length === 0 && managers.length === 0}}"
+        title="GW{{event}} 阵容还没公布"
+        description="比赛周阵容同步后，首发和替补会显示在这里"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <player-row wx:for="{{starters}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" />
     </view>
 
@@ -59,7 +75,8 @@
 
     <view class="section card">
       <view class="section-heading">本周转会</view>
-      <app-empty-state wx:if="{{transfers.length === 0}}" title="本周无转会" description="当前 GW 未记录转会" />
+      <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
+      <app-empty-state wx:elif="{{transfers.length === 0}}" title="本周保持原阵容" description="GW{{event}} 没有转会记录" />
       <view wx:for="{{transfers}}" wx:key="inText" class="transfer-row">
         <view>
           <view class="transfer-in">转入 {{item.inText}}</view>

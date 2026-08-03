@@ -29,7 +29,7 @@
       </view>
     </view>
     <button class="primary-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onValidateAndSaveEntry">
-      验证球队
+      {{buttonText}}
     </button>
   </view>
 

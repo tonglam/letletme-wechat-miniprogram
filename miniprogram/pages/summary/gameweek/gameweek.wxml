@@ -19,7 +19,14 @@
     </view>
 
     <view wx:if="{{showSummary}}" class="section card">
-      <app-empty-state wx:if="{{!hasSummary}}" title="暂无总览" description="下拉刷新或切换 GW 后再试" />
+      <app-error-state wx:if="{{summaryError}}" message="{{summaryError}}" bind:retry="onRetry" />
+      <app-empty-state
+        wx:elif="{{!hasSummary}}"
+        title="GW{{event}} 总览还没生成"
+        description="比赛周开始或官方数据同步后会显示整体得分与开卡情况"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <block wx:else>
         <view class="metric-grid">
           <view wx:for="{{summaryStats}}" wx:key="label" class="metric-card">
@@ -42,7 +49,14 @@
     </view>
 
     <view wx:if="{{showDreamTeam}}" class="section">
-      <app-empty-state wx:if="{{!hasDreamTeam}}" title="暂无梦之队" />
+      <app-error-state wx:if="{{dreamTeamError}}" message="{{dreamTeamError}}" bind:retry="onRetry" />
+      <app-empty-state
+        wx:elif="{{!hasDreamTeam}}"
+        title="GW{{event}} 梦之队还没公布"
+        description="本轮产生球员得分后会按位置生成"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <block wx:else>
         <view wx:for="{{dreamTeamGroups}}" wx:key="id" class="card summary-card">
           <view class="section-title-small">{{item.title}}</view>
@@ -59,7 +73,12 @@
     </view>
 
     <view wx:if="{{showElite}}" class="section card">
-      <app-empty-state wx:if="{{!hasElite}}" title="暂无高分球员" />
+      <app-error-state wx:if="{{eliteError}}" message="{{eliteError}}" bind:retry="onRetry" />
+      <app-empty-state
+        wx:elif="{{!hasElite}}"
+        title="还没有达到 10 分的球员"
+        description="GW{{event}} 出现高分表现后会显示在这里"
+      />
       <block wx:else>
         <view wx:for="{{eliteRows}}" wx:key="id" class="summary-row">
           <view class="row-main">
@@ -72,9 +91,11 @@
     </view>
 
     <view wx:if="{{showTransfers}}" class="section transfer-grid">
+      <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
+      <block wx:else>
       <view class="card transfer-card">
         <view class="section-title-small">转入最多</view>
-        <app-empty-state wx:if="{{transfersInRows.length === 0}}" title="暂无转入" />
+        <app-empty-state wx:if="{{transfersInRows.length === 0}}" title="还没有转入趋势" description="本轮产生转会后会显示热门转入" />
         <block wx:else>
           <view wx:for="{{transfersInRows}}" wx:key="id" class="summary-row">
             <view class="row-title">{{index + 1}}. {{item.title}}</view>
@@ -84,7 +105,7 @@
       </view>
       <view class="card transfer-card">
         <view class="section-title-small">转出最多</view>
-        <app-empty-state wx:if="{{transfersOutRows.length === 0}}" title="暂无转出" />
+        <app-empty-state wx:if="{{transfersOutRows.length === 0}}" title="还没有转出趋势" description="本轮产生转会后会显示热门转出" />
         <block wx:else>
           <view wx:for="{{transfersOutRows}}" wx:key="id" class="summary-row">
             <view class="row-title">{{index + 1}}. {{item.title}}</view>
@@ -92,6 +113,7 @@
           </view>
         </block>
       </view>
+      </block>
     </view>
   </block>
 

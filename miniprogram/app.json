@@ -29,8 +29,7 @@
   },
   "__usePrivacyCheck__": true,
   "usingComponents": {
-    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar",
-    "van-action-sheet": "@vant/weapp/action-sheet/index"
+    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar"
   },
   "style": "v2",
   "componentFramework": "glass-easel",

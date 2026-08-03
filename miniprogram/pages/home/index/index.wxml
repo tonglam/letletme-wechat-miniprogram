@@ -75,7 +75,7 @@
             <text>上涨</text>
             <text class="price-count">{{priceRises.length}}</text>
           </view>
-          <view wx:if="{{priceRises.length === 0}}" class="price-empty">暂无上涨</view>
+          <view wx:if="{{priceRises.length === 0}}" class="price-empty">今天没有上涨</view>
           <view wx:for="{{priceRises}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
             <view class="price-player">
               <view class="price-name-line">
@@ -95,7 +95,7 @@
             <text>下跌</text>
             <text class="price-count">{{priceFalls.length}}</text>
           </view>
-          <view wx:if="{{priceFalls.length === 0}}" class="price-empty">暂无下跌</view>
+          <view wx:if="{{priceFalls.length === 0}}" class="price-empty">今天没有下跌</view>
           <view wx:for="{{priceFalls}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
             <view class="price-player">
               <view class="price-name-line">
@@ -137,8 +137,15 @@
           </view>
         </view>
       </view>
-      <app-loading wx:if="{{fixtureLoading}}" text="加载赛程" />
-      <app-empty-state wx:elif="{{fixtureRows.length === 0}}" title="暂无赛程" description="稍后刷新查看最新赛程" />
+      <app-error-state wx:if="{{fixtureError}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
+      <app-loading wx:elif="{{fixtureLoading}}" text="加载赛程" />
+      <app-empty-state
+        wx:elif="{{fixtureRows.length === 0}}"
+        title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
+        description="官方赛程发布后会自动显示在这里"
+        actionText="重新加载"
+        bind:action="onRetryFixtures"
+      />
       <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
         <view class="fixture-team home-team">
           <text class="team-name">{{item.homeName}}</text>

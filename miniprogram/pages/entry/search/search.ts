@@ -18,7 +18,7 @@ Page({
     manualEntryId: "",
     loading: false,
     error: "",
-    buttonText: "验证并绑定",
+    buttonText: "查找球队",
     hasPreview: false,
     previewTitle: "",
     previewSubtitle: "",
@@ -51,7 +51,7 @@ Page({
 
     this.setData({
       loading: true,
-      buttonText: "验证中...",
+      buttonText: "查找中...",
       error: "",
       hasPreview: false,
       previewTitle: "",
@@ -68,7 +68,7 @@ Page({
         error: error instanceof Error ? error.message : "无法验证 Entry ID"
       });
     } finally {
-      this.setData({ loading: false, buttonText: "验证并绑定" });
+      this.setData({ loading: false, buttonText: "查找球队" });
     }
   },
 

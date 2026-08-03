@@ -31,7 +31,9 @@ function load(): StoredPerf {
 
 function flush(): void {
   if (!_cache) return;
-  wx.setStorage({ key: STORAGE_KEY, data: _cache });
+  try {
+    wx.setStorage({ key: STORAGE_KEY, data: _cache });
+  } catch { /* instrumentation must never break callers */ }
 }
 
 export function recordLaunch(duration: number): void {
@@ -57,5 +59,7 @@ export function getPerf(): StoredPerf {
 
 export function clearPerf(): void {
   _cache = { apiRecords: [] };
-  wx.removeStorage({ key: STORAGE_KEY });
+  try {
+    wx.removeStorage({ key: STORAGE_KEY });
+  } catch { /* silent */ }
 }

@@ -55,6 +55,8 @@ jobs:
             process.exit(1)
           })
           NODE
+      - name: Prune unused Vant components
+        run: node scripts/prune-vant.mjs
       - name: Upload signed package
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}

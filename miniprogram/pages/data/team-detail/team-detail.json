@@ -2,6 +2,7 @@
   "navigationBarTitleText": "球队详情",
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
+    "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state"
   }
 }

@@ -4,10 +4,10 @@
       <view class="title">阵容选择</view>
       <view class="subtitle">{{headerSubtitle || '联赛选择率、队长和转会趋势'}}</view>
     </view>
-    <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+    <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
   </view>
 
-  <view class="section card control-card">
+  <view wx:if="{{tournaments.length}}" class="section card control-card">
     <view>
       <view class="field-label">联赛</view>
       <view class="field-help">{{totalEntriesText || '选择联赛查看数据'}}</view>
@@ -19,6 +19,16 @@
 
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loadingTournaments}}" text="加载联赛" />
+  <view wx:elif="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="{{emptyEyebrow}}"
+      title="{{emptyTitle}}"
+      description="{{emptyDescription}}"
+      actionText="{{emptyActionText}}"
+      featured="{{true}}"
+      bind:action="onEmptyAction"
+    />
+  </view>
 
   <block wx:else>
     <view class="section tab-strip">
@@ -29,7 +39,13 @@
 
     <app-loading wx:if="{{loadingStats}}" text="加载阵容选择" />
     <view wx:else class="section card stat-card">
-      <app-empty-state wx:if="{{visibleRows.length === 0}}" title="暂无阵容选择数据" description="切换联赛或 GW 后重试" />
+      <app-empty-state
+        wx:if="{{visibleRows.length === 0}}"
+        title="{{statsEmptyTitle}}"
+        description="{{statsEmptyDescription}}"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <view wx:else>
         <view wx:for="{{visibleRows}}" wx:key="id" class="stat-row">
           <view class="rank-badge">{{item.rank}}</view>
