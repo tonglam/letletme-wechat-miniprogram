@@ -676,8 +676,12 @@ Page({
       selectedTeamExposureIndex: 0,
       selectedTeamExposure: null,
       teamExposureCount: 1,
-      teamExposureScope: "any"
+      teamExposureScope: "any",
+      // In-memory rows may be a keyword-filtered subset, so they cannot be
+      // reapplied locally; treat the cleared-filter reload as a new result
+      // context instead of letting the old empty filtered view linger.
+      hasContent: false
     });
-    this.loadRows();
+    this.loadRows(false);
   }
 });
