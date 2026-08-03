@@ -182,10 +182,17 @@ function mapPlayerValueChange(value: PlayerValue): PlayerValueChange {
   });
 }
 
+/** Local calendar day — matches how the price page builds its picker dates. */
+function localTodayKey(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 /** Past dates are immutable; today's board moves once or twice a day. */
 function priceCacheTtl(changeDate: string): number {
-  const todayKey = new Date().toISOString().slice(0, 10);
-  return toDateKey(changeDate) === todayKey ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  return toDateKey(changeDate) === localTodayKey() ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
 }
 
 export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
@@ -217,5 +224,5 @@ export async function getPlayerValues(changeDate: string, forceRefresh = false):
 }
 
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
-  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || new Date().toISOString().slice(0, 10).replace(/-/g, ""), true);
+  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || localTodayKey().replace(/-/g, ""), true);
 }

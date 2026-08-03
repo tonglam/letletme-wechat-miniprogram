@@ -4,7 +4,7 @@ import { getEntryId } from "./utils/storage";
 import { getApiSessionToken, refreshWechatApiSession } from "./services/auth.service";
 import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
-import { storagePrefixes } from "./config/storage-keys";
+import { storageKeys, storagePrefixes } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import { resolveEventContext } from "./utils/event-context";
 
@@ -60,6 +60,7 @@ App<IAppOption>({
     // single-flight refresh path in graphql.service.
     this.globalData.entryId = getEntryId();
     if (getApiSessionToken()) {
+      this.revalidateSessionProfile();
       return;
     }
     refreshWechatApiSession().then((session) => {
@@ -70,6 +71,32 @@ App<IAppOption>({
       if (error instanceof MiniProgramLinkRequiredError) {
         wx.reLaunch({ url: routes.accountLink });
       }
+    });
+  },
+
+  /**
+   * A valid session can outlive the web-side binding: the user may change or
+   * unlink their verified FPL entry while the 30-day token keeps working.
+   * Re-fetch the authoritative profile in the background at most once per
+   * 24h so such changes propagate without blocking cold starts.
+   * storeApiSession applies the fresh entry binding (and clears stale
+   * caches) when the profile changed.
+   */
+  revalidateSessionProfile() {
+    const lastChecked = Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
+    if (lastChecked && Date.now() - lastChecked < 24 * 60 * 60 * 1000) {
+      return;
+    }
+    refreshWechatApiSession().then((session) => {
+      wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
+      if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
+        this.globalData.entryId = session.profile.fplEntryId;
+      }
+    }).catch((error) => {
+      if (error instanceof MiniProgramLinkRequiredError) {
+        wx.reLaunch({ url: routes.accountLink });
+      }
+      // Network failures keep the stored binding and retry on a later launch.
     });
   },
 

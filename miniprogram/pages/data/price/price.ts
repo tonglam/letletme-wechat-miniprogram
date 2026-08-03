@@ -218,19 +218,21 @@ Page({
     }
   },
 
-  async ensurePlayersLoaded(): Promise<void> {
+  async ensurePlayersLoaded(forceRefresh = false): Promise<void> {
     if (this.data.playersLoaded || this.data.playerLoading) {
       return;
     }
 
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const players = await getPlayersByElementType("all");
+      const players = await getPlayersByElementType("all", forceRefresh);
       const sortedPlayers = players.sort(sortByName);
       const teamOptions = buildTeamOptions(sortedPlayers);
       this.setData({
         players: sortedPlayers,
-        playersLoaded: true,
+        // An empty directory is a transient backend state, not "loaded":
+        // keep the door open for the next ensure/retry to refetch.
+        playersLoaded: sortedPlayers.length > 0,
         teamOptions,
         teamOptionNames: teamOptions.map((option) => option.label)
       });
@@ -281,7 +283,7 @@ Page({
 
   onRetryPlayers() {
     this.setData({ players: [], playersLoaded: false });
-    this.ensurePlayersLoaded();
+    this.ensurePlayersLoaded(true);
   },
 
   onClearPlayerFilters() {
