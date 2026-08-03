@@ -181,15 +181,23 @@ export function getApiSessionToken(): string | null {
 }
 
 export async function logoutMiniProgramSession(): Promise<void> {
+  // Settle any in-flight login first: once /wechat/login has reached the
+  // server it rotates the device token there regardless of the local epoch,
+  // so revoking the pre-rotation token would 401 and strand the session.
+  // Awaiting it lets the rotated token be stored, and the DELETE below then
+  // revokes the credential the server actually considers current.
+  const pending = getPendingSessionRefresh();
+  if (pending) {
+    await pending.catch(() => undefined);
+  }
+
   const token = getApiSessionToken();
   if (!token) {
     clearApiSession();
     return;
   }
 
-  // Logout intent supersedes any in-flight refresh immediately: bump the
-  // epoch now so a revalidation that completes while the DELETE is pending
-  // discards its rotated token instead of keeping the session alive.
+  // From here on, no refresh still in flight may store past the logout.
   sessionEpoch += 1;
 
   const t0 = Date.now();
@@ -201,8 +209,18 @@ export async function logoutMiniProgramSession(): Promise<void> {
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
-        if (response.statusCode >= 200 && response.statusCode < 300) resolve();
-        else reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          resolve();
+          return;
+        }
+        if (response.statusCode === 401) {
+          // The credential is already dead server-side (a rotation raced the
+          // settle above): the session is revoked either way, so clean up
+          // locally instead of reporting a failed logout.
+          resolve();
+          return;
+        }
+        reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
       },
       fail(error) {
         recordApi("auth:/session", Date.now() - t0, false);
@@ -221,17 +239,19 @@ async function performWechatSessionRefresh(): Promise<ApiSession> {
     code,
     deviceId: getDeviceId()
   });
+  if (epoch !== sessionEpoch) {
+    // A logout, session clear, or explicit email-link confirm landed while
+    // the login round trip was in flight — this stale response must not
+    // touch session state in either direction (neither store a credential
+    // nor clear the session that superseded it).
+    throw new Error("登录状态已变更，请重试");
+  }
   if (!response.linked) {
     // The WeChat identity was understood and is not linked, so retaining a
     // previous account would be unsafe. Network/login failures above retain a
     // still-valid session for offline resilience.
     clearApiSession();
     throw new MiniProgramLinkRequiredError();
-  }
-  if (epoch !== sessionEpoch) {
-    // A logout or session clear landed while the login round trip was in
-    // flight — do not resurrect a credential afterwards.
-    throw new Error("登录状态已变更，请重试");
   }
   return storeApiSession(asSession(response));
 }
