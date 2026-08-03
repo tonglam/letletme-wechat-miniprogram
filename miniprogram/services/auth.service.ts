@@ -293,6 +293,13 @@ export async function confirmMiniProgramEmailLink(
   email: string,
   emailCode: string
 ): Promise<ApiSession> {
+  // Settle any in-flight /wechat/login first, same as logout: if the server
+  // processes the older login after our /email/confirm, its token rotation
+  // would invalidate the confirmation token we are about to store.
+  const pending = getPendingSessionRefresh();
+  if (pending) {
+    await pending.catch(() => undefined);
+  }
   const wechatCode = await loginCode();
   const response = await requestWebAuth("/email/confirm", {
     email,
