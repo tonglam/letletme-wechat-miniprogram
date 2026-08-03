@@ -1,5 +1,10 @@
-import { getLiveMatchByStatus } from "../../../services/live.service";
-import type { LiveMatch, LivePlayerRow } from "../../../models/live";
+import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
+import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import {
+  LIVE_REFRESH_INTERVAL_MS,
+  liveSnapshotNeedsRefresh,
+  shouldPollLiveSnapshot
+} from "../../../utils/live-refresh";
 
 interface StatusOption {
   key: string;
@@ -28,6 +33,12 @@ function isValidStatus(value: unknown): value is string {
 function numberValue(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatTime(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
 function textValue(value: unknown, fallback = "-"): string {
@@ -194,16 +205,31 @@ function emptyDescription(status: string): string {
 Page({
   data: {
     loading: false,
+    refreshing: false,
+    hasData: false,
     error: "",
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
     statusOptions: STATUS_OPTIONS,
     matches: [] as LiveMatch[],
-    groups: [] as MatchGroup[]
+    groups: [] as MatchGroup[],
+    lastUpdated: ""
   },
 
+  autoRefreshTimer: undefined as number | undefined,
+  liveRequest: null as Promise<void> | null,
+  liveRequestKey: "",
+  liveRequestId: 0,
+  freshnessRequest: null as Promise<void> | null,
+  freshnessRequestId: 0,
+  liveSnapshot: null as LiveSnapshotStatus | null,
+  currentEventId: 0,
+  pageVisible: false,
+  hasShown: false,
+
   onLoad() {
+    this.currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
     const storedStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
     if (isValidStatus(storedStatus)) {
       this.setData({
@@ -215,26 +241,150 @@ Page({
     this.loadData();
   },
 
+  onShow() {
+    this.pageVisible = true;
+    const nextEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (nextEventId && nextEventId !== this.currentEventId) {
+      this.currentEventId = nextEventId;
+      this.liveSnapshot = null;
+    }
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    this.syncAutoRefresh();
+    if (resumed && this.shouldAutoRefresh()) {
+      this.refreshIfChanged();
+    }
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
   onPullDownRefresh() {
     this.loadData().finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData() {
-    this.setData({ loading: true, error: "" });
-    try {
-      const matches = (await getLiveMatchByStatus(this.data.status)).map((match) => normalizeMatch(match, this.data.status));
-      const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === this.data.status)?.label || "比赛";
-      this.setData({
-        activeStatusLabel,
-        emptyDescription: emptyDescription(this.data.status),
-        matches,
-        groups: groupMatches(matches, this.data.status)
-      });
-    } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
-    } finally {
-      this.setData({ loading: false });
+  loadData(background = false): Promise<void> {
+    const status = this.data.status;
+    if (this.liveRequest && this.liveRequestKey === status) {
+      return this.liveRequest;
     }
+
+    const requestId = this.liveRequestId + 1;
+    this.liveRequestId = requestId;
+    const preserveData = background && this.data.hasData;
+    this.setData(preserveData
+      ? { refreshing: true, error: "" }
+      : { loading: true, error: "" });
+
+    const request = (async () => {
+      try {
+        const liveResult = await getLiveMatchByStatusSnapshot(status);
+        if (requestId !== this.liveRequestId) return;
+        const matches = liveResult.data.map((match) => normalizeMatch(match, status));
+        const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
+        this.liveSnapshot = liveResult.snapshot;
+        if (!this.currentEventId && liveResult.snapshot) {
+          this.currentEventId = liveResult.snapshot.eventId;
+        }
+        this.setData({
+          activeStatusLabel,
+          emptyDescription: emptyDescription(status),
+          matches,
+          groups: groupMatches(matches, status),
+          hasData: true,
+          lastUpdated: formatTime(new Date())
+        });
+        this.syncAutoRefresh();
+      } catch (error) {
+        if (requestId !== this.liveRequestId) return;
+        this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+      } finally {
+        if (requestId === this.liveRequestId) {
+          this.setData({ loading: false, refreshing: false });
+        }
+      }
+    })();
+
+    this.liveRequest = request;
+    this.liveRequestKey = status;
+    void request.finally(() => {
+      if (this.liveRequest === request) {
+        this.liveRequest = null;
+        this.liveRequestKey = "";
+      }
+    });
+    return request;
+  },
+
+  shouldAutoRefresh(): boolean {
+    return shouldPollLiveSnapshot({
+      pageVisible: this.pageVisible,
+      currentEventId: this.currentEventId,
+      selectedEventId: this.currentEventId,
+      snapshot: this.liveSnapshot
+    });
+  },
+
+  refreshIfChanged(): Promise<void> {
+    if (!this.shouldAutoRefresh()) return Promise.resolve();
+    if (this.freshnessRequest) return this.freshnessRequest;
+
+    const requestId = this.freshnessRequestId + 1;
+    this.freshnessRequestId = requestId;
+    const liveRequestId = this.liveRequestId;
+    const request = (async () => {
+      try {
+        const observed = await getLiveSnapshot(this.currentEventId);
+        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
+        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
+          this.liveSnapshot = observed;
+          this.setData({ error: "" });
+          this.syncAutoRefresh();
+          return;
+        }
+        await this.loadData(true);
+      } catch (error) {
+        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
+        this.setData({ error: error instanceof Error ? error.message : "实时比赛刷新失败" });
+      }
+    })();
+
+    this.freshnessRequest = request;
+    void request.finally(() => {
+      if (this.freshnessRequest === request) {
+        this.freshnessRequest = null;
+      }
+    });
+    return request;
+  },
+
+  syncAutoRefresh() {
+    this.stopAutoRefresh();
+    if (!this.shouldAutoRefresh()) return;
+    this.autoRefreshTimer = setInterval(() => {
+      this.refreshIfChanged();
+    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
+  },
+
+  stopAutoRefresh() {
+    if (this.autoRefreshTimer !== undefined) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = undefined;
+    }
+  },
+
+  cancelFreshnessCheck() {
+    this.freshnessRequestId += 1;
+    this.freshnessRequest = null;
   },
 
   onStatusTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { status: string }>) {
@@ -244,12 +394,16 @@ Page({
     }
     const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
     this.setData({
       status,
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
       matches: [],
-      groups: []
+      groups: [],
+      hasData: false,
+      lastUpdated: ""
     });
     this.loadData();
   },

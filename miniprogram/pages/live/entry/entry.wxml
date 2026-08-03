@@ -9,8 +9,8 @@
     </view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading}}" text="加载实时分数" />
+  <app-error-state wx:if="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时分数" />
   <view wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="需要账户"
@@ -22,11 +22,12 @@
     />
   </view>
   <block wx:else>
+    <view wx:if="{{error}}" class="section live-refresh-error">{{error}}，当前显示上次成功结果</view>
     <view class="section live-summary">
       <view class="score-card scoreboard">
         <view class="score-label">实时总分</view>
         <view class="score">{{total}}</view>
-        <view class="score-sub">更新 {{lastUpdated || '-'}}</view>
+        <view class="score-sub">更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
       </view>
       <view class="summary-grid">
         <view wx:for="{{summaryTiles}}" wx:key="label" class="summary-tile">

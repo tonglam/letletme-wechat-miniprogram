@@ -1,9 +1,44 @@
 import { graphqlRequest } from "./graphql.service";
-import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import type {
+  LiveEntryResult,
+  LiveMatch,
+  LivePlayerRow,
+  LiveSnapshotResult,
+  LiveSnapshotStatus,
+  LiveTournamentRow
+} from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
+
+export const LIVE_SNAPSHOT_QUERY = `
+  query GetLiveSnapshot($eventId: Int!) {
+    liveSnapshot(eventId: $eventId) {
+      eventId
+      revision
+      state
+      publishedAt
+      checkedAt
+    }
+  }
+`;
+
+interface LiveSnapshotResponse {
+  liveSnapshot: LiveSnapshotStatus | null;
+}
+
+export async function getLiveSnapshot(eventId: number): Promise<LiveSnapshotStatus | null> {
+  const data = await graphqlRequest<LiveSnapshotResponse>(LIVE_SNAPSHOT_QUERY, { eventId });
+  return data.liveSnapshot;
+}
 
 const CALC_LIVE_POINTS_BY_ENTRY = `
   query CalcLivePointsByEntry($eventId: Int!, $entryId: Int!) {
+    liveSnapshot(eventId: $eventId) {
+      eventId
+      revision
+      state
+      publishedAt
+      checkedAt
+    }
     calcLivePointsByEntry(eventId: $eventId, entryId: $entryId) {
       entry
       event
@@ -71,6 +106,7 @@ interface GraphQLPickListItem {
 }
 
 interface CalcLivePointsByEntryResponse {
+  liveSnapshot: LiveSnapshotStatus | null;
   calcLivePointsByEntry: {
     entry: number;
     event: number;
@@ -115,30 +151,47 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
   }));
 }
 
-export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
+export async function getLivePointsByEntrySnapshot(
+  entry: number,
+  event: number
+): Promise<LiveSnapshotResult<LiveEntryResult>> {
   const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry });
   const result = data.calcLivePointsByEntry;
   if (!result) {
     throw new Error("实时分数暂时不可用，请稍后重试");
   }
   return {
-    entry: result.entry,
-    event: result.event,
-    livePoints: result.livePoints,
-    liveNetPoints: result.liveNetPoints,
-    liveTotalPoints: result.liveTotalPoints,
-    transferCost: result.transferCost,
-    captainName: result.captainName,
-    chip: result.chip,
-    played: result.played,
-    toPlay: result.toPlay,
-    pickList: mapGraphQLPickList(result.pickList)
+    data: {
+      entry: result.entry,
+      event: result.event,
+      livePoints: result.livePoints,
+      liveNetPoints: result.liveNetPoints,
+      liveTotalPoints: result.liveTotalPoints,
+      transferCost: result.transferCost,
+      captainName: result.captainName,
+      chip: result.chip,
+      played: result.played,
+      toPlay: result.toPlay,
+      pickList: mapGraphQLPickList(result.pickList)
+    },
+    snapshot: data.liveSnapshot
   };
+}
+
+export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
+  return (await getLivePointsByEntrySnapshot(entry, event)).data;
 }
 
 export const LIVE_MATCHES_QUERY = `
   query LiveMatches {
-    liveMatches {
+    liveSnapshot {
+      eventId
+      revision
+      state
+      publishedAt
+      checkedAt
+    }
+    liveMatches(upcoming: true) {
       nextEvent {
         ...LiveMatchFields
       }
@@ -222,6 +275,7 @@ interface GraphQLMatchData {
 }
 
 interface LiveMatchesResponse {
+  liveSnapshot: LiveSnapshotStatus | null;
   liveMatches: {
     nextEvent: GraphQLMatchData[];
     notStarted: GraphQLMatchData[];
@@ -247,31 +301,51 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
   };
 }
 
-export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
+export async function getLiveMatchByStatusSnapshot(
+  status: string
+): Promise<LiveSnapshotResult<LiveMatch[]>> {
   const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY);
   const result = data.liveMatches;
+  let matches: LiveMatch[];
   switch (status) {
     case "playing":
-      return result.playing.map(mapGraphQLMatch);
+      matches = result.playing.map(mapGraphQLMatch);
+      break;
     case "finished":
-      return result.finished.map(mapGraphQLMatch);
+      matches = result.finished.map(mapGraphQLMatch);
+      break;
     case "not_start":
-      return result.notStarted.map(mapGraphQLMatch);
+      matches = result.notStarted.map(mapGraphQLMatch);
+      break;
     case "next_event":
-      return result.nextEvent.map(mapGraphQLMatch);
+      matches = result.nextEvent.map(mapGraphQLMatch);
+      break;
     case "all":
     default:
-      return [
+      matches = [
         ...result.nextEvent.map(mapGraphQLMatch),
         ...result.notStarted.map(mapGraphQLMatch),
         ...result.playing.map(mapGraphQLMatch),
         ...result.finished.map(mapGraphQLMatch)
       ];
+      break;
   }
+  return { data: matches, snapshot: data.liveSnapshot };
+}
+
+export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
+  return (await getLiveMatchByStatusSnapshot(status)).data;
 }
 
 const TOURNAMENT_LIVE_POINTS = `
   query GetTournamentLivePoints($eventId: Int!, $tournamentId: Int!) {
+    liveSnapshot(eventId: $eventId) {
+      eventId
+      revision
+      state
+      publishedAt
+      checkedAt
+    }
     calcLivePointsForTournament(eventId: $eventId, tournamentId: $tournamentId) {
       results {
         entry
@@ -298,13 +372,23 @@ const TOURNAMENT_LIVE_POINTS = `
           isViceCaptain
         }
       }
+      errors {
+        entryId
+      }
+      meta {
+        failedCount
+        totalEntries
+      }
     }
   }
 `;
 
 interface TournamentLivePointsResponse {
+  liveSnapshot: LiveSnapshotStatus | null;
   calcLivePointsForTournament: {
     results: TournamentLiveGraphQLRow[];
+    errors: Array<{ entryId: number }>;
+    meta: { failedCount: number; totalEntries: number };
   };
 }
 
@@ -317,11 +401,25 @@ function numericId(value: number | string): number {
 }
 
 export async function getLivePointsByTournament(tournamentId: number | string, event: number): Promise<LiveTournamentRow[]> {
+  return (await getLivePointsByTournamentSnapshot(tournamentId, event)).data;
+}
+
+export async function getLivePointsByTournamentSnapshot(
+  tournamentId: number | string,
+  event: number
+): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
     tournamentId: numericId(tournamentId),
     eventId: numericId(event)
   });
-  return mapTournamentLiveRows(data.calcLivePointsForTournament.results);
+  return {
+    data: mapTournamentLiveRows(data.calcLivePointsForTournament.results),
+    snapshot: data.liveSnapshot,
+    failedEntryIds: data.calcLivePointsForTournament.errors.map((error) => error.entryId),
+    partialError: data.calcLivePointsForTournament.meta.failedCount > 0
+      ? `部分结果不可用：${data.calcLivePointsForTournament.meta.failedCount}/${data.calcLivePointsForTournament.meta.totalEntries} 支参赛球队计算失败`
+      : undefined
+  };
 }
 
 export async function searchLivePointsByTournament(
@@ -331,4 +429,18 @@ export async function searchLivePointsByTournament(
 ): Promise<LiveTournamentRow[]> {
   const rows = await getLivePointsByTournament(tournamentId, event);
   return filterTournamentLiveRows(rows, keyword);
+}
+
+export async function searchLivePointsByTournamentSnapshot(
+  tournamentId: number | string,
+  event: number,
+  keyword: string
+): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event);
+  return {
+    data: filterTournamentLiveRows(result.data, keyword),
+    snapshot: result.snapshot,
+    failedEntryIds: result.failedEntryIds,
+    partialError: result.partialError
+  };
 }
