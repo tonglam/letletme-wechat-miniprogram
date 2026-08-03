@@ -34,7 +34,7 @@ const MENU_MAP: Record<string, NavMenu> = {
     url: {
       比赛周: "/pages/summary/gameweek/gameweek",
       球队: "/pages/summary/entry/entry",
-      联赛: "/pages/summary/tournament/tourment"
+      联赛: "/pages/summary/tournament/tournament"
     },
     show: true
   },

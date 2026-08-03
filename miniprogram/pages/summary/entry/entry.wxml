@@ -12,7 +12,7 @@
   }
   module.exports = { cls: cls };
 </wxs>
-<view class="page summary-page">
+<view class="page">
   <view class="section summary-header">
     <view class="header-text">
       <view class="title">{{headerTitle}}</view>

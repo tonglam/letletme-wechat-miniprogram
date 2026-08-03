@@ -16,7 +16,7 @@
     "pages/data/price/price",
     "pages/data/selections/selections",
     "pages/summary/entry/entry",
-    "pages/summary/tournament/tourment",
+    "pages/summary/tournament/tournament",
     "pages/summary/gameweek/gameweek",
     "pages/performance/index/index"
   ],

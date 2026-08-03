@@ -15,7 +15,7 @@ export const routes = {
   dataPrice: "/pages/data/price/price",
   dataSelections: "/pages/data/selections/selections",
   summaryEntry: "/pages/summary/entry/entry",
-  summaryTournament: "/pages/summary/tournament/tourment",
+  summaryTournament: "/pages/summary/tournament/tournament",
   summaryGameweek: "/pages/summary/gameweek/gameweek",
   performance: "/pages/performance/index/index"
 } as const;
