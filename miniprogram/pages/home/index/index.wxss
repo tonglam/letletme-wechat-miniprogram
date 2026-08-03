@@ -411,41 +411,11 @@
   white-space: nowrap;
 }
 
-/* FDR badges — web DIFFICULTY_COLORS scale */
-.difficulty {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* FDR badges — global .fdr scale (app.wxss), aligned per side */
+.fixture-team .fdr {
   align-self: flex-start;
-  min-width: 76rpx;
-  padding: 4rpx 8rpx;
-  border-radius: 6rpx;
-  color: #ffffff;
-  font-size: 18rpx;
-  font-weight: 700;
-  line-height: 1.2;
 }
 
-.away-team .difficulty {
+.away-team .fdr {
   align-self: flex-end;
-}
-
-.difficulty-1 {
-  background: var(--green-ink, #008545);
-}
-
-.difficulty-2 {
-  background: rgba(0, 133, 69, 0.7);
-}
-
-.difficulty-3 {
-  background: var(--warning, #924a07);
-}
-
-.difficulty-4 {
-  background: rgba(146, 74, 7, 0.8);
-}
-
-.difficulty-5 {
-  background: var(--danger, #c9183f);
 }

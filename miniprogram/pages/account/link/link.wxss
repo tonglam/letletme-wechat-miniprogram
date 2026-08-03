@@ -49,4 +49,5 @@
 }
 
 .text-button { margin-top: 24rpx; color: var(--muted-ink, #6e5a72); background: transparent; font-size: 28rpx; }
+.text-button::after { border: 0; }
 .inline-error { color: var(--danger, #c9183f); margin-top: 16rpx; }

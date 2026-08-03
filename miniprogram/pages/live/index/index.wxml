@@ -5,7 +5,7 @@
       <view class="title">实时</view>
       <view class="subtitle">比赛进行时追踪球队、比赛和联赛。</view>
     </view>
-    <view class="gw-pill">GW {{event || '-'}}</view>
+    <view class="gw-pill-dark">GW {{event || '-'}}</view>
   </view>
 
   <view class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenCard" data-url="{{cards[0].url}}">

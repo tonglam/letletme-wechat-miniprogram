@@ -104,10 +104,9 @@
 }
 
 /* Pill CTA — pitch green, plum text (web primary button) */
+.entry-action,
 .entry-action-inline {
   flex-shrink: 0;
-  margin-top: 0;
-  margin-right: 0;
   padding: 0 24rpx;
   min-width: 104rpx;
   height: 56rpx;
@@ -120,6 +119,12 @@
   font-weight: 700;
 }
 
+.entry-action-inline {
+  margin-top: 0;
+  margin-right: 0;
+}
+
+.entry-action::after,
 .entry-action-inline::after {
   border: 0;
 }

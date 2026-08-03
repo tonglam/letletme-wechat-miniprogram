@@ -9,15 +9,8 @@
   margin-bottom: 12rpx;
 }
 
-.gw-pill {
+.live-hero .gw-pill-dark {
   flex-shrink: 0;
-  padding: 8rpx 16rpx;
-  border-radius: 8rpx;
-  background: var(--plum, #38003c);
-  color: var(--electric, #00ff85);
-  font-size: 22rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
 }
 
 .entry-strip {

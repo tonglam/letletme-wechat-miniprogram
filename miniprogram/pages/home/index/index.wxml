@@ -1,5 +1,10 @@
 <wxs module="pos">
-  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  var map = {
+    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
+    DEF: 'pos-def', DEFENDER: 'pos-def',
+    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
+    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
+  };
   function cls(p) {
     if (!p) return '';
     var key = String(p).toUpperCase();
@@ -137,7 +142,7 @@
       <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
         <view class="fixture-team home-team">
           <text class="team-name">{{item.homeName}}</text>
-          <text wx:if="{{item.homeDifficulty}}" class="difficulty difficulty-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
+          <text wx:if="{{item.homeDifficulty}}" class="fdr fdr-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
         </view>
         <view class="fixture-center">
           <text class="fixture-vs">vs</text>
@@ -145,7 +150,7 @@
         </view>
         <view class="fixture-team away-team">
           <text class="team-name">{{item.awayName}}</text>
-          <text wx:if="{{item.awayDifficulty}}" class="difficulty difficulty-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
+          <text wx:if="{{item.awayDifficulty}}" class="fdr fdr-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
         </view>
       </view>
     </view>
