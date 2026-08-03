@@ -63,6 +63,22 @@ function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
   memoryCache.set(cacheKey, entry);
 }
 
+function readCacheEntry(cacheKey: string, requestKey: string): unknown | undefined {
+  const fromMemory = readMemoryCache(cacheKey, requestKey);
+  if (fromMemory !== undefined) {
+    return fromMemory;
+  }
+  try {
+    const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
+    if (cached && cached.requestKey === requestKey && Date.now() < cached.expiresAt) {
+      writeMemoryCache(cacheKey, cached);
+      return cached.data;
+    }
+    try { wx.removeStorageSync(cacheKey); } catch {}
+  } catch {}
+  return undefined;
+}
+
 function toHttpError(statusCode: number): Error {
   return new Error(httpErrorMessage(statusCode));
 }
@@ -171,7 +187,16 @@ export function graphqlRequest<T>(
   if (!token) {
     const pending = getPendingSessionRefresh();
     if (pending) {
-      // Cold start: wait for the in-flight login rather than firing a
+      // A usable public-cache hit must not wait on the login round trip
+      // (e.g. CurrentEventInfo during app init on a slow cold start).
+      if (options?.forceRefresh !== true && (options?.cacheTtl != null || options?.getCacheExpiry)) {
+        const publicKey = buildGraphQLRequestCacheKey(query, variables, null);
+        const cached = readCacheEntry(getStorageCacheKey(publicKey, null), publicKey);
+        if (cached !== undefined) {
+          return Promise.resolve(cached as T);
+        }
+      }
+      // Otherwise wait for the in-flight login rather than firing a
       // tokenless request that 401s and retries — and that would key any
       // cached session data under the public namespace. A failed refresh
       // falls through to the normal unauthenticated path on re-entry.
@@ -187,19 +212,10 @@ export function graphqlRequest<T>(
 
   const skipCacheRead = options?.forceRefresh === true;
   if (!skipCacheRead && (options?.cacheTtl != null || options?.getCacheExpiry)) {
-    const cacheKey = getStorageCacheKey(key, token);
-    const fromMemory = readMemoryCache(cacheKey, key);
-    if (fromMemory !== undefined) {
-      return Promise.resolve(fromMemory as T);
+    const cached = readCacheEntry(getStorageCacheKey(key, token), key);
+    if (cached !== undefined) {
+      return Promise.resolve(cached as T);
     }
-    try {
-      const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
-      if (cached && cached.requestKey === key && Date.now() < cached.expiresAt) {
-        writeMemoryCache(cacheKey, cached);
-        return Promise.resolve(cached.data as T);
-      }
-      try { wx.removeStorageSync(cacheKey); } catch {}
-    } catch {}
   }
 
   const t0 = Date.now();

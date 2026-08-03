@@ -281,7 +281,9 @@ Page({
 
   async onLoad() {
     const app = getApp<IAppOption>();
-    // Wait for the shared launch data so a cold open never falls back to GW1.
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders placeholder content as if it were loaded.
+    this.setData({ loading: true });
     await app.initAppData();
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
@@ -478,15 +480,19 @@ Page({
   },
 
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    // A new keyword = a new result context: drop the content flag so stale
+    // rows cannot linger under the new keyword after a failed reload.
     if (event) {
-      this.setData({ keyword: event.detail.keyword });
+      this.setData({ keyword: event.detail.keyword, hasContent: false });
+    } else {
+      this.setData({ hasContent: false });
     }
-    this.loadRows();
+    this.loadRows(false);
   },
 
   onResetSearch() {
-    this.setData({ keyword: "" });
-    this.loadRows();
+    this.setData({ keyword: "", hasContent: false });
+    this.loadRows(false);
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {

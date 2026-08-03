@@ -81,7 +81,9 @@ Page({
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
     const routeEntry = Number(options?.entry);
-    // Wait for the shared launch data so a cold open never falls back to GW1.
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders zero scores as if they were loaded content.
+    this.setData({ loading: true });
     await app.initAppData();
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
@@ -171,7 +173,9 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
+    // New gameweek = new result context: drop the content flag so the old
+    // GW's scores cannot linger under the newly selected GW after a failure.
+    this.setData({ event: event.detail.value, hasContent: false });
     this.loadData(false);
   },
 
