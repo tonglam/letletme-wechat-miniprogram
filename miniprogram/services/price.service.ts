@@ -182,15 +182,21 @@ function mapPlayerValueChange(value: PlayerValue): PlayerValueChange {
   });
 }
 
-export async function getPlayerValueByDate(changeDate: string): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) });
+/** Past dates are immutable; today's board moves once or twice a day. */
+function priceCacheTtl(changeDate: string): number {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  return toDateKey(changeDate) === todayKey ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
+}
+
+export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
+  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, { cacheTtl: priceCacheTtl(changeDate), forceRefresh });
   return (data.playerValues || [])
     .filter((value) => value.value !== value.lastValue)
     .map(mapPlayerValueChange);
 }
 
-export async function getPlayerValueByElement(element: number): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element });
+export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {
+  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, { cacheTtl: 6 * 60 * 60 * 1000, forceRefresh });
   return (data.playerValueHistory || []).map((item) => enrichPriceChange({
     element: item.playerId,
     playerId: item.playerId,
@@ -205,11 +211,11 @@ export async function getPlayerValueByElement(element: number): Promise<PlayerVa
   }));
 }
 
-export async function getPlayerValues(changeDate: string): Promise<PlayerValue[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) });
+export async function getPlayerValues(changeDate: string, forceRefresh = false): Promise<PlayerValue[]> {
+  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, { cacheTtl: priceCacheTtl(changeDate), forceRefresh });
   return data.playerValues || [];
 }
 
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
-  return changeDate ? getPlayerValueByDate(changeDate) : getPlayerValues(changeDate || new Date().toISOString().slice(0, 10).replace(/-/g, ""));
+  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || new Date().toISOString().slice(0, 10).replace(/-/g, ""), true);
 }

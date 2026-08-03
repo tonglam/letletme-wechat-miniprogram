@@ -1,5 +1,5 @@
 import { routes } from "../../../config/routes";
-import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { forceEntryBinding, navigateTo } from "../../../utils/navigation";
 
 Page({
   data: {
@@ -37,7 +37,7 @@ Page({
 
   onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
     if (!this.data.entryId) {
-      goToEntrySearch();
+      forceEntryBinding();
       return;
     }
 

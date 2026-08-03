@@ -25,13 +25,23 @@
 
     <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
     <app-loading wx:elif="{{loading}}" text="加载身价变化" />
+    <block wx:else>
+    <view wx:if="{{riseChanges.length === 0 && fallChanges.length === 0}}" class="section card">
+      <app-empty-state
+        eyebrow="当日无变动"
+        title="{{changeDate}} 没有球员调价"
+        description="这是正常情况；有新的涨跌时会显示在这里"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
+    </view>
     <view wx:else class="price-columns section">
       <view class="card price-panel rise-panel">
         <view class="panel-head">
           <text>上涨</text>
           <text class="panel-count">{{riseChanges.length}}</text>
         </view>
-        <app-empty-state wx:if="{{riseChanges.length === 0}}" title="暂无上涨" description="这一天没有球员涨价" />
+        <app-empty-state wx:if="{{riseChanges.length === 0}}" title="这一天没有上涨" description="当日没有球员涨价" />
         <view wx:for="{{riseChanges}}" wx:key="element" class="price-change-row">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
@@ -49,7 +59,7 @@
           <text>下跌</text>
           <text class="panel-count">{{fallChanges.length}}</text>
         </view>
-        <app-empty-state wx:if="{{fallChanges.length === 0}}" title="暂无下跌" description="这一天没有球员降价" />
+        <app-empty-state wx:if="{{fallChanges.length === 0}}" title="这一天没有下跌" description="当日没有球员降价" />
         <view wx:for="{{fallChanges}}" wx:key="element" class="price-change-row">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
@@ -62,6 +72,7 @@
         </view>
       </view>
     </view>
+    </block>
   </block>
 
   <block wx:else>
@@ -98,12 +109,25 @@
 
       <app-error-state wx:if="{{playersError}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
       <app-loading wx:elif="{{playerLoading}}" text="加载球员列表" />
+      <app-empty-state
+        wx:elif="{{playersLoaded && players.length === 0}}"
+        title="球员名单还没有同步"
+        description="新赛季球员数据准备好后再回来查看"
+        actionText="重新加载"
+        bind:action="onRetryPlayers"
+      />
       <view wx:else>
         <view wx:if="{{!playerListReady}}" class="player-list-placeholder">请选择球队和位置后显示球员列表。</view>
         <view wx:elif="{{!playerListVisible}}" class="player-list-placeholder">已选择球员。调整筛选或清除当前球员后可重新选择。</view>
         <block wx:else>
           <view class="result-count">显示 {{filteredPlayers.length}} / {{filteredPlayerCount}} 名球员</view>
-          <app-empty-state wx:if="{{filteredPlayers.length === 0}}" title="暂无球员" description="调整搜索、球队或位置筛选" />
+          <app-empty-state
+            wx:if="{{filteredPlayers.length === 0}}"
+            title="没有符合筛选的球员"
+            description="清除球队、位置和搜索条件后重新选择"
+            actionText="清除筛选"
+            bind:action="onClearPlayerFilters"
+          />
           <view wx:for="{{filteredPlayers}}" wx:key="element" class="player-option {{selectedPlayer && selectedPlayer.element === item.element ? 'selected' : ''}}" data-index="{{index}}" bindtap="onSelectPlayer">
             <view class="player-option-main">
               <view class="player-option-name">{{item.name}}</view>
@@ -124,7 +148,7 @@
       <view wx:if="{{!selectedPlayer}}" class="history-placeholder">选择一个球员后显示历史身价变化。</view>
       <app-error-state wx:elif="{{historyError}}" message="{{historyError}}" bind:retry="onRetryHistory" />
       <app-loading wx:elif="{{historyLoading}}" text="加载球员身价历史" />
-      <app-empty-state wx:elif="{{historyRows.length === 0}}" title="暂无历史" description="该球员暂时没有身价变化记录" />
+      <app-empty-state wx:elif="{{historyRows.length === 0}}" title="还没有身价变化记录" description="该球员首次调价后会开始显示历史" />
       <view wx:else>
         <view wx:for="{{historyRows}}" wx:key="changeDate" class="history-row">
           <view class="history-main">

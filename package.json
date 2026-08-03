@@ -6,7 +6,8 @@
     "lint": "eslint miniprogram/",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/**/*.test.mjs tests/**/*.test.ts",
-    "package:check": "npm pack --dry-run"
+    "package:check": "npm pack --dry-run",
+    "prune:vant": "node scripts/prune-vant.mjs"
   },
   "keywords": [
     "wechat-miniprogram",
@@ -27,7 +28,6 @@
   "main": "index.js",
   "type": "commonjs",
   "dependencies": {
-    "@vant/weapp": "^1.11.7",
-    "miniprogram-table-component": "^1.1.0"
+    "@vant/weapp": "^1.11.7"
   }
 }

@@ -3,7 +3,7 @@ import { getLivePointsByTournament, searchLivePointsByTournament } from "../../.
 import type { LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
-import { goToEntrySearch } from "../../../utils/navigation";
+import { forceEntryBinding } from "../../../utils/navigation";
 import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -14,6 +14,7 @@ import {
 } from "../../../services/live-tournament";
 
 type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
+type LiveTournamentEmptyState = "" | "entry" | "tournaments";
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
@@ -43,6 +44,15 @@ interface OwnershipPlayerOption {
 interface LiveTournamentData {
   loading: boolean;
   error: string;
+  emptyState: LiveTournamentEmptyState;
+  emptyEyebrow: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyActionText: string;
+  resultsEmptyTitle: string;
+  resultsEmptyDescription: string;
+  resultsEmptyActionText: string;
+  resultsFiltered: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -201,6 +211,15 @@ Page({
   data: {
     loading: false,
     error: "",
+    emptyState: "",
+    emptyEyebrow: "",
+    emptyTitle: "",
+    emptyDescription: "",
+    emptyActionText: "",
+    resultsEmptyTitle: "本轮实时排名还没生成",
+    resultsEmptyDescription: "比赛开始或联赛数据同步后会显示实时排名",
+    resultsEmptyActionText: "重新加载",
+    resultsFiltered: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -266,7 +285,8 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadRows().finally(() => wx.stopPullDownRefresh());
+    const task = this.data.tournaments.length ? this.loadRows() : this.loadTournaments();
+    task.finally(() => wx.stopPullDownRefresh());
   },
 
   onReachBottom() {
@@ -276,13 +296,49 @@ Page({
   async loadTournaments() {
     const entryId = this.data.entryId;
     if (!entryId) {
-      this.setData({ error: "请先选择 FPL 球队" });
+      this.setData({
+        loading: false,
+        error: "",
+        emptyState: "entry",
+        emptyEyebrow: "需要账户",
+        emptyTitle: "先关联你的 LetLetMe 账户",
+        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，并加载实时联赛。",
+        emptyActionText: "去关联账户",
+        tournaments: [],
+        tournamentNames: [],
+        selectedTournament: undefined,
+        rows: [],
+        displayedRows: []
+      });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({
+      loading: true,
+      error: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: ""
+    });
     try {
       const tournaments = await getEntryPointsRaceTournament(entryId);
+      if (tournaments.length === 0) {
+        this.setData({
+          tournaments: [],
+          tournamentNames: [],
+          selectedTournament: undefined,
+          rows: [],
+          displayedRows: [],
+          emptyState: "tournaments",
+          emptyEyebrow: "联赛待就绪",
+          emptyTitle: "当前球队还没有可查看的联赛",
+          emptyDescription: "加入一个积分联赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyActionText: "重新检查"
+        });
+        return;
+      }
       const storedId = wx.getStorageSync(SELECTED_TOURNAMENT_ID_KEY);
       const storedIndex = tournaments.findIndex((tournament) => String(tournament.id) === String(storedId));
       const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
@@ -291,7 +347,8 @@ Page({
         tournaments,
         tournamentNames: tournaments.map((tournament) => tournament.name),
         selectedTournamentIndex,
-        selectedTournament
+        selectedTournament,
+        emptyState: ""
       });
       this.persistSelectedTournament(selectedTournament);
       await this.loadRows();
@@ -350,12 +407,25 @@ Page({
       ...row,
       visibleRank: index + 1
     }));
+    const resultsFiltered = Boolean(
+      this.data.keyword.trim()
+      || this.data.selectedOwnershipPlayers.length
+      || selectedTeamExposure
+    );
     const nextSize = resetPage ? this.data.pageSize : this.data.displayedRows.length + this.data.pageSize;
     this.setData({
       rows,
       displayedRows: sortedRows.slice(0, nextSize),
       filteredCount: sortedRows.length,
       hasMore: sortedRows.length > nextSize,
+      resultsFiltered,
+      resultsEmptyTitle: resultsFiltered
+        ? "没有符合当前筛选的球队"
+        : `GW${this.data.event} 实时排名还没生成`,
+      resultsEmptyDescription: resultsFiltered
+        ? "清除搜索或球员持有、球队人数筛选后再看"
+        : "比赛开始或联赛数据同步后会显示实时排名",
+      resultsEmptyActionText: resultsFiltered ? "清除全部筛选" : "重新加载",
       ownershipPlayers,
       ownershipTeamOptions: teamOptions,
       ownershipTeamNames: teamOptions.map(formatTeamName),
@@ -545,10 +615,47 @@ Page({
   },
 
   onRetry() {
-    this.loadTournaments();
+    if (this.data.tournaments.length === 0) {
+      this.loadTournaments();
+      return;
+    }
+    this.loadRows();
   },
 
   onChooseEntry() {
-    goToEntrySearch();
+    forceEntryBinding();
+  },
+
+  onEmptyAction() {
+    if (this.data.emptyState === "entry") {
+      forceEntryBinding();
+      return;
+    }
+    this.loadTournaments();
+  },
+
+  onEmptyResultsAction() {
+    if (!this.data.resultsFiltered) {
+      this.loadRows();
+      return;
+    }
+
+    this.setData({
+      keyword: "",
+      selectedOwnershipPlayers: [],
+      ownershipScope: "any",
+      ownershipCaptainMode: "any",
+      selectedOwnershipTeamIndex: 0,
+      selectedOwnershipTeam: null,
+      selectedOwnershipPositionIndex: 0,
+      selectedOwnershipPosition: "",
+      ownershipAvailablePlayers: [],
+      ownershipAvailablePlayerNames: [],
+      selectedTeamExposureIndex: 0,
+      selectedTeamExposure: null,
+      teamExposureCount: 1,
+      teamExposureScope: "any"
+    });
+    this.loadRows();
   }
 });

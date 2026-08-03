@@ -1,5 +1,15 @@
 <view class="page">
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <view wx:if="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="需要账户"
+      title="先关联你的 LetLetMe 账户"
+      description="关联后会自动读取你在网站端已验证的 FPL 球队"
+      actionText="去关联账户"
+      featured="{{true}}"
+      bind:action="onLinkAccount"
+    />
+  </view>
+  <app-error-state wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队资料" />
   <block wx:else>
     <entry-card entry="{{entry}}" bind:change="onChangeEntry" />

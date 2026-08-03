@@ -1,5 +1,23 @@
-<view class="empty">
+<view class="empty {{featured ? 'empty-featured' : ''}}">
+  <view class="empty-visual">
+    <view class="visual-head">
+      <view class="visual-live"></view>
+      <view class="visual-head-line"></view>
+    </view>
+    <view class="visual-bars">
+      <view class="visual-bar visual-bar-short"></view>
+      <view class="visual-bar visual-bar-tall"></view>
+      <view class="visual-bar visual-bar-mid"></view>
+    </view>
+    <view class="visual-zero">–</view>
+  </view>
+  <view wx:if="{{eyebrow}}" class="empty-eyebrow">{{eyebrow}}</view>
   <view class="empty-title">{{title}}</view>
   <view wx:if="{{description}}" class="empty-description">{{description}}</view>
-  <button wx:if="{{actionText}}" class="empty-action" size="mini" bindtap="onAction">{{actionText}}</button>
+  <button
+    wx:if="{{actionText}}"
+    class="empty-action"
+    hover-class="empty-action-hover"
+    bindtap="onAction"
+  >{{actionText}}</button>
 </view>

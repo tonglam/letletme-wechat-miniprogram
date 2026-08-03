@@ -299,7 +299,7 @@ export interface EntryHistoryPayload {
 }
 
 interface EntryHistoryResponse {
-  entryHistory: EntryHistoryPayload;
+  entryHistory: EntryHistoryPayload | null;
 }
 
 export interface EntryTransferMove {
@@ -352,18 +352,22 @@ function mapEventPlayer(row: GraphQLEventPlayer): Record<string, unknown> {
   };
 }
 
-export async function getEntryTeamStatsEventResult(entry: number, event: number): Promise<EntryEventResult | undefined> {
-  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event });
+export async function getEntryTeamStatsEventResult(entry: number, event: number, forceRefresh = false): Promise<EntryEventResult | undefined> {
+  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
   return data.entryEventResult || undefined;
 }
 
-export async function getEntryTeamStatsHistory(entry: number): Promise<EntryHistoryPayload> {
-  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry });
-  return data.entryHistory;
+export async function getEntryTeamStatsHistory(entry: number, forceRefresh = false): Promise<EntryHistoryPayload> {
+  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
+  const payload = data.entryHistory;
+  return {
+    results: payload?.results || [],
+    history: payload?.history || []
+  };
 }
 
-export async function getEntryTeamStatsTransfers(entry: number): Promise<EntryGameweekTransfers[]> {
-  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry });
+export async function getEntryTeamStatsTransfers(entry: number, forceRefresh = false): Promise<EntryGameweekTransfers[]> {
+  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
   return data.entryTransferHistory || [];
 }
 
@@ -376,8 +380,8 @@ export async function getGameweekOverallSummary(event: number): Promise<Gameweek
   return enrichGameweekSummaryPlayers(result);
 }
 
-export async function getGameweekStatsForHome(event: number): Promise<GameweekOverallSummary | undefined> {
-  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {});
+export async function getGameweekStatsForHome(event: number, forceRefresh = false): Promise<GameweekOverallSummary | undefined> {
+  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {}, { cacheTtl: 30 * 60 * 1000, forceRefresh });
   return pickEventOverallResult(data.eventOverallResult, event);
 }
 

@@ -36,6 +36,13 @@ Page({
     this.setData({ keyword, displayedPlayers });
   },
 
+  onResetSearch() {
+    this.setData({
+      keyword: "",
+      displayedPlayers: this.data.players.slice(0, 50)
+    });
+  },
+
   onOpenPlayer(event: WechatMiniprogram.CustomEvent<{ player: PlayerOption }>) {
     const player = event.detail.player;
     if (player && player.code) {

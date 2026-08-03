@@ -6,9 +6,11 @@ import {
   type TournamentEventResult
 } from "../../../services/tournament.service";
 import { storageKeys } from "../../../config/storage-keys";
+import { forceEntryBinding } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
+type TournamentEmptyState = "" | "entry" | "tournaments";
 
 interface MetricCard {
   label: string;
@@ -31,6 +33,11 @@ interface RankingRow {
 interface SummaryData {
   loading: boolean;
   error: string;
+  emptyState: TournamentEmptyState;
+  emptyEyebrow: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyActionText: string;
   entryId?: number;
   event: number;
   maxGw: number;
@@ -56,6 +63,11 @@ Page({
   data: {
     loading: false,
     error: "",
+    emptyState: "",
+    emptyEyebrow: "",
+    emptyTitle: "",
+    emptyDescription: "",
+    emptyActionText: "",
     entryId: undefined,
     event: 1,
     maxGw: 1,
@@ -102,11 +114,30 @@ Page({
 
   async loadTournaments() {
     if (!this.data.entryId) {
-      this.setData({ error: "请先绑定 Entry ID" });
+      this.setData({
+        loading: false,
+        error: "",
+        emptyState: "entry",
+        emptyEyebrow: "需要账户",
+        emptyTitle: "先关联你的 LetLetMe 账户",
+        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，无需再次输入 Entry ID。",
+        emptyActionText: "去关联账户",
+        tournaments: [],
+        tournamentNames: [],
+        selectedTournamentName: ""
+      });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({
+      loading: true,
+      error: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: ""
+    });
     try {
       const tournaments = await getEntrySummaryTournaments(this.data.entryId);
       if (tournaments.length === 0) {
@@ -114,7 +145,11 @@ Page({
           tournaments: [],
           tournamentNames: [],
           selectedTournamentName: "",
-          error: "暂无可用联赛"
+          emptyState: "tournaments",
+          emptyEyebrow: "联赛待就绪",
+          emptyTitle: "当前球队还没有可查看的联赛",
+          emptyDescription: "加入或创建一个积分联赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyActionText: "重新检查"
         });
         return;
       }
@@ -126,7 +161,8 @@ Page({
         tournaments,
         tournamentNames: tournaments.map((item) => item.name),
         selectedTournamentIndex,
-        selectedTournamentName: selectedTournament.name
+        selectedTournamentName: selectedTournament.name,
+        emptyState: ""
       });
       await this.loadSummary();
     } catch (error) {
@@ -156,8 +192,19 @@ Page({
   },
 
   async refreshData() {
-    await this.loadSummary();
-    wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
+    if (this.data.tournaments.length === 0) {
+      await this.loadTournaments();
+    } else {
+      await this.loadSummary();
+    }
+
+    if (!this.data.error && this.data.emptyState !== "entry") {
+      wx.showToast({
+        title: this.data.emptyState ? "已是最新" : "刷新成功",
+        icon: "success",
+        duration: 1000
+      });
+    }
   },
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -190,6 +237,15 @@ Page({
   },
 
   onRetry() {
+    this.loadTournaments();
+  },
+
+  onEmptyAction() {
+    if (this.data.emptyState === "entry") {
+      forceEntryBinding();
+      return;
+    }
+
     this.loadTournaments();
   }
 });

@@ -1,10 +1,12 @@
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
+import { routes } from "../../../config/routes";
 
 Page({
   data: {
     loading: false,
     error: "",
+    emptyState: false,
     code: "",
     season: "",
     player: undefined as PlayerDetail | undefined
@@ -17,11 +19,11 @@ Page({
 
   async loadData() {
     if (!this.data.code) {
-      this.setData({ error: "缺少球员 code" });
+      this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", emptyState: false });
     try {
       const player = await getPlayerInfoByCode(this.data.code, this.data.season);
       this.setData({ player });
@@ -34,5 +36,9 @@ Page({
 
   onRetry() {
     this.loadData();
+  },
+
+  onBackToPlayers() {
+    wx.redirectTo({ url: routes.dataPlayers });
   }
 });

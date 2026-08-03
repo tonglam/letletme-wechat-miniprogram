@@ -166,7 +166,7 @@ interface TournamentSelectionStatsResponse {
 
 export async function getEntryPointsRaceTournament(entry: number): Promise<TournamentOption[]> {
   const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry });
-  return data.entryTournaments.map((t) => ({ id: t.id, name: t.name }));
+  return (data.entryTournaments || []).map((t) => ({ id: t.id, name: t.name }));
 }
 
 export async function getEntrySummaryTournaments(entry: number): Promise<EntryTournament[]> {

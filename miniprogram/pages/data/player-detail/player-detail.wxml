@@ -1,5 +1,15 @@
 <view class="page">
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <view wx:if="{{emptyState}}" class="section">
+    <app-empty-state
+      eyebrow="还没选球员"
+      title="先从球员列表选择一名球员"
+      description="进入详情前需要一个具体球员，返回列表即可继续"
+      actionText="返回球员列表"
+      featured="{{true}}"
+      bind:action="onBackToPlayers"
+    />
+  </view>
+  <app-error-state wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球员详情" />
   <view wx:else class="section card">
     <view class="title">{{player.name || '球员详情'}}</view>

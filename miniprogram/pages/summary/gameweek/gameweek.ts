@@ -25,6 +25,10 @@ interface GameweekSummaryData {
   loading: boolean;
   refreshing: boolean;
   error: string;
+  summaryError: string;
+  dreamTeamError: string;
+  eliteError: string;
+  transfersError: string;
   event: number;
   maxGw: number;
   activeTab: GameweekTab;
@@ -49,6 +53,10 @@ Page({
     loading: false,
     refreshing: false,
     error: "",
+    summaryError: "",
+    dreamTeamError: "",
+    eliteError: "",
+    transfersError: "",
     event: 0,
     maxGw: 1,
     activeTab: "summary",
@@ -87,16 +95,40 @@ Page({
   },
 
   async loadData() {
-    this.setData({ loading: true, error: "" });
+    this.setData({
+      loading: true,
+      error: "",
+      summaryError: "",
+      dreamTeamError: "",
+      eliteError: "",
+      transfersError: ""
+    });
     try {
-      const [summary, dreamTeam, elite, transfers] = await Promise.all([
-        getGameweekOverallSummary(this.data.event).catch(() => undefined),
-        getEventDreamTeam(this.data.event).catch(() => []),
-        getEventEliteElements(this.data.event).catch(() => []),
-        getEventOverallTransfers(this.data.event).catch(() => undefined)
+      const [summaryResult, dreamTeamResult, eliteResult, transfersResult] = await Promise.all([
+        settle(getGameweekOverallSummary(this.data.event), undefined, "GW 总览加载失败"),
+        settle(getEventDreamTeam(this.data.event), [], "梦之队加载失败"),
+        settle(getEventEliteElements(this.data.event), [], "高分球员加载失败"),
+        settle(getEventOverallTransfers(this.data.event), undefined, "转会趋势加载失败")
       ]);
 
-      this.setData(mapGameweekData(summary, dreamTeam, elite, transfers));
+      const results = [summaryResult, dreamTeamResult, eliteResult, transfersResult];
+      if (results.every((result) => Boolean(result.error))) {
+        this.setData({ error: results[0].error || "GW 总结加载失败" });
+        return;
+      }
+
+      this.setData({
+        ...mapGameweekData(
+          summaryResult.value,
+          dreamTeamResult.value,
+          eliteResult.value,
+          transfersResult.value
+        ),
+        summaryError: summaryResult.error,
+        dreamTeamError: dreamTeamResult.error,
+        eliteError: eliteResult.error,
+        transfersError: transfersResult.error
+      });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "GW 总结加载失败" });
     } finally {
@@ -107,9 +139,17 @@ Page({
   async refreshData() {
     this.setData({ refreshing: true, error: "" });
     try {
-      await refreshEventOverallSummary(this.data.event).catch(() => undefined);
+      await refreshEventOverallSummary(this.data.event);
       await this.loadData();
-      wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
+      if (
+        !this.data.error
+        && !this.data.summaryError
+        && !this.data.dreamTeamError
+        && !this.data.eliteError
+        && !this.data.transfersError
+      ) {
+        wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
+      }
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "GW 总结刷新失败" });
     } finally {
@@ -145,6 +185,22 @@ Page({
     this.loadData();
   }
 });
+
+interface LoadResult<T> {
+  value: T;
+  error: string;
+}
+
+async function settle<T>(request: Promise<T>, fallback: T, fallbackMessage: string): Promise<LoadResult<T>> {
+  try {
+    return { value: await request, error: "" };
+  } catch (error) {
+    return {
+      value: fallback,
+      error: error instanceof Error ? error.message : fallbackMessage
+    };
+  }
+}
 
 function mapGameweekData(
   summary: GameweekOverallSummary | undefined,
@@ -280,7 +336,7 @@ function mapDreamTeamGroups(players: unknown[]): DisplayGroup[] {
       .map(asRecord)
       .filter((player) => group.types.indexOf(fieldText(player, ["elementType", "position", "singularNameShort"], "")) >= 0)
       .map((player, index) => mapPlayerRow(player, `${group.id}-${index}`, "points")),
-    emptyText: "暂无球员"
+    emptyText: "该位置还没有梦之队球员"
   }));
 }
 

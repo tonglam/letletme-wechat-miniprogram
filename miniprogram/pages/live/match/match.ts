@@ -178,12 +178,26 @@ function groupMatches(matches: LiveMatch[], status: string): MatchGroup[] {
   return Object.keys(groups).map((title) => ({ title, matches: groups[title] }));
 }
 
+function emptyDescription(status: string): string {
+  if (status === "playing") {
+    return "目前没有正在进行的比赛，可以切换到未开始或下轮";
+  }
+  if (status === "not_start") {
+    return "本轮暂时没有待开球比赛，赛程更新后会自动出现";
+  }
+  if (status === "finished") {
+    return "本轮还没有完赛记录，比赛结束后会显示比分";
+  }
+  return "下一轮赛程还没公布，稍后回来重新加载";
+}
+
 Page({
   data: {
     loading: false,
     error: "",
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
+    emptyDescription: emptyDescription(DEFAULT_STATUS),
     statusOptions: STATUS_OPTIONS,
     matches: [] as LiveMatch[],
     groups: [] as MatchGroup[]
@@ -194,7 +208,8 @@ Page({
     if (isValidStatus(storedStatus)) {
       this.setData({
         status: storedStatus,
-        activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === storedStatus)?.label || "比赛中"
+        activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === storedStatus)?.label || "比赛中",
+        emptyDescription: emptyDescription(storedStatus)
       });
     }
     this.loadData();
@@ -209,7 +224,12 @@ Page({
     try {
       const matches = (await getLiveMatchByStatus(this.data.status)).map((match) => normalizeMatch(match, this.data.status));
       const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === this.data.status)?.label || "比赛";
-      this.setData({ activeStatusLabel, matches, groups: groupMatches(matches, this.data.status) });
+      this.setData({
+        activeStatusLabel,
+        emptyDescription: emptyDescription(this.data.status),
+        matches,
+        groups: groupMatches(matches, this.data.status)
+      });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
     } finally {
@@ -224,7 +244,13 @@ Page({
     }
     const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
-    this.setData({ status, activeStatusLabel, matches: [], groups: [] });
+    this.setData({
+      status,
+      activeStatusLabel,
+      emptyDescription: emptyDescription(status),
+      matches: [],
+      groups: []
+    });
     this.loadData();
   },
 

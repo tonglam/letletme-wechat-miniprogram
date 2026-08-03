@@ -22,8 +22,9 @@ interface CurrentEventInfoResponse {
   } | null;
 }
 
-export async function getCurrentEventAndDeadline(): Promise<CurrentEventDeadline> {
+export async function getCurrentEventAndDeadline(forceRefresh = false): Promise<CurrentEventDeadline> {
   const data = await graphqlRequest<CurrentEventInfoResponse>(CURRENT_EVENT_INFO, {}, {
+    forceRefresh,
     getCacheExpiry: (res) => {
       const deadline = (res as CurrentEventInfoResponse).currentEventInfo?.nextUtcDeadline;
       if (deadline) {
@@ -47,7 +48,7 @@ export async function getCurrentEventAndDeadline(): Promise<CurrentEventDeadline
 }
 
 export function refreshEventAndDeadline(): Promise<CurrentEventDeadline> {
-  return getCurrentEventAndDeadline();
+  return getCurrentEventAndDeadline(true);
 }
 
 const EVENT_FIXTURES = `
@@ -96,12 +97,13 @@ interface MiniProgramNoticeResponse {
   miniProgramNotice: string;
 }
 
-export async function getNextFixture(event?: number): Promise<Fixture[]> {
+export async function getNextFixture(event?: number, forceRefresh = false): Promise<Fixture[]> {
   if (!event) {
     return [];
   }
   const data = await graphqlRequest<EventFixturesResponse>(EVENT_FIXTURES, { eventId: event }, {
-    cacheTtl: 30 * 60 * 1000
+    cacheTtl: 30 * 60 * 1000,
+    forceRefresh
   });
   return (data.eventFixtures || []).map((f) => ({
     id: f.id,

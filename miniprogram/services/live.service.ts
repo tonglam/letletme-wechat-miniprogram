@@ -118,6 +118,9 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
 export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
   const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry });
   const result = data.calcLivePointsByEntry;
+  if (!result) {
+    throw new Error("实时分数暂时不可用，请稍后重试");
+  }
   return {
     entry: result.entry,
     event: result.event,

@@ -10,9 +10,11 @@ import {
   type EntrySeasonHistoryItem,
   type EntryTransferMove
 } from "../../../services/summary.service";
+import { forceEntryBinding } from "../../../utils/navigation";
 import { formatCompactNumber } from "../../../utils/summary-format";
 
 type EntrySummaryTab = "squad" | "transfer" | "chips" | "history";
+type EntrySummaryEmptyState = "" | "entry" | "event";
 
 interface MetricCard {
   label: string;
@@ -95,6 +97,12 @@ interface TeamStatsViewModel {
 interface EntrySummaryData {
   loading: boolean;
   error: string;
+  transferError: string;
+  emptyState: EntrySummaryEmptyState;
+  emptyEyebrow: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyActionText: string;
   entryId?: number;
   event: number;
   maxGw: number;
@@ -124,6 +132,12 @@ Page({
   data: {
     loading: false,
     error: "",
+    transferError: "",
+    emptyState: "",
+    emptyEyebrow: "",
+    emptyTitle: "",
+    emptyDescription: "",
+    emptyActionText: "",
     entryId: undefined,
     event: 1,
     maxGw: 1,
@@ -161,8 +175,17 @@ Page({
     this.loadData();
   },
 
+  onShow() {
+    // Summary data moves slowly; only reload when the cached view is 5min+ old.
+    if (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000) {
+      this.loadData();
+    }
+  },
+
+  _loadedAt: 0,
+
   onPullDownRefresh() {
-    this.loadData().finally(() => wx.stopPullDownRefresh());
+    this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -172,28 +195,54 @@ Page({
     }
   },
 
-  async loadData() {
+  async loadData(forceRefresh = false) {
     if (!this.data.entryId) {
-      this.setData({ error: "请先选择 FPL 球队" });
+      this.setData({
+        loading: false,
+        error: "",
+        emptyState: "entry",
+        emptyEyebrow: "需要账户",
+        emptyTitle: "先关联你的 LetLetMe 账户",
+        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，并生成每轮总结。",
+        emptyActionText: "去关联账户"
+      });
       return;
     }
 
-    this.setData({ loading: true, error: "" });
+    this.setData({
+      loading: true,
+      error: "",
+      transferError: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: ""
+    });
     try {
       const entryId = this.data.entryId;
-      const history = await getEntryTeamStatsHistory(entryId);
+      const history = await getEntryTeamStatsHistory(entryId, forceRefresh);
       const latestEvent = latestEventId(history.results);
       const selectedEvent = clampEvent(this.data.event, latestEvent);
+      let transferError = "";
       const [eventResult, transferHistory] = await Promise.all([
-        getEntryTeamStatsEventResult(entryId, selectedEvent),
-        getEntryTeamStatsTransfers(entryId).catch(() => [] as EntryGameweekTransfers[])
+        getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh),
+        getEntryTeamStatsTransfers(entryId, forceRefresh).catch((error) => {
+          transferError = error instanceof Error ? error.message : "转会历史加载失败";
+          return [] as EntryGameweekTransfers[];
+        })
       ]);
 
       if (!eventResult) {
         this.setData({
           event: selectedEvent,
           maxGw: latestEvent,
-          error: `GW${selectedEvent} 暂无球队数据`
+          error: "",
+          emptyState: "event",
+          emptyEyebrow: "本轮待就绪",
+          emptyTitle: `GW${selectedEvent} 球队总结还没生成`,
+          emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
+          emptyActionText: "重新加载"
         });
         return;
       }
@@ -203,11 +252,14 @@ Page({
         ...viewModel,
         event: selectedEvent,
         maxGw: latestEvent,
+        transferError,
+        emptyState: "",
         hasSquad: viewModel.squadRows.length > 0,
         hasTransfers: viewModel.transferRows.length > 0,
         hasChips: viewModel.chipUsageRows.length > 0 || viewModel.chipCountRows.length > 0,
         hasHistory: viewModel.historyRows.length > 0 || viewModel.seasonHistoryRows.length > 0
       });
+      this._loadedAt = Date.now();
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
     } finally {
@@ -236,6 +288,14 @@ Page({
   },
 
   onRetry() {
+    this.loadData();
+  },
+
+  onEmptyAction() {
+    if (this.data.emptyState === "entry") {
+      forceEntryBinding();
+      return;
+    }
     this.loadData();
   }
 });
@@ -274,7 +334,7 @@ function mapApiDataToTeamStats(
       { label: "板凳分", value: String(eventResult.eventBenchPoints) },
       { label: "队长", value: `${eventResult.eventPlayedCaptain?.webName || "-"} (${eventResult.eventCaptainPoints})` }
     ],
-    squadRows: mapSquadRows(eventResult.eventPicks),
+    squadRows: mapSquadRows(eventResult.eventPicks || []),
     transferRows: mapTransferRows(sortedHistory, transferByEvent),
     chipSummaryStats: [
       { label: "本轮开卡", value: formatChip(eventResult.eventChip) },
@@ -333,7 +393,7 @@ function mapTransferRows(historyRows: EntryHistoryItem[], transferByEvent: Map<n
       transfers: String(history.eventTransfers),
       cost: String(history.eventTransfersCost),
       hasCost: history.eventTransfersCost > 0,
-      emptyText: history.eventTransfers > 0 ? "已发生转会，API 暂无明细" : "无转会",
+      emptyText: history.eventTransfers > 0 ? "转会明细还在同步" : "本轮未转会",
       moves
     };
   });

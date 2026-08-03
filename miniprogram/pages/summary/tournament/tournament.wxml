@@ -2,12 +2,13 @@
   <view class="section summary-header">
     <view class="header-copy">
       <view class="title">联赛总结</view>
-      <view class="subtitle">{{selectedTournamentName || '选择联赛'}} · {{headerSubtitle || '当前赛季'}}</view>
+      <view wx:if="{{selectedTournamentName}}" class="subtitle">{{selectedTournamentName}} · {{headerSubtitle || '当前赛季'}}</view>
+      <view wx:else class="subtitle">排名、净分与赛季表现</view>
     </view>
-    <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+    <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
   </view>
 
-  <view class="section card control-card">
+  <view wx:if="{{tournaments.length}}" class="section card control-card">
     <view class="field-label">联赛</view>
     <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
       <view class="picker-value">{{selectedTournamentName || '请选择联赛'}}</view>
@@ -16,6 +17,16 @@
 
   <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载联赛总结" />
+  <view wx:elif="{{emptyState}}" class="section empty-state-section">
+    <app-empty-state
+      eyebrow="{{emptyEyebrow}}"
+      title="{{emptyTitle}}"
+      description="{{emptyDescription}}"
+      actionText="{{emptyActionText}}"
+      featured="{{true}}"
+      bind:action="onEmptyAction"
+    />
+  </view>
 
   <block wx:else>
     <view class="section tab-strip">
@@ -25,7 +36,13 @@
     </view>
 
     <view wx:if="{{showOverview}}" class="section">
-      <app-empty-state wx:if="{{!hasOverview}}" title="暂无联赛总结" />
+      <app-empty-state
+        wx:if="{{!hasOverview}}"
+        title="GW{{event}} 总结还没准备好"
+        description="比赛数据同步后会自动出现在这里"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <block wx:else>
         <view wx:if="{{overviewStats.length}}" class="card summary-card">
           <view class="section-title-small">我的表现</view>
@@ -49,7 +66,13 @@
     </view>
 
     <view wx:if="{{showRankings}}" class="section">
-      <app-empty-state wx:if="{{!hasRankings}}" title="暂无排名数据" />
+      <app-empty-state
+        wx:if="{{!hasRankings}}"
+        title="本轮排名还没生成"
+        description="联赛完成本轮数据同步后即可查看"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <view wx:else class="card ranking-card">
         <view class="section-title-small">本轮排名</view>
         <view wx:for="{{rankingRows}}" wx:key="id" class="ranking-row {{item.isMine ? 'ranking-row-active' : ''}}">
@@ -68,7 +91,13 @@
     </view>
 
     <view wx:if="{{showMetrics}}" class="section">
-      <app-empty-state wx:if="{{!hasMetrics}}" title="暂无指标数据" />
+      <app-empty-state
+        wx:if="{{!hasMetrics}}"
+        title="累计指标还没生成"
+        description="产生比赛数据后，这里会展示身价、转会和板凳排名"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
       <view wx:else class="card summary-card">
         <view class="section-title-small">累计指标</view>
         <view class="metric-grid">
