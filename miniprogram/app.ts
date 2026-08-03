@@ -95,7 +95,7 @@ App<IAppOption>({
         ? session.profile.fplEntryId
         : undefined;
       if (nextEntry !== boundEntryAtStart) {
-        this.reloadCurrentPageForEntryChange();
+        this.reloadCurrentPageForEntryChange(nextEntry);
       }
     }).catch((error) => {
       if (error instanceof MiniProgramLinkRequiredError) {
@@ -106,19 +106,32 @@ App<IAppOption>({
   },
 
   /** Rebuild the visible page after the authoritative entry binding changed. */
-  reloadCurrentPageForEntryChange() {
+  reloadCurrentPageForEntryChange(nextEntry?: number) {
     try {
       const pages = getCurrentPages();
-      const current = pages[pages.length - 1];
+      const current = pages[pages.length - 1] as
+        | { route?: string; options?: Record<string, unknown> }
+        | undefined;
       if (!current || !current.route) {
         return;
       }
       const url = `/${current.route}`;
-      // Never yank an in-progress account-link flow.
       if (url === routes.accountLink) {
+        // Never yank an in-progress account-link flow — unless the binding it
+        // exists to create has just been restored, in which case the form is
+        // obsolete and the user belongs back on content.
+        if (nextEntry) {
+          wx.reLaunch({ url: routes.home });
+        }
         return;
       }
-      wx.reLaunch({ url });
+      // Preserve route params (player-detail?code=..., team-detail?teamId=...):
+      // reLaunching the bare route re-runs onLoad with no identifier and
+      // strands the page on an empty state.
+      const query = Object.entries(current.options || {})
+        .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+        .join("&");
+      wx.reLaunch({ url: query ? `${url}?${query}` : url });
     } catch {}
   },
 

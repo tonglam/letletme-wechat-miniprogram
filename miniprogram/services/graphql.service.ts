@@ -2,6 +2,7 @@ import { getGraphQLEndpoint, REQUEST_TIMEOUT_MS } from "../config/env";
 import {
   clearApiSession,
   getApiSessionToken,
+  getPendingSessionRefresh,
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
@@ -135,6 +136,29 @@ function makeRequest<T>(
             // background profile revalidation stored a fresh token): retry
             // with the current credential instead of clearing it.
             makeRequest<T>(query, variables, false, currentToken).then(resolve).catch(reject);
+            return;
+          }
+          const pending = getPendingSessionRefresh();
+          if (pending) {
+            // A login round trip is already in flight and may be rotating
+            // this very token server-side without the response being stored
+            // yet. Await it: clearApiSession here would bump the session
+            // epoch and make that login discard its own fresh credential.
+            pending
+              .catch(() => undefined)
+              .then(() => {
+                const freshToken = getApiSessionToken();
+                if (freshToken && freshToken !== token) {
+                  return makeRequest<T>(query, variables, false, freshToken);
+                }
+                // The in-flight refresh produced no usable new credential —
+                // fall back to the classic clear + re-login cycle.
+                clearApiSession();
+                return refreshWechatApiSession()
+                  .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()));
+              })
+              .then(resolve)
+              .catch(reject);
             return;
           }
           clearApiSession();

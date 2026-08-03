@@ -187,6 +187,11 @@ export async function logoutMiniProgramSession(): Promise<void> {
     return;
   }
 
+  // Logout intent supersedes any in-flight refresh immediately: bump the
+  // epoch now so a revalidation that completes while the DELETE is pending
+  // discards its rotated token instead of keeping the session alive.
+  sessionEpoch += 1;
+
   const t0 = Date.now();
   await new Promise<void>((resolve, reject) => {
     wx.request<ApiResponse>({
@@ -252,6 +257,14 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
   return refresh;
 }
 
+/**
+ * Exposes the in-flight refresh (if any) so a 401 handler can await it
+ * instead of clearing the session out from under an active login round trip.
+ */
+export function getPendingSessionRefresh(): Promise<ApiSession> | null {
+  return pendingRefresh;
+}
+
 export async function startMiniProgramEmailLink(email: string): Promise<void> {
   await requestWebAuth("/email/start", { email, deviceId: getDeviceId() });
 }
@@ -267,5 +280,9 @@ export async function confirmMiniProgramEmailLink(
     wechatCode,
     deviceId: getDeviceId()
   });
+  // An explicit link confirmation supersedes any background /wechat/login
+  // that started before it — bump the epoch so the older response can never
+  // overwrite this freshly confirmed session.
+  sessionEpoch += 1;
   return storeApiSession(asSession(response));
 }
