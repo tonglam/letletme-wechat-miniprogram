@@ -1,3 +1,12 @@
+<wxs module="pos">
+  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  function cls(p) {
+    if (!p) return '';
+    var key = String(p).toUpperCase();
+    return map[key] || '';
+  }
+  module.exports = { cls: cls };
+</wxs>
 <view class="page summary-page">
   <view class="section summary-header">
     <view class="header-text">
@@ -47,7 +56,7 @@
             <view class="row-meta">{{item.teamName}}</view>
           </view>
           <view class="squad-meta">
-            <text class="position-badge">{{item.position}}</text>
+            <text class="position-badge pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
             <text class="mini-stat">{{item.minutes}}'</text>
             <text class="points-stat">{{item.points}}</text>
             <text class="role-badge {{item.bench ? 'role-bench' : 'role-starter'}}">{{item.role}}</text>

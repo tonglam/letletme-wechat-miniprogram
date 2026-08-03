@@ -15,18 +15,19 @@
   opacity: 0.8;
 }
 
+/* FDR-aligned difficulty scale (green → amber → red → dark red) */
 .difficulty-easy {
-  background: #16a34a;
+  background: var(--green-ink, #008545);
 }
 
 .difficulty-medium {
-  background: #667085;
+  background: var(--warning, #924a07);
 }
 
 .difficulty-hard {
-  background: #dc2626;
+  background: var(--danger, #c9183f);
 }
 
 .difficulty-very-hard {
-  background: #7f1d1d;
+  background: #7a0b28;
 }

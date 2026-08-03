@@ -1,3 +1,12 @@
+<wxs module="pos">
+  var map = { GKP: 'pos-gkp', GK: 'pos-gkp', DEF: 'pos-def', MID: 'pos-mid', FWD: 'pos-fwd' };
+  function cls(p) {
+    if (!p) return '';
+    var key = String(p).toUpperCase();
+    return map[key] || '';
+  }
+  module.exports = { cls: cls };
+</wxs>
 <view class="page">
   <view class="home-header section">
     <view class="title">{{entry.entryName || entry.teamName || 'LetLetMe'}}</view>
@@ -18,13 +27,13 @@
       <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
     </view>
 
-    <view class="deadline-card section">
+    <view class="deadline-card scoreboard section">
       <view class="deadline-top">
         <view>
           <view class="deadline-label">GW{{nextGw || '-' }} Deadline</view>
           <view class="deadline-time">{{deadline || '等待赛程更新'}}</view>
         </view>
-        <view class="gw-pill">Current GW{{gw || '-'}}</view>
+        <view class="gw-pill-dark">Current GW{{gw || '-'}}</view>
       </view>
       <view class="countdown">
         <view class="countdown-item">
@@ -64,7 +73,7 @@
           <view wx:for="{{priceRises}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
             <view class="price-player">
               <view class="price-name-line">
-                <text wx:if="{{item.position}}" class="position-badge">{{item.position}}</text>
+                <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
                 <text class="price-name">{{item.name}}</text>
               </view>
               <text class="price-team">{{item.team}}</text>
@@ -84,7 +93,7 @@
           <view wx:for="{{priceFalls}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
             <view class="price-player">
               <view class="price-name-line">
-                <text wx:if="{{item.position}}" class="position-badge">{{item.position}}</text>
+                <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
                 <text class="price-name">{{item.name}}</text>
               </view>
               <text class="price-team">{{item.team}}</text>

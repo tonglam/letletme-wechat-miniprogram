@@ -3,14 +3,15 @@
   text-align: center;
 }
 
+/* Notice — soft pitch-green strip */
 .notice-strip {
   display: flex;
   align-items: flex-start;
   gap: 12rpx;
   padding: 18rpx 20rpx;
-  background: #ecfdf3;
-  border: 1rpx solid #abefc6;
-  border-radius: 8rpx;
+  background: var(--accent-tint, #dcf6ea);
+  border: 1rpx solid rgba(0, 133, 69, 0.25);
+  border-radius: 12rpx;
 }
 
 .notice-icon {
@@ -20,7 +21,7 @@
   width: 30rpx;
   height: 30rpx;
   border-radius: 50%;
-  background: #16a34a;
+  background: var(--green-ink, #008545);
   color: #ffffff;
   font-size: 20rpx;
   font-weight: 700;
@@ -28,7 +29,7 @@
 
 .notice-text {
   flex: 1;
-  color: #166534;
+  color: var(--green-ink, #008545);
   font-size: 24rpx;
   line-height: 1.45;
 }
@@ -40,17 +41,15 @@
   flex-shrink: 0;
   width: 32rpx;
   height: 32rpx;
-  color: #166534;
+  color: var(--green-ink, #008545);
   font-size: 30rpx;
   line-height: 30rpx;
   opacity: 0.75;
 }
 
+/* Deadline — scoreboard panel (dark fascia, electric edge via .scoreboard) */
 .deadline-card {
   padding: 28rpx;
-  background: #111827;
-  border-radius: 8rpx;
-  color: #ffffff;
 }
 
 .deadline-top {
@@ -61,23 +60,16 @@
 }
 
 .deadline-label {
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 700;
+  letter-spacing: 2rpx;
+  text-transform: uppercase;
 }
 
 .deadline-time {
   margin-top: 8rpx;
-  color: #d1d5db;
+  color: rgba(249, 247, 242, 0.6);
   font-size: 24rpx;
-}
-
-.gw-pill {
-  padding: 8rpx 14rpx;
-  background: #ffffff;
-  color: #111827;
-  border-radius: 8rpx;
-  font-size: 22rpx;
-  font-weight: 700;
 }
 
 .countdown {
@@ -92,42 +84,46 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 96rpx;
-  background: #1f2937;
-  border-radius: 8rpx;
+  min-height: 104rpx;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
 }
 
 .countdown-value {
-  font-size: 32rpx;
+  color: var(--electric, #00ff85);
+  font-size: 36rpx;
   font-weight: 800;
 }
 
 .countdown-label {
   margin-top: 4rpx;
-  color: #d1d5db;
+  color: rgba(249, 247, 242, 0.6);
   font-size: 20rpx;
 }
 
+/* Section headers */
 .section-title {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 30rpx;
   font-weight: 700;
 }
 
 .section-subtitle {
   margin-top: 8rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
 }
 
 .section-link {
   flex-shrink: 0;
   padding: 8rpx 14rpx;
-  color: #2563eb;
+  color: var(--green-ink, #008545);
   font-size: 24rpx;
   font-weight: 700;
 }
 
+/* Price changes */
 .price-card {
   padding-bottom: 20rpx;
 }
@@ -149,19 +145,19 @@
 .price-group {
   min-width: 0;
   padding: 14rpx;
-  border: 1rpx solid #eef2f7;
-  border-radius: 8rpx;
-  background: #fbfdff;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .price-rise {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  border-color: rgba(0, 133, 69, 0.3);
+  background: var(--accent-tint, #dcf6ea);
 }
 
 .price-fall {
-  border-color: #fecdd3;
-  background: #fff1f2;
+  border-color: rgba(201, 24, 63, 0.28);
+  background: var(--danger-tint, #fbe3e9);
 }
 
 .price-group-head {
@@ -169,7 +165,7 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10rpx;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -182,8 +178,8 @@
   height: 32rpx;
   padding: 0 8rpx;
   border-radius: 16rpx;
-  background: rgba(17, 24, 39, 0.08);
-  color: #475467;
+  background: rgba(56, 0, 60, 0.08);
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
   box-sizing: border-box;
 }
@@ -194,7 +190,7 @@
   justify-content: space-between;
   gap: 10rpx;
   padding: 12rpx 0;
-  border-top: 1rpx solid rgba(148, 163, 184, 0.22);
+  border-top: 1rpx solid rgba(56, 0, 60, 0.08);
 }
 
 .price-row-first {
@@ -203,7 +199,7 @@
 
 .price-empty {
   padding: 28rpx 0 18rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   text-align: center;
 }
@@ -220,22 +216,12 @@
   min-width: 0;
 }
 
-.position-badge {
-  flex-shrink: 0;
-  padding: 2rpx 6rpx;
-  border-radius: 5rpx;
-  background: rgba(17, 24, 39, 0.08);
-  color: #475467;
-  font-size: 18rpx;
-  font-weight: 800;
-}
-
 .price-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 23rpx;
   font-weight: 700;
 }
@@ -246,7 +232,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
 }
 
@@ -269,13 +255,14 @@
 }
 
 .price-up {
-  color: #15803d;
+  color: var(--green-ink, #008545);
 }
 
 .price-down {
-  color: #be123c;
+  color: var(--danger, #c9183f);
 }
 
+/* GW stats grid */
 .gw-stats-head {
   margin-bottom: 18rpx;
 }
@@ -289,14 +276,13 @@
 .gw-stat-item {
   min-width: 0;
   padding: 18rpx;
-  border: 1rpx solid #eef2f7;
-  border-radius: 8rpx;
-  background: #f8fafc;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .gw-stat-label {
   display: block;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   line-height: 1.25;
 }
@@ -307,12 +293,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.25;
 }
 
+/* Fixtures */
 .fixture-head {
   display: flex;
   align-items: center;
@@ -342,7 +329,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   line-height: 40rpx;
   font-weight: 700;
@@ -353,7 +340,7 @@
 }
 
 .fixture-arrow-disabled {
-  color: #cbd5e1;
+  color: var(--line, #ddd4de);
 }
 
 .fixture-row {
@@ -362,7 +349,7 @@
   align-items: center;
   gap: 12rpx;
   padding: 18rpx 0;
-  border-top: 1rpx solid #eef2f7;
+  border-top: 1rpx solid var(--line, #ddd4de);
   font-size: 26rpx;
 }
 
@@ -377,7 +364,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--ink, #301333);
   font-weight: 700;
 }
 
@@ -393,13 +380,13 @@
   justify-content: center;
   min-height: 70rpx;
   padding: 8rpx;
-  border-radius: 8rpx;
-  background: #f8fafc;
+  border-radius: 10rpx;
+  background: var(--track, #f1efe9);
   box-sizing: border-box;
 }
 
 .fixture-vs {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1.1;
@@ -407,12 +394,13 @@
 
 .fixture-time {
   margin-top: 6rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 19rpx;
   line-height: 1.1;
   white-space: nowrap;
 }
 
+/* FDR badges — web DIFFICULTY_COLORS scale */
 .difficulty {
   display: inline-flex;
   align-items: center;
@@ -432,21 +420,21 @@
 }
 
 .difficulty-1 {
-  background: #16a34a;
+  background: var(--green-ink, #008545);
 }
 
 .difficulty-2 {
-  background: #65a30d;
+  background: rgba(0, 133, 69, 0.7);
 }
 
 .difficulty-3 {
-  background: #ca8a04;
+  background: var(--warning, #924a07);
 }
 
 .difficulty-4 {
-  background: #ea580c;
+  background: rgba(146, 74, 7, 0.8);
 }
 
 .difficulty-5 {
-  background: #dc2626;
+  background: var(--danger, #c9183f);
 }

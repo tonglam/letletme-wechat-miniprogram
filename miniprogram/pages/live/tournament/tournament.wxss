@@ -1,7 +1,8 @@
 .picker-card {
   overflow: hidden;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 16rpx;
+  background: var(--card, #ffffff);
 }
 
 .picker-inner {
@@ -12,20 +13,20 @@
 }
 
 .picker-label {
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
 }
 
 .picker-value {
   margin-top: 6rpx;
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 800;
 }
 
 .picker-arrow {
   flex-shrink: 0;
-  color: #047857;
+  color: var(--green-ink, #008545);
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -40,25 +41,25 @@
 .sort-tab {
   flex-shrink: 0;
   padding: 12rpx 18rpx;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
-  background: #ffffff;
-  color: #344054;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 10rpx;
+  background: var(--card, #ffffff);
+  color: var(--muted-ink, #6e5a72);
   font-size: 23rpx;
   font-weight: 700;
 }
 
 .sort-tab.active {
-  border-color: #111827;
-  background: #111827;
-  color: #ffffff;
+  border-color: var(--plum, #38003c);
+  background: var(--plum, #38003c);
+  color: var(--chalk, #f9f7f2);
 }
 
 .filter-panel {
   overflow: hidden;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
-  background: #ffffff;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 16rpx;
+  background: var(--card, #ffffff);
 }
 
 .filter-header {
@@ -70,7 +71,7 @@
 }
 
 .filter-title {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 27rpx;
   font-weight: 900;
 }
@@ -79,7 +80,7 @@
   max-width: 520rpx;
   margin-top: 6rpx;
   overflow: hidden;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,29 +88,29 @@
 
 .filter-toggle {
   flex-shrink: 0;
-  color: #047857;
+  color: var(--green-ink, #008545);
   font-size: 23rpx;
   font-weight: 800;
 }
 
 .filter-body {
   padding: 0 24rpx 22rpx;
-  border-top: 1rpx solid #eef2f7;
+  border-top: 1rpx solid var(--line, #ddd4de);
 }
 
 .filter-picker {
   margin-top: 18rpx;
   padding: 18rpx 20rpx;
-  border: 1rpx solid #d1d5db;
-  border-radius: 8rpx;
-  background: #f9fafb;
-  color: #111827;
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
+  color: var(--ink, #301333);
   font-size: 24rpx;
   font-weight: 800;
 }
 
 .filter-picker.disabled {
-  color: #98a2b3;
+  color: var(--muted-ink, #6e5a72);
 }
 
 .ownership-picker-grid {
@@ -130,43 +131,44 @@
   padding: 10rpx 14rpx;
   overflow: hidden;
   border-radius: 8rpx;
-  background: #ecfdf3;
-  color: #027a48;
+  background: var(--accent-tint, #dcf6ea);
+  color: var(--green-ink, #008545);
   font-size: 22rpx;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Segmented control — web Tabs pattern (muted track, white active) */
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8rpx;
   margin-top: 16rpx;
   padding: 6rpx;
-  border-radius: 8rpx;
-  background: #f3f4f6;
+  border-radius: 12rpx;
+  background: var(--track, #f1efe9);
 }
 
 .segment {
   min-width: 0;
   padding: 12rpx 8rpx;
-  border-radius: 6rpx;
-  color: #475467;
+  border-radius: 8rpx;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   font-weight: 800;
   text-align: center;
 }
 
 .segment.active {
-  background: #ffffff;
-  color: #111827;
-  box-shadow: 0 1rpx 4rpx rgba(17, 24, 39, 0.08);
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
+  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
 }
 
 .filter-clear {
   margin-top: 16rpx;
-  color: #b42318;
+  color: var(--danger, #c9183f);
   font-size: 22rpx;
   font-weight: 800;
   text-align: right;
@@ -174,7 +176,7 @@
 
 .result-count {
   margin-bottom: 14rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -185,11 +187,11 @@
   gap: 18rpx;
   align-items: center;
   margin-bottom: 16rpx;
-  border: 1rpx solid #eef2f7;
+  border: 1rpx solid var(--line, #ddd4de);
 }
 
 .tournament-rank {
-  color: #047857;
+  color: var(--green-ink, #008545);
   font-size: 26rpx;
   font-weight: 900;
 }
@@ -207,20 +209,20 @@
 }
 
 .tournament-title {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 28rpx;
   font-weight: 800;
 }
 
 .tournament-subtitle {
   margin-top: 4rpx;
-  color: #344054;
+  color: var(--ink, #301333);
   font-size: 22rpx;
 }
 
 .tournament-meta {
   margin-top: 8rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 21rpx;
 }
 
@@ -229,20 +231,20 @@
 }
 
 .score-main {
-  color: #111827;
+  color: var(--ink, #301333);
   font-size: 34rpx;
   font-weight: 900;
 }
 
 .score-sub {
   margin-top: 4rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 20rpx;
 }
 
 .load-more {
   padding: 22rpx;
-  color: #047857;
+  color: var(--green-ink, #008545);
   font-size: 24rpx;
   font-weight: 800;
   text-align: center;

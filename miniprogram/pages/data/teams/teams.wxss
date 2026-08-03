@@ -3,6 +3,6 @@
   align-items: center;
   justify-content: space-between;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #eef2f7;
+  border-bottom: 1rpx solid var(--line, #ddd4de);
   font-size: 28rpx;
 }

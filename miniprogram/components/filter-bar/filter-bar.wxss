@@ -6,27 +6,37 @@
 
 .filter-input {
   flex: 1;
-  height: 72rpx;
-  padding: 0 20rpx;
-  background: #ffffff;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
+  height: 80rpx;
+  padding: 0 24rpx;
+  background: var(--card, #ffffff);
+  border: 1rpx solid var(--line, #ddd4de);
+  border-radius: 12rpx;
+  color: var(--ink, #301333);
   box-sizing: border-box;
 }
 
 .filter-button {
   flex-shrink: 0;
-  height: 72rpx;
+  height: 80rpx;
   margin: 0;
-  padding: 0 18rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  color: #344054;
+  padding: 0 22rpx;
+  border-radius: 12rpx;
+  background: var(--card, #ffffff);
+  color: var(--ink, #301333);
+  border: 1rpx solid var(--line, #ddd4de);
   font-size: 24rpx;
-  line-height: 72rpx;
+  font-weight: 600;
+  line-height: 78rpx;
+  box-sizing: border-box;
+}
+
+.filter-button::after {
+  border: 0;
 }
 
 .filter-button.primary {
-  background: #111827;
-  color: #ffffff;
+  background: var(--cta, #00d16d);
+  color: var(--cta-ink, #1a001e);
+  border-color: transparent;
+  font-weight: 700;
 }

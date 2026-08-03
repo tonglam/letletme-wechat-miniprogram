@@ -5,22 +5,19 @@
   padding: 28rpx 0 8rpx;
 }
 
-.eyebrow {
-  margin-bottom: 10rpx;
-  color: #047857;
-  font-size: 20rpx;
-  font-weight: 800;
-  letter-spacing: 0;
+.live-hero .chyron {
+  margin-bottom: 12rpx;
 }
 
 .gw-pill {
   flex-shrink: 0;
-  padding: 10rpx 16rpx;
+  padding: 8rpx 16rpx;
   border-radius: 8rpx;
-  background: #111827;
-  color: #ffffff;
-  font-size: 24rpx;
-  font-weight: 800;
+  background: var(--plum, #38003c);
+  color: var(--electric, #00ff85);
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
 }
 
 .entry-strip {
@@ -28,18 +25,18 @@
   align-items: center;
   justify-content: space-between;
   padding: 22rpx 24rpx;
-  border-radius: 8rpx;
+  border-radius: 12rpx;
   box-sizing: border-box;
 }
 
 .entry-strip.ready {
-  background: #ecfdf3;
-  color: #065f46;
+  background: var(--accent-tint, #dcf6ea);
+  color: var(--green-ink, #008545);
 }
 
 .entry-strip.empty {
-  background: #fff7ed;
-  color: #9a3412;
+  background: var(--warning-tint, #f6ead9);
+  color: var(--warning, #924a07);
 }
 
 .strip-label {
@@ -63,15 +60,14 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20rpx;
-  border: 1rpx solid #eef2f7;
-  box-shadow: 0 12rpx 32rpx rgba(15, 23, 42, 0.06);
 }
 
 .card-meta {
   margin-bottom: 8rpx;
-  color: #047857;
+  color: var(--green-ink, #008545);
   font-size: 20rpx;
   font-weight: 800;
+  letter-spacing: 2rpx;
 }
 
 .card-title {
@@ -81,7 +77,7 @@
 
 .card-desc {
   margin-top: 8rpx;
-  color: #667085;
+  color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
 }
 
@@ -96,15 +92,15 @@
 .status-pill {
   padding: 6rpx 10rpx;
   border-radius: 6rpx;
-  background: #f2f4f7;
-  color: #344054;
+  background: var(--track, #f1efe9);
+  color: var(--ink, #301333);
   font-size: 20rpx;
   font-weight: 700;
 }
 
 .open-arrow {
   margin-top: 16rpx;
-  color: #111827;
+  color: var(--plum, #38003c);
   font-size: 44rpx;
   line-height: 36rpx;
 }

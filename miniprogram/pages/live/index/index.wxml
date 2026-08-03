@@ -1,7 +1,7 @@
 <view class="page">
   <view class="section live-hero">
     <view>
-      <view class="eyebrow">LIVE CENTRE</view>
+      <view class="chyron">LIVE CENTRE</view>
       <view class="title">实时</view>
       <view class="subtitle">比赛进行时追踪球队、比赛和联赛。</view>
     </view>

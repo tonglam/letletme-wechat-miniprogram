@@ -15,7 +15,7 @@
   </view>
 
   <!-- Score Card -->
-  <view class="section card score-card">
+  <view class="section scoreboard score-card">
     <view class="score-body">
       <view class="score-ring score-ring-{{scoreGrade}}">
         <text class="score-number">{{hasData ? score : '--'}}</text>

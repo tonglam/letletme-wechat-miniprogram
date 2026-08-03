@@ -1,9 +1,49 @@
+/* ============================================================
+   LetLetMe Matchday Design Tokens — mirrors letletme-web
+   (plum / electric / pink FPL broadcast kit, light chalk theme)
+   ============================================================ */
 page {
   min-height: 100%;
-  background: #f5f6f8;
-  color: #111827;
+
+  /* Brand */
+  --plum: #38003c;
+  --fascia: #1d0520;
+  --fascia-hi: #2b0a33;
+  --electric: #00ff85;
+  --pink: #ff2882;
+  --chalk: #f9f7f2;
+
+  /* Semantic (web light-theme values) */
+  --green-ink: #008545;   /* primary-ink / success on light surfaces */
+  --cta: #00d16d;         /* primary button green */
+  --cta-ink: #1a001e;     /* text on CTA green */
+  --danger: #c9183f;
+  --warning: #924a07;
+  --info: #82208a;
+
+  /* Surfaces & text */
+  --bg: #f9f8f4;
+  --ink: #301333;
+  --muted-ink: #6e5a72;
+  --card: #ffffff;
+  --line: #ddd4de;
+  --track: #f1efe9;
+  --accent-tint: #dcf6ea; /* soft green highlight */
+  --danger-tint: #fbe3e9;
+  --warning-tint: #f6ead9;
+
+  /* Vant theming (custom properties cascade into components) */
+  --tabbar-background-color: #1d0520;
+  --tabbar-item-text-color: rgba(249, 247, 242, 0.55);
+  --tabbar-item-active-color: #00ff85;
+  --tabbar-item-active-background-color: #1d0520;
+
+  background: var(--bg);
+  color: var(--ink);
   font-size: 28rpx;
 }
+
+/* ---------- Layout primitives (existing API, new palette) ---------- */
 
 .page {
   min-height: 100vh;
@@ -16,21 +56,24 @@ page {
 }
 
 .card {
-  background: #ffffff;
-  border-radius: 8rpx;
+  background: var(--card);
+  border: 1rpx solid var(--line);
+  border-radius: 16rpx;
   padding: 24rpx;
   box-sizing: border-box;
+  box-shadow: 0 2rpx 8rpx rgba(56, 0, 60, 0.04);
 }
 
 .title {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #111827;
+  font-size: 38rpx;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: 0.5rpx;
 }
 
 .subtitle {
   margin-top: 8rpx;
-  color: #667085;
+  color: var(--muted-ink);
   font-size: 24rpx;
 }
 
@@ -41,9 +84,234 @@ page {
 }
 
 .muted {
-  color: #667085;
+  color: var(--muted-ink);
 }
 
 .action {
-  color: #2563eb;
+  color: var(--green-ink);
+  font-weight: 600;
 }
+
+/* ---------- Matchday utilities ---------- */
+
+/* Broadcast chyron label — green tick + tracked caps */
+.chyron {
+  display: inline-flex;
+  align-items: center;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  text-transform: uppercase;
+  color: var(--muted-ink);
+}
+
+.chyron::before {
+  content: '';
+  width: 8rpx;
+  height: 26rpx;
+  margin-right: 14rpx;
+  background: var(--cta);
+  box-shadow: 0 0 10rpx rgba(0, 255, 133, 0.45);
+}
+
+/* Scoreboard — dark fascia panel with an electric edge */
+.scoreboard {
+  position: relative;
+  overflow: hidden;
+  border: 1rpx solid rgba(0, 255, 133, 0.28);
+  border-radius: 20rpx;
+  background:
+    radial-gradient(ellipse 120% 90% at 50% -30%, rgba(56, 0, 60, 0.7), rgba(56, 0, 60, 0) 60%),
+    linear-gradient(180deg, var(--fascia-hi), var(--fascia));
+  color: var(--chalk);
+  box-shadow: inset 0 1rpx 0 rgba(0, 255, 133, 0.2);
+}
+
+.scoreboard .muted,
+.scoreboard-mute {
+  color: rgba(249, 247, 242, 0.6);
+}
+
+.scoreboard-num {
+  color: var(--electric);
+  font-weight: 800;
+}
+
+/* GW pill — plum board, electric text (web GW badge) */
+.gw-pill-dark {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  background: var(--plum);
+  color: var(--electric);
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+/* Position badges — official FPL position colours */
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.pos-gkp { background: #fcd34d; color: #451a03; }
+.pos-def { background: var(--electric); color: var(--plum); }
+.pos-mid { background: var(--pink); color: #500724; }
+.pos-fwd { background: var(--plum); color: var(--electric); }
+
+/* Fixture difficulty rating — web DIFFICULTY_COLORS scale */
+.fdr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76rpx;
+  padding: 4rpx 8rpx;
+  border-radius: 6rpx;
+  color: #ffffff;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.fdr-1 { background: var(--green-ink); }
+.fdr-2 { background: rgba(0, 133, 69, 0.7); }
+.fdr-3 { background: var(--warning); }
+.fdr-4 { background: rgba(146, 74, 7, 0.8); }
+.fdr-5 { background: var(--danger); }
+
+/* Blinking live dot */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: var(--cta);
+}
+
+.live-dot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--electric);
+  animation: live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes live-ping {
+  0% { transform: scale(1); opacity: 0.9; }
+  75%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* Buttons — web button variants (reset WeChat button chrome) */
+.btn-primary,
+.btn-outline,
+.btn-danger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0 32rpx;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 88rpx;
+  box-sizing: border-box;
+}
+
+.btn-primary::after,
+.btn-outline::after,
+.btn-danger::after {
+  border: 0;
+}
+
+.btn-primary {
+  background: var(--cta);
+  color: var(--cta-ink);
+}
+
+.btn-primary.button-hover {
+  background: #00b862;
+}
+
+.btn-outline {
+  background: var(--card);
+  color: var(--ink);
+  border: 1rpx solid var(--line);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* Segmented tabs — web Tabs (muted track + white active segment) */
+.seg {
+  display: flex;
+  align-items: center;
+  padding: 6rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+.seg-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14rpx 8rpx;
+  border-radius: 8rpx;
+  color: var(--muted-ink);
+  font-size: 24rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.seg-active {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
+}
+
+/* Stat tile — muted track stat cell */
+.stat-tile {
+  min-width: 0;
+  padding: 18rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+/* Input shell — web Input */
+.input-shell {
+  display: flex;
+  align-items: center;
+  height: 80rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+
+/* Semantic text helpers */
+.text-success { color: var(--green-ink); }
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
