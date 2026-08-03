@@ -164,7 +164,7 @@
   text-align: center;
 }
 
-/* Layout-only badge shells — colours come from global pos-*/role-* classes */
+/* Layout-only badge shells; colours come from global position and role classes. */
 .position-badge,
 .role-badge {
   display: inline-flex;
