@@ -127,16 +127,22 @@ Page({
 
     // Stale-while-revalidate: once content exists it stays on screen during
     // refreshes; only the very first load blanks into the loading state.
+    const requestedEvent = this.data.event;
     this.setData({ loading: true, error: "", transfersError: "", emptyState: false });
     try {
       let transfersError = "";
       const [result, transfers] = await Promise.all([
-        getLivePointsByEntry(entryId, this.data.event, forceRefresh),
-        getEntryEventTransfers(entryId, this.data.event, forceRefresh).catch((error) => {
+        getLivePointsByEntry(entryId, requestedEvent, forceRefresh),
+        getEntryEventTransfers(entryId, requestedEvent, forceRefresh).catch((error) => {
           transfersError = error instanceof Error ? error.message : "本周转会加载失败";
           return [] as EntryTransfer[];
         })
       ]);
+      if (requestedEvent !== this.data.event) {
+        // Superseded by a GW switch while in flight: this payload belongs to
+        // the old gameweek, and the new GW's own load owns the page state.
+        return;
+      }
       const players = (result.players || result.pickList || []).map(normalizePlayer);
       const managers = players.filter((player) => numberValue(player.elementType) === 5);
       const fieldPlayers = players.filter((player) => numberValue(player.elementType) !== 5);
@@ -173,6 +179,9 @@ Page({
       });
       this._loadedAt = fetchedAt;
     } catch (error) {
+      if (requestedEvent !== this.data.event) {
+        return;
+      }
       const message = error instanceof Error ? error.message : "实时球队加载失败";
       if (this.data.hasContent) {
         // Background refresh failure: keep the stale view, surface a toast.
@@ -181,7 +190,9 @@ Page({
         this.setData({ error: message });
       }
     } finally {
-      this.setData({ loading: false });
+      if (requestedEvent === this.data.event) {
+        this.setData({ loading: false });
+      }
     }
   },
 

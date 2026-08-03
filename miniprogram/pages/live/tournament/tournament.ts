@@ -300,7 +300,9 @@ Page({
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadRows(true) : this.loadTournaments(true);
+    // Always re-pull the tournament list (it chains into loadRows): a cached
+    // list must not hide a league the user just joined until the TTL expires.
+    const task = this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -395,14 +397,28 @@ Page({
       return;
     }
 
+    const requestedContext = `${selected.id}|${this.data.event}|${this.data.keyword}`;
+    const activeContext = () => `${this.data.selectedTournament?.id}|${this.data.event}|${this.data.keyword}`;
     this.setData({ loading: true, error: "" });
     try {
-      const rows = this.data.keyword
+      const result = this.data.keyword
       ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword, forceRefresh)
       : await getLivePointsByTournament(selected.id, this.data.event, forceRefresh);
-      this.applyRows(rows.map(normalizeRow), true);
+      if (requestedContext !== activeContext()) {
+        // Superseded by a tournament/GW/keyword change while in flight: this
+        // payload belongs to the old context; the new context's load owns
+        // loading/error state.
+        return;
+      }
+      // A cache serve keeps its original fetch time so the "updated" label
+      // reflects the data's real age.
+      const fetchedAt = result.servedStoredAt || Date.now();
+      this.applyRows(result.rows.map(normalizeRow), true, fetchedAt);
       this.setData({ hasContent: true });
     } catch (error) {
+      if (requestedContext !== activeContext()) {
+        return;
+      }
       const message = error instanceof Error ? error.message : "实时联赛加载失败";
       if (this.data.hasContent) {
         // Background refresh failure: keep the stale rows, surface a toast.
@@ -411,11 +427,13 @@ Page({
         this.setData({ error: message });
       }
     } finally {
-      this.setData({ loading: false });
+      if (requestedContext === activeContext()) {
+        this.setData({ loading: false });
+      }
     }
   },
 
-  applyRows(rows: DisplayTournamentRow[], resetPage: boolean) {
+  applyRows(rows: DisplayTournamentRow[], resetPage: boolean, fetchedAt?: number) {
     const teamOptions = getTournamentTeamOptions(rows);
     const selectedTeamExposure = this.data.selectedTeamExposure
       ? teamOptions.find((team) => team.shortName === this.data.selectedTeamExposure?.shortName)
@@ -481,7 +499,7 @@ Page({
       selectedTeamExposure,
       selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
       teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
-      lastUpdated: formatTime(new Date())
+      lastUpdated: formatTime(new Date(fetchedAt ?? Date.now()))
     });
   },
 

@@ -1,5 +1,5 @@
 import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
-import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRowsResult } from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
 
 // Live data moves during matches but the upstream only updates periodically;
@@ -328,15 +328,19 @@ function numericId(value: number | string): number {
   return parsed;
 }
 
-export async function getLivePointsByTournament(tournamentId: number | string, event: number, forceRefresh = false): Promise<LiveTournamentRow[]> {
-  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
+export async function getLivePointsByTournament(tournamentId: number | string, event: number, forceRefresh = false): Promise<LiveTournamentRowsResult> {
+  const variables = {
     tournamentId: numericId(tournamentId),
     eventId: numericId(event)
-  }, {
+  };
+  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
     cacheTtl: LIVE_CACHE_TTL_MS,
     forceRefresh
   });
-  return mapTournamentLiveRows(data.calcLivePointsForTournament.results);
+  return {
+    rows: mapTournamentLiveRows(data.calcLivePointsForTournament.results),
+    servedStoredAt: getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables)
+  };
 }
 
 export async function searchLivePointsByTournament(
@@ -344,7 +348,7 @@ export async function searchLivePointsByTournament(
   event: number,
   keyword: string,
   forceRefresh = false
-): Promise<LiveTournamentRow[]> {
-  const rows = await getLivePointsByTournament(tournamentId, event, forceRefresh);
-  return filterTournamentLiveRows(rows, keyword);
+): Promise<LiveTournamentRowsResult> {
+  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh);
+  return { rows: filterTournamentLiveRows(rows, keyword), servedStoredAt };
 }

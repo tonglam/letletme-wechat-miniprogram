@@ -99,3 +99,9 @@ export interface LiveTournamentRow {
   picks?: LivePlayerRow[];
   searchText?: string;
 }
+
+export interface LiveTournamentRowsResult {
+  rows: LiveTournamentRow[];
+  /** Fetch time when the rows were served from cache; undefined on a fresh network response. */
+  servedStoredAt?: number;
+}
