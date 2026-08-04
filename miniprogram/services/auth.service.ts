@@ -181,54 +181,63 @@ export function getApiSessionToken(): string | null {
 }
 
 export async function logoutMiniProgramSession(): Promise<void> {
-  // Settle any in-flight login first: once /wechat/login has reached the
-  // server it rotates the device token there regardless of the local epoch,
-  // so revoking the pre-rotation token would 401 and strand the session.
-  // Awaiting it lets the rotated token be stored, and the DELETE below then
-  // revokes the credential the server actually considers current.
-  const pending = getPendingSessionRefresh();
-  if (pending) {
-    await pending.catch(() => undefined);
-  }
+  // Block refresh creation until the DELETE and local cleanup complete:
+  // waiting only for the refresh pending at entry is a one-time snapshot —
+  // an in-flight GraphQL request could still 401 mid-DELETE and start a
+  // /wechat/login whose rotated server-side session would outlive the logout.
+  logoutInFlight = true;
+  try {
+    // Settle any in-flight login first: once /wechat/login has reached the
+    // server it rotates the device token there regardless of the local epoch,
+    // so revoking the pre-rotation token would 401 and strand the session.
+    // Awaiting it lets the rotated token be stored, and the DELETE below then
+    // revokes the credential the server actually considers current.
+    const pending = getPendingSessionRefresh();
+    if (pending) {
+      await pending.catch(() => undefined);
+    }
 
-  const token = getApiSessionToken();
-  if (!token) {
-    clearApiSession();
-    return;
-  }
+    const token = getApiSessionToken();
+    if (!token) {
+      clearApiSession();
+      return;
+    }
 
-  // From here on, no refresh still in flight may store past the logout.
-  sessionEpoch += 1;
+    // From here on, no refresh still in flight may store past the logout.
+    sessionEpoch += 1;
 
-  const t0 = Date.now();
-  await new Promise<void>((resolve, reject) => {
-    wx.request<ApiResponse>({
-      url: `${getMiniProgramApiBase()}/session`,
-      method: "DELETE",
-      header: { Authorization: `Bearer ${token}` },
-      timeout: REQUEST_TIMEOUT_MS,
-      success(response) {
-        recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          resolve();
-          return;
+    const t0 = Date.now();
+    await new Promise<void>((resolve, reject) => {
+      wx.request<ApiResponse>({
+        url: `${getMiniProgramApiBase()}/session`,
+        method: "DELETE",
+        header: { Authorization: `Bearer ${token}` },
+        timeout: REQUEST_TIMEOUT_MS,
+        success(response) {
+          recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            resolve();
+            return;
+          }
+          if (response.statusCode === 401) {
+            // The credential is already dead server-side (a rotation raced the
+            // settle above): the session is revoked either way, so clean up
+            // locally instead of reporting a failed logout.
+            resolve();
+            return;
+          }
+          reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
+        },
+        fail(error) {
+          recordApi("auth:/session", Date.now() - t0, false);
+          reject(new Error(networkErrorMessage(error)));
         }
-        if (response.statusCode === 401) {
-          // The credential is already dead server-side (a rotation raced the
-          // settle above): the session is revoked either way, so clean up
-          // locally instead of reporting a failed logout.
-          resolve();
-          return;
-        }
-        reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
-      },
-      fail(error) {
-        recordApi("auth:/session", Date.now() - t0, false);
-        reject(new Error(networkErrorMessage(error)));
-      }
+      });
     });
-  });
-  clearApiSession();
+    clearApiSession();
+  } finally {
+    logoutInFlight = false;
+  }
 }
 
 /** Uses only web-owned identity. FPL entry IDs are inherited from the verified account. */
@@ -258,6 +267,11 @@ async function performWechatSessionRefresh(): Promise<ApiSession> {
 
 let pendingRefresh: Promise<ApiSession> | null = null;
 
+// True for the entire sign-out round trip: a 401 landing mid-DELETE must not
+// start /wechat/login and rotate a fresh server-side session that outlives
+// the logout.
+let logoutInFlight = false;
+
 /**
  * Single-flight session refresh: concurrent callers (e.g. several requests
  * failing with 401 at once) share one wx.login + /wechat/login round trip.
@@ -265,6 +279,9 @@ let pendingRefresh: Promise<ApiSession> | null = null;
 export function refreshWechatApiSession(): Promise<ApiSession> {
   if (pendingRefresh) {
     return pendingRefresh;
+  }
+  if (logoutInFlight) {
+    return Promise.reject(new Error("正在退出登录，请稍后重试"));
   }
   const refresh = performWechatSessionRefresh();
   pendingRefresh = refresh;
