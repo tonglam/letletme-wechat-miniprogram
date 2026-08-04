@@ -166,6 +166,11 @@ Page({
     const eventId = this.data.event;
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
+      // A pull-to-refresh can overlap an automatic score request. Reuse that
+      // score request, but still refresh the independent transfer panel once.
+      if (options.includeTransfers) {
+        void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
+      }
       return this.liveRequest;
     }
 
