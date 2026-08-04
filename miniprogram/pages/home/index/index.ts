@@ -1,5 +1,6 @@
 import { getMiniProgramNotice, getNextFixture, refreshEventAndDeadline } from "../../../services/common.service";
 import { getEntryInfo } from "../../../services/entry.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import { getPlayerValues } from "../../../services/price.service";
 import { getGameweekStatsForHome } from "../../../services/summary.service";
 import type { Fixture } from "../../../models/common";
@@ -143,6 +144,12 @@ Page({
 
   async loadPage(forceRefresh = false) {
     const app = getApp<IAppOption>();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry.
+      try { await app.authReady; } catch {}
+    }
     const entryId = app.globalData.entryId;
     if (!entryId) {
       forceEntryBinding();

@@ -1,4 +1,5 @@
 import { getEntryInfo } from "../../../services/entry.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { EntryInfo } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
 
@@ -19,8 +20,15 @@ Page({
     entry: {}
   } as EntryProfileData,
 
-  onLoad(options: Record<string, string | undefined>) {
-    const entryId = Number(options.entry || getApp<IAppOption>().globalData.entryId);
+  async onLoad(options: Record<string, string | undefined>) {
+    const app = getApp<IAppOption>();
+    if (!options.entry && !getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry.
+      try { await app.authReady; } catch {}
+    }
+    const entryId = Number(options.entry || app.globalData.entryId);
     this.setData({ entryId });
     this.loadEntry(entryId);
   },

@@ -5,6 +5,7 @@ import {
   type TournamentEntryRankingSummary,
   type TournamentEventResult
 } from "../../../services/tournament.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import { storageKeys } from "../../../config/storage-keys";
 import { forceEntryBinding } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
@@ -92,6 +93,12 @@ Page({
   async onLoad() {
     await this.ensureAppDataReady();
     const app = getApp<IAppOption>();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry.
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId,
