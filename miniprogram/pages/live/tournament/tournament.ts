@@ -1,5 +1,6 @@
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
@@ -285,11 +286,11 @@ Page({
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
     await app.initAppData();
-    if (!app.globalData.entryId) {
-      // No stored binding yet: wait for the cold-start login to settle before
-      // falling to the link empty state. The login may not even have started
-      // (the privacy callback can lag), so await the app's auth-ready signal
-      // rather than a refresh promise that might not exist yet.
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);

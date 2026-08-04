@@ -38,6 +38,12 @@ export interface GraphQLOptions {
   getCacheExpiry?: (data: unknown) => number;
   /** Skip the cache read (fresh result still re-populates the cache). */
   forceRefresh?: boolean;
+  /**
+   * Suffix separating cache entries that share a query and variables but
+   * follow different freshness policies (e.g. live vs historical views of
+   * one payload). Without it, a long-TTL entry can satisfy a short-TTL read.
+   */
+  cacheVariant?: string;
 }
 
 const inFlightRequests = new Map<string, Promise<unknown>>();
@@ -119,10 +125,11 @@ function hashKey(str: string): string {
 export function buildGraphQLRequestCacheKey(
   query: string,
   variables: Record<string, unknown>,
-  token: string | null
+  token: string | null,
+  cacheVariant = ""
 ): string {
   const audience = token ? `session:${hashKey(token)}` : "public";
-  return `${audience}::${query}::${JSON.stringify(variables)}`;
+  return `${audience}::${query}::${JSON.stringify(variables)}${cacheVariant ? `#${cacheVariant}` : ""}`;
 }
 
 /**
@@ -221,7 +228,7 @@ export function graphqlRequest<T>(
       // A usable public-cache hit must not wait on the login round trip
       // (e.g. CurrentEventInfo during app init on a slow cold start).
       if (options?.forceRefresh !== true && (options?.cacheTtl != null || options?.getCacheExpiry)) {
-        const publicKey = buildGraphQLRequestCacheKey(query, variables, null);
+        const publicKey = buildGraphQLRequestCacheKey(query, variables, null, options?.cacheVariant ?? "");
         const cached = readCacheEntry(getStorageCacheKey(publicKey, null), publicKey);
         if (cached !== undefined) {
           return Promise.resolve(cached as T);
@@ -234,7 +241,7 @@ export function graphqlRequest<T>(
       return pending.catch(() => undefined).then(() => graphqlRequest<T>(query, variables, options));
     }
   }
-  const key = buildGraphQLRequestCacheKey(query, variables, token);
+  const key = buildGraphQLRequestCacheKey(query, variables, token, options?.cacheVariant ?? "");
 
   const inFlight = inFlightRequests.get(key) as Promise<T> | undefined;
   if (inFlight) {
@@ -254,18 +261,22 @@ export function graphqlRequest<T>(
 
   const request = makeRequest<T>(query, variables, true, token).then((data) => {
     recordApi(opName, Date.now() - t0, true);
-    if (
-      (options?.cacheTtl != null || options?.getCacheExpiry)
-      && getApiSessionToken() === token
-    ) {
+    if (options?.cacheTtl != null || options?.getCacheExpiry) {
       try {
-        const cacheKey = getStorageCacheKey(key, token);
+        // The response may have been produced by a refreshed session (401 →
+        // rotate → retry): cache under the token that actually produced it,
+        // or later reads in the current session namespace can never hit.
+        const responseToken = getApiSessionToken();
+        const effectiveKey = responseToken !== token
+          ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
+          : key;
+        const cacheKey = getStorageCacheKey(effectiveKey, responseToken);
         const expiresAt = options?.getCacheExpiry
           ? options.getCacheExpiry(data)
           : Date.now() + (options?.cacheTtl ?? 0);
-        const entry: CacheEntry = { requestKey: key, data, expiresAt, storedAt: Date.now() };
+        const entry: CacheEntry = { requestKey: effectiveKey, data, expiresAt, storedAt: Date.now() };
         writeMemoryCache(cacheKey, entry);
-        servedFromCache.delete(key);
+        servedFromCache.delete(effectiveKey);
         // Sub-minute caches stay process-local: they would be expired by the
         // next launch anyway, and keeping large live payloads (full
         // tournament pick lists) out of storage avoids accumulating one

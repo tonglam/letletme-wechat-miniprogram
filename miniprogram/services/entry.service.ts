@@ -235,6 +235,11 @@ export async function getEntryEventTransfers(entry: number, event: number, force
   } catch {}
   const isLiveEvent = currentGw > 0 && event >= currentGw;
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    // Live and historical freshness policies get separate cache entries:
+    // sharing one key would let a 30-minute history serve stand in for the
+    // live view, and a memory-only live write could never replace a
+    // persisted stale entry.
+    cacheVariant: isLiveEvent ? "live" : "history",
     cacheTtl: isLiveEvent ? LIVE_EVENT_TRANSFERS_CACHE_TTL_MS : TRANSFERS_HISTORY_CACHE_TTL_MS,
     forceRefresh
   });
@@ -256,6 +261,8 @@ export async function getEntryEventTransfers(entry: number, event: number, force
 
 export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    // Same freshness class as historical per-event views: share their entry.
+    cacheVariant: "history",
     cacheTtl: 30 * 60 * 1000,
     forceRefresh
   });

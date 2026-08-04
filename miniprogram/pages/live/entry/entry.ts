@@ -1,5 +1,6 @@
 import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntry } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
@@ -86,11 +87,11 @@ Page({
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
     await app.initAppData();
-    if (!app.globalData.entryId && !hasRouteEntry) {
-      // No stored binding yet: wait for the cold-start login to settle before
-      // falling to the link empty state. The login may not even have started
-      // (the privacy callback can lag), so await the app's auth-ready signal
-      // rather than a refresh promise that might not exist yet.
+    if (!hasRouteEntry && !getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
