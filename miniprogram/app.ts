@@ -1,7 +1,7 @@
 import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
-import { getApiSessionToken, refreshWechatApiSession } from "./services/auth.service";
+import { getApiSessionToken, isLogoutInFlight, refreshWechatApiSession } from "./services/auth.service";
 import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
 import { storageKeys, storagePrefixes } from "./config/storage-keys";
@@ -108,6 +108,12 @@ App<IAppOption>({
   /** Rebuild the visible page after the authoritative entry binding changed. */
   reloadCurrentPageForEntryChange(nextEntry?: number) {
     try {
+      if (isLogoutInFlight()) {
+        // Logout is about to clear the session it awaited: rebuilding entry
+        // content now would strand the signed-out user on it with no route
+        // back. The sign-out flow owns navigation from here.
+        return;
+      }
       const pages = getCurrentPages();
       const current = pages[pages.length - 1] as
         | { route?: string; options?: Record<string, unknown> }

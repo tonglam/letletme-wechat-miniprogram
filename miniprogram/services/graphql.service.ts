@@ -3,6 +3,7 @@ import {
   clearApiSession,
   getApiSessionToken,
   getPendingSessionRefresh,
+  isLogoutInFlight,
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
@@ -130,6 +131,13 @@ function makeRequest<T>(
       success(response) {
         const body = response.data;
         if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
+          if (isLogoutInFlight()) {
+            // A sign-out owns the credential right now: fail this request
+            // instead of erasing the token the logout may still need to retry
+            // revoking, and never start a recovery login alongside it.
+            reject(new Error("正在退出登录，请稍后重试"));
+            return;
+          }
           const currentToken = getApiSessionToken();
           if (currentToken && currentToken !== token) {
             // The session rotated while this request was in flight (e.g. the
