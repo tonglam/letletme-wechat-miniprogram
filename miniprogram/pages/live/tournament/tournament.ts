@@ -36,6 +36,10 @@ export function partialTournamentErrorSuffix(retainedRowCount: number): string {
     : "未成功加载的球队暂未显示";
 }
 
+export function shouldClearTournamentRowsError(failedEntryCount: number): boolean {
+  return failedEntryCount === 0;
+}
+
 interface SortOption {
   key: SortKey;
   label: string;
@@ -64,6 +68,8 @@ interface LiveTournamentData {
   hasData: boolean;
   error: string;
   errorSuffix: string;
+  tournamentListError: string;
+  tournamentListErrorSuffix: string;
   emptyState: LiveTournamentEmptyState;
   emptyEyebrow: string;
   emptyTitle: string;
@@ -239,6 +245,8 @@ Page({
     hasData: false,
     error: "",
     errorSuffix: "",
+    tournamentListError: "",
+    tournamentListErrorSuffix: "",
     emptyState: "",
     emptyEyebrow: "",
     emptyTitle: "",
@@ -315,6 +323,7 @@ Page({
   cachedLiveStoredAt: undefined as number | undefined,
   pageVisible: false,
   hasShown: false,
+  failedEntryCount: 0,
 
   async onLoad() {
     const app = getApp<IAppOption>();
@@ -372,6 +381,7 @@ Page({
     if (!entryId) {
       this.cancelFreshnessCheck();
       this.liveSnapshot = null;
+      this.failedEntryCount = 0;
       this.cachedLiveStoredAt = undefined;
       this.stopAutoRefresh();
       this.setData({
@@ -379,6 +389,8 @@ Page({
         hasData: false,
         error: "",
         errorSuffix: "",
+        tournamentListError: "",
+        tournamentListErrorSuffix: "",
         emptyState: "entry",
         emptyEyebrow: "需要账户",
         emptyTitle: "先关联你的 LetLetMe 账户",
@@ -397,6 +409,8 @@ Page({
       loading: true,
       error: "",
       errorSuffix: "",
+      tournamentListError: "",
+      tournamentListErrorSuffix: "",
       emptyState: "",
       emptyEyebrow: "",
       emptyTitle: "",
@@ -408,6 +422,7 @@ Page({
       if (tournaments.length === 0) {
         this.cancelFreshnessCheck();
         this.liveSnapshot = null;
+        this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
         this.stopAutoRefresh();
         this.setData({
@@ -437,6 +452,7 @@ Page({
       if (selectionChanged) {
         this.cancelFreshnessCheck();
         this.liveSnapshot = null;
+        this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
         this.stopAutoRefresh();
       }
@@ -460,8 +476,8 @@ Page({
       });
     } catch (error) {
       this.setData({
-        error: error instanceof Error ? error.message : "实时联赛加载失败",
-        errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+        tournamentListError: error instanceof Error ? error.message : "实时联赛加载失败",
+        tournamentListErrorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
       });
     } finally {
       this.setData({ loading: false });
@@ -501,10 +517,17 @@ Page({
           ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword, options.forceRefresh === true)
           : await getLivePointsByTournamentSnapshot(selected.id, eventId, options.forceRefresh === true);
         if (requestId !== this.rowsRequestId) return;
-        this.liveSnapshot = liveResult.partialError ? null : liveResult.snapshot;
-        this.cachedLiveStoredAt = liveResult.servedStoredAt;
         const refreshedRows = liveResult.data.map(normalizeRow);
         const failedEntryIds = new Set(liveResult.failedEntryIds || []);
+        this.failedEntryCount = Math.max(
+          failedEntryIds.size,
+          liveResult.partialError ? 1 : 0
+        );
+        // Per-entry failures do not invalidate producer metadata. Retaining a
+        // SETTLED snapshot stops expensive batch polling while the partial
+        // row error remains visible and manually retryable.
+        this.liveSnapshot = liveResult.snapshot;
+        this.cachedLiveStoredAt = liveResult.servedStoredAt;
         const refreshedEntryIds = new Set(refreshedRows.map((row) => numberValue(row.entry)));
         const retainedRows = preserveData
           ? this.data.rows.filter((row) => (
@@ -590,7 +613,9 @@ Page({
         if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
         if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
           this.liveSnapshot = observed;
-          this.setData({ error: "", errorSuffix: "" });
+          if (shouldClearTournamentRowsError(this.failedEntryCount)) {
+            this.setData({ error: "", errorSuffix: "" });
+          }
           this.syncAutoRefresh();
           return;
         }
@@ -727,6 +752,7 @@ Page({
     // rows cannot linger under the new keyword after a failed reload.
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
     this._submittedKeyword = event ? event.detail.keyword : this.data.keyword;
     if (event) {
@@ -741,6 +767,7 @@ Page({
   onResetSearch() {
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
     this._submittedKeyword = "";
     this.setData({ keyword: "", hasData: false, lastUpdated: "" });
@@ -751,6 +778,7 @@ Page({
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({
@@ -769,6 +797,7 @@ Page({
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({
@@ -913,7 +942,7 @@ Page({
   },
 
   onRetry() {
-    if (this.data.tournaments.length === 0) {
+    if (this.data.tournamentListError || this.data.tournaments.length === 0) {
       this.loadTournaments(true);
       return;
     }
@@ -962,6 +991,7 @@ Page({
     });
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
     this.syncAutoRefresh();
     this.loadRows();

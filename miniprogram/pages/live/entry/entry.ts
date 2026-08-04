@@ -142,6 +142,18 @@ Page({
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       this.refreshIfChanged();
     }
+    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (
+      resumed
+      && this.data.entryId
+      && currentEventId > 0
+      && this.data.event === currentEventId
+    ) {
+      // Transfers follow their own 30-second cache policy and can change while
+      // the score revision does not. Revalidate them independently on resume;
+      // the service cache makes a fresh view a memory-only read.
+      void this.loadTransfers(this.data.entryId, this.data.event, false);
+    }
   },
 
   onHide() {

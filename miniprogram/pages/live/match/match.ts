@@ -235,8 +235,9 @@ Page({
   pageVisible: false,
   hasShown: false,
 
-  onLoad() {
-    this.currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+  async onLoad() {
+    const app = getApp<IAppOption>();
+    this.currentEventId = Number(app.globalData.gw) || 0;
     const storedStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
     if (isValidStatus(storedStatus)) {
       this.setData({
@@ -245,6 +246,13 @@ Page({
         emptyDescription: emptyDescription(storedStatus)
       });
     }
+    // onShow can run before shared launch data has resolved. Wait for the
+    // current event, then arm recovery before the first match request so a
+    // failed cold-start request still has a revision poll to recover it.
+    this.setData({ loading: true });
+    await app.initAppData();
+    this.currentEventId = Number(app.globalData.gw) || 0;
+    this.syncAutoRefresh();
     this.loadData();
   },
 
@@ -432,6 +440,9 @@ Page({
       hasData: false,
       lastUpdated: ""
     });
+    // A previous SETTLED result may have stopped the timer. The new status is
+    // a fresh request context and must own recovery before its first request.
+    this.syncAutoRefresh();
     this.loadData();
   },
 
