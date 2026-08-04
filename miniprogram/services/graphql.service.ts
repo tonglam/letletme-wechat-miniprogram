@@ -3,6 +3,7 @@ import {
   clearApiSession,
   getApiSessionToken,
   getPendingSessionRefresh,
+  isLogoutInFlight,
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
@@ -184,6 +185,44 @@ function makeRequest<T>(
       success(response) {
         const body = response.data;
         if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
+          if (isLogoutInFlight()) {
+            // A sign-out owns the credential right now: fail this request
+            // instead of erasing the token the logout may still need to retry
+            // revoking, and never start a recovery login alongside it.
+            reject(new Error("正在退出登录，请稍后重试"));
+            return;
+          }
+          const currentToken = getApiSessionToken();
+          if (currentToken && currentToken !== token) {
+            // The session rotated while this request was in flight (e.g. the
+            // background profile revalidation stored a fresh token): retry
+            // with the current credential instead of clearing it.
+            makeRequest<T>(query, variables, false, currentToken).then(resolve).catch(reject);
+            return;
+          }
+          const pending = getPendingSessionRefresh();
+          if (pending) {
+            // A login round trip is already in flight and may be rotating
+            // this very token server-side without the response being stored
+            // yet. Await it: clearApiSession here would bump the session
+            // epoch and make that login discard its own fresh credential.
+            pending
+              .catch(() => undefined)
+              .then(() => {
+                const freshToken = getApiSessionToken();
+                if (freshToken && freshToken !== token) {
+                  return makeRequest<T>(query, variables, false, freshToken);
+                }
+                // The in-flight refresh produced no usable new credential —
+                // fall back to the classic clear + re-login cycle.
+                clearApiSession();
+                return refreshWechatApiSession()
+                  .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()));
+              })
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
           clearApiSession();
           refreshWechatApiSession()
             .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))

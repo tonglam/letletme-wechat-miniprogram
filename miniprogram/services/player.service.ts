@@ -169,11 +169,20 @@ export async function getPlayerInfoByCode(code: number | string, _season?: strin
   return mapPlayerDetail(data.player);
 }
 
-export async function getPlayersByElementType(_elementType: number | string): Promise<PlayerOption[]> {
+export async function getPlayersByElementType(_elementType: number | string, forceRefresh = false): Promise<PlayerOption[]> {
   // The 600-row player directory changes slowly (names/teams/positions are
   // stable; prices move once daily), so a 6h TTL is safe and avoids pulling
-  // the full list on every visit to the price page's player mode.
-  const data = await graphqlRequest<PlayersResponse>(PLAYERS, { limit: 600, offset: 0 }, { cacheTtl: 6 * 60 * 60 * 1000 });
+  // the full list on every visit to the price page's player mode. An empty
+  // directory is almost always a mid-sync backend state rather than a real
+  // season with zero players, though — retry those soon instead of pinning
+  // them for 6h.
+  const data = await graphqlRequest<PlayersResponse>(PLAYERS, { limit: 600, offset: 0 }, {
+    getCacheExpiry: (result) => {
+      const rows = (result as PlayersResponse | undefined)?.players;
+      return Date.now() + ((rows && rows.length > 0) ? 6 * 60 * 60 * 1000 : 60 * 1000);
+    },
+    forceRefresh
+  });
   return (data.players || []).map(mapPlayer);
 }
 
