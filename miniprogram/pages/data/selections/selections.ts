@@ -107,9 +107,9 @@ Page({
   },
 
   onPullDownRefresh() {
-    // Explicit refresh gestures bypass the tournament-list cache: a cached
-    // empty list must not keep claiming "no leagues" after the user joins one.
-    const task = this.data.tournaments.length ? this.loadStats() : this.loadTournaments(true);
+    // Always re-pull the tournament list (it chains into loadStats when
+    // populated): a cached list must not hide a league the user just joined.
+    const task = this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 

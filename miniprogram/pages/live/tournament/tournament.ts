@@ -390,6 +390,12 @@ Page({
     }
   },
 
+  // The keyword that the in-flight/visible rows were actually requested with.
+  // data.keyword is a per-keystroke draft (onKeyword fires no request), so
+  // the request-context guard must track only submitted keywords — otherwise
+  // a draft edit mid-flight would strand the load unsettled forever.
+  _submittedKeyword: "",
+
   async loadRows(forceRefresh = false) {
     const selected = this.data.selectedTournament;
     if (!selected) {
@@ -397,12 +403,12 @@ Page({
       return;
     }
 
-    const requestedContext = `${selected.id}|${this.data.event}|${this.data.keyword}`;
-    const activeContext = () => `${this.data.selectedTournament?.id}|${this.data.event}|${this.data.keyword}`;
+    const requestedContext = `${selected.id}|${this.data.event}|${this._submittedKeyword}`;
+    const activeContext = () => `${this.data.selectedTournament?.id}|${this.data.event}|${this._submittedKeyword}`;
     this.setData({ loading: true, error: "" });
     try {
-      const result = this.data.keyword
-      ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword, forceRefresh)
+      const result = this._submittedKeyword
+      ? await searchLivePointsByTournament(selected.id, this.data.event, this._submittedKeyword, forceRefresh)
       : await getLivePointsByTournament(selected.id, this.data.event, forceRefresh);
       if (requestedContext !== activeContext()) {
         // Superseded by a tournament/GW/keyword change while in flight: this
@@ -518,6 +524,7 @@ Page({
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
     // A new keyword = a new result context: drop the content flag so stale
     // rows cannot linger under the new keyword after a failed reload.
+    this._submittedKeyword = event ? event.detail.keyword : this.data.keyword;
     if (event) {
       this.setData({ keyword: event.detail.keyword, hasContent: false });
     } else {
@@ -527,6 +534,7 @@ Page({
   },
 
   onResetSearch() {
+    this._submittedKeyword = "";
     this.setData({ keyword: "", hasContent: false });
     this.loadRows(false);
   },
@@ -698,6 +706,7 @@ Page({
       return;
     }
 
+    this._submittedKeyword = "";
     this.setData({
       keyword: "",
       selectedOwnershipPlayers: [],
