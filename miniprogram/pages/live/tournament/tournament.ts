@@ -30,6 +30,12 @@ type LiveTournamentEmptyState = "" | "entry" | "tournaments";
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
 
+export function partialTournamentErrorSuffix(retainedRowCount: number): string {
+  return retainedRowCount > 0
+    ? "部分球队显示上次成功结果"
+    : "未成功加载的球队暂未显示";
+}
+
 interface SortOption {
   key: SortKey;
   label: string;
@@ -57,6 +63,7 @@ interface LiveTournamentData {
   refreshing: boolean;
   hasData: boolean;
   error: string;
+  errorSuffix: string;
   emptyState: LiveTournamentEmptyState;
   emptyEyebrow: string;
   emptyTitle: string;
@@ -231,6 +238,7 @@ Page({
     refreshing: false,
     hasData: false,
     error: "",
+    errorSuffix: "",
     emptyState: "",
     emptyEyebrow: "",
     emptyTitle: "",
@@ -370,6 +378,7 @@ Page({
         loading: false,
         hasData: false,
         error: "",
+        errorSuffix: "",
         emptyState: "entry",
         emptyEyebrow: "需要账户",
         emptyTitle: "先关联你的 LetLetMe 账户",
@@ -387,6 +396,7 @@ Page({
     this.setData({
       loading: true,
       error: "",
+      errorSuffix: "",
       emptyState: "",
       emptyEyebrow: "",
       emptyTitle: "",
@@ -449,7 +459,10 @@ Page({
         forceRefresh
       });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+      this.setData({
+        error: error instanceof Error ? error.message : "实时联赛加载失败",
+        errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+      });
     } finally {
       this.setData({ loading: false });
     }
@@ -479,8 +492,8 @@ Page({
     this.rowsRequestId = requestId;
     const preserveData = options.background === true && this.data.hasData;
     this.setData(preserveData
-      ? { refreshing: true, error: "" }
-      : { loading: true, error: "" });
+      ? { refreshing: true, error: "", errorSuffix: "" }
+      : { loading: true, error: "", errorSuffix: "" });
 
     const request = (async () => {
       try {
@@ -505,12 +518,18 @@ Page({
           liveResult.servedStoredAt || Date.now()
         );
         if (liveResult.partialError) {
-          this.setData({ error: liveResult.partialError });
+          this.setData({
+            error: liveResult.partialError,
+            errorSuffix: partialTournamentErrorSuffix(retainedRows.length)
+          });
         }
         this.syncAutoRefresh();
       } catch (error) {
         if (requestId !== this.rowsRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+        this.setData({
+          error: error instanceof Error ? error.message : "实时联赛加载失败",
+          errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+        });
       } finally {
         if (requestId === this.rowsRequestId) {
           this.setData({ loading: false, refreshing: false });
@@ -571,14 +590,17 @@ Page({
         if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
         if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
           this.liveSnapshot = observed;
-          this.setData({ error: "" });
+          this.setData({ error: "", errorSuffix: "" });
           this.syncAutoRefresh();
           return;
         }
         await this.loadRows({ background: true, forceRefresh: true });
       } catch (error) {
         if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时联赛刷新失败" });
+        this.setData({
+          error: error instanceof Error ? error.message : "实时联赛刷新失败",
+          errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+        });
       }
     })();
 

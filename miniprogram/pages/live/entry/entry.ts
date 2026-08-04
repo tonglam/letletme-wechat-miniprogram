@@ -21,6 +21,7 @@ interface SummaryTile {
 interface LiveEntryData {
   loading: boolean;
   refreshing: boolean;
+  transfersLoading: boolean;
   hasData: boolean;
   error: string;
   transfersError: string;
@@ -71,6 +72,7 @@ Page({
   data: {
     loading: false,
     refreshing: false,
+    transfersLoading: false,
     hasData: false,
     error: "",
     transfersError: "",
@@ -126,6 +128,9 @@ Page({
       maxGw: currentGw,
       entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
     });
+    // onShow can run while initAppData is still pending. Re-arm here once the
+    // entry/event context exists so an initial failure still recovers by poll.
+    this.syncAutoRefresh();
     this.loadData({ includeTransfers: true });
   },
 
@@ -167,11 +172,14 @@ Page({
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       // A pull-to-refresh can overlap an automatic score request. Reuse that
-      // score request, but still refresh the independent transfer panel once.
-      if (options.includeTransfers) {
-        void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
-      }
-      return this.liveRequest;
+      // score request, but still refresh and await the independent transfer
+      // panel for callers (such as pull-to-refresh) that requested it.
+      const transfersRequest = options.includeTransfers
+        ? this.loadTransfers(entryId, eventId, options.forceRefresh === true)
+        : null;
+      return transfersRequest
+        ? Promise.all([this.liveRequest, transfersRequest]).then(() => undefined)
+        : this.liveRequest;
     }
 
     const requestId = this.liveRequestId + 1;
@@ -186,9 +194,9 @@ Page({
           emptyState: false
         });
 
-    if (options.includeTransfers) {
-      void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
-    }
+    const transfersRequest = options.includeTransfers
+      ? this.loadTransfers(entryId, eventId, options.forceRefresh === true)
+      : null;
 
     const request = (async () => {
       try {
@@ -252,12 +260,15 @@ Page({
         this.revalidateCachedSnapshot();
       }
     });
-    return request;
+    return transfersRequest
+      ? Promise.all([request, transfersRequest]).then(() => undefined)
+      : request;
   },
 
   async loadTransfers(entryId: number, eventId: number, forceRefresh: boolean): Promise<void> {
     const requestId = this.transfersRequestId + 1;
     this.transfersRequestId = requestId;
+    this.setData({ transfersLoading: true, transfersError: "" });
     try {
       const transfers: EntryTransfer[] = await getEntryEventTransfers(entryId, eventId, forceRefresh);
       if (
@@ -279,6 +290,14 @@ Page({
       this.setData({
         transfersError: error instanceof Error ? error.message : "本周转会加载失败"
       });
+    } finally {
+      if (
+        requestId === this.transfersRequestId
+        && entryId === this.data.entryId
+        && eventId === this.data.event
+      ) {
+        this.setData({ transfersLoading: false });
+      }
     }
   },
 
@@ -371,6 +390,9 @@ Page({
     this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({ event: event.detail.value, hasData: false, lastUpdated: "" });
+    // The new current-event context must own a timer before its first request:
+    // a failed request has no snapshot metadata yet but still needs recovery.
+    this.syncAutoRefresh();
     this.loadData({ includeTransfers: true });
   },
 

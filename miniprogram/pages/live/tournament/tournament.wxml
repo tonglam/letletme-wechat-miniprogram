@@ -117,7 +117,7 @@
     />
   </view>
   <view wx:else class="section">
-    <view wx:if="{{error}}" class="live-refresh-error">{{error}}，当前显示上次成功结果</view>
+    <view wx:if="{{error}}" class="live-refresh-error">{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}</view>
     <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>
     <app-empty-state
       wx:if="{{displayedRows.length === 0}}"

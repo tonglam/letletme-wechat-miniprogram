@@ -75,8 +75,9 @@
     </view>
 
     <view class="section card">
-      <view class="section-heading">本周转会</view>
-      <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
+      <view class="section-heading">本周转会{{transfersLoading && transfers.length > 0 ? ' · 刷新中' : ''}}</view>
+      <app-loading wx:if="{{transfersLoading && transfers.length === 0}}" text="加载本周转会" />
+      <app-error-state wx:elif="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{transfers.length === 0}}" title="本周保持原阵容" description="GW{{event}} 没有转会记录" />
       <view wx:for="{{transfers}}" wx:key="inText" class="transfer-row">
         <view>
