@@ -289,27 +289,41 @@ export async function startMiniProgramEmailLink(email: string): Promise<void> {
   await requestWebAuth("/email/start", { email, deviceId: getDeviceId() });
 }
 
-export async function confirmMiniProgramEmailLink(
+export function confirmMiniProgramEmailLink(
   email: string,
   emailCode: string
 ): Promise<ApiSession> {
-  // Settle any in-flight /wechat/login first, same as logout: if the server
-  // processes the older login after our /email/confirm, its token rotation
-  // would invalidate the confirmation token we are about to store.
-  const pending = getPendingSessionRefresh();
-  if (pending) {
-    await pending.catch(() => undefined);
-  }
-  const wechatCode = await loginCode();
-  const response = await requestWebAuth("/email/confirm", {
-    email,
-    code: emailCode,
-    wechatCode,
-    deviceId: getDeviceId()
-  });
-  // An explicit link confirmation supersedes any background /wechat/login
-  // that started before it — bump the epoch so the older response can never
-  // overwrite this freshly confirmed session.
-  sessionEpoch += 1;
-  return storeApiSession(asSession(response));
+  const run = (async () => {
+    // Settle any in-flight /wechat/login first, same as logout: if the server
+    // processes the older login after our /email/confirm, its token rotation
+    // would invalidate the confirmation token we are about to store.
+    const pending = getPendingSessionRefresh();
+    if (pending) {
+      await pending.catch(() => undefined);
+    }
+    const wechatCode = await loginCode();
+    const response = await requestWebAuth("/email/confirm", {
+      email,
+      code: emailCode,
+      wechatCode,
+      deviceId: getDeviceId()
+    });
+    // An explicit link confirmation supersedes any background /wechat/login
+    // that started before it — bump the epoch so the older response can never
+    // overwrite this freshly confirmed session.
+    sessionEpoch += 1;
+    return storeApiSession(asSession(response));
+  })();
+  // Occupy the single-flight slot for the whole confirmation: a 401 landing
+  // while loginCode()//email/confirm is pending must await this run instead
+  // of starting a /wechat/login that would rotate the confirmation token
+  // server-side before we ever store it.
+  pendingRefresh = run;
+  const release = () => {
+    if (pendingRefresh === run) {
+      pendingRefresh = null;
+    }
+  };
+  run.then(release, release);
+  return run;
 }
