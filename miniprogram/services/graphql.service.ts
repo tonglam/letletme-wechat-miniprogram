@@ -162,7 +162,7 @@ function makeRequest<T>(
   variables: Record<string, unknown>,
   retryOnUnauthorized = true,
   token = getApiSessionToken()
-): Promise<T> {
+): Promise<{ data: T; token: string | null }> {
   return new Promise((resolve, reject) => {
     const endpoint = getGraphQLEndpoint();
     const header: Record<string, string> = {
@@ -207,7 +207,11 @@ function makeRequest<T>(
           return;
         }
 
-        resolve(body.data);
+        // Propagate the credential that produced this response: callers must
+        // never infer it from mutable session state (logout or relogin to
+        // another account mid-flight would leak this payload into the wrong
+        // cache namespace).
+        resolve({ data: body.data, token });
       },
       fail(error) {
         reject(new Error(networkErrorMessage(error)));
@@ -259,14 +263,14 @@ export function graphqlRequest<T>(
   const t0 = Date.now();
   const opName = extractOpName(query);
 
-  const request = makeRequest<T>(query, variables, true, token).then((data) => {
+  const request = makeRequest<T>(query, variables, true, token).then(({ data, token: responseToken }) => {
     recordApi(opName, Date.now() - t0, true);
     if (options?.cacheTtl != null || options?.getCacheExpiry) {
       try {
-        // The response may have been produced by a refreshed session (401 →
-        // rotate → retry): cache under the token that actually produced it,
-        // or later reads in the current session namespace can never hit.
-        const responseToken = getApiSessionToken();
+        // Cache under the credential that actually produced the response,
+        // propagated from the successful attempt — never inferred from
+        // mutable session state (logout or relogin mid-flight must not leak
+        // this payload into the public or another account's namespace).
         const effectiveKey = responseToken !== token
           ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
           : key;
