@@ -266,29 +266,36 @@ export function graphqlRequest<T>(
   const request = makeRequest<T>(query, variables, true, token).then(({ data, token: responseToken }) => {
     recordApi(opName, Date.now() - t0, true);
     if (options?.cacheTtl != null || options?.getCacheExpiry) {
-      try {
-        // Cache under the credential that actually produced the response,
-        // propagated from the successful attempt — never inferred from
-        // mutable session state (logout or relogin mid-flight must not leak
-        // this payload into the public or another account's namespace).
-        const effectiveKey = responseToken !== token
-          ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
-          : key;
-        const cacheKey = getStorageCacheKey(effectiveKey, responseToken);
-        const expiresAt = options?.getCacheExpiry
-          ? options.getCacheExpiry(data)
-          : Date.now() + (options?.cacheTtl ?? 0);
-        const entry: CacheEntry = { requestKey: effectiveKey, data, expiresAt, storedAt: Date.now() };
-        writeMemoryCache(cacheKey, entry);
-        servedFromCache.delete(effectiveKey);
-        // Sub-minute caches stay process-local: they would be expired by the
-        // next launch anyway, and keeping large live payloads (full
-        // tournament pick lists) out of storage avoids accumulating one
-        // persisted key per tournament/gameweek combination.
-        if (expiresAt - Date.now() > 60 * 1000) {
-          wx.setStorageSync(cacheKey, entry);
-        }
-      } catch {}
+      // An authenticated payload is cached only while its producing
+      // credential is still the live session: a logout or account switch
+      // mid-flight already wiped that account's cache namespace, and an
+      // unconditional write here would repopulate it after removal.
+      const producingTokenStillActive = !responseToken || responseToken === getApiSessionToken();
+      if (producingTokenStillActive) {
+        try {
+          // Cache under the credential that actually produced the response,
+          // propagated from the successful attempt — never inferred from
+          // mutable session state (logout or relogin mid-flight must not leak
+          // this payload into the public or another account's namespace).
+          const effectiveKey = responseToken !== token
+            ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
+            : key;
+          const cacheKey = getStorageCacheKey(effectiveKey, responseToken);
+          const expiresAt = options?.getCacheExpiry
+            ? options.getCacheExpiry(data)
+            : Date.now() + (options?.cacheTtl ?? 0);
+          const entry: CacheEntry = { requestKey: effectiveKey, data, expiresAt, storedAt: Date.now() };
+          writeMemoryCache(cacheKey, entry);
+          servedFromCache.delete(effectiveKey);
+          // Sub-minute caches stay process-local: they would be expired by the
+          // next launch anyway, and keeping large live payloads (full
+          // tournament pick lists) out of storage avoids accumulating one
+          // persisted key per tournament/gameweek combination.
+          if (expiresAt - Date.now() > 60 * 1000) {
+            wx.setStorageSync(cacheKey, entry);
+          }
+        } catch {}
+      }
     }
     return data;
   }).catch((err: unknown) => {

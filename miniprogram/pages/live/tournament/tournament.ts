@@ -466,8 +466,11 @@ Page({
       ...row,
       visibleRank: index + 1
     }));
+    // The keyword filter is applied server-side at submit time, so classify
+    // by the submitted keyword: an unsubmitted draft in the search box must
+    // not make unfiltered rows claim "no teams match the current filters".
     const resultsFiltered = Boolean(
-      this.data.keyword.trim()
+      this._submittedKeyword.trim()
       || this.data.selectedOwnershipPlayers.length
       || selectedTeamExposure
     );
@@ -504,7 +507,10 @@ Page({
       selectedTeamExposure,
       selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
       teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
-      lastUpdated: formatTime(new Date(fetchedAt ?? Date.now()))
+      // Local re-sorts/filter tweaks reapply the same rows without a fetch:
+      // keep the original fetch time rather than stamping "now" as if the
+      // data had just been refreshed.
+      ...(fetchedAt != null ? { lastUpdated: formatTime(new Date(fetchedAt)) } : {})
     });
   },
 
