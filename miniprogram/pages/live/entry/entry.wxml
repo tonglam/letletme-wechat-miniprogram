@@ -9,8 +9,8 @@
     </view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading}}" text="加载实时分数" />
+  <app-error-state wx:if="{{error && !hasContent}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasContent}}" text="加载实时分数" />
   <view wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="需要账户"

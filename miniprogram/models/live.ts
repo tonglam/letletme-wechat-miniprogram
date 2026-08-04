@@ -48,6 +48,8 @@ export interface LiveEntryResult {
   toPlay?: number;
   players?: LivePlayerRow[];
   pickList?: LivePlayerRow[];
+  /** Fetch time when this result was served from cache; undefined on a fresh network response. */
+  servedStoredAt?: number;
 }
 
 export interface LiveMatch {
@@ -96,4 +98,10 @@ export interface LiveTournamentRow {
   overallRank?: number;
   picks?: LivePlayerRow[];
   searchText?: string;
+}
+
+export interface LiveTournamentRowsResult {
+  rows: LiveTournamentRow[];
+  /** Fetch time when the rows were served from cache; undefined on a fresh network response. */
+  servedStoredAt?: number;
 }

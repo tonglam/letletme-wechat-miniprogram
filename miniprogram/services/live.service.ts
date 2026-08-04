@@ -1,6 +1,10 @@
-import { graphqlRequest } from "./graphql.service";
-import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
+import type { LiveEntryResult, LiveMatch, LivePlayerRow, LiveTournamentRowsResult } from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
+
+// Live data moves during matches but the upstream only updates periodically;
+// 30s keeps rapid tab/page revisits instant without masking real changes.
+const LIVE_CACHE_TTL_MS = 30 * 1000;
 
 const CALC_LIVE_POINTS_BY_ENTRY = `
   query CalcLivePointsByEntry($eventId: Int!, $entryId: Int!) {
@@ -115,8 +119,12 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
   }));
 }
 
-export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
-  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry });
+export async function getLivePointsByEntry(entry: number, event: number, forceRefresh = false): Promise<LiveEntryResult> {
+  const variables = { eventId: event, entryId: entry };
+  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.calcLivePointsByEntry;
   if (!result) {
     throw new Error("实时分数暂时不可用，请稍后重试");
@@ -132,7 +140,8 @@ export async function getLivePointsByEntry(entry: number, event: number): Promis
     chip: result.chip,
     played: result.played,
     toPlay: result.toPlay,
-    pickList: mapGraphQLPickList(result.pickList)
+    pickList: mapGraphQLPickList(result.pickList),
+    servedStoredAt: getServedCacheStoredAt(CALC_LIVE_POINTS_BY_ENTRY, variables)
   };
 }
 
@@ -247,8 +256,11 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
   };
 }
 
-export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
-  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY);
+export async function getLiveMatchByStatus(status: string, forceRefresh = false): Promise<LiveMatch[]> {
+  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, {}, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.liveMatches;
   switch (status) {
     case "playing":
@@ -316,19 +328,27 @@ function numericId(value: number | string): number {
   return parsed;
 }
 
-export async function getLivePointsByTournament(tournamentId: number | string, event: number): Promise<LiveTournamentRow[]> {
-  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
+export async function getLivePointsByTournament(tournamentId: number | string, event: number, forceRefresh = false): Promise<LiveTournamentRowsResult> {
+  const variables = {
     tournamentId: numericId(tournamentId),
     eventId: numericId(event)
+  };
+  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
   });
-  return mapTournamentLiveRows(data.calcLivePointsForTournament.results);
+  return {
+    rows: mapTournamentLiveRows(data.calcLivePointsForTournament.results),
+    servedStoredAt: getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables)
+  };
 }
 
 export async function searchLivePointsByTournament(
   tournamentId: number | string,
   event: number,
-  keyword: string
-): Promise<LiveTournamentRow[]> {
-  const rows = await getLivePointsByTournament(tournamentId, event);
-  return filterTournamentLiveRows(rows, keyword);
+  keyword: string,
+  forceRefresh = false
+): Promise<LiveTournamentRowsResult> {
+  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh);
+  return { rows: filterTournamentLiveRows(rows, keyword), servedStoredAt };
 }

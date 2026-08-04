@@ -195,6 +195,7 @@ Page({
   data: {
     loading: false,
     error: "",
+    hasContent: false,
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
@@ -216,24 +217,43 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadData().finally(() => wx.stopPullDownRefresh());
+    this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData() {
+  async loadData(forceRefresh = false) {
+    // Stale-while-revalidate: existing groups stay visible while a refresh
+    // runs; only the first load of a status context blanks into loading.
+    const requestedStatus = this.data.status;
     this.setData({ loading: true, error: "" });
     try {
-      const matches = (await getLiveMatchByStatus(this.data.status)).map((match) => normalizeMatch(match, this.data.status));
-      const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === this.data.status)?.label || "比赛";
+      const matches = (await getLiveMatchByStatus(requestedStatus, forceRefresh)).map((match) => normalizeMatch(match, requestedStatus));
+      if (requestedStatus !== this.data.status) {
+        // Superseded by a status switch while in flight: this payload belongs
+        // to the old tab, and the new tab's own load owns loading/error state.
+        return;
+      }
+      const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === requestedStatus)?.label || "比赛";
       this.setData({
         activeStatusLabel,
-        emptyDescription: emptyDescription(this.data.status),
+        emptyDescription: emptyDescription(requestedStatus),
         matches,
-        groups: groupMatches(matches, this.data.status)
+        groups: groupMatches(matches, requestedStatus),
+        hasContent: true
       });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+      if (requestedStatus !== this.data.status) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : "实时比赛加载失败";
+      if (this.data.hasContent) {
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (requestedStatus === this.data.status) {
+        this.setData({ loading: false });
+      }
     }
   },
 
@@ -249,12 +269,13 @@ Page({
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
       matches: [],
-      groups: []
+      groups: [],
+      hasContent: false
     });
-    this.loadData();
+    this.loadData(false);
   },
 
   onRetry() {
-    this.loadData();
+    this.loadData(true);
   }
 });

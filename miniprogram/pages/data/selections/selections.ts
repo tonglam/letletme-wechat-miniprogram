@@ -2,6 +2,7 @@ import {
   getEntryPointsRaceTournament,
   getTournamentSelectionStats
 } from "../../../services/tournament.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
 import { forceEntryBinding } from "../../../utils/navigation";
@@ -97,6 +98,14 @@ Page({
   async onLoad() {
     await this.ensureAppDataReady();
     const app = getApp<IAppOption>();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry. Enter the loading
+      // state first so the wait never renders placeholder content.
+      this.setData({ loadingTournaments: true });
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId,
@@ -107,7 +116,9 @@ Page({
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadStats() : this.loadTournaments();
+    // Always re-pull the tournament list (it chains into loadStats when
+    // populated): a cached list must not hide a league the user just joined.
+    const task = this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -118,7 +129,7 @@ Page({
     }
   },
 
-  async loadTournaments(): Promise<void> {
+  async loadTournaments(forceRefresh = false): Promise<void> {
     if (!this.data.entryId) {
       this.setData({
         loadingTournaments: false,
@@ -145,7 +156,7 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(this.data.entryId);
+      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh);
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -193,13 +204,26 @@ Page({
       return;
     }
 
+    const requestedEvent = this.data.event;
+    const isActiveContext = () => (
+      Number(this.data.tournaments[this.data.selectedTournamentIndex]?.id) === tournamentId
+      && this.data.event === requestedEvent
+    );
     this.setData({ loadingStats: true, error: "" });
     try {
-      const stats = await getTournamentSelectionStats(tournamentId, this.data.event, STATS_LIMIT);
+      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT);
+      if (!isActiveContext()) {
+        // Superseded by a tournament/GW change or a list refresh while in
+        // flight: the newer load owns rows, header, and loading state.
+        return;
+      }
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentName, tournament.name);
-      this.setData(mapSelectionStats(tournament, this.data.event, stats, this.data.activeTab));
+      this.setData(mapSelectionStats(tournament, requestedEvent, stats, this.data.activeTab));
     } catch (error) {
+      if (!isActiveContext()) {
+        return;
+      }
       this.setData({
         error: error instanceof Error ? error.message : "阵容选择数据加载失败",
         selectedRows: [],
@@ -209,7 +233,9 @@ Page({
         visibleRows: []
       });
     } finally {
-      this.setData({ loadingStats: false });
+      if (isActiveContext()) {
+        this.setData({ loadingStats: false });
+      }
     }
   },
 
@@ -241,7 +267,7 @@ Page({
 
   onRetry() {
     if (this.data.tournaments.length === 0) {
-      this.loadTournaments();
+      this.loadTournaments(true);
       return;
     }
     this.loadStats();
@@ -252,7 +278,7 @@ Page({
       forceEntryBinding();
       return;
     }
-    this.loadTournaments();
+    this.loadTournaments(true);
   }
 });
 

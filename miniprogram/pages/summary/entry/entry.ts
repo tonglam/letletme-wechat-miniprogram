@@ -10,6 +10,7 @@ import {
   type EntrySeasonHistoryItem,
   type EntryTransferMove
 } from "../../../services/summary.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import { forceEntryBinding } from "../../../utils/navigation";
 import { formatCompactNumber } from "../../../utils/summary-format";
 
@@ -166,6 +167,14 @@ Page({
   async onLoad() {
     await this.ensureAppDataReady();
     const app = getApp<IAppOption>();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry. Enter the loading
+      // state first so the wait never renders placeholder content.
+      this.setData({ loading: true });
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId,

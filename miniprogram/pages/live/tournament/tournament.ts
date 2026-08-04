@@ -1,5 +1,6 @@
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
@@ -44,6 +45,7 @@ interface OwnershipPlayerOption {
 interface LiveTournamentData {
   loading: boolean;
   error: string;
+  hasContent: boolean;
   emptyState: LiveTournamentEmptyState;
   emptyEyebrow: string;
   emptyTitle: string;
@@ -211,6 +213,7 @@ Page({
   data: {
     loading: false,
     error: "",
+    hasContent: false,
     emptyState: "",
     emptyEyebrow: "",
     emptyTitle: "",
@@ -277,15 +280,28 @@ Page({
     ]
   } as LiveTournamentData,
 
-  onLoad() {
+  async onLoad() {
     const app = getApp<IAppOption>();
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders placeholder content as if it were loaded.
+    this.setData({ loading: true });
+    await app.initAppData();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
-    this.loadTournaments();
+    this.loadTournaments(false);
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadRows() : this.loadTournaments();
+    // Always re-pull the tournament list (it chains into loadRows): a cached
+    // list must not hide a league the user just joined until the TTL expires.
+    const task = this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -293,7 +309,7 @@ Page({
     this.loadMore();
   },
 
-  async loadTournaments() {
+  async loadTournaments(forceRefresh = false) {
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({
@@ -323,7 +339,7 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(entryId);
+      const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -331,6 +347,9 @@ Page({
           selectedTournament: undefined,
           rows: [],
           displayedRows: [],
+          // The content context is gone: a later failed recheck must surface
+          // the full-page error/empty state, not a toast over a blank view.
+          hasContent: false,
           emptyState: "tournaments",
           emptyEyebrow: "联赛待就绪",
           emptyTitle: "当前球队还没有可查看的联赛",
@@ -343,43 +362,83 @@ Page({
       const storedIndex = tournaments.findIndex((tournament) => String(tournament.id) === String(storedId));
       const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
       const selectedTournament = tournaments[selectedTournamentIndex];
+      // A league switch — including the refreshed list dropping the current
+      // one — is a new result context: never show the previous league's rows
+      // under the newly selected league after a failed reload.
+      const selectionChanged = !this.data.selectedTournament
+        || String(this.data.selectedTournament.id) !== String(selectedTournament.id);
       this.setData({
         tournaments,
         tournamentNames: tournaments.map((tournament) => tournament.name),
         selectedTournamentIndex,
         selectedTournament,
-        emptyState: ""
+        emptyState: "",
+        ...(selectionChanged ? { hasContent: false, rows: [], displayedRows: [] } : {})
       });
       this.persistSelectedTournament(selectedTournament);
-      await this.loadRows();
+      await this.loadRows(forceRefresh);
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+      const message = error instanceof Error ? error.message : "实时联赛加载失败";
+      if (this.data.hasContent) {
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
       this.setData({ loading: false });
     }
   },
 
-  async loadRows() {
+  // The keyword that the in-flight/visible rows were actually requested with.
+  // data.keyword is a per-keystroke draft (onKeyword fires no request), so
+  // the request-context guard must track only submitted keywords — otherwise
+  // a draft edit mid-flight would strand the load unsettled forever.
+  _submittedKeyword: "",
+
+  async loadRows(forceRefresh = false) {
     const selected = this.data.selectedTournament;
     if (!selected) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
       return;
     }
 
+    const requestedContext = `${selected.id}|${this.data.event}|${this._submittedKeyword}`;
+    const activeContext = () => `${this.data.selectedTournament?.id}|${this.data.event}|${this._submittedKeyword}`;
     this.setData({ loading: true, error: "" });
     try {
-      const rows = this.data.keyword
-      ? await searchLivePointsByTournament(selected.id, this.data.event, this.data.keyword)
-      : await getLivePointsByTournament(selected.id, this.data.event);
-      this.applyRows(rows.map(normalizeRow), true);
+      const result = this._submittedKeyword
+      ? await searchLivePointsByTournament(selected.id, this.data.event, this._submittedKeyword, forceRefresh)
+      : await getLivePointsByTournament(selected.id, this.data.event, forceRefresh);
+      if (requestedContext !== activeContext()) {
+        // Superseded by a tournament/GW/keyword change while in flight: this
+        // payload belongs to the old context; the new context's load owns
+        // loading/error state.
+        return;
+      }
+      // A cache serve keeps its original fetch time so the "updated" label
+      // reflects the data's real age.
+      const fetchedAt = result.servedStoredAt || Date.now();
+      this.applyRows(result.rows.map(normalizeRow), true, fetchedAt);
+      this.setData({ hasContent: true });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
+      if (requestedContext !== activeContext()) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : "实时联赛加载失败";
+      if (this.data.hasContent) {
+        // Background refresh failure: keep the stale rows, surface a toast.
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (requestedContext === activeContext()) {
+        this.setData({ loading: false });
+      }
     }
   },
 
-  applyRows(rows: DisplayTournamentRow[], resetPage: boolean) {
+  applyRows(rows: DisplayTournamentRow[], resetPage: boolean, fetchedAt?: number) {
     const teamOptions = getTournamentTeamOptions(rows);
     const selectedTeamExposure = this.data.selectedTeamExposure
       ? teamOptions.find((team) => team.shortName === this.data.selectedTeamExposure?.shortName)
@@ -407,8 +466,11 @@ Page({
       ...row,
       visibleRank: index + 1
     }));
+    // The keyword filter is applied server-side at submit time, so classify
+    // by the submitted keyword: an unsubmitted draft in the search box must
+    // not make unfiltered rows claim "no teams match the current filters".
     const resultsFiltered = Boolean(
-      this.data.keyword.trim()
+      this._submittedKeyword.trim()
       || this.data.selectedOwnershipPlayers.length
       || selectedTeamExposure
     );
@@ -445,7 +507,10 @@ Page({
       selectedTeamExposure,
       selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
       teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
-      lastUpdated: formatTime(new Date())
+      // Local re-sorts/filter tweaks reapply the same rows without a fetch:
+      // keep the original fetch time rather than stamping "now" as if the
+      // data had just been refreshed.
+      ...(fetchedAt != null ? { lastUpdated: formatTime(new Date(fetchedAt)) } : {})
     });
   },
 
@@ -462,28 +527,34 @@ Page({
   },
 
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    // A new keyword = a new result context: drop the content flag so stale
+    // rows cannot linger under the new keyword after a failed reload.
+    this._submittedKeyword = event ? event.detail.keyword : this.data.keyword;
     if (event) {
-      this.setData({ keyword: event.detail.keyword });
+      this.setData({ keyword: event.detail.keyword, hasContent: false });
+    } else {
+      this.setData({ hasContent: false });
     }
-    this.loadRows();
+    this.loadRows(false);
   },
 
   onResetSearch() {
-    this.setData({ keyword: "" });
-    this.loadRows();
+    this._submittedKeyword = "";
+    this.setData({ keyword: "", hasContent: false });
+    this.loadRows(false);
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
-    this.loadRows();
+    this.setData({ event: event.detail.value, hasContent: false });
+    this.loadRows(false);
   },
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const selectedTournamentIndex = Number(event.detail.value);
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
-    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [] });
+    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [], hasContent: false });
     this.persistSelectedTournament(selectedTournament);
-    this.loadRows();
+    this.loadRows(false);
   },
 
   onSortTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { key: SortKey }>) {
@@ -616,10 +687,10 @@ Page({
 
   onRetry() {
     if (this.data.tournaments.length === 0) {
-      this.loadTournaments();
+      this.loadTournaments(true);
       return;
     }
-    this.loadRows();
+    this.loadRows(true);
   },
 
   onChooseEntry() {
@@ -631,15 +702,16 @@ Page({
       forceEntryBinding();
       return;
     }
-    this.loadTournaments();
+    this.loadTournaments(true);
   },
 
   onEmptyResultsAction() {
     if (!this.data.resultsFiltered) {
-      this.loadRows();
+      this.loadRows(true);
       return;
     }
 
+    this._submittedKeyword = "";
     this.setData({
       keyword: "",
       selectedOwnershipPlayers: [],
@@ -654,8 +726,12 @@ Page({
       selectedTeamExposureIndex: 0,
       selectedTeamExposure: null,
       teamExposureCount: 1,
-      teamExposureScope: "any"
+      teamExposureScope: "any",
+      // In-memory rows may be a keyword-filtered subset, so they cannot be
+      // reapplied locally; treat the cleared-filter reload as a new result
+      // context instead of letting the old empty filtered view linger.
+      hasContent: false
     });
-    this.loadRows();
+    this.loadRows(false);
   }
 });

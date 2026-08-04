@@ -1,5 +1,6 @@
 import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntry } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
@@ -16,6 +17,7 @@ interface LiveEntryData {
   error: string;
   transfersError: string;
   emptyState: boolean;
+  hasContent: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -58,6 +60,7 @@ Page({
     error: "",
     transfersError: "",
     emptyState: false,
+    hasContent: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -76,14 +79,26 @@ Page({
     transfers: []
   } as LiveEntryData,
 
-  onLoad(options?: Record<string, string | undefined>) {
+  async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
     const routeEntry = Number(options?.entry);
+    const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders zero scores as if they were loaded content.
+    this.setData({ loading: true });
+    await app.initAppData();
+    if (!hasRouteEntry && !getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: Number.isFinite(routeEntry) && routeEntry > 0 ? routeEntry : app.globalData.entryId
+      entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
     });
     this.loadData(false);
   },
@@ -102,23 +117,31 @@ Page({
     this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData(_refreshCache: boolean) {
+  async loadData(forceRefresh: boolean) {
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
 
+    // Stale-while-revalidate: once content exists it stays on screen during
+    // refreshes; only the very first load blanks into the loading state.
+    const requestedEvent = this.data.event;
     this.setData({ loading: true, error: "", transfersError: "", emptyState: false });
     try {
       let transfersError = "";
       const [result, transfers] = await Promise.all([
-        getLivePointsByEntry(entryId, this.data.event),
-        getEntryEventTransfers(entryId, this.data.event).catch((error) => {
+        getLivePointsByEntry(entryId, requestedEvent, forceRefresh),
+        getEntryEventTransfers(entryId, requestedEvent, forceRefresh).catch((error) => {
           transfersError = error instanceof Error ? error.message : "本周转会加载失败";
           return [] as EntryTransfer[];
         })
       ]);
+      if (requestedEvent !== this.data.event) {
+        // Superseded by a GW switch while in flight: this payload belongs to
+        // the old gameweek, and the new GW's own load owns the page state.
+        return;
+      }
       const players = (result.players || result.pickList || []).map(normalizePlayer);
       const managers = players.filter((player) => numberValue(player.elementType) === 5);
       const fieldPlayers = players.filter((player) => numberValue(player.elementType) !== 5);
@@ -128,6 +151,9 @@ Page({
       const total = numberValue(result.liveTotalPoints ?? result.total);
       const netPoints = numberValue(result.liveNetPoints ?? livePoints);
       const transferCost = numberValue(result.transferCost);
+      // A cache serve keeps its original fetch time: the "updated" label and
+      // the onShow refresh clock must reflect the data's real age.
+      const fetchedAt = result.servedStoredAt || Date.now();
       this.setData({
         total,
         livePoints,
@@ -147,23 +173,37 @@ Page({
         managers,
         transfers: transfers.map(normalizeTransfer),
         transfersError,
-        lastUpdated: formatTime(new Date())
+        lastUpdated: formatTime(new Date(fetchedAt)),
+        hasContent: true
       });
-      this._loadedAt = Date.now();
+      this._loadedAt = fetchedAt;
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+      if (requestedEvent !== this.data.event) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : "实时球队加载失败";
+      if (this.data.hasContent) {
+        // Background refresh failure: keep the stale view, surface a toast.
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({ error: message });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (requestedEvent === this.data.event) {
+        this.setData({ loading: false });
+      }
     }
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
+    // New gameweek = new result context: drop the content flag so the old
+    // GW's scores cannot linger under the newly selected GW after a failure.
+    this.setData({ event: event.detail.value, hasContent: false });
     this.loadData(false);
   },
 
   onRetry() {
-    this.loadData(false);
+    this.loadData(true);
   },
 
   onChooseEntry() {

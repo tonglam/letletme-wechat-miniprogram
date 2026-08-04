@@ -20,8 +20,8 @@
     >{{item.label}}</view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading}}" text="加载比赛" />
+  <app-error-state wx:if="{{error && !hasContent}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasContent}}" text="加载比赛" />
   <view wx:else class="match-content">
     <app-empty-state
       wx:if="{{matches.length === 0}}"

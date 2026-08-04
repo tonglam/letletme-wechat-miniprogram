@@ -164,8 +164,11 @@ interface TournamentSelectionStatsResponse {
   tournamentSelectionStats: TournamentSelectionStats | null;
 }
 
-export async function getEntryPointsRaceTournament(entry: number): Promise<TournamentOption[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry });
+export async function getEntryPointsRaceTournament(entry: number, forceRefresh = false): Promise<TournamentOption[]> {
+  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
+    cacheTtl: 5 * 60 * 1000,
+    forceRefresh
+  });
   return (data.entryTournaments || []).map((t) => ({ id: t.id, name: t.name }));
 }
 
