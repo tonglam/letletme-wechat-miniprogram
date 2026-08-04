@@ -195,13 +195,26 @@ Page({
       return;
     }
 
+    const requestedEvent = this.data.event;
+    const isActiveContext = () => (
+      Number(this.data.tournaments[this.data.selectedTournamentIndex]?.id) === tournamentId
+      && this.data.event === requestedEvent
+    );
     this.setData({ loadingStats: true, error: "" });
     try {
-      const stats = await getTournamentSelectionStats(tournamentId, this.data.event, STATS_LIMIT);
+      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT);
+      if (!isActiveContext()) {
+        // Superseded by a tournament/GW change or a list refresh while in
+        // flight: the newer load owns rows, header, and loading state.
+        return;
+      }
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentName, tournament.name);
-      this.setData(mapSelectionStats(tournament, this.data.event, stats, this.data.activeTab));
+      this.setData(mapSelectionStats(tournament, requestedEvent, stats, this.data.activeTab));
     } catch (error) {
+      if (!isActiveContext()) {
+        return;
+      }
       this.setData({
         error: error instanceof Error ? error.message : "阵容选择数据加载失败",
         selectedRows: [],
@@ -211,7 +224,9 @@ Page({
         visibleRows: []
       });
     } finally {
-      this.setData({ loadingStats: false });
+      if (isActiveContext()) {
+        this.setData({ loadingStats: false });
+      }
     }
   },
 

@@ -222,9 +222,20 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
+const TRANSFERS_HISTORY_CACHE_TTL_MS = 30 * 60 * 1000;
+const LIVE_EVENT_TRANSFERS_CACHE_TTL_MS = 30 * 1000;
+
 export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
+  // The history payload covers the live gameweek too: while the deadline is
+  // open the manager can still make moves, so current-GW views must churn
+  // with the live data instead of pinning the payload for the full half hour.
+  let currentGw = 0;
+  try {
+    currentGw = Number(getApp<IAppOption>().globalData.gw) || 0;
+  } catch {}
+  const isLiveEvent = currentGw > 0 && event >= currentGw;
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
-    cacheTtl: 30 * 60 * 1000,
+    cacheTtl: isLiveEvent ? LIVE_EVENT_TRANSFERS_CACHE_TTL_MS : TRANSFERS_HISTORY_CACHE_TTL_MS,
     forceRefresh
   });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);

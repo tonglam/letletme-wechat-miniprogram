@@ -1,6 +1,5 @@
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
-import { getPendingSessionRefresh } from "../../../services/auth.service";
 import type { LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
@@ -287,12 +286,11 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     if (!app.globalData.entryId) {
-      // No stored binding yet: give the in-flight cold-start login a chance
-      // to hydrate the account before falling to the link empty state.
-      const pending = getPendingSessionRefresh();
-      if (pending) {
-        try { await pending; } catch {}
-      }
+      // No stored binding yet: wait for the cold-start login to settle before
+      // falling to the link empty state. The login may not even have started
+      // (the privacy callback can lag), so await the app's auth-ready signal
+      // rather than a refresh promise that might not exist yet.
+      try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });

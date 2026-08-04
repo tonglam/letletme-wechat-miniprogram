@@ -1,6 +1,5 @@
 import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntry } from "../../../services/live.service";
-import { getPendingSessionRefresh } from "../../../services/auth.service";
 import type { LivePlayerRow } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
@@ -88,12 +87,11 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     if (!app.globalData.entryId && !hasRouteEntry) {
-      // No stored binding yet: give the in-flight cold-start login a chance
-      // to hydrate the account before falling to the link empty state.
-      const pending = getPendingSessionRefresh();
-      if (pending) {
-        try { await pending; } catch {}
-      }
+      // No stored binding yet: wait for the cold-start login to settle before
+      // falling to the link empty state. The login may not even have started
+      // (the privacy callback can lag), so await the app's auth-ready signal
+      // rather than a refresh promise that might not exist yet.
+      try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({

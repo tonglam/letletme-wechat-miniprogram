@@ -132,11 +132,11 @@ export function buildGraphQLRequestCacheKey(
  */
 export function getServedCacheStoredAt(query: string, variables: Record<string, unknown>): number | undefined {
   const key = buildGraphQLRequestCacheKey(query, variables, getApiSessionToken());
-  const storedAt = servedFromCache.get(key);
-  // Single-consumer bookkeeping: the caller stamps its result right after the
-  // serve, so the entry is consumed here rather than retained.
-  servedFromCache.delete(key);
-  return storedAt;
+  // Concurrent callers share a single cache serve, so reads must NOT consume
+  // the entry: every consumer of the same payload sees the same timestamp.
+  // The map stays bounded by recordServedFromCache's cap, and a fresh network
+  // write for the key deletes it.
+  return servedFromCache.get(key);
 }
 
 function getStorageCacheKey(requestKey: string, token: string | null): string {

@@ -21,10 +21,19 @@ App<IAppOption>({
   },
 
   _pendingInit: null as Promise<void> | null,
+  _authReadyResolve: null as (() => void) | null,
+  /** Resolves once the first cold-start login attempt has settled (either
+   *  path). Pages that need the authoritative entry binding should await it
+   *  instead of polling for an in-flight refresh, which may not exist yet
+   *  while the privacy callback is still pending. */
+  authReady: null as Promise<void> | null,
 
   async onLaunch() {
     const launchStart = Date.now();
     this.globalData.entryId = getEntryId();
+    this.authReady = new Promise<void>((resolve) => {
+      this._authReadyResolve = resolve;
+    });
     this.requirePrivacyAndLogin();
     await this.initAppData();
     recordLaunch(Date.now() - launchStart);
@@ -59,7 +68,12 @@ App<IAppOption>({
     // entry binding is restored from storage, and a later 401 triggers the
     // single-flight refresh path in graphql.service.
     this.globalData.entryId = getEntryId();
+    const markAuthReady = () => {
+      this._authReadyResolve?.();
+      this._authReadyResolve = null;
+    };
     if (getApiSessionToken()) {
+      markAuthReady();
       return;
     }
     refreshWechatApiSession().then((session) => {
@@ -70,7 +84,7 @@ App<IAppOption>({
       if (error instanceof MiniProgramLinkRequiredError) {
         wx.reLaunch({ url: routes.accountLink });
       }
-    });
+    }).finally(markAuthReady);
   },
 
   async initAppData() {
