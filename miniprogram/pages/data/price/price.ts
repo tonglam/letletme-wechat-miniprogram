@@ -212,20 +212,26 @@ Page({
   },
 
   async refreshPlayerMode(): Promise<void> {
-    await this.ensurePlayersLoaded();
+    // An empty directory is transient: pull-to-refresh must refetch it even
+    // though the attempt completed (playersLoaded) — the wxml retry button
+    // keys off `playersLoaded && players.length === 0`.
+    await this.ensurePlayersLoaded(this.data.playersLoaded && this.data.players.length === 0);
     if (this.data.selectedPlayer?.element) {
       await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
     }
   },
 
-  async ensurePlayersLoaded(): Promise<void> {
-    if (this.data.playersLoaded || this.data.playerLoading) {
+  async ensurePlayersLoaded(forceRefresh = false): Promise<void> {
+    if (this.data.playerLoading) {
+      return;
+    }
+    if (this.data.playersLoaded && !forceRefresh) {
       return;
     }
 
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const players = await getPlayersByElementType("all");
+      const players = await getPlayersByElementType("all", forceRefresh);
       const sortedPlayers = players.sort(sortByName);
       const teamOptions = buildTeamOptions(sortedPlayers);
       this.setData({
@@ -281,7 +287,7 @@ Page({
 
   onRetryPlayers() {
     this.setData({ players: [], playersLoaded: false });
-    this.ensurePlayersLoaded();
+    this.ensurePlayersLoaded(true);
   },
 
   onClearPlayerFilters() {

@@ -15,10 +15,10 @@ Page({
     this.loadPlayers();
   },
 
-  async loadPlayers() {
+  async loadPlayers(forceRefresh = false) {
     this.setData({ loading: true, error: "" });
     try {
-      const players = await getPlayersByElementType("all");
+      const players = await getPlayersByElementType("all", forceRefresh);
       this.setData({ players, displayedPlayers: players.slice(0, 50) });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球员数据加载失败" });
@@ -51,6 +51,6 @@ Page({
   },
 
   onRetry() {
-    this.loadPlayers();
+    this.loadPlayers(true);
   }
 });
