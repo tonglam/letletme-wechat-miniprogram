@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   buildGraphQLRequestCacheKey
 } from "../miniprogram/services/graphql.service.ts";
-import { LIVE_MATCHES_QUERY } from "../miniprogram/services/live.service.ts";
+import {
+  LIVE_MATCHES_QUERY,
+  LIVE_SNAPSHOT_QUERY
+} from "../miniprogram/services/live.service.ts";
 import {
   authApiErrorMessage,
   graphQLErrorMessage,
@@ -39,4 +42,10 @@ test("keeps the live matches query compact with shared fragments", () => {
   assert.match(LIVE_MATCHES_QUERY, /fragment LiveMatchPlayerFields on ElementEventResultData/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bmatchId\b/g) || []).length, 1);
   assert.ok(LIVE_MATCHES_QUERY.length < 2_000);
+});
+
+test("uses a metadata-only query for automatic live freshness checks", () => {
+  assert.match(LIVE_SNAPSHOT_QUERY, /liveSnapshot\(eventId: \$eventId\)/);
+  assert.doesNotMatch(LIVE_SNAPSHOT_QUERY, /liveMatches|calcLivePoints/);
+  assert.ok(LIVE_SNAPSHOT_QUERY.length < 300);
 });

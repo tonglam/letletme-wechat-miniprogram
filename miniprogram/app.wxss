@@ -91,6 +91,16 @@ page {
   font-weight: 600;
 }
 
+.live-refresh-error {
+  padding: 18rpx 22rpx;
+  border: 1rpx solid rgba(201, 24, 63, 0.3);
+  border-radius: 12rpx;
+  background: var(--danger-tint, #fbe3e9);
+  color: var(--danger, #c9183f);
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+
 /* ---------- Matchday utilities ---------- */
 
 /* Broadcast chyron label — green tick + tracked caps */

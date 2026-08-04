@@ -1,5 +1,11 @@
-import { getLiveMatchByStatus } from "../../../services/live.service";
-import type { LiveMatch, LivePlayerRow } from "../../../models/live";
+import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
+import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import {
+  LIVE_REFRESH_INTERVAL_MS,
+  liveSnapshotNeedsRefresh,
+  shouldRevalidateCachedLiveSnapshot,
+  shouldPollLiveSnapshot
+} from "../../../utils/live-refresh";
 
 interface StatusOption {
   key: string;
@@ -9,6 +15,11 @@ interface StatusOption {
 interface MatchGroup {
   title: string;
   matches: LiveMatch[];
+}
+
+interface LiveMatchLoadOptions {
+  background?: boolean;
+  forceRefresh?: boolean;
 }
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -28,6 +39,12 @@ function isValidStatus(value: unknown): value is string {
 function numberValue(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatTime(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
 function textValue(value: unknown, fallback = "-"): string {
@@ -194,17 +211,33 @@ function emptyDescription(status: string): string {
 Page({
   data: {
     loading: false,
+    refreshing: false,
+    hasData: false,
     error: "",
-    hasContent: false,
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
     statusOptions: STATUS_OPTIONS,
     matches: [] as LiveMatch[],
-    groups: [] as MatchGroup[]
+    groups: [] as MatchGroup[],
+    lastUpdated: ""
   },
 
-  onLoad() {
+  autoRefreshTimer: undefined as number | undefined,
+  liveRequest: null as Promise<void> | null,
+  liveRequestKey: "",
+  liveRequestId: 0,
+  freshnessRequest: null as Promise<void> | null,
+  freshnessRequestId: 0,
+  liveSnapshot: null as LiveSnapshotStatus | null,
+  cachedLiveStoredAt: undefined as number | undefined,
+  currentEventId: 0,
+  pageVisible: false,
+  hasShown: false,
+
+  async onLoad() {
+    const app = getApp<IAppOption>();
+    this.currentEventId = Number(app.globalData.gw) || 0;
     const storedStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
     if (isValidStatus(storedStatus)) {
       this.setData({
@@ -213,48 +246,179 @@ Page({
         emptyDescription: emptyDescription(storedStatus)
       });
     }
+    // onShow can run before shared launch data has resolved. Wait for the
+    // current event, then arm recovery before the first match request so a
+    // failed cold-start request still has a revision poll to recover it.
+    this.setData({ loading: true });
+    await app.initAppData();
+    this.currentEventId = Number(app.globalData.gw) || 0;
+    this.syncAutoRefresh();
     this.loadData();
   },
 
-  onPullDownRefresh() {
-    this.loadData(true).finally(() => wx.stopPullDownRefresh());
+  onShow() {
+    this.pageVisible = true;
+    const nextEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (nextEventId && nextEventId !== this.currentEventId) {
+      this.currentEventId = nextEventId;
+      this.liveSnapshot = null;
+      this.cachedLiveStoredAt = undefined;
+    }
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    this.syncAutoRefresh();
+    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
+      this.refreshIfChanged();
+    }
   },
 
-  async loadData(forceRefresh = false) {
-    // Stale-while-revalidate: existing groups stay visible while a refresh
-    // runs; only the first load of a status context blanks into loading.
-    const requestedStatus = this.data.status;
-    this.setData({ loading: true, error: "" });
-    try {
-      const matches = (await getLiveMatchByStatus(requestedStatus, forceRefresh)).map((match) => normalizeMatch(match, requestedStatus));
-      if (requestedStatus !== this.data.status) {
-        // Superseded by a status switch while in flight: this payload belongs
-        // to the old tab, and the new tab's own load owns loading/error state.
-        return;
-      }
-      const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === requestedStatus)?.label || "比赛";
-      this.setData({
-        activeStatusLabel,
-        emptyDescription: emptyDescription(requestedStatus),
-        matches,
-        groups: groupMatches(matches, requestedStatus),
-        hasContent: true
-      });
-    } catch (error) {
-      if (requestedStatus !== this.data.status) {
-        return;
-      }
-      const message = error instanceof Error ? error.message : "实时比赛加载失败";
-      if (this.data.hasContent) {
-        wx.showToast({ title: message, icon: "none" });
-      } else {
-        this.setData({ error: message });
-      }
-    } finally {
-      if (requestedStatus === this.data.status) {
-        this.setData({ loading: false });
-      }
+  onHide() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
+  onPullDownRefresh() {
+    this.loadData({ background: true, forceRefresh: true })
+      .finally(() => wx.stopPullDownRefresh());
+  },
+
+  loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
+    const status = this.data.status;
+    if (this.liveRequest && this.liveRequestKey === status) {
+      return this.liveRequest;
     }
+
+    const requestId = this.liveRequestId + 1;
+    this.liveRequestId = requestId;
+    const preserveData = options.background === true && this.data.hasData;
+    this.setData(preserveData
+      ? { refreshing: true, error: "" }
+      : { loading: true, error: "" });
+
+    const request = (async () => {
+      try {
+        const liveResult = await getLiveMatchByStatusSnapshot(status, options.forceRefresh === true);
+        if (requestId !== this.liveRequestId) return;
+        const matches = liveResult.data.map((match) => normalizeMatch(match, status));
+        const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
+        this.liveSnapshot = liveResult.snapshot;
+        this.cachedLiveStoredAt = liveResult.servedStoredAt;
+        if (!this.currentEventId && liveResult.snapshot) {
+          this.currentEventId = liveResult.snapshot.eventId;
+        }
+        this.setData({
+          activeStatusLabel,
+          emptyDescription: emptyDescription(status),
+          matches,
+          groups: groupMatches(matches, status),
+          hasData: true,
+          lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
+        });
+        this.syncAutoRefresh();
+      } catch (error) {
+        if (requestId !== this.liveRequestId) return;
+        this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+      } finally {
+        if (requestId === this.liveRequestId) {
+          this.setData({ loading: false, refreshing: false });
+        }
+      }
+    })();
+
+    this.liveRequest = request;
+    this.liveRequestKey = status;
+    void request.finally(() => {
+      if (this.liveRequest === request) {
+        this.liveRequest = null;
+        this.liveRequestKey = "";
+        this.revalidateCachedSnapshot();
+      }
+    });
+    return request;
+  },
+
+  shouldAutoRefresh(): boolean {
+    return shouldPollLiveSnapshot({
+      pageVisible: this.pageVisible,
+      currentEventId: this.currentEventId,
+      selectedEventId: this.currentEventId,
+      snapshot: this.liveSnapshot
+    });
+  },
+
+  revalidateCachedSnapshot(): boolean {
+    if (!shouldRevalidateCachedLiveSnapshot({
+      servedStoredAt: this.cachedLiveStoredAt,
+      pageVisible: this.pageVisible,
+      currentEventId: this.currentEventId,
+      selectedEventId: this.currentEventId,
+      snapshot: this.liveSnapshot
+    })) {
+      return false;
+    }
+    this.cachedLiveStoredAt = undefined;
+    void this.refreshIfChanged();
+    return true;
+  },
+
+  refreshIfChanged(): Promise<void> {
+    if (!this.shouldAutoRefresh()) return Promise.resolve();
+    if (this.freshnessRequest) return this.freshnessRequest;
+
+    const requestId = this.freshnessRequestId + 1;
+    this.freshnessRequestId = requestId;
+    const liveRequestId = this.liveRequestId;
+    const request = (async () => {
+      try {
+        const observed = await getLiveSnapshot(this.currentEventId);
+        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
+        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
+          this.liveSnapshot = observed;
+          this.setData({ error: "" });
+          this.syncAutoRefresh();
+          return;
+        }
+        await this.loadData({ background: true, forceRefresh: true });
+      } catch (error) {
+        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
+        this.setData({ error: error instanceof Error ? error.message : "实时比赛刷新失败" });
+      }
+    })();
+
+    this.freshnessRequest = request;
+    void request.finally(() => {
+      if (this.freshnessRequest === request) {
+        this.freshnessRequest = null;
+      }
+    });
+    return request;
+  },
+
+  syncAutoRefresh() {
+    this.stopAutoRefresh();
+    if (!this.shouldAutoRefresh()) return;
+    this.autoRefreshTimer = setInterval(() => {
+      this.refreshIfChanged();
+    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
+  },
+
+  stopAutoRefresh() {
+    if (this.autoRefreshTimer !== undefined) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = undefined;
+    }
+  },
+
+  cancelFreshnessCheck() {
+    this.freshnessRequestId += 1;
+    this.freshnessRequest = null;
   },
 
   onStatusTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { status: string }>) {
@@ -264,18 +428,25 @@ Page({
     }
     const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
     this.setData({
       status,
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
       matches: [],
       groups: [],
-      hasContent: false
+      hasData: false,
+      lastUpdated: ""
     });
-    this.loadData(false);
+    // A previous SETTLED result may have stopped the timer. The new status is
+    // a fresh request context and must own recovery before its first request.
+    this.syncAutoRefresh();
+    this.loadData();
   },
 
   onRetry() {
-    this.loadData(true);
+    this.loadData({ forceRefresh: true });
   }
 });

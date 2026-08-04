@@ -1,10 +1,20 @@
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
-import { getLivePointsByTournament, searchLivePointsByTournament } from "../../../services/live.service";
+import {
+  getLivePointsByTournamentSnapshot,
+  getLiveSnapshot,
+  searchLivePointsByTournamentSnapshot
+} from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import type { LiveTournamentRow } from "../../../models/live";
+import type { LiveSnapshotStatus, LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
 import { forceEntryBinding } from "../../../utils/navigation";
+import {
+  LIVE_REFRESH_INTERVAL_MS,
+  liveSnapshotNeedsRefresh,
+  shouldRevalidateCachedLiveSnapshot,
+  shouldPollLiveSnapshot
+} from "../../../utils/live-refresh";
 import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -19,6 +29,16 @@ type LiveTournamentEmptyState = "" | "entry" | "tournaments";
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
+
+export function partialTournamentErrorSuffix(retainedRowCount: number): string {
+  return retainedRowCount > 0
+    ? "部分球队显示上次成功结果"
+    : "未成功加载的球队暂未显示";
+}
+
+export function shouldClearTournamentRowsError(failedEntryCount: number): boolean {
+  return failedEntryCount === 0;
+}
 
 interface SortOption {
   key: SortKey;
@@ -44,8 +64,12 @@ interface OwnershipPlayerOption {
 
 interface LiveTournamentData {
   loading: boolean;
+  refreshing: boolean;
+  hasData: boolean;
   error: string;
-  hasContent: boolean;
+  errorSuffix: string;
+  tournamentListError: string;
+  tournamentListErrorSuffix: string;
   emptyState: LiveTournamentEmptyState;
   emptyEyebrow: string;
   emptyTitle: string;
@@ -97,6 +121,11 @@ interface LiveTournamentData {
   hasMore: boolean;
   lastUpdated: string;
   columns: Array<{ key: string; label: string }>;
+}
+
+interface LiveTournamentLoadOptions {
+  background?: boolean;
+  forceRefresh?: boolean;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -212,8 +241,12 @@ function filterOwnershipPlayers(
 Page({
   data: {
     loading: false,
+    refreshing: false,
+    hasData: false,
     error: "",
-    hasContent: false,
+    errorSuffix: "",
+    tournamentListError: "",
+    tournamentListErrorSuffix: "",
     emptyState: "",
     emptyEyebrow: "",
     emptyTitle: "",
@@ -280,6 +313,18 @@ Page({
     ]
   } as LiveTournamentData,
 
+  autoRefreshTimer: undefined as number | undefined,
+  rowsRequest: null as Promise<void> | null,
+  rowsRequestKey: "",
+  rowsRequestId: 0,
+  freshnessRequest: null as Promise<void> | null,
+  freshnessRequestId: 0,
+  liveSnapshot: null as LiveSnapshotStatus | null,
+  cachedLiveStoredAt: undefined as number | undefined,
+  pageVisible: false,
+  hasShown: false,
+  failedEntryCount: 0,
+
   async onLoad() {
     const app = getApp<IAppOption>();
     // Show the loading state while waiting for shared launch data so a cold
@@ -298,6 +343,28 @@ Page({
     this.loadTournaments(false);
   },
 
+  onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    this.syncAutoRefresh();
+    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
+      this.refreshIfChanged();
+    }
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.stopAutoRefresh();
+    this.cancelFreshnessCheck();
+  },
+
   onPullDownRefresh() {
     // Always re-pull the tournament list (it chains into loadRows): a cached
     // list must not hide a league the user just joined until the TTL expires.
@@ -312,9 +379,18 @@ Page({
   async loadTournaments(forceRefresh = false) {
     const entryId = this.data.entryId;
     if (!entryId) {
+      this.cancelFreshnessCheck();
+      this.liveSnapshot = null;
+      this.failedEntryCount = 0;
+      this.cachedLiveStoredAt = undefined;
+      this.stopAutoRefresh();
       this.setData({
         loading: false,
+        hasData: false,
         error: "",
+        errorSuffix: "",
+        tournamentListError: "",
+        tournamentListErrorSuffix: "",
         emptyState: "entry",
         emptyEyebrow: "需要账户",
         emptyTitle: "先关联你的 LetLetMe 账户",
@@ -332,6 +408,9 @@ Page({
     this.setData({
       loading: true,
       error: "",
+      errorSuffix: "",
+      tournamentListError: "",
+      tournamentListErrorSuffix: "",
       emptyState: "",
       emptyEyebrow: "",
       emptyTitle: "",
@@ -341,15 +420,18 @@ Page({
     try {
       const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
       if (tournaments.length === 0) {
+        this.cancelFreshnessCheck();
+        this.liveSnapshot = null;
+        this.failedEntryCount = 0;
+        this.cachedLiveStoredAt = undefined;
+        this.stopAutoRefresh();
         this.setData({
           tournaments: [],
           tournamentNames: [],
           selectedTournament: undefined,
           rows: [],
           displayedRows: [],
-          // The content context is gone: a later failed recheck must surface
-          // the full-page error/empty state, not a toast over a blank view.
-          hasContent: false,
+          hasData: false,
           emptyState: "tournaments",
           emptyEyebrow: "联赛待就绪",
           emptyTitle: "当前球队还没有可查看的联赛",
@@ -367,23 +449,36 @@ Page({
       // under the newly selected league after a failed reload.
       const selectionChanged = !this.data.selectedTournament
         || String(this.data.selectedTournament.id) !== String(selectedTournament.id);
+      if (selectionChanged) {
+        this.cancelFreshnessCheck();
+        this.liveSnapshot = null;
+        this.failedEntryCount = 0;
+        this.cachedLiveStoredAt = undefined;
+        this.stopAutoRefresh();
+      }
       this.setData({
         tournaments,
         tournamentNames: tournaments.map((tournament) => tournament.name),
         selectedTournamentIndex,
         selectedTournament,
         emptyState: "",
-        ...(selectionChanged ? { hasContent: false, rows: [], displayedRows: [] } : {})
+        ...(selectionChanged ? { hasData: false, rows: [], displayedRows: [], lastUpdated: "" } : {})
       });
       this.persistSelectedTournament(selectedTournament);
-      await this.loadRows(forceRefresh);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "实时联赛加载失败";
-      if (this.data.hasContent) {
-        wx.showToast({ title: message, icon: "none" });
-      } else {
-        this.setData({ error: message });
+      if (selectionChanged) {
+        // Re-arm recovery before the rows request: if that request fails, a
+        // visible current-event page must still retry on the next revision tick.
+        this.syncAutoRefresh();
       }
+      await this.loadRows({
+        background: !selectionChanged && this.data.hasData,
+        forceRefresh
+      });
+    } catch (error) {
+      this.setData({
+        tournamentListError: error instanceof Error ? error.message : "实时联赛加载失败",
+        tournamentListErrorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+      });
     } finally {
       this.setData({ loading: false });
     }
@@ -395,47 +490,172 @@ Page({
   // a draft edit mid-flight would strand the load unsettled forever.
   _submittedKeyword: "",
 
-  async loadRows(forceRefresh = false) {
+  loadRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
     const selected = this.data.selectedTournament;
     if (!selected) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
-      return;
+      return Promise.resolve();
     }
 
-    const requestedContext = `${selected.id}|${this.data.event}|${this._submittedKeyword}`;
-    const activeContext = () => `${this.data.selectedTournament?.id}|${this.data.event}|${this._submittedKeyword}`;
-    this.setData({ loading: true, error: "" });
-    try {
-      const result = this._submittedKeyword
-      ? await searchLivePointsByTournament(selected.id, this.data.event, this._submittedKeyword, forceRefresh)
-      : await getLivePointsByTournament(selected.id, this.data.event, forceRefresh);
-      if (requestedContext !== activeContext()) {
-        // Superseded by a tournament/GW/keyword change while in flight: this
-        // payload belongs to the old context; the new context's load owns
-        // loading/error state.
-        return;
-      }
-      // A cache serve keeps its original fetch time so the "updated" label
-      // reflects the data's real age.
-      const fetchedAt = result.servedStoredAt || Date.now();
-      this.applyRows(result.rows.map(normalizeRow), true, fetchedAt);
-      this.setData({ hasContent: true });
-    } catch (error) {
-      if (requestedContext !== activeContext()) {
-        return;
-      }
-      const message = error instanceof Error ? error.message : "实时联赛加载失败";
-      if (this.data.hasContent) {
-        // Background refresh failure: keep the stale rows, surface a toast.
-        wx.showToast({ title: message, icon: "none" });
-      } else {
-        this.setData({ error: message });
-      }
-    } finally {
-      if (requestedContext === activeContext()) {
-        this.setData({ loading: false });
-      }
+    const eventId = this.data.event;
+    const keyword = this._submittedKeyword;
+    const requestKey = `${selected.id}:${eventId}:${keyword}`;
+    if (this.rowsRequest && this.rowsRequestKey === requestKey) {
+      return this.rowsRequest;
     }
+
+    const requestId = this.rowsRequestId + 1;
+    this.rowsRequestId = requestId;
+    const preserveData = options.background === true && this.data.hasData;
+    this.setData(preserveData
+      ? { refreshing: true, error: "", errorSuffix: "" }
+      : { loading: true, error: "", errorSuffix: "" });
+
+    const request = (async () => {
+      try {
+        const liveResult = keyword
+          ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword, options.forceRefresh === true)
+          : await getLivePointsByTournamentSnapshot(selected.id, eventId, options.forceRefresh === true);
+        if (requestId !== this.rowsRequestId) return;
+        const refreshedRows = liveResult.data.map(normalizeRow);
+        const failedEntryIds = new Set(liveResult.failedEntryIds || []);
+        this.failedEntryCount = Math.max(
+          failedEntryIds.size,
+          liveResult.partialError ? 1 : 0
+        );
+        // Per-entry failures do not invalidate producer metadata. Retaining a
+        // SETTLED snapshot stops expensive batch polling while the partial
+        // row error remains visible and manually retryable.
+        this.liveSnapshot = liveResult.snapshot;
+        this.cachedLiveStoredAt = liveResult.servedStoredAt;
+        const refreshedEntryIds = new Set(refreshedRows.map((row) => numberValue(row.entry)));
+        const retainedRows = preserveData
+          ? this.data.rows.filter((row) => (
+              failedEntryIds.has(numberValue(row.entry))
+              && !refreshedEntryIds.has(numberValue(row.entry))
+            ))
+          : [];
+        this.applyRows(
+          [...refreshedRows, ...retainedRows],
+          true,
+          liveResult.servedStoredAt || Date.now()
+        );
+        if (liveResult.partialError) {
+          this.setData({
+            error: liveResult.partialError,
+            errorSuffix: partialTournamentErrorSuffix(retainedRows.length)
+          });
+        }
+        this.syncAutoRefresh();
+      } catch (error) {
+        if (requestId !== this.rowsRequestId) return;
+        this.setData({
+          error: error instanceof Error ? error.message : "实时联赛加载失败",
+          errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+        });
+      } finally {
+        if (requestId === this.rowsRequestId) {
+          this.setData({ loading: false, refreshing: false });
+        }
+      }
+    })();
+
+    this.rowsRequest = request;
+    this.rowsRequestKey = requestKey;
+    void request.finally(() => {
+      if (this.rowsRequest === request) {
+        this.rowsRequest = null;
+        this.rowsRequestKey = "";
+        this.revalidateCachedSnapshot();
+      }
+    });
+    return request;
+  },
+
+  shouldAutoRefresh(): boolean {
+    if (!this.data.selectedTournament) return false;
+    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    return shouldPollLiveSnapshot({
+      pageVisible: this.pageVisible,
+      currentEventId,
+      selectedEventId: this.data.event,
+      snapshot: this.liveSnapshot
+    });
+  },
+
+  revalidateCachedSnapshot(): boolean {
+    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (!shouldRevalidateCachedLiveSnapshot({
+      servedStoredAt: this.cachedLiveStoredAt,
+      pageVisible: this.pageVisible,
+      currentEventId,
+      selectedEventId: this.data.event,
+      snapshot: this.liveSnapshot
+    })) {
+      return false;
+    }
+    this.cachedLiveStoredAt = undefined;
+    void this.refreshIfChanged();
+    return true;
+  },
+
+  refreshIfChanged(): Promise<void> {
+    if (!this.shouldAutoRefresh()) return Promise.resolve();
+    if (this.freshnessRequest) return this.freshnessRequest;
+
+    const requestId = this.freshnessRequestId + 1;
+    this.freshnessRequestId = requestId;
+    const eventId = this.data.event;
+    const rowsRequestId = this.rowsRequestId;
+    const request = (async () => {
+      try {
+        const observed = await getLiveSnapshot(eventId);
+        if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
+        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
+          this.liveSnapshot = observed;
+          if (shouldClearTournamentRowsError(this.failedEntryCount)) {
+            this.setData({ error: "", errorSuffix: "" });
+          }
+          this.syncAutoRefresh();
+          return;
+        }
+        await this.loadRows({ background: true, forceRefresh: true });
+      } catch (error) {
+        if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
+        this.setData({
+          error: error instanceof Error ? error.message : "实时联赛刷新失败",
+          errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+        });
+      }
+    })();
+
+    this.freshnessRequest = request;
+    void request.finally(() => {
+      if (this.freshnessRequest === request) {
+        this.freshnessRequest = null;
+      }
+    });
+    return request;
+  },
+
+  syncAutoRefresh() {
+    this.stopAutoRefresh();
+    if (!this.shouldAutoRefresh()) return;
+    this.autoRefreshTimer = setInterval(() => {
+      this.refreshIfChanged();
+    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
+  },
+
+  stopAutoRefresh() {
+    if (this.autoRefreshTimer !== undefined) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = undefined;
+    }
+  },
+
+  cancelFreshnessCheck() {
+    this.freshnessRequestId += 1;
+    this.freshnessRequest = null;
   },
 
   applyRows(rows: DisplayTournamentRow[], resetPage: boolean, fetchedAt?: number) {
@@ -476,6 +696,7 @@ Page({
     );
     const nextSize = resetPage ? this.data.pageSize : this.data.displayedRows.length + this.data.pageSize;
     this.setData({
+      hasData: true,
       rows,
       displayedRows: sortedRows.slice(0, nextSize),
       filteredCount: sortedRows.length,
@@ -529,32 +750,67 @@ Page({
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
     // A new keyword = a new result context: drop the content flag so stale
     // rows cannot linger under the new keyword after a failed reload.
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.failedEntryCount = 0;
+    this.cachedLiveStoredAt = undefined;
     this._submittedKeyword = event ? event.detail.keyword : this.data.keyword;
     if (event) {
-      this.setData({ keyword: event.detail.keyword, hasContent: false });
+      this.setData({ keyword: event.detail.keyword, hasData: false, lastUpdated: "" });
     } else {
-      this.setData({ hasContent: false });
+      this.setData({ hasData: false, lastUpdated: "" });
     }
-    this.loadRows(false);
+    this.syncAutoRefresh();
+    this.loadRows();
   },
 
   onResetSearch() {
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.failedEntryCount = 0;
+    this.cachedLiveStoredAt = undefined;
     this._submittedKeyword = "";
-    this.setData({ keyword: "", hasContent: false });
-    this.loadRows(false);
+    this.setData({ keyword: "", hasData: false, lastUpdated: "" });
+    this.syncAutoRefresh();
+    this.loadRows();
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value, hasContent: false });
-    this.loadRows(false);
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.failedEntryCount = 0;
+    this.cachedLiveStoredAt = undefined;
+    this.stopAutoRefresh();
+    this.setData({
+      event: event.detail.value,
+      hasData: false,
+      rows: [],
+      displayedRows: [],
+      lastUpdated: ""
+    });
+    this.syncAutoRefresh();
+    this.loadRows();
   },
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const selectedTournamentIndex = Number(event.detail.value);
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
-    this.setData({ selectedTournamentIndex, selectedTournament, rows: [], displayedRows: [], hasContent: false });
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.failedEntryCount = 0;
+    this.cachedLiveStoredAt = undefined;
+    this.stopAutoRefresh();
+    this.setData({
+      selectedTournamentIndex,
+      selectedTournament,
+      rows: [],
+      displayedRows: [],
+      hasData: false,
+      lastUpdated: ""
+    });
     this.persistSelectedTournament(selectedTournament);
-    this.loadRows(false);
+    this.syncAutoRefresh();
+    this.loadRows();
   },
 
   onSortTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { key: SortKey }>) {
@@ -686,11 +942,11 @@ Page({
   },
 
   onRetry() {
-    if (this.data.tournaments.length === 0) {
+    if (this.data.tournamentListError || this.data.tournaments.length === 0) {
       this.loadTournaments(true);
       return;
     }
-    this.loadRows(true);
+    this.loadRows({ forceRefresh: true });
   },
 
   onChooseEntry() {
@@ -707,7 +963,7 @@ Page({
 
   onEmptyResultsAction() {
     if (!this.data.resultsFiltered) {
-      this.loadRows(true);
+      this.loadRows({ forceRefresh: true });
       return;
     }
 
@@ -730,8 +986,14 @@ Page({
       // In-memory rows may be a keyword-filtered subset, so they cannot be
       // reapplied locally; treat the cleared-filter reload as a new result
       // context instead of letting the old empty filtered view linger.
-      hasContent: false
+      hasData: false,
+      lastUpdated: ""
     });
-    this.loadRows(false);
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.failedEntryCount = 0;
+    this.cachedLiveStoredAt = undefined;
+    this.syncAutoRefresh();
+    this.loadRows();
   }
 });

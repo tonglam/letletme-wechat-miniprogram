@@ -1,3 +1,22 @@
+export type LiveSnapshotState = "SCHEDULED" | "LIVE" | "SETTLED";
+
+export interface LiveSnapshotStatus {
+  eventId: number;
+  revision: string;
+  state: LiveSnapshotState;
+  publishedAt: string;
+  checkedAt: string;
+}
+
+export interface LiveSnapshotResult<T> {
+  data: T;
+  snapshot: LiveSnapshotStatus | null;
+  /** Fetch time when the payload was served from the short-lived client cache. */
+  servedStoredAt?: number;
+  failedEntryIds?: number[];
+  partialError?: string;
+}
+
 export interface LivePlayerRow {
   element?: number;
   name?: string;

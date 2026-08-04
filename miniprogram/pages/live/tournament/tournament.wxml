@@ -3,7 +3,7 @@
     <view class="row">
       <view>
         <view class="title">实时联赛</view>
-        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '关联账户后加载联赛' : '联赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') : ''}}</view>
+        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '关联账户后加载联赛' : '联赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') + (refreshing ? ' · 刷新中' : '') : ''}}</view>
       </view>
       <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
@@ -104,8 +104,9 @@
     </view>
   </view>
 
-  <app-error-state wx:if="{{error && !hasContent}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading && !hasContent}}" text="加载实时联赛" />
+  <app-error-state wx:if="{{tournamentListError && !hasData && !emptyState}}" message="{{tournamentListError}}" bind:retry="onRetry" />
+  <app-error-state wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时联赛" />
   <view wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
@@ -117,6 +118,8 @@
     />
   </view>
   <view wx:else class="section">
+    <view wx:if="{{tournamentListError}}" class="live-refresh-error">{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}</view>
+    <view wx:elif="{{error}}" class="live-refresh-error">{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}</view>
     <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>
     <app-empty-state
       wx:if="{{displayedRows.length === 0}}"
