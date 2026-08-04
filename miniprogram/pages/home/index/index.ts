@@ -147,11 +147,14 @@ Page({
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
       // fallback: the account may have been relinked, so wait for the
-      // refreshed profile before snapshotting the entry.
+      // refreshed profile before snapshotting the entry. Show the loading
+      // state first so the wait never renders placeholder content.
+      this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
     const entryId = app.globalData.entryId;
     if (!entryId) {
+      this.setData({ loading: false });
       forceEntryBinding();
       return;
     }

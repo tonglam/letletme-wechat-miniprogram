@@ -25,7 +25,9 @@ Page({
     if (!options.entry && !getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
       // fallback: the account may have been relinked, so wait for the
-      // refreshed profile before snapshotting the entry.
+      // refreshed profile before snapshotting the entry. Enter the loading
+      // state first so the wait never renders the empty entry card.
+      this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
     const entryId = Number(options.entry || app.globalData.entryId);
