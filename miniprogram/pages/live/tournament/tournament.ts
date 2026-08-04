@@ -4,6 +4,7 @@ import {
   getLiveSnapshot,
   searchLivePointsByTournamentSnapshot
 } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LiveSnapshotStatus, LiveTournamentRow } from "../../../models/live";
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
@@ -11,6 +12,7 @@ import { forceEntryBinding } from "../../../utils/navigation";
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
+  shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../../../utils/live-refresh";
 import {
@@ -106,6 +108,11 @@ interface LiveTournamentData {
   hasMore: boolean;
   lastUpdated: string;
   columns: Array<{ key: string; label: string }>;
+}
+
+interface LiveTournamentLoadOptions {
+  background?: boolean;
+  forceRefresh?: boolean;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -297,14 +304,26 @@ Page({
   freshnessRequest: null as Promise<void> | null,
   freshnessRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
+  cachedLiveStoredAt: undefined as number | undefined,
   pageVisible: false,
   hasShown: false,
 
-  onLoad() {
+  async onLoad() {
     const app = getApp<IAppOption>();
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders placeholder content as if it were loaded.
+    this.setData({ loading: true });
+    await app.initAppData();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
-    this.loadTournaments();
+    this.loadTournaments(false);
   },
 
   onShow() {
@@ -312,7 +331,7 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     this.syncAutoRefresh();
-    if (resumed && this.shouldAutoRefresh()) {
+    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       this.refreshIfChanged();
     }
   },
@@ -330,7 +349,9 @@ Page({
   },
 
   onPullDownRefresh() {
-    const task = this.data.tournaments.length ? this.loadRows(true) : this.loadTournaments();
+    // Always re-pull the tournament list (it chains into loadRows): a cached
+    // list must not hide a league the user just joined until the TTL expires.
+    const task = this.loadTournaments(true);
     task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -338,11 +359,16 @@ Page({
     this.loadMore();
   },
 
-  async loadTournaments() {
+  async loadTournaments(forceRefresh = false) {
     const entryId = this.data.entryId;
     if (!entryId) {
+      this.cancelFreshnessCheck();
+      this.liveSnapshot = null;
+      this.cachedLiveStoredAt = undefined;
+      this.stopAutoRefresh();
       this.setData({
         loading: false,
+        hasData: false,
         error: "",
         emptyState: "entry",
         emptyEyebrow: "需要账户",
@@ -368,14 +394,19 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(entryId);
+      const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
       if (tournaments.length === 0) {
+        this.cancelFreshnessCheck();
+        this.liveSnapshot = null;
+        this.cachedLiveStoredAt = undefined;
+        this.stopAutoRefresh();
         this.setData({
           tournaments: [],
           tournamentNames: [],
           selectedTournament: undefined,
           rows: [],
           displayedRows: [],
+          hasData: false,
           emptyState: "tournaments",
           emptyEyebrow: "联赛待就绪",
           emptyTitle: "当前球队还没有可查看的联赛",
@@ -388,15 +419,35 @@ Page({
       const storedIndex = tournaments.findIndex((tournament) => String(tournament.id) === String(storedId));
       const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
       const selectedTournament = tournaments[selectedTournamentIndex];
+      // A league switch — including the refreshed list dropping the current
+      // one — is a new result context: never show the previous league's rows
+      // under the newly selected league after a failed reload.
+      const selectionChanged = !this.data.selectedTournament
+        || String(this.data.selectedTournament.id) !== String(selectedTournament.id);
+      if (selectionChanged) {
+        this.cancelFreshnessCheck();
+        this.liveSnapshot = null;
+        this.cachedLiveStoredAt = undefined;
+        this.stopAutoRefresh();
+      }
       this.setData({
         tournaments,
         tournamentNames: tournaments.map((tournament) => tournament.name),
         selectedTournamentIndex,
         selectedTournament,
-        emptyState: ""
+        emptyState: "",
+        ...(selectionChanged ? { hasData: false, rows: [], displayedRows: [], lastUpdated: "" } : {})
       });
       this.persistSelectedTournament(selectedTournament);
-      await this.loadRows();
+      if (selectionChanged) {
+        // Re-arm recovery before the rows request: if that request fails, a
+        // visible current-event page must still retry on the next revision tick.
+        this.syncAutoRefresh();
+      }
+      await this.loadRows({
+        background: !selectionChanged && this.data.hasData,
+        forceRefresh
+      });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "实时联赛加载失败" });
     } finally {
@@ -404,7 +455,13 @@ Page({
     }
   },
 
-  loadRows(background = false): Promise<void> {
+  // The keyword that the in-flight/visible rows were actually requested with.
+  // data.keyword is a per-keystroke draft (onKeyword fires no request), so
+  // the request-context guard must track only submitted keywords — otherwise
+  // a draft edit mid-flight would strand the load unsettled forever.
+  _submittedKeyword: "",
+
+  loadRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
     const selected = this.data.selectedTournament;
     if (!selected) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
@@ -412,7 +469,7 @@ Page({
     }
 
     const eventId = this.data.event;
-    const keyword = this.data.keyword;
+    const keyword = this._submittedKeyword;
     const requestKey = `${selected.id}:${eventId}:${keyword}`;
     if (this.rowsRequest && this.rowsRequestKey === requestKey) {
       return this.rowsRequest;
@@ -420,7 +477,7 @@ Page({
 
     const requestId = this.rowsRequestId + 1;
     this.rowsRequestId = requestId;
-    const preserveData = background && this.data.hasData;
+    const preserveData = options.background === true && this.data.hasData;
     this.setData(preserveData
       ? { refreshing: true, error: "" }
       : { loading: true, error: "" });
@@ -428,20 +485,25 @@ Page({
     const request = (async () => {
       try {
         const liveResult = keyword
-          ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword)
-          : await getLivePointsByTournamentSnapshot(selected.id, eventId);
+          ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword, options.forceRefresh === true)
+          : await getLivePointsByTournamentSnapshot(selected.id, eventId, options.forceRefresh === true);
         if (requestId !== this.rowsRequestId) return;
         this.liveSnapshot = liveResult.partialError ? null : liveResult.snapshot;
+        this.cachedLiveStoredAt = liveResult.servedStoredAt;
         const refreshedRows = liveResult.data.map(normalizeRow);
         const failedEntryIds = new Set(liveResult.failedEntryIds || []);
         const refreshedEntryIds = new Set(refreshedRows.map((row) => numberValue(row.entry)));
-        const retainedRows = background
+        const retainedRows = preserveData
           ? this.data.rows.filter((row) => (
               failedEntryIds.has(numberValue(row.entry))
               && !refreshedEntryIds.has(numberValue(row.entry))
             ))
           : [];
-        this.applyRows([...refreshedRows, ...retainedRows], true);
+        this.applyRows(
+          [...refreshedRows, ...retainedRows],
+          true,
+          liveResult.servedStoredAt || Date.now()
+        );
         if (liveResult.partialError) {
           this.setData({ error: liveResult.partialError });
         }
@@ -462,6 +524,7 @@ Page({
       if (this.rowsRequest === request) {
         this.rowsRequest = null;
         this.rowsRequestKey = "";
+        this.revalidateCachedSnapshot();
       }
     });
     return request;
@@ -476,6 +539,22 @@ Page({
       selectedEventId: this.data.event,
       snapshot: this.liveSnapshot
     });
+  },
+
+  revalidateCachedSnapshot(): boolean {
+    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (!shouldRevalidateCachedLiveSnapshot({
+      servedStoredAt: this.cachedLiveStoredAt,
+      pageVisible: this.pageVisible,
+      currentEventId,
+      selectedEventId: this.data.event,
+      snapshot: this.liveSnapshot
+    })) {
+      return false;
+    }
+    this.cachedLiveStoredAt = undefined;
+    void this.refreshIfChanged();
+    return true;
   },
 
   refreshIfChanged(): Promise<void> {
@@ -496,7 +575,7 @@ Page({
           this.syncAutoRefresh();
           return;
         }
-        await this.loadRows(true);
+        await this.loadRows({ background: true, forceRefresh: true });
       } catch (error) {
         if (requestId !== this.freshnessRequestId || rowsRequestId !== this.rowsRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时联赛刷新失败" });
@@ -532,7 +611,7 @@ Page({
     this.freshnessRequest = null;
   },
 
-  applyRows(rows: DisplayTournamentRow[], resetPage: boolean) {
+  applyRows(rows: DisplayTournamentRow[], resetPage: boolean, fetchedAt?: number) {
     const teamOptions = getTournamentTeamOptions(rows);
     const selectedTeamExposure = this.data.selectedTeamExposure
       ? teamOptions.find((team) => team.shortName === this.data.selectedTeamExposure?.shortName)
@@ -560,8 +639,11 @@ Page({
       ...row,
       visibleRank: index + 1
     }));
+    // The keyword filter is applied server-side at submit time, so classify
+    // by the submitted keyword: an unsubmitted draft in the search box must
+    // not make unfiltered rows claim "no teams match the current filters".
     const resultsFiltered = Boolean(
-      this.data.keyword.trim()
+      this._submittedKeyword.trim()
       || this.data.selectedOwnershipPlayers.length
       || selectedTeamExposure
     );
@@ -599,7 +681,10 @@ Page({
       selectedTeamExposure,
       selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
       teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
-      lastUpdated: formatTime(new Date())
+      // Local re-sorts/filter tweaks reapply the same rows without a fetch:
+      // keep the original fetch time rather than stamping "now" as if the
+      // data had just been refreshed.
+      ...(fetchedAt != null ? { lastUpdated: formatTime(new Date(fetchedAt)) } : {})
     });
   },
 
@@ -616,20 +701,35 @@ Page({
   },
 
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    // A new keyword = a new result context: drop the content flag so stale
+    // rows cannot linger under the new keyword after a failed reload.
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this._submittedKeyword = event ? event.detail.keyword : this.data.keyword;
     if (event) {
-      this.setData({ keyword: event.detail.keyword });
+      this.setData({ keyword: event.detail.keyword, hasData: false, lastUpdated: "" });
+    } else {
+      this.setData({ hasData: false, lastUpdated: "" });
     }
+    this.syncAutoRefresh();
     this.loadRows();
   },
 
   onResetSearch() {
-    this.setData({ keyword: "" });
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this._submittedKeyword = "";
+    this.setData({ keyword: "", hasData: false, lastUpdated: "" });
+    this.syncAutoRefresh();
     this.loadRows();
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({
       event: event.detail.value,
@@ -638,6 +738,7 @@ Page({
       displayedRows: [],
       lastUpdated: ""
     });
+    this.syncAutoRefresh();
     this.loadRows();
   },
 
@@ -646,6 +747,7 @@ Page({
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({
       selectedTournamentIndex,
@@ -656,6 +758,7 @@ Page({
       lastUpdated: ""
     });
     this.persistSelectedTournament(selectedTournament);
+    this.syncAutoRefresh();
     this.loadRows();
   },
 
@@ -788,11 +891,11 @@ Page({
   },
 
   onRetry() {
-    if (this.data.tournaments.length > 0) {
-      this.loadRows();
+    if (this.data.tournaments.length === 0) {
+      this.loadTournaments(true);
       return;
     }
-    this.loadTournaments();
+    this.loadRows({ forceRefresh: true });
   },
 
   onChooseEntry() {
@@ -804,15 +907,16 @@ Page({
       forceEntryBinding();
       return;
     }
-    this.loadTournaments();
+    this.loadTournaments(true);
   },
 
   onEmptyResultsAction() {
     if (!this.data.resultsFiltered) {
-      this.loadRows();
+      this.loadRows({ forceRefresh: true });
       return;
     }
 
+    this._submittedKeyword = "";
     this.setData({
       keyword: "",
       selectedOwnershipPlayers: [],
@@ -827,8 +931,17 @@ Page({
       selectedTeamExposureIndex: 0,
       selectedTeamExposure: null,
       teamExposureCount: 1,
-      teamExposureScope: "any"
+      teamExposureScope: "any",
+      // In-memory rows may be a keyword-filtered subset, so they cannot be
+      // reapplied locally; treat the cleared-filter reload as a new result
+      // context instead of letting the old empty filtered view linger.
+      hasData: false,
+      lastUpdated: ""
     });
+    this.cancelFreshnessCheck();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this.syncAutoRefresh();
     this.loadRows();
   }
 });

@@ -1,6 +1,7 @@
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
+  shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../miniprogram/utils/live-refresh";
 import type { LiveSnapshotStatus } from "../miniprogram/models/live";
@@ -64,6 +65,34 @@ assertEqual(shouldPollLiveSnapshot({
   selectedEventId: 33,
   snapshot: { ...snapshot("LIVE"), eventId: 34 }
 }), true, "stale metadata does not wedge current-event recovery");
+assertEqual(shouldRevalidateCachedLiveSnapshot({
+  servedStoredAt: Date.now() - 1_000,
+  pageVisible: true,
+  currentEventId: 33,
+  selectedEventId: 33,
+  snapshot: snapshot("LIVE")
+}), true, "cached current-event payloads revalidate immediately");
+assertEqual(shouldRevalidateCachedLiveSnapshot({
+  servedStoredAt: undefined,
+  pageVisible: true,
+  currentEventId: 33,
+  selectedEventId: 33,
+  snapshot: snapshot("LIVE")
+}), false, "fresh network payloads do not add a metadata request");
+assertEqual(shouldRevalidateCachedLiveSnapshot({
+  servedStoredAt: Date.now() - 1_000,
+  pageVisible: true,
+  currentEventId: 33,
+  selectedEventId: 32,
+  snapshot: snapshot("LIVE")
+}), false, "cached historical payloads do not poll");
+assertEqual(shouldRevalidateCachedLiveSnapshot({
+  servedStoredAt: Date.now() - 1_000,
+  pageVisible: false,
+  currentEventId: 33,
+  selectedEventId: 33,
+  snapshot: snapshot("LIVE")
+}), false, "cached payloads wait until a hidden page is shown");
 assertEqual(
   liveSnapshotNeedsRefresh(snapshot("LIVE"), {
     ...snapshot("LIVE"),

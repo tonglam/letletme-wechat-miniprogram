@@ -1,13 +1,20 @@
-import { graphqlRequest } from "./graphql.service";
+import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
 import type {
   LiveEntryResult,
   LiveMatch,
   LivePlayerRow,
   LiveSnapshotResult,
   LiveSnapshotStatus,
-  LiveTournamentRow
+  LiveTournamentRow,
+  LiveTournamentRowsResult
 } from "../models/live";
 import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGraphQLRow } from "./live-tournament";
+
+// Live payloads are expensive enough to deduplicate rapid page revisits, but
+// short-lived enough to stay process-local (graphql.service does not persist
+// sub-minute entries). Snapshot polling bypasses this cache when a new backend
+// revision is observed.
+const LIVE_CACHE_TTL_MS = 30 * 1000;
 
 export const LIVE_SNAPSHOT_QUERY = `
   query GetLiveSnapshot($eventId: Int!) {
@@ -153,13 +160,19 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
 
 export async function getLivePointsByEntrySnapshot(
   entry: number,
-  event: number
+  event: number,
+  forceRefresh = false
 ): Promise<LiveSnapshotResult<LiveEntryResult>> {
-  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, { eventId: event, entryId: entry });
+  const variables = { eventId: event, entryId: entry };
+  const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.calcLivePointsByEntry;
   if (!result) {
     throw new Error("实时分数暂时不可用，请稍后重试");
   }
+  const servedStoredAt = getServedCacheStoredAt(CALC_LIVE_POINTS_BY_ENTRY, variables);
   return {
     data: {
       entry: result.entry,
@@ -172,14 +185,16 @@ export async function getLivePointsByEntrySnapshot(
       chip: result.chip,
       played: result.played,
       toPlay: result.toPlay,
-      pickList: mapGraphQLPickList(result.pickList)
+      pickList: mapGraphQLPickList(result.pickList),
+      servedStoredAt
     },
-    snapshot: data.liveSnapshot
+    snapshot: data.liveSnapshot,
+    servedStoredAt
   };
 }
 
-export async function getLivePointsByEntry(entry: number, event: number): Promise<LiveEntryResult> {
-  return (await getLivePointsByEntrySnapshot(entry, event)).data;
+export async function getLivePointsByEntry(entry: number, event: number, forceRefresh = false): Promise<LiveEntryResult> {
+  return (await getLivePointsByEntrySnapshot(entry, event, forceRefresh)).data;
 }
 
 export const LIVE_MATCHES_QUERY = `
@@ -302,9 +317,14 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
 }
 
 export async function getLiveMatchByStatusSnapshot(
-  status: string
+  status: string,
+  forceRefresh = false
 ): Promise<LiveSnapshotResult<LiveMatch[]>> {
-  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY);
+  const variables = {};
+  const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
+  });
   const result = data.liveMatches;
   let matches: LiveMatch[];
   switch (status) {
@@ -330,11 +350,15 @@ export async function getLiveMatchByStatusSnapshot(
       ];
       break;
   }
-  return { data: matches, snapshot: data.liveSnapshot };
+  return {
+    data: matches,
+    snapshot: data.liveSnapshot,
+    servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
+  };
 }
 
-export async function getLiveMatchByStatus(status: string): Promise<LiveMatch[]> {
-  return (await getLiveMatchByStatusSnapshot(status)).data;
+export async function getLiveMatchByStatus(status: string, forceRefresh = false): Promise<LiveMatch[]> {
+  return (await getLiveMatchByStatusSnapshot(status, forceRefresh)).data;
 }
 
 const TOURNAMENT_LIVE_POINTS = `
@@ -400,21 +424,24 @@ function numericId(value: number | string): number {
   return parsed;
 }
 
-export async function getLivePointsByTournament(tournamentId: number | string, event: number): Promise<LiveTournamentRow[]> {
-  return (await getLivePointsByTournamentSnapshot(tournamentId, event)).data;
-}
-
 export async function getLivePointsByTournamentSnapshot(
   tournamentId: number | string,
-  event: number
+  event: number,
+  forceRefresh = false
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
-  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, {
+  const variables = {
     tournamentId: numericId(tournamentId),
     eventId: numericId(event)
+  };
+  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
+    cacheTtl: LIVE_CACHE_TTL_MS,
+    forceRefresh
   });
+  const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);
   return {
     data: mapTournamentLiveRows(data.calcLivePointsForTournament.results),
     snapshot: data.liveSnapshot,
+    servedStoredAt,
     failedEntryIds: data.calcLivePointsForTournament.errors.map((error) => error.entryId),
     partialError: data.calcLivePointsForTournament.meta.failedCount > 0
       ? `部分结果不可用：${data.calcLivePointsForTournament.meta.failedCount}/${data.calcLivePointsForTournament.meta.totalEntries} 支参赛球队计算失败`
@@ -422,24 +449,36 @@ export async function getLivePointsByTournamentSnapshot(
   };
 }
 
+export async function getLivePointsByTournament(
+  tournamentId: number | string,
+  event: number,
+  forceRefresh = false
+): Promise<LiveTournamentRowsResult> {
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh);
+  return { rows: result.data, servedStoredAt: result.servedStoredAt };
+}
+
 export async function searchLivePointsByTournament(
   tournamentId: number | string,
   event: number,
-  keyword: string
-): Promise<LiveTournamentRow[]> {
-  const rows = await getLivePointsByTournament(tournamentId, event);
-  return filterTournamentLiveRows(rows, keyword);
+  keyword: string,
+  forceRefresh = false
+): Promise<LiveTournamentRowsResult> {
+  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh);
+  return { rows: filterTournamentLiveRows(rows, keyword), servedStoredAt };
 }
 
 export async function searchLivePointsByTournamentSnapshot(
   tournamentId: number | string,
   event: number,
-  keyword: string
+  keyword: string,
+  forceRefresh = false
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
-  const result = await getLivePointsByTournamentSnapshot(tournamentId, event);
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh);
   return {
     data: filterTournamentLiveRows(result.data, keyword),
     snapshot: result.snapshot,
+    servedStoredAt: result.servedStoredAt,
     failedEntryIds: result.failedEntryIds,
     partialError: result.partialError
   };

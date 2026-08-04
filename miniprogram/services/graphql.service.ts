@@ -2,6 +2,8 @@ import { getGraphQLEndpoint, REQUEST_TIMEOUT_MS } from "../config/env";
 import {
   clearApiSession,
   getApiSessionToken,
+  getPendingSessionRefresh,
+  isLogoutInFlight,
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
@@ -28,6 +30,8 @@ interface CacheEntry {
   requestKey: string;
   data: unknown;
   expiresAt: number;
+  /** Fetch time of the cached payload; absent in entries persisted by older builds. */
+  storedAt?: number;
 }
 
 export interface GraphQLOptions {
@@ -35,6 +39,12 @@ export interface GraphQLOptions {
   getCacheExpiry?: (data: unknown) => number;
   /** Skip the cache read (fresh result still re-populates the cache). */
   forceRefresh?: boolean;
+  /**
+   * Suffix separating cache entries that share a query and variables but
+   * follow different freshness policies (e.g. live vs historical views of
+   * one payload). Without it, a long-TTL entry can satisfy a short-TTL read.
+   */
+  cacheVariant?: string;
 }
 
 const inFlightRequests = new Map<string, Promise<unknown>>();
@@ -45,6 +55,19 @@ const inFlightRequests = new Map<string, Promise<unknown>>();
 const memoryCache = new Map<string, CacheEntry>();
 const MEMORY_CACHE_LIMIT = 120;
 
+/** requestKey -> fetch time of the payload most recently served from cache. */
+const servedFromCache = new Map<string, number>();
+
+function recordServedFromCache(requestKey: string, storedAt: number): void {
+  if (servedFromCache.size >= MEMORY_CACHE_LIMIT) {
+    // Same bounding policy as the L1 cache it mirrors: request keys embed the
+    // full query text and variables, so the map must not grow for the whole
+    // process lifetime as distinct cached entries are revisited.
+    servedFromCache.clear();
+  }
+  servedFromCache.set(requestKey, storedAt);
+}
+
 function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefined {
   const entry = memoryCache.get(cacheKey);
   if (!entry || entry.requestKey !== requestKey) return undefined;
@@ -52,6 +75,7 @@ function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefi
     memoryCache.delete(cacheKey);
     return undefined;
   }
+  recordServedFromCache(requestKey, entry.storedAt ?? Date.now());
   return entry.data;
 }
 
@@ -60,6 +84,23 @@ function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
     memoryCache.clear();
   }
   memoryCache.set(cacheKey, entry);
+}
+
+function readCacheEntry(cacheKey: string, requestKey: string): unknown | undefined {
+  const fromMemory = readMemoryCache(cacheKey, requestKey);
+  if (fromMemory !== undefined) {
+    return fromMemory;
+  }
+  try {
+    const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
+    if (cached && cached.requestKey === requestKey && Date.now() < cached.expiresAt) {
+      writeMemoryCache(cacheKey, cached);
+      recordServedFromCache(requestKey, cached.storedAt ?? Date.now());
+      return cached.data;
+    }
+    try { wx.removeStorageSync(cacheKey); } catch {}
+  } catch {}
+  return undefined;
 }
 
 function toHttpError(statusCode: number): Error {
@@ -85,10 +126,25 @@ function hashKey(str: string): string {
 export function buildGraphQLRequestCacheKey(
   query: string,
   variables: Record<string, unknown>,
-  token: string | null
+  token: string | null,
+  cacheVariant = ""
 ): string {
   const audience = token ? `session:${hashKey(token)}` : "public";
-  return `${audience}::${query}::${JSON.stringify(variables)}`;
+  return `${audience}::${query}::${JSON.stringify(variables)}${cacheVariant ? `#${cacheVariant}` : ""}`;
+}
+
+/**
+ * Fetch time of the payload if the last serve for this request came from
+ * cache, else undefined. Lets callers age-label cached data honestly
+ * instead of stamping it as just-fetched.
+ */
+export function getServedCacheStoredAt(query: string, variables: Record<string, unknown>): number | undefined {
+  const key = buildGraphQLRequestCacheKey(query, variables, getApiSessionToken());
+  // Concurrent callers share a single cache serve, so reads must NOT consume
+  // the entry: every consumer of the same payload sees the same timestamp.
+  // The map stays bounded by recordServedFromCache's cap, and a fresh network
+  // write for the key deletes it.
+  return servedFromCache.get(key);
 }
 
 function getStorageCacheKey(requestKey: string, token: string | null): string {
@@ -107,7 +163,7 @@ function makeRequest<T>(
   variables: Record<string, unknown>,
   retryOnUnauthorized = true,
   token = getApiSessionToken()
-): Promise<T> {
+): Promise<{ data: T; token: string | null }> {
   return new Promise((resolve, reject) => {
     const endpoint = getGraphQLEndpoint();
     const header: Record<string, string> = {
@@ -129,6 +185,44 @@ function makeRequest<T>(
       success(response) {
         const body = response.data;
         if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
+          if (isLogoutInFlight()) {
+            // A sign-out owns the credential right now: fail this request
+            // instead of erasing the token the logout may still need to retry
+            // revoking, and never start a recovery login alongside it.
+            reject(new Error("正在退出登录，请稍后重试"));
+            return;
+          }
+          const currentToken = getApiSessionToken();
+          if (currentToken && currentToken !== token) {
+            // The session rotated while this request was in flight (e.g. the
+            // background profile revalidation stored a fresh token): retry
+            // with the current credential instead of clearing it.
+            makeRequest<T>(query, variables, false, currentToken).then(resolve).catch(reject);
+            return;
+          }
+          const pending = getPendingSessionRefresh();
+          if (pending) {
+            // A login round trip is already in flight and may be rotating
+            // this very token server-side without the response being stored
+            // yet. Await it: clearApiSession here would bump the session
+            // epoch and make that login discard its own fresh credential.
+            pending
+              .catch(() => undefined)
+              .then(() => {
+                const freshToken = getApiSessionToken();
+                if (freshToken && freshToken !== token) {
+                  return makeRequest<T>(query, variables, false, freshToken);
+                }
+                // The in-flight refresh produced no usable new credential —
+                // fall back to the classic clear + re-login cycle.
+                clearApiSession();
+                return refreshWechatApiSession()
+                  .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()));
+              })
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
           clearApiSession();
           refreshWechatApiSession()
             .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))
@@ -152,7 +246,11 @@ function makeRequest<T>(
           return;
         }
 
-        resolve(body.data);
+        // Propagate the credential that produced this response: callers must
+        // never infer it from mutable session state (logout or relogin to
+        // another account mid-flight would leak this payload into the wrong
+        // cache namespace).
+        resolve({ data: body.data, token });
       },
       fail(error) {
         reject(new Error(networkErrorMessage(error)));
@@ -167,7 +265,26 @@ export function graphqlRequest<T>(
   options?: GraphQLOptions
 ): Promise<T> {
   const token = getApiSessionToken();
-  const key = buildGraphQLRequestCacheKey(query, variables, token);
+  if (!token) {
+    const pending = getPendingSessionRefresh();
+    if (pending) {
+      // A usable public-cache hit must not wait on the login round trip
+      // (e.g. CurrentEventInfo during app init on a slow cold start).
+      if (options?.forceRefresh !== true && (options?.cacheTtl != null || options?.getCacheExpiry)) {
+        const publicKey = buildGraphQLRequestCacheKey(query, variables, null, options?.cacheVariant ?? "");
+        const cached = readCacheEntry(getStorageCacheKey(publicKey, null), publicKey);
+        if (cached !== undefined) {
+          return Promise.resolve(cached as T);
+        }
+      }
+      // Otherwise wait for the in-flight login rather than firing a
+      // tokenless request that 401s and retries — and that would key any
+      // cached session data under the public namespace. A failed refresh
+      // falls through to the normal unauthenticated path on re-entry.
+      return pending.catch(() => undefined).then(() => graphqlRequest<T>(query, variables, options));
+    }
+  }
+  const key = buildGraphQLRequestCacheKey(query, variables, token, options?.cacheVariant ?? "");
 
   const inFlight = inFlightRequests.get(key) as Promise<T> | undefined;
   if (inFlight) {
@@ -176,39 +293,48 @@ export function graphqlRequest<T>(
 
   const skipCacheRead = options?.forceRefresh === true;
   if (!skipCacheRead && (options?.cacheTtl != null || options?.getCacheExpiry)) {
-    const cacheKey = getStorageCacheKey(key, token);
-    const fromMemory = readMemoryCache(cacheKey, key);
-    if (fromMemory !== undefined) {
-      return Promise.resolve(fromMemory as T);
+    const cached = readCacheEntry(getStorageCacheKey(key, token), key);
+    if (cached !== undefined) {
+      return Promise.resolve(cached as T);
     }
-    try {
-      const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
-      if (cached && cached.requestKey === key && Date.now() < cached.expiresAt) {
-        writeMemoryCache(cacheKey, cached);
-        return Promise.resolve(cached.data as T);
-      }
-      try { wx.removeStorageSync(cacheKey); } catch {}
-    } catch {}
   }
 
   const t0 = Date.now();
   const opName = extractOpName(query);
 
-  const request = makeRequest<T>(query, variables, true, token).then((data) => {
+  const request = makeRequest<T>(query, variables, true, token).then(({ data, token: responseToken }) => {
     recordApi(opName, Date.now() - t0, true);
-    if (
-      (options?.cacheTtl != null || options?.getCacheExpiry)
-      && getApiSessionToken() === token
-    ) {
-      try {
-        const cacheKey = getStorageCacheKey(key, token);
-        const expiresAt = options?.getCacheExpiry
-          ? options.getCacheExpiry(data)
-          : Date.now() + (options?.cacheTtl ?? 0);
-        const entry: CacheEntry = { requestKey: key, data, expiresAt };
-        writeMemoryCache(cacheKey, entry);
-        wx.setStorageSync(cacheKey, entry);
-      } catch {}
+    if (options?.cacheTtl != null || options?.getCacheExpiry) {
+      // An authenticated payload is cached only while its producing
+      // credential is still the live session: a logout or account switch
+      // mid-flight already wiped that account's cache namespace, and an
+      // unconditional write here would repopulate it after removal.
+      const producingTokenStillActive = !responseToken || responseToken === getApiSessionToken();
+      if (producingTokenStillActive) {
+        try {
+          // Cache under the credential that actually produced the response,
+          // propagated from the successful attempt — never inferred from
+          // mutable session state (logout or relogin mid-flight must not leak
+          // this payload into the public or another account's namespace).
+          const effectiveKey = responseToken !== token
+            ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
+            : key;
+          const cacheKey = getStorageCacheKey(effectiveKey, responseToken);
+          const expiresAt = options?.getCacheExpiry
+            ? options.getCacheExpiry(data)
+            : Date.now() + (options?.cacheTtl ?? 0);
+          const entry: CacheEntry = { requestKey: effectiveKey, data, expiresAt, storedAt: Date.now() };
+          writeMemoryCache(cacheKey, entry);
+          servedFromCache.delete(effectiveKey);
+          // Sub-minute caches stay process-local: they would be expired by the
+          // next launch anyway, and keeping large live payloads (full
+          // tournament pick lists) out of storage avoids accumulating one
+          // persisted key per tournament/gameweek combination.
+          if (expiresAt - Date.now() > 60 * 1000) {
+            wx.setStorageSync(cacheKey, entry);
+          }
+        } catch {}
+      }
     }
     return data;
   }).catch((err: unknown) => {

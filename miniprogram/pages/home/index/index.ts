@@ -1,5 +1,6 @@
 import { getMiniProgramNotice, getNextFixture, refreshEventAndDeadline } from "../../../services/common.service";
 import { getEntryInfo } from "../../../services/entry.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import { getPlayerValues } from "../../../services/price.service";
 import { getGameweekStatsForHome } from "../../../services/summary.service";
 import type { Fixture } from "../../../models/common";
@@ -9,7 +10,7 @@ import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/su
 import { routes } from "../../../config/routes";
 import { forceEntryBinding, goToEntryProfile, navigateTo } from "../../../utils/navigation";
 import { clearEntryId, clearEntryScopedStorage } from "../../../utils/storage";
-import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
+import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
 
@@ -143,8 +144,17 @@ Page({
 
   async loadPage(forceRefresh = false) {
     const app = getApp<IAppOption>();
+    if (!getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked, so wait for the
+      // refreshed profile before snapshotting the entry. Show the loading
+      // state first so the wait never renders placeholder content.
+      this.setData({ loading: true });
+      try { await app.authReady; } catch {}
+    }
     const entryId = app.globalData.entryId;
     if (!entryId) {
+      this.setData({ loading: false });
       forceEntryBinding();
       return;
     }
@@ -169,7 +179,7 @@ Page({
       const [entry, fixtures, priceChanges, gameweekStats] = await Promise.all([
         getEntryInfo(entryId, forceRefresh).catch(() => undefined as EntryInfo | undefined),
         fixtureTask,
-        getPlayerValues(new Date().toISOString().slice(0, 10).replace(/-/g, ""), forceRefresh).catch(() => [] as PlayerValue[]),
+        getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]),
         getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined)
       ]);
       if (!entry) {

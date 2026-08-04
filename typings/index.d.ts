@@ -12,6 +12,8 @@ interface IAppOption extends WechatMiniprogram.IAnyObject {
     openid?: string
   }
   _pendingInit: Promise<void> | null
+  _authReadyResolve: (() => void) | null
+  authReady: Promise<void> | null
   initAppData: () => Promise<void>
 }
 

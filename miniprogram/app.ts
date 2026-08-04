@@ -1,10 +1,10 @@
 import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
-import { getApiSessionToken, refreshWechatApiSession } from "./services/auth.service";
+import { getApiSessionToken, isLogoutInFlight, refreshWechatApiSession } from "./services/auth.service";
 import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
-import { storagePrefixes } from "./config/storage-keys";
+import { storageKeys, storagePrefixes } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import { resolveEventContext } from "./utils/event-context";
 
@@ -21,10 +21,19 @@ App<IAppOption>({
   },
 
   _pendingInit: null as Promise<void> | null,
+  _authReadyResolve: null as (() => void) | null,
+  /** Resolves once the first cold-start login attempt has settled (either
+   *  path). Pages that need the authoritative entry binding should await it
+   *  instead of polling for an in-flight refresh, which may not exist yet
+   *  while the privacy callback is still pending. */
+  authReady: null as Promise<void> | null,
 
   async onLaunch() {
     const launchStart = Date.now();
     this.globalData.entryId = getEntryId();
+    this.authReady = new Promise<void>((resolve) => {
+      this._authReadyResolve = resolve;
+    });
     this.requirePrivacyAndLogin();
     await this.initAppData();
     recordLaunch(Date.now() - launchStart);
@@ -59,7 +68,13 @@ App<IAppOption>({
     // entry binding is restored from storage, and a later 401 triggers the
     // single-flight refresh path in graphql.service.
     this.globalData.entryId = getEntryId();
+    const markAuthReady = () => {
+      this._authReadyResolve?.();
+      this._authReadyResolve = null;
+    };
     if (getApiSessionToken()) {
+      markAuthReady();
+      this.revalidateSessionProfile();
       return;
     }
     refreshWechatApiSession().then((session) => {
@@ -70,7 +85,74 @@ App<IAppOption>({
       if (error instanceof MiniProgramLinkRequiredError) {
         wx.reLaunch({ url: routes.accountLink });
       }
+    }).finally(markAuthReady);
+  },
+
+  /**
+   * A valid session can outlive the web-side binding: the user may change or
+   * unlink their verified FPL entry while the 30-day token keeps working.
+   * Re-fetch the authoritative profile in the background at most once per
+   * 24h (storeApiSession stamps every persisted session, so fresh logins and
+   * 401 recoveries count too) without blocking cold starts.
+   */
+  revalidateSessionProfile() {
+    const lastChecked = Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
+    if (lastChecked && Date.now() - lastChecked < 24 * 60 * 60 * 1000) {
+      return;
+    }
+    const boundEntryAtStart = this.globalData.entryId;
+    refreshWechatApiSession().then((session) => {
+      // storeApiSession has applied the fresh binding to globalData and
+      // cleared stale caches. If the binding actually changed, the open page
+      // is still showing the previously bound team — rebuild it.
+      const nextEntry = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
+        ? session.profile.fplEntryId
+        : undefined;
+      if (nextEntry !== boundEntryAtStart) {
+        this.reloadCurrentPageForEntryChange(nextEntry);
+      }
+    }).catch((error) => {
+      if (error instanceof MiniProgramLinkRequiredError) {
+        wx.reLaunch({ url: routes.accountLink });
+      }
+      // Network failures keep the stored binding and retry on a later launch.
     });
+  },
+
+  /** Rebuild the visible page after the authoritative entry binding changed. */
+  reloadCurrentPageForEntryChange(nextEntry?: number) {
+    try {
+      if (isLogoutInFlight()) {
+        // Logout is about to clear the session it awaited: rebuilding entry
+        // content now would strand the signed-out user on it with no route
+        // back. The sign-out flow owns navigation from here.
+        return;
+      }
+      const pages = getCurrentPages();
+      const current = pages[pages.length - 1] as
+        | { route?: string; options?: Record<string, unknown> }
+        | undefined;
+      if (!current || !current.route) {
+        return;
+      }
+      const url = `/${current.route}`;
+      if (url === routes.accountLink) {
+        // Never yank an in-progress account-link flow — unless the binding it
+        // exists to create has just been restored, in which case the form is
+        // obsolete and the user belongs back on content.
+        if (nextEntry) {
+          wx.reLaunch({ url: routes.home });
+        }
+        return;
+      }
+      // Preserve route params (player-detail?code=..., team-detail?teamId=...):
+      // reLaunching the bare route re-runs onLoad with no identifier and
+      // strands the page on an empty state.
+      const query = Object.entries(current.options || {})
+        .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+        .join("&");
+      wx.reLaunch({ url: query ? `${url}?${query}` : url });
+    } catch {}
   },
 
   async initAppData() {

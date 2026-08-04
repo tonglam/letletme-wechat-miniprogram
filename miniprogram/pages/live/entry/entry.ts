@@ -1,11 +1,13 @@
 import { getEntryEventTransfers } from "../../../services/entry.service";
 import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services/live.service";
+import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { forceEntryBinding } from "../../../utils/navigation";
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
+  shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../../../utils/live-refresh";
 import { normalizePlayer } from "./player";
@@ -44,6 +46,7 @@ interface LiveEntryData {
 interface LiveEntryLoadOptions {
   background?: boolean;
   includeTransfers?: boolean;
+  forceRefresh?: boolean;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -94,20 +97,34 @@ Page({
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
+  transfersRequestId: 0,
   freshnessRequest: null as Promise<void> | null,
   freshnessRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
+  cachedLiveStoredAt: undefined as number | undefined,
   pageVisible: false,
   hasShown: false,
 
-  onLoad(options?: Record<string, string | undefined>) {
+  async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
     const routeEntry = Number(options?.entry);
+    const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
+    // Show the loading state while waiting for shared launch data so a cold
+    // open never renders zero scores as if they were loaded content.
+    this.setData({ loading: true });
+    await app.initAppData();
+    if (!hasRouteEntry && !getApiSessionToken()) {
+      // With no valid session the stored binding is only offline/display
+      // fallback: the account may have been relinked to a different entry
+      // since, so wait for the refreshed profile to re-assert it (the login
+      // may not even have started while the privacy callback is pending).
+      try { await app.authReady; } catch {}
+    }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: Number.isFinite(routeEntry) && routeEntry > 0 ? routeEntry : app.globalData.entryId
+      entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
     });
     this.loadData({ includeTransfers: true });
   },
@@ -117,7 +134,7 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     this.syncAutoRefresh();
-    if (resumed && this.shouldAutoRefresh()) {
+    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       this.refreshIfChanged();
     }
   },
@@ -135,7 +152,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadData({ background: true, includeTransfers: true })
+    this.loadData({ background: true, includeTransfers: true, forceRefresh: true })
       .finally(() => wx.stopPullDownRefresh());
   },
 
@@ -160,22 +177,21 @@ Page({
       : {
           loading: true,
           error: "",
-          ...(options.includeTransfers ? { transfersError: "" } : {}),
+          ...(options.includeTransfers ? { transfers: [], transfersError: "" } : {}),
           emptyState: false
         });
 
+    if (options.includeTransfers) {
+      void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
+    }
+
     const request = (async () => {
       try {
-        let transfersError = "";
-        const [liveResult, transfers] = await Promise.all([
-          getLivePointsByEntrySnapshot(entryId, eventId),
-          options.includeTransfers
-            ? getEntryEventTransfers(entryId, eventId).catch((error) => {
-                transfersError = error instanceof Error ? error.message : "本周转会加载失败";
-                return [] as EntryTransfer[];
-              })
-            : Promise.resolve<EntryTransfer[] | null>(null)
-        ]);
+        const liveResult = await getLivePointsByEntrySnapshot(
+          entryId,
+          eventId,
+          options.forceRefresh === true
+        );
         if (requestId !== this.liveRequestId) return;
 
         const result = liveResult.data;
@@ -188,7 +204,9 @@ Page({
         const total = numberValue(result.liveTotalPoints ?? result.total);
         const netPoints = numberValue(result.liveNetPoints ?? livePoints);
         const transferCost = numberValue(result.transferCost);
+        const fetchedAt = liveResult.servedStoredAt || Date.now();
         this.liveSnapshot = liveResult.snapshot;
+        this.cachedLiveStoredAt = liveResult.servedStoredAt;
         this.setData({
           hasData: true,
           total,
@@ -207,9 +225,7 @@ Page({
           starters,
           bench,
           managers,
-          ...(transfers === null ? {} : { transfers: transfers.map(normalizeTransfer) }),
-          ...(transfers === null ? {} : { transfersError }),
-          lastUpdated: formatTime(new Date())
+          lastUpdated: formatTime(new Date(fetchedAt))
         });
         this.syncAutoRefresh();
       } catch (error) {
@@ -228,9 +244,37 @@ Page({
       if (this.liveRequest === request) {
         this.liveRequest = null;
         this.liveRequestKey = "";
+        this.revalidateCachedSnapshot();
       }
     });
     return request;
+  },
+
+  async loadTransfers(entryId: number, eventId: number, forceRefresh: boolean): Promise<void> {
+    const requestId = this.transfersRequestId + 1;
+    this.transfersRequestId = requestId;
+    try {
+      const transfers: EntryTransfer[] = await getEntryEventTransfers(entryId, eventId, forceRefresh);
+      if (
+        requestId !== this.transfersRequestId
+        || entryId !== this.data.entryId
+        || eventId !== this.data.event
+      ) {
+        return;
+      }
+      this.setData({ transfers: transfers.map(normalizeTransfer), transfersError: "" });
+    } catch (error) {
+      if (
+        requestId !== this.transfersRequestId
+        || entryId !== this.data.entryId
+        || eventId !== this.data.event
+      ) {
+        return;
+      }
+      this.setData({
+        transfersError: error instanceof Error ? error.message : "本周转会加载失败"
+      });
+    }
   },
 
   shouldAutoRefresh(): boolean {
@@ -242,6 +286,24 @@ Page({
       selectedEventId: this.data.event,
       snapshot: this.liveSnapshot
     });
+  },
+
+  revalidateCachedSnapshot(): boolean {
+    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    if (!shouldRevalidateCachedLiveSnapshot({
+      servedStoredAt: this.cachedLiveStoredAt,
+      pageVisible: this.pageVisible,
+      currentEventId,
+      selectedEventId: this.data.event,
+      snapshot: this.liveSnapshot
+    })) {
+      return false;
+    }
+    // Consume this signal before starting the metadata request so onShow and
+    // request cleanup cannot launch duplicate stale-while-revalidate checks.
+    this.cachedLiveStoredAt = undefined;
+    void this.refreshIfChanged();
+    return true;
   },
 
   refreshIfChanged(): Promise<void> {
@@ -262,7 +324,7 @@ Page({
           this.syncAutoRefresh();
           return;
         }
-        await this.loadData({ background: true });
+        await this.loadData({ background: true, forceRefresh: true });
       } catch (error) {
         if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队刷新失败" });
@@ -301,13 +363,14 @@ Page({
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.cancelFreshnessCheck();
     this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
     this.stopAutoRefresh();
     this.setData({ event: event.detail.value, hasData: false, lastUpdated: "" });
     this.loadData({ includeTransfers: true });
   },
 
   onRetry() {
-    this.loadData({ includeTransfers: true });
+    this.loadData({ includeTransfers: true, forceRefresh: true });
   },
 
   onChooseEntry() {

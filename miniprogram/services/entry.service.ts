@@ -222,8 +222,27 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
-export async function getEntryEventTransfers(entry: number, event: number): Promise<EntryTransfer[]> {
-  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry });
+const TRANSFERS_HISTORY_CACHE_TTL_MS = 30 * 60 * 1000;
+const LIVE_EVENT_TRANSFERS_CACHE_TTL_MS = 30 * 1000;
+
+export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
+  // The history payload covers the live gameweek too: while the deadline is
+  // open the manager can still make moves, so current-GW views must churn
+  // with the live data instead of pinning the payload for the full half hour.
+  let currentGw = 0;
+  try {
+    currentGw = Number(getApp<IAppOption>().globalData.gw) || 0;
+  } catch {}
+  const isLiveEvent = currentGw > 0 && event >= currentGw;
+  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    // Live and historical freshness policies get separate cache entries:
+    // sharing one key would let a 30-minute history serve stand in for the
+    // live view, and a memory-only live write could never replace a
+    // persisted stale entry.
+    cacheVariant: isLiveEvent ? "live" : "history",
+    cacheTtl: isLiveEvent ? LIVE_EVENT_TRANSFERS_CACHE_TTL_MS : TRANSFERS_HISTORY_CACHE_TTL_MS,
+    forceRefresh
+  });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);
   if (!gw) {
     return [];
@@ -240,8 +259,13 @@ export async function getEntryEventTransfers(entry: number, event: number): Prom
   }));
 }
 
-export async function getEntryAllTransfers(entry: number): Promise<EntryTransfer[]> {
-  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry });
+export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
+  const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
+    // Same freshness class as historical per-event views: share their entry.
+    cacheVariant: "history",
+    cacheTtl: 30 * 60 * 1000,
+    forceRefresh
+  });
   return (data.entryTransferHistory || []).flatMap((gw) => gw.transfers.map((t) => ({
     event: t.event,
     playerIn: t.elementInWebName,

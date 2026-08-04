@@ -25,3 +25,14 @@ export function shouldPollLiveSnapshot(options: {
   if (!snapshot || snapshot.eventId !== selectedEventId) return true;
   return snapshot.state !== "SETTLED";
 }
+
+export function shouldRevalidateCachedLiveSnapshot(options: {
+  servedStoredAt?: number;
+  pageVisible: boolean;
+  currentEventId?: number;
+  selectedEventId?: number;
+  snapshot?: LiveSnapshotStatus | null;
+}): boolean {
+  const { servedStoredAt, ...pollOptions } = options;
+  return servedStoredAt !== undefined && shouldPollLiveSnapshot(pollOptions);
+}
