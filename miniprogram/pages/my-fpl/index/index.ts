@@ -136,28 +136,24 @@ Page({
       return;
     }
 
-    // Phase renders from context alone — secondary reads must not block it.
-    const snapshotState = context.currentEvent
-      ? await getCurrentSnapshotState(context.currentEvent)
-      : undefined;
-    if (this.isStale(requestId)) return;
-
-    const phase = deriveMyFplPhase({
+    // Render a safe context-only phase immediately. Snapshot and secondary
+    // reads continue in parallel, so an unavailable live endpoint never
+    // blocks the primary card.
+    const initialPhase = deriveMyFplPhase({
       currentEvent: context.currentEvent,
       nextEvent: context.nextEvent,
-      now: Date.now(),
-      snapshotState
+      now: Date.now()
     });
     this.setData({
       loading: false,
       eventContextAvailable: true,
-      phase,
+      phase: initialPhase,
       deadlineText: context.utcDeadline ? formatDeadline(context.utcDeadline) : ""
     });
     // Primary card render: the observability anchor for time-to-phase-card.
     recordMyFplVisit({
       surface: "overview",
-      phase,
+      phase: initialPhase,
       eventId: event || undefined,
       cacheOutcome: cached ? "last-good" : "miss",
       durationBucket: durationBucket(Date.now() - loadStart)
@@ -174,12 +170,26 @@ Page({
       return;
     }
 
-    // Bounded secondary summaries, independently degraded on failure.
-    const [brief, leagues] = await Promise.all([
+    // Snapshot and bounded secondary summaries are independent and degrade
+    // separately after the primary card is already visible.
+    const [snapshotState, brief, leagues] = await Promise.all([
+      context.currentEvent
+        ? getCurrentSnapshotState(context.currentEvent)
+        : Promise.resolve(undefined),
       getMyFplTeamBrief(context.entryId, event).catch(() => null),
       getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
     ]);
     if (this.isStale(requestId)) return;
+
+    const phase = deriveMyFplPhase({
+      currentEvent: context.currentEvent,
+      nextEvent: context.nextEvent,
+      now: Date.now(),
+      snapshotState
+    });
+    if (phase !== this.data.phase) {
+      this.setData({ phase });
+    }
 
     if (brief === null && leagues === null) {
       // Total failure: keep last-good and surface a retryable data state.
@@ -192,9 +202,17 @@ Page({
     }
     const nextBrief = brief ?? cached?.teamBrief ?? null;
     const leagueState = resolveOverviewLeagueState(leagues, cached?.leagueCount);
+    const retainedBrief = brief === null && Boolean(cached?.teamBrief);
+    const retainedLeagues = leagues === null && cached?.leagueCount !== undefined;
+    const partialError = brief === null
+      ? retainedBrief ? "球队摘要刷新失败，当前显示上次成功结果" : "球队摘要暂时无法读取"
+      : leagues === null
+        ? retainedLeagues ? "联赛摘要刷新失败，当前显示上次成功结果" : "联赛摘要暂时无法读取"
+        : "";
     this.setData({
       teamBrief: nextBrief,
-      ...leagueState
+      ...leagueState,
+      error: partialError
     });
     try {
       wx.setStorageSync(OVERVIEW_CACHE_KEY, {
@@ -202,7 +220,7 @@ Page({
         event,
         teamBrief: nextBrief,
         ...(leagueState.leaguesLoaded ? { leagueCount: leagueState.leagueCount } : {}),
-        storedAt: Date.now()
+        storedAt: (retainedBrief || retainedLeagues) && cached ? cached.storedAt : Date.now()
       } satisfies OverviewCache);
     } catch { /* cache is best effort */ }
     this.syncPrincipalState();

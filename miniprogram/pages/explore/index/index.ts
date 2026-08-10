@@ -53,8 +53,9 @@ Page({
   syncContext() {
     const app = getApp<IAppOption>();
     const season = app.globalData.season;
-    const gw = Number(app.globalData.gw);
-    if (!season && !gw) {
+    const currentGw = Number(app.globalData.currentGw);
+    const resolvedGw = Number(app.globalData.gw);
+    if (!season && !resolvedGw) {
       this.setData({ contextText: "" });
       return;
     }
@@ -62,8 +63,10 @@ Page({
     if (season) {
       parts.push(`赛季 ${season}`);
     }
-    if (Number.isInteger(gw) && gw > 0) {
-      parts.push(`当前 GW ${gw}`);
+    if (Number.isInteger(currentGw) && currentGw > 0) {
+      parts.push(`当前 GW ${currentGw}`);
+    } else if (Number.isInteger(resolvedGw) && resolvedGw > 0) {
+      parts.push(`下轮 GW ${resolvedGw}`);
     }
     this.setData({ contextText: parts.join(" · ") });
   },

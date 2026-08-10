@@ -75,7 +75,7 @@ interface LiveTournamentData {
   refreshing: boolean;
   hasData: boolean;
   displayState: LiveDisplayState;
-  failedRowCount: number;
+  retainedRowCount: number;
   error: string;
   errorSuffix: string;
   tournamentListError: string;
@@ -254,7 +254,7 @@ Page({
     refreshing: false,
     hasData: false,
     displayState: "fresh",
-    failedRowCount: 0,
+    retainedRowCount: 0,
     error: "",
     errorSuffix: "",
     tournamentListError: "",
@@ -336,6 +336,7 @@ Page({
   pageVisible: false,
   hasShown: false,
   failedEntryCount: 0,
+  retainedRowCount: 0,
 
   async onLoad() {
     const app = getApp<IAppOption>();
@@ -565,6 +566,9 @@ Page({
     const requestId = this.rowsRequestId + 1;
     this.rowsRequestId = requestId;
     const preserveData = options.background === true && this.data.hasData;
+    if (!preserveData) {
+      this.retainedRowCount = 0;
+    }
     this.setData(preserveData
       ? { refreshing: true, error: "", errorSuffix: "" }
       : { loading: true, error: "", errorSuffix: "" });
@@ -593,6 +597,7 @@ Page({
               && !refreshedEntryIds.has(numberValue(row.entry))
             ))
           : [];
+        this.retainedRowCount = retainedRows.length;
         this.applyRows(
           [...refreshedRows, ...retainedRows],
           true,
@@ -677,12 +682,12 @@ Page({
         eventId: this.data.event,
         isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
         displayState: next,
-        retainedRowCount: this.failedEntryCount
+        retainedRowCount: this.retainedRowCount
       });
     }
     this.setData({
       displayState: next,
-      failedRowCount: this.failedEntryCount
+      retainedRowCount: this.retainedRowCount
     });
   },
 

@@ -10,7 +10,7 @@
   </view>
 
   <view wx:if="{{tournaments.length && !emptyState}}" class="section status-section">
-    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{failedRowCount}}" bind:refresh="onRetry" />
+    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{retainedRowCount}}" bind:refresh="onRetry" />
   </view>
 
   <view wx:if="{{tournaments.length}}" class="section picker-card">

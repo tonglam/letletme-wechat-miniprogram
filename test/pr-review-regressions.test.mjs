@@ -105,3 +105,31 @@ test("overview clears secondary content when the event has no matching cache", (
     /if \(brief === null && leagues === null\)[\s\S]*teamBrief: cached\?\.teamBrief \?\? null/
   );
 });
+
+test("Explore labels an upcoming preseason round separately from the current event", () => {
+  const explore = source("miniprogram/pages/explore/index/index.ts");
+  assert.match(explore, /const currentGw = Number\(app\.globalData\.currentGw\)/);
+  assert.match(explore, /`下轮 GW \$\{resolvedGw\}`/);
+});
+
+test("entry lookup results are guarded by request generation and input identity", () => {
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  assert.match(search, /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/);
+  assert.match(search, /if \(requestId === this\.lookupRequestId\)/);
+});
+
+test("overview paints before starting snapshot and secondary reads", () => {
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  const primaryPaint = overview.indexOf("eventContextAvailable: true");
+  const snapshotRead = overview.indexOf("const [snapshotState, brief, leagues]");
+  assert.ok(primaryPaint >= 0 && snapshotRead > primaryPaint);
+  assert.match(overview, /storedAt: \(retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
+});
+
+test("tournament status reports only rows actually retained", () => {
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const template = source("miniprogram/pages/live/tournament/tournament.wxml");
+  assert.match(tournament, /this\.retainedRowCount = retainedRows\.length/);
+  assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
+  assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
+});
