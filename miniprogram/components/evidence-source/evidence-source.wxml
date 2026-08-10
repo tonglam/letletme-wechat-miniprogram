@@ -1,0 +1,4 @@
+<view class="evidence-source tone-{{tone}}">
+  <view class="source-dot" />
+  <text>{{line}}</text>
+</view>

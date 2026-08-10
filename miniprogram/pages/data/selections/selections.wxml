@@ -67,7 +67,11 @@
         </view>
       </view>
     </view>
+
+    <view class="section">
+      <evidence-source text="范围:本赛事全部成员 · 精确 · LetLetMe 计算" />
+    </view>
   </block>
 
-  <bottomNavBar active="data" />
+  <bottomNavBar active="explore" />
 </view>

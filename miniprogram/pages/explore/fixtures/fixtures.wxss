@@ -126,9 +126,3 @@
   color: var(--muted-ink, #6e5a72);
   font-size: 24rpx;
 }
-
-.source-line {
-  color: var(--muted-ink, #6e5a72);
-  font-size: 22rpx;
-  text-align: center;
-}

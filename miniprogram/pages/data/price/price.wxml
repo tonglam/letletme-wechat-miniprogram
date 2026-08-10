@@ -165,5 +165,9 @@
     </view>
   </block>
 
-  <bottomNavBar active="data" />
+  <view class="section">
+    <evidence-source evidenceClass="OFFICIAL_FPL" freshness="每日更新" />
+  </view>
+
+  <bottomNavBar active="explore" />
 </view>

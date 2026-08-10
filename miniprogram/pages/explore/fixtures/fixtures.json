@@ -4,6 +4,7 @@
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "gw-picker": "../../../components/gw-picker/gw-picker",
-    "fixture-chip": "../../../components/fixture-chip/fixture-chip"
+    "fixture-chip": "../../../components/fixture-chip/fixture-chip",
+    "evidence-source": "../../../components/evidence-source/evidence-source"
   }
 }

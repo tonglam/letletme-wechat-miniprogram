@@ -44,7 +44,7 @@
       </view>
     </view>
     <view class="section">
-      <view class="source-line">来源 FPL 官方</view>
+      <evidence-source evidenceClass="OFFICIAL_FPL" />
     </view>
   </block>
 
