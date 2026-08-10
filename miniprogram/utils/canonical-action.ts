@@ -11,6 +11,9 @@ export type CanonicalActionType =
   | "TEAM_BIND"
   | "LEAGUE_PREPARE"
   | "LEAGUE_MANAGE"
+  | "CREATE_COMPETITION"
+  | "MANAGE_COMPETITION"
+  | "VIEW_COMPETITION"
   | "OPEN_HOME";
 
 export interface CanonicalAction {
@@ -23,6 +26,11 @@ const ACTION_URLS: Record<CanonicalActionType, string> = {
   TEAM_BIND: "https://www.letletme.top/zh-CN/account",
   LEAGUE_PREPARE: "https://www.letletme.top/zh-CN/tournament",
   LEAGUE_MANAGE: "https://www.letletme.top/zh-CN/tournament",
+  // Compatibility destinations until the Website /zh-CN/competitions route
+  // registry ships (§11.1); URLs stay static — no competition IDs appended.
+  CREATE_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
+  MANAGE_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
+  VIEW_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
   OPEN_HOME: "https://www.letletme.top/zh-CN"
 };
 

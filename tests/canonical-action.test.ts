@@ -29,11 +29,21 @@ function testAllowlist(): void {
 }
 
 function testActionTable(): void {
-  const types: CanonicalActionType[] = ["ACCOUNT_LINK", "TEAM_BIND", "LEAGUE_PREPARE", "LEAGUE_MANAGE", "OPEN_HOME"];
+  const types: CanonicalActionType[] = [
+    "ACCOUNT_LINK",
+    "TEAM_BIND",
+    "LEAGUE_PREPARE",
+    "LEAGUE_MANAGE",
+    "CREATE_COMPETITION",
+    "MANAGE_COMPETITION",
+    "VIEW_COMPETITION",
+    "OPEN_HOME"
+  ];
   for (const type of types) {
     const action = canonicalAction(type);
     assertEqual(action.actionType, type, `${type} keeps its type`);
     assert(isAllowedWebsiteUrl(action.href), `${type} maps to an allowlisted URL`);
+    assert(!action.href.includes("?"), `${type} stays a static URL with no interpolated parameters`);
   }
 }
 
