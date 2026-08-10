@@ -47,7 +47,7 @@ function testActionTable(): void {
   }
 }
 
-function testOpenWebsiteAction(): void {
+async function testOpenWebsiteAction(): Promise<void> {
   const copied: string[] = [];
   const toasts: string[] = [];
   (globalThis as { wx?: unknown }).wx = {
@@ -60,20 +60,27 @@ function testOpenWebsiteAction(): void {
     }
   };
 
-  assert(openWebsiteAction(canonicalAction("LEAGUE_PREPARE")), "allowlisted action is accepted");
+  assert(await openWebsiteAction(canonicalAction("LEAGUE_PREPARE")), "allowlisted action is accepted");
   assertEqual(copied.length, 1, "the href lands on the clipboard");
   assert(copied[0].includes("letletme.top"), "clipboard holds the website URL");
   assert(toasts[0].includes("浏览器"), "the toast explains the browser handoff");
 
-  assert(!openWebsiteAction({ actionType: "OPEN_HOME", href: "https://evil.com/" }), "rejected URL returns false");
+  assert(!(await openWebsiteAction({ actionType: "OPEN_HOME", href: "https://evil.com/" })), "rejected URL returns false");
   assertEqual(copied.length, 1, "a rejected URL never touches the clipboard");
+
+  (globalThis as { wx?: unknown }).wx = {
+    setClipboardData: ({ fail }: { fail?: () => void }) => fail?.(),
+    showToast: ({ title }: { title: string }) => toasts.push(title)
+  };
+  assert(!(await openWebsiteAction(canonicalAction("LEAGUE_PREPARE"))), "clipboard failure rejects the handoff");
+  assert(toasts[toasts.length - 1]?.includes("复制失败") ?? false, "clipboard failure remains visible");
 }
 
-function main(): void {
+async function main(): Promise<void> {
   testAllowlist();
   testActionTable();
-  testOpenWebsiteAction();
+  await testOpenWebsiteAction();
   console.log("canonical-action tests passed");
 }
 
-main();
+void main();

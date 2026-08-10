@@ -25,6 +25,24 @@ interface EntryEventResultPayload {
   overallRank?: number | null;
 }
 
+type ReadResult<T> =
+  | { available: true; value: T }
+  | { available: false; value: null };
+
+export interface MyFplTeamBriefResult {
+  brief: MyFplTeamBrief | null;
+  entryAvailable: boolean;
+  eventResultAvailable: boolean;
+}
+
+async function settleRead<T>(read: Promise<T>): Promise<ReadResult<T>> {
+  try {
+    return { available: true, value: await read };
+  } catch {
+    return { available: false, value: null };
+  }
+}
+
 function pickNumber(value: number | null | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -95,25 +113,31 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
 }
 
 /**
- * Team brief for the overview card. Partial failure returns a partial brief;
- * total failure returns null so the page can keep last-good content.
+ * Team brief for the overview card. Availability travels with the composed
+ * value so a caller can retain only fields whose source failed, rather than
+ * mistaking a partial object for a fully fresh response.
  */
-export async function getMyFplTeamBrief(entryId: number, event: number): Promise<MyFplTeamBrief | null> {
-  const [entry, eventResult] = await Promise.all([
-    getEntryInfo(entryId).catch(() => null),
+export async function getMyFplTeamBrief(entryId: number, event: number): Promise<MyFplTeamBriefResult> {
+  const [entryRead, eventRead] = await Promise.all([
+    settleRead(getEntryInfo(entryId)),
     event > 0
-      ? getEntryEventResult(entryId, event).then((res) => res as EntryEventResultPayload | null).catch(() => null)
-      : Promise.resolve(null)
+      ? settleRead(getEntryEventResult(entryId, event).then((res) => res as EntryEventResultPayload | null))
+      : Promise.resolve({ available: true, value: null } as ReadResult<EntryEventResultPayload | null>)
   ]);
-  return mergeMyFplTeamBrief(
-    entry ? {
-      entryName: entry.entryName,
-      playerName: entry.playerName,
-      overallPoints: entry.totalPoints,
-      overallRank: entry.overallRank
-    } : null,
-    eventResult
-  );
+  const entry = entryRead.value;
+  return {
+    brief: mergeMyFplTeamBrief(
+      entry ? {
+        entryName: entry.entryName,
+        playerName: entry.playerName,
+        overallPoints: entry.totalPoints,
+        overallRank: entry.overallRank
+      } : null,
+      eventRead.value
+    ),
+    entryAvailable: entryRead.available,
+    eventResultAvailable: eventRead.available
+  };
 }
 
 /**

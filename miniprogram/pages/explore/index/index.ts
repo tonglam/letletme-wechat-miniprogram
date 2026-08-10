@@ -27,6 +27,8 @@ Page({
     groups: [] as CardGroup[]
   },
 
+  hasShown: false,
+
   async onLoad() {
     const loadStart = Date.now();
     this.buildGroups();
@@ -37,14 +39,20 @@ Page({
       contractSource: "compat",
       durationBucket: durationBucket(Date.now() - loadStart)
     });
-    const app = getApp<IAppOption>();
-    if (!app.globalData.season && !app.globalData.gw) {
-      try { await app.initAppData(); } catch { /* the context row stays hidden */ }
-    }
-    this.syncContext();
+    await this.refreshContext();
   },
 
   onShow() {
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (resumed) {
+      void this.refreshContext();
+    }
+  },
+
+  async refreshContext() {
+    const app = getApp<IAppOption>();
+    try { await app.initAppData(true); } catch { /* retain the last known context, if any */ }
     this.syncContext();
   },
 

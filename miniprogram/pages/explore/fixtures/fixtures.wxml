@@ -35,7 +35,8 @@
             <text class="chip-event">GW{{chip.event}}</text>
             <fixture-chip
               opponent="{{chip.opponentShortName}}"
-              difficulty="{{chip.difficulty || 0}}"
+              difficulty="{{chip.difficulty}}"
+              difficultyKnown="{{chip.difficulty != null}}"
               homeAway="{{chip.home ? '主' : '客'}}"
             />
           </view>

@@ -20,6 +20,7 @@ globalThis.Page = () => {};
 
 const { waitForAuthoritativeFollow } = await import("../miniprogram/utils/follow.ts");
 const { resolveKeywordAfterPlayerLoad } = await import("../miniprogram/pages/data/players/players.ts");
+const { mergeTeamBriefWithCache } = await import("../miniprogram/pages/my-fpl/index/index.ts");
 
 function source(relativePath) {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -66,7 +67,7 @@ test("a total overview secondary failure settles the league module", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   assert.match(
     overview,
-    /if \(brief === null && leagues === null\)[\s\S]*resolveOverviewLeagueState\(null, cached\?\.leagueCount\)/,
+    /if \(briefUnavailable && leagues === null\)[\s\S]*resolveOverviewLeagueState\(null, cached\?\.leagueCount\)/,
     "terminal failure renders cached availability or an explicit unavailable state"
   );
 });
@@ -85,7 +86,8 @@ test("empty fixture directories clear previously composed cards", () => {
 test("Explore waits for shared launch context before syncing its context row", () => {
   const explore = source("miniprogram/pages/explore/index/index.ts");
   assert.match(explore, /async onLoad\(\)/);
-  assert.match(explore, /await app\.initAppData\(\)[\s\S]*this\.syncContext\(\)/);
+  assert.match(explore, /await app\.initAppData\(true\)[\s\S]*this\.syncContext\(\)/);
+  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.refreshContext\(\)/);
 });
 
 test("player directory completion preserves edits made during the request", () => {
@@ -102,7 +104,7 @@ test("overview clears secondary content when the event has no matching cache", (
   assert.match(overview, /teamBrief: cached\?\.teamBrief \?\? null/);
   assert.match(
     overview,
-    /if \(brief === null && leagues === null\)[\s\S]*teamBrief: cached\?\.teamBrief \?\? null/
+    /if \(briefUnavailable && leagues === null\)[\s\S]*teamBrief: cached\?\.teamBrief \?\? null/
   );
 });
 
@@ -121,9 +123,9 @@ test("entry lookup results are guarded by request generation and input identity"
 test("overview paints before starting snapshot and secondary reads", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const primaryPaint = overview.indexOf("eventContextAvailable: true");
-  const snapshotRead = overview.indexOf("const [snapshotState, brief, leagues]");
+  const snapshotRead = overview.indexOf("const [snapshotState, briefResult, leagues]");
   assert.ok(primaryPaint >= 0 && snapshotRead > primaryPaint);
-  assert.match(overview, /storedAt: \(retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
+  assert.match(overview, /storedAt: \(briefPartial \|\| retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
 });
 
 test("tournament status reports only rows actually retained", () => {
@@ -163,4 +165,66 @@ test("fixture windows force-refresh event context on open and resume", () => {
   assert.match(fixtures, /await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
+  assert.match(fixtures, /this\.setData\(\{ startEvent: gw \}\);[\s\S]*this\.rebuild\(\)/);
+});
+
+test("My FPL partial brief reads retain only fields from the failed source", () => {
+  const cached = {
+    entryName: "Cached team",
+    playerName: "Cached player",
+    eventPoints: 44,
+    overallPoints: 900,
+    overallRank: 1000
+  };
+  assert.deepEqual(
+    mergeTeamBriefWithCache({
+      brief: { eventPoints: 51, overallPoints: 951, overallRank: 800 },
+      entryAvailable: false,
+      eventResultAvailable: true
+    }, cached),
+    {
+      entryName: "Cached team",
+      playerName: "Cached player",
+      eventPoints: 51,
+      overallPoints: 951,
+      overallRank: 800
+    }
+  );
+  assert.deepEqual(
+    mergeTeamBriefWithCache({
+      brief: { entryName: "Fresh team", playerName: "Fresh player", overallPoints: 960, overallRank: 750 },
+      entryAvailable: true,
+      eventResultAvailable: false
+    }, cached),
+    {
+      entryName: "Fresh team",
+      playerName: "Fresh player",
+      eventPoints: 44,
+      overallPoints: 960,
+      overallRank: 750
+    }
+  );
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  assert.match(overview, /storedAt: \(briefPartial \|\| retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
+});
+
+test("website returns bypass competition cache and accepted handoffs await clipboard success", () => {
+  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const action = source("miniprogram/utils/canonical-action.ts");
+  assert.match(competitions, /if \(resumed\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(competitions, /if \(await openWebsiteAction\(action\)\)/);
+  assert.match(leagues, /if \(await openWebsiteAction\(action\)\)/);
+  assert.match(action, /success:[\s\S]*resolve\(true\)/);
+  assert.match(action, /fail[\s\S]*resolve\(false\)/);
+});
+
+test("unknown fixture difficulty uses a neutral style", () => {
+  const template = source("miniprogram/pages/explore/fixtures/fixtures.wxml");
+  const component = source("miniprogram/components/fixture-chip/fixture-chip.ts");
+  const utility = source("miniprogram/utils/fpl.ts");
+  assert.doesNotMatch(template, /difficulty="\{\{chip\.difficulty \|\| 0\}\}"/);
+  assert.match(template, /difficultyKnown="\{\{chip\.difficulty != null\}\}"/);
+  assert.match(component, /difficultyClass: "difficulty-unknown"/);
+  assert.match(utility, /return "difficulty-unknown"/);
 });

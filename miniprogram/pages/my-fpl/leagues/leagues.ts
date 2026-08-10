@@ -114,10 +114,10 @@ Page({
     this.setData({ displayLeagues });
   },
 
-  onOpenWebsite() {
+  async onOpenWebsite() {
     // Competition preparation and league management are Website-only (§7.3).
     const action = canonicalAction("LEAGUE_PREPARE");
-    if (openWebsiteAction(action)) {
+    if (await openWebsiteAction(action)) {
       recordMyFplVisit({ surface: "leagues", handoffActionType: action.actionType });
     }
   },

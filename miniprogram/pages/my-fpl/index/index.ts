@@ -4,6 +4,7 @@ import {
   getMyFplLeagues,
   getMyFplTeamBrief
 } from "../../../services/my-fpl.service";
+import type { MyFplTeamBriefResult } from "../../../services/my-fpl.service";
 import type {
   MyFplContext,
   MyFplLeagueBrief,
@@ -38,6 +39,29 @@ export function resolveOverviewLeagueState(
     return { leagueCount: 0, leaguesLoaded: false, leaguesUnavailable: true };
   }
   return { leagueCount, leaguesLoaded: true, leaguesUnavailable: false };
+}
+
+/** Keep cached fields only for the source that failed. Successful reads are
+ * authoritative even when a field is absent, so stale values are cleared. */
+export function mergeTeamBriefWithCache(
+  result: MyFplTeamBriefResult | null,
+  cached: MyFplTeamBrief | null | undefined
+): MyFplTeamBrief | null {
+  if (!result || (!result.entryAvailable && !result.eventResultAvailable)) {
+    return cached ?? null;
+  }
+  const fresh = result.brief ?? {};
+  return {
+    entryName: result.entryAvailable ? fresh.entryName : cached?.entryName,
+    playerName: result.entryAvailable ? fresh.playerName : cached?.playerName,
+    eventPoints: result.eventResultAvailable ? fresh.eventPoints : cached?.eventPoints,
+    overallPoints: result.eventResultAvailable || result.entryAvailable
+      ? fresh.overallPoints
+      : cached?.overallPoints,
+    overallRank: result.eventResultAvailable || result.entryAvailable
+      ? fresh.overallRank
+      : cached?.overallRank
+  };
 }
 
 function readOverviewCache(entryId: number | undefined, event: number | undefined): OverviewCache | null {
@@ -172,7 +196,7 @@ Page({
 
     // Snapshot and bounded secondary summaries are independent and degrade
     // separately after the primary card is already visible.
-    const [snapshotState, brief, leagues] = await Promise.all([
+    const [snapshotState, briefResult, leagues] = await Promise.all([
       context.currentEvent
         ? getCurrentSnapshotState(context.currentEvent)
         : Promise.resolve(undefined),
@@ -180,6 +204,12 @@ Page({
       getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
     ]);
     if (this.isStale(requestId)) return;
+
+    const briefUnavailable = !briefResult
+      || (!briefResult.entryAvailable && !briefResult.eventResultAvailable);
+    const briefPartial = Boolean(briefResult)
+      && !briefUnavailable
+      && (!briefResult.entryAvailable || !briefResult.eventResultAvailable);
 
     const phase = deriveMyFplPhase({
       currentEvent: context.currentEvent,
@@ -191,7 +221,7 @@ Page({
       this.setData({ phase });
     }
 
-    if (brief === null && leagues === null) {
+    if (briefUnavailable && leagues === null) {
       // Total failure: keep last-good and surface a retryable data state.
       this.setData({
         teamBrief: cached?.teamBrief ?? null,
@@ -200,12 +230,14 @@ Page({
       });
       return;
     }
-    const nextBrief = brief ?? cached?.teamBrief ?? null;
+    const nextBrief = mergeTeamBriefWithCache(briefResult, cached?.teamBrief);
     const leagueState = resolveOverviewLeagueState(leagues, cached?.leagueCount);
-    const retainedBrief = brief === null && Boolean(cached?.teamBrief);
+    const retainedBrief = (briefUnavailable || briefPartial) && Boolean(cached?.teamBrief);
     const retainedLeagues = leagues === null && cached?.leagueCount !== undefined;
-    const partialError = brief === null
+    const partialError = briefUnavailable
       ? retainedBrief ? "球队摘要刷新失败，当前显示上次成功结果" : "球队摘要暂时无法读取"
+      : briefPartial
+        ? retainedBrief ? "球队摘要部分刷新失败，当前保留上次成功字段" : "球队摘要部分数据暂时无法读取"
       : leagues === null
         ? retainedLeagues ? "联赛摘要刷新失败，当前显示上次成功结果" : "联赛摘要暂时无法读取"
         : "";
@@ -220,7 +252,7 @@ Page({
         event,
         teamBrief: nextBrief,
         ...(leagueState.leaguesLoaded ? { leagueCount: leagueState.leagueCount } : {}),
-        storedAt: (retainedBrief || retainedLeagues) && cached ? cached.storedAt : Date.now()
+        storedAt: (briefPartial || retainedBrief || retainedLeagues) && cached ? cached.storedAt : Date.now()
       } satisfies OverviewCache);
     } catch { /* cache is best effort */ }
     this.syncPrincipalState();

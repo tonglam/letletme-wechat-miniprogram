@@ -16,6 +16,10 @@
 }
 
 /* FDR-aligned difficulty scale (green → amber → red → dark red) */
+.difficulty-unknown {
+  background: var(--text-tertiary, #6b7280);
+}
+
 .difficulty-easy {
   background: var(--green-ink, #008545);
 }

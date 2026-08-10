@@ -39,7 +39,6 @@ Page({
     this.hasShown = true;
     if (!resumed) return;
     await this.syncEventContext(true);
-    this.rebuild();
   },
 
   onPullDownRefresh() {
@@ -53,6 +52,11 @@ Page({
     try { await app.initAppData(forceRefresh); } catch { /* the picker falls back to GW 1 */ }
     const gw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({ startEvent: gw });
+    // Recompose retained fixture payload immediately. If the subsequent
+    // refresh fails, the picker and cards still describe the same event.
+    if (this.teams.length) {
+      this.rebuild();
+    }
   },
 
   async load(forceRefresh = false) {

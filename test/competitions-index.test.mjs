@@ -49,7 +49,7 @@ test("resume revalidates the list; first show does not double-load", () => {
   assert.deepEqual(loads, [], "first show skips the reload that onLoad already started");
 
   competitionsPage.onShow.call(context);
-  assert.deepEqual(loads, [false], "resume revalidates principal and list");
+  assert.deepEqual(loads, [true], "resume bypasses the cache while revalidating principal and list");
 });
 
 test("empty-state create hands off to the Website create action", () => {

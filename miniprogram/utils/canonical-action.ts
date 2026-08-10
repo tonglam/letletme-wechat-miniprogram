@@ -58,19 +58,31 @@ export function isAllowedWebsiteUrl(href: string): boolean {
 
 /**
  * Copy the task link and explain the browser handoff. Returns whether the
- * action was accepted (allowlist pass), so callers can fall back visibly
- * instead of failing silently.
+ * action completed, so callers only record an accepted handoff after the
+ * clipboard write succeeds.
  */
-export function openWebsiteAction(action: CanonicalAction): boolean {
+export function openWebsiteAction(action: CanonicalAction): Promise<boolean> {
   if (!isAllowedWebsiteUrl(action.href)) {
     wx.showToast({ title: "链接不可用", icon: "none" });
-    return false;
+    return Promise.resolve(false);
   }
-  wx.setClipboardData({
-    data: action.href,
-    success: () => {
-      wx.showToast({ title: "链接已复制，请在浏览器打开，可能需要登录网页版", icon: "none" });
+
+  return new Promise((resolve) => {
+    const fail = () => {
+      wx.showToast({ title: "复制失败，请重试", icon: "none" });
+      resolve(false);
+    };
+    try {
+      wx.setClipboardData({
+        data: action.href,
+        success: () => {
+          wx.showToast({ title: "链接已复制，请在浏览器打开，可能需要登录网页版", icon: "none" });
+          resolve(true);
+        },
+        fail
+      });
+    } catch {
+      fail();
     }
   });
-  return true;
 }

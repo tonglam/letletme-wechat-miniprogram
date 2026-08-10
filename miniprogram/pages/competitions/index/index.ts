@@ -56,7 +56,7 @@ Page({
     this.hasShown = true;
     if (resumed) {
       // Website return / team switch: principal and list revalidate (§10.1).
-      void this.loadList();
+      void this.loadList(true);
     }
   },
 
@@ -150,17 +150,17 @@ Page({
     navigateTo(routes.liveTournament);
   },
 
-  onManageCompetition() {
+  async onManageCompetition() {
     const action = canonicalAction("MANAGE_COMPETITION");
-    if (openWebsiteAction(action)) {
+    if (await openWebsiteAction(action)) {
       recordCompetitionVisit({ surface: "list", contractSource: "compat", handoffActionType: action.actionType });
     }
   },
 
-  onCreateCompetition() {
+  async onCreateCompetition() {
     // Creation is Website-only (§1); the empty state hands off.
     const action = canonicalAction("CREATE_COMPETITION");
-    if (openWebsiteAction(action)) {
+    if (await openWebsiteAction(action)) {
       recordCompetitionVisit({ surface: "list", contractSource: "compat", handoffActionType: action.actionType });
     }
   },
