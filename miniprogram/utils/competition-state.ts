@@ -1,22 +1,16 @@
-import type { CompetitionFormatHint, CompetitionLifecycleCompat, CompetitionListItem } from "../models/competition";
+import type {
+  CompetitionFormatHint,
+  CompetitionLifecycleCompat,
+  CompetitionListItem,
+  EntryTournamentRow
+} from "../models/competition";
 
 /**
  * Compatibility adapter (MP-C1.3/1.4): the ONLY place legacy entryTournaments
  * fields are interpreted. Ambiguous input degrades to UNKNOWN — the rest of
  * the client never infers kind, lifecycle, or format from legacy fields.
  */
-export interface EntryTournamentRow {
-  id: number | string;
-  name: string;
-  groupMode?: string | null;
-  totalTeamNum?: number | null;
-  groupStartedEventId?: number | null;
-  groupEndedEventId?: number | null;
-  state?: string | null;
-  knockoutMode?: string | null;
-  knockoutStartedEventId?: number | null;
-  knockoutEndedEventId?: number | null;
-}
+export type { EntryTournamentRow };
 
 const KNOWN_STATES: ReadonlySet<string> = new Set(["ACTIVE", "INACTIVE", "FINISHED"]);
 

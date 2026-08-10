@@ -26,3 +26,17 @@ export interface CompetitionListItem {
   startedEventId?: number;
   endedEventId?: number;
 }
+
+/** Legacy entryTournaments GraphQL row — the adapter's input shape. */
+export interface EntryTournamentRow {
+  id: number | string;
+  name: string;
+  groupMode?: string | null;
+  totalTeamNum?: number | null;
+  groupStartedEventId?: number | null;
+  groupEndedEventId?: number | null;
+  state?: string | null;
+  knockoutMode?: string | null;
+  knockoutStartedEventId?: number | null;
+  knockoutEndedEventId?: number | null;
+}
