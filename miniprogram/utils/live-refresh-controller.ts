@@ -79,8 +79,12 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
   }
 
   function cancelProbe(): void {
+    const wasProbing = probeRequest !== null;
     probeRequestId += 1;
     probeRequest = null;
+    if (wasProbing) {
+      options.onProbeChange?.(false);
+    }
   }
 
   function isResponseStale(requestId: number): boolean {

@@ -68,8 +68,12 @@ Page({
       return;
     }
 
+    const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
+    if (principalChanged) {
+      this.setData({ leagues: [], displayLeagues: [], fromCache: false });
+    }
     const cached = readLeaguesCache(entryId);
-    if (cached && !this.data.leagues.length) {
+    if (cached && (principalChanged || !this.data.leagues.length)) {
       this.setData({ leagues: cached.leagues, fromCache: true });
       this.syncDisplay();
     }
@@ -78,6 +82,11 @@ Page({
     try {
       const leagues = await getMyFplLeagues(entryId, forceRefresh);
       if (requestId !== this.requestId) return;
+      if (currentFollowEntryId() !== entryId) {
+        this.setData({ leagues: [], displayLeagues: [], fromCache: false });
+        void this.loadLeagues(true);
+        return;
+      }
       this.setData({ loading: false, leagues, fromCache: false });
       this.syncDisplay();
       try {
@@ -85,6 +94,11 @@ Page({
       } catch { /* cache is best effort */ }
     } catch (error) {
       if (requestId !== this.requestId) return;
+      if (currentFollowEntryId() !== entryId) {
+        this.setData({ leagues: [], displayLeagues: [], fromCache: false });
+        void this.loadLeagues(true);
+        return;
+      }
       this.setData({
         loading: false,
         error: cached

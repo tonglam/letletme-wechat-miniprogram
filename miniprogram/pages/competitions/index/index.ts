@@ -80,8 +80,12 @@ Page({
       return;
     }
 
+    const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
+    if (principalChanged) {
+      this.setData({ items: [], displayItems: [], fromCache: false });
+    }
     const cached = readListCache(entryId);
-    if (cached && !this.data.items.length) {
+    if (cached && (principalChanged || !this.data.items.length)) {
       this.setData({ items: cached.items, fromCache: true });
       this.syncDisplay();
     }
@@ -93,6 +97,7 @@ Page({
       if (currentFollowEntryId() !== entryId) {
         // A 401 recovery can authoritatively change the followed entry while
         // this request is in flight. Never paint/cache the old principal.
+        this.setData({ items: [], displayItems: [], fromCache: false });
         void this.loadList(true);
         return;
       }
@@ -112,6 +117,7 @@ Page({
     } catch (error) {
       if (requestId !== this.requestId) return;
       if (currentFollowEntryId() !== entryId) {
+        this.setData({ items: [], displayItems: [], fromCache: false });
         void this.loadList(true);
         return;
       }

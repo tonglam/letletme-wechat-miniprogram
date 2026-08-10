@@ -18,7 +18,7 @@ import { durationBucket, recordMyFplVisit } from "../../../utils/perf";
 import { formatDeadline } from "../../../utils/date";
 import { goToEntrySearch, goToLiveEntry, navigateTo } from "../../../utils/navigation";
 import { routes } from "../../../config/routes";
-import { waitForAuthoritativeFollow } from "../../../utils/follow";
+import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
 
 interface OverviewCache {
   entryId: number;
@@ -204,6 +204,18 @@ Page({
       getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
     ]);
     if (this.isStale(requestId)) return;
+    if (currentFollowEntryId() !== context.entryId) {
+      // A sub-read may recover a 401 and replace the authoritative follow.
+      // Clear the old principal immediately, then restart under the new one.
+      this.setData({
+        teamBrief: null,
+        leagueCount: 0,
+        leaguesLoaded: false,
+        leaguesUnavailable: false
+      });
+      void this.loadOverview(true);
+      return;
+    }
 
     const briefUnavailable = !briefResult
       || (!briefResult.entryAvailable && !briefResult.eventResultAvailable);

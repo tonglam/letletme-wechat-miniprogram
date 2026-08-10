@@ -161,12 +161,14 @@ async function testStopDiscardsLateResponse(): Promise<void> {
   const gate = deferred<LiveSnapshotStatus>();
   let accepted = 0;
   let reloads = 0;
+  const probeStates: boolean[] = [];
   const controller = createLiveRefreshController({
     isEligible: () => true,
     getAcceptedSnapshot: () => snapshot("aa"),
     probe: () => gate.promise,
     reload: () => { reloads += 1; return Promise.resolve(); },
-    acceptSnapshot: () => { accepted += 1; }
+    acceptSnapshot: () => { accepted += 1; },
+    onProbeChange: (probing) => probeStates.push(probing)
   });
 
   const pending = controller.probeNow();
@@ -176,6 +178,7 @@ async function testStopDiscardsLateResponse(): Promise<void> {
 
   assertEqual(accepted, 0, "late accept after stop is discarded");
   assertEqual(reloads, 0, "late reload after stop is discarded");
+  assertEqual(probeStates.join(","), "true,false", "stop closes the visible probe lifecycle immediately");
   controller.dispose();
 }
 

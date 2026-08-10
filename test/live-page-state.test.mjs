@@ -218,11 +218,17 @@ test("match status changes re-arm polling before the first request", () => {
   ]);
 });
 
-test("entry resume revalidates current-gameweek transfers independently", () => {
+test("entry resume revalidates current-gameweek transfers independently", async () => {
   const calls = [];
-  globalThis.getApp = () => ({ globalData: { gw: 33 } });
+  globalThis.getApp = () => ({
+    globalData: { gw: 33 },
+    initAppData(forceRefresh) {
+      calls.push(`init:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  });
   const context = {
-    data: { ...entryPage.data, entryId: 123, event: 33 },
+    data: { ...entryPage.data, entryId: 123, event: 33, maxGw: 33 },
     pageVisible: false,
     hasShown: true,
     liveRefresh: {
@@ -242,9 +248,9 @@ test("entry resume revalidates current-gameweek transfers independently", () => 
     }
   };
 
-  entryPage.onShow.call(context);
+  await entryPage.onShow.call(context);
 
-  assert.deepEqual(calls, ["sync", "transfers:123:33:false"]);
+  assert.deepEqual(calls, ["init:true", "sync", "transfers:123:33:false"]);
 });
 
 test("tournament list errors are retried by their owning request", () => {

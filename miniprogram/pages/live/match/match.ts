@@ -320,16 +320,29 @@ Page({
     });
   },
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
-    const nextEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    const app = getApp<IAppOption>();
+    if (resumed) {
+      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      if (!this.pageVisible) return;
+    }
+    const nextEventId = Number(app.globalData.gw) || 0;
     if (nextEventId && nextEventId !== this.currentEventId) {
+      this.liveRefresh?.stop();
       this.currentEventId = nextEventId;
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
+      if (resumed) {
+        this.setData({ matches: [], groups: [], hasData: false, lastUpdated: "" });
+        this.liveRefresh?.sync();
+        await this.loadData({ forceRefresh: true });
+        this.syncDisplayState();
+        return;
+      }
     }
-    const resumed = this.hasShown;
-    this.hasShown = true;
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();

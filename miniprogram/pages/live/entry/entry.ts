@@ -196,10 +196,35 @@ Page({
     });
   },
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed) {
+      const app = getApp<IAppOption>();
+      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      if (!this.pageVisible) return;
+      const nextEventId = Number(app.globalData.gw) || 0;
+      const wasCurrentEvent = this.data.event === this.data.maxGw;
+      if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
+        if (wasCurrentEvent) {
+          this.liveRefresh?.stop();
+          this.liveSnapshot = null;
+          this.cachedLiveStoredAt = undefined;
+          this.setData({
+            event: nextEventId,
+            maxGw: nextEventId,
+            hasData: false,
+            lastUpdated: ""
+          });
+          this.liveRefresh?.sync();
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+          this.syncDisplayState();
+          return;
+        }
+        this.setData({ maxGw: nextEventId });
+      }
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();

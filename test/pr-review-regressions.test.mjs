@@ -238,6 +238,28 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(fixtures, /this\.loadedSeason = season/);
 });
 
+test("personal responses never cross an authoritative follow change", () => {
+  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  assert.match(competitions, /principalChanged[\s\S]*items: \[\], displayItems: \[\]/);
+  assert.match(leagues, /currentFollowEntryId\(\) !== entryId[\s\S]*this\.loadLeagues\(true\)/);
+  assert.match(overview, /currentFollowEntryId\(\) !== context\.entryId[\s\S]*this\.loadOverview\(true\)/);
+});
+
+test("all Live surfaces refresh event context before resume polling", () => {
+  for (const path of [
+    "miniprogram/pages/live/entry/entry.ts",
+    "miniprogram/pages/live/match/match.ts",
+    "miniprogram/pages/live/tournament/tournament.ts"
+  ]) {
+    const page = source(path);
+    assert.match(page, /async onShow\(\)/, path);
+    assert.match(page, /if \(resumed\)[\s\S]*await app\.initAppData\(true\)/, path);
+    assert.match(page, /nextEventId[\s\S]*forceRefresh: true/, path);
+  }
+});
+
 test("unknown fixture difficulty uses a neutral style", () => {
   const template = source("miniprogram/pages/explore/fixtures/fixtures.wxml");
   const component = source("miniprogram/components/fixture-chip/fixture-chip.ts");
