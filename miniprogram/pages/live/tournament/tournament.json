@@ -1,11 +1,12 @@
 {
-  "navigationBarTitleText": "实时联赛",
+  "navigationBarTitleText": "实时竞赛",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "filter-bar": "../../../components/filter-bar/filter-bar",
-    "gw-picker": "../../../components/gw-picker/gw-picker"
+    "gw-picker": "../../../components/gw-picker/gw-picker",
+    "live-status-bar": "../../../components/live-status-bar/live-status-bar"
   }
 }

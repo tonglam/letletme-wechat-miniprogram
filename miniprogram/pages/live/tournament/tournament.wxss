@@ -249,3 +249,11 @@
   font-weight: 800;
   text-align: center;
 }
+
+.manage-hint {
+  margin-top: 8rpx;
+  text-align: center;
+  color: var(--green-ink, #008545);
+  font-size: 24rpx;
+  font-weight: 700;
+}

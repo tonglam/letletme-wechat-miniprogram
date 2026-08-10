@@ -2,11 +2,15 @@
   <view class="section">
     <view class="row">
       <view>
-        <view class="title">实时联赛</view>
-        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '选择球队后加载联赛' : '联赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') + (refreshing ? ' · 刷新中' : '') : ''}}</view>
+        <view class="title">实时竞赛</view>
+        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '选择球队后加载竞赛' : '竞赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') + (refreshing ? ' · 刷新中' : '') : ''}}</view>
       </view>
       <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
+  </view>
+
+  <view wx:if="{{tournaments.length && !emptyState}}" class="section status-section">
+    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{failedRowCount}}" bind:refresh="onRetry" />
   </view>
 
   <view wx:if="{{tournaments.length}}" class="section picker-card">
@@ -116,6 +120,7 @@
       featured="{{true}}"
       bind:action="onEmptyAction"
     />
+    <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink">创建和管理竞赛请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
   <view wx:else class="section">
     <view wx:if="{{tournamentListError}}" class="live-refresh-error">{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}</view>

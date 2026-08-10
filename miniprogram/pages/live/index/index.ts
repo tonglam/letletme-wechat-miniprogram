@@ -21,8 +21,8 @@ Page({
         url: routes.liveMatch
       },
       {
-        title: "实时联赛",
-        description: "联赛实时排名、搜索和排序",
+        title: "实时竞赛",
+        description: "竞赛实时排名、搜索和排序",
         meta: "Tournament table",
         status: "支持切换",
         url: routes.liveTournament

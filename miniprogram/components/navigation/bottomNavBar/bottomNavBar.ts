@@ -15,12 +15,12 @@ const MENU_MAP: Record<string, NavMenu> = {
   live: {
     pages: [
       { name: "球队", subname: "查看球队实时得分" },
-      { name: "联赛", subname: "查看联赛实时得分和排名" },
+      { name: "竞赛", subname: "查看竞赛实时得分和排名" },
       { name: "比赛", subname: "查看实时更新的比赛结果" }
     ],
     url: {
       球队: "/pages/live/entry/entry",
-      联赛: "/pages/live/tournament/tournament",
+      竞赛: "/pages/live/tournament/tournament",
       比赛: "/pages/live/match/match"
     },
     show: true

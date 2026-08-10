@@ -54,7 +54,7 @@ Component({
         parts.push(this.properties.coverageText);
       }
       if (this.properties.retainedCount > 0) {
-        parts.push(`保留 ${this.properties.retainedCount} 行`);
+        parts.push(`${this.properties.retainedCount} 行未更新`);
       }
       this.setData({
         stateLabel: meta.label,
