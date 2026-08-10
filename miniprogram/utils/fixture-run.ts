@@ -36,6 +36,18 @@ export function normalizeHorizon(horizon: number): 3 | 5 {
   return horizon === 5 ? 5 : 3;
 }
 
+/** Real event ids needed by the visible fixture window. */
+export function fixtureWindowEvents(
+  startEvent: number,
+  horizon: number,
+  maxEvent = 38
+): number[] {
+  const safeMax = Math.max(1, Math.trunc(maxEvent) || 38);
+  const safeStart = Math.min(Math.max(1, Math.trunc(startEvent) || 1), safeMax);
+  const endEvent = Math.min(safeMax, safeStart + normalizeHorizon(horizon) - 1);
+  return Array.from({ length: endEvent - safeStart + 1 }, (_, index) => safeStart + index);
+}
+
 function toId(value: number | string | undefined): number | undefined {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : undefined;

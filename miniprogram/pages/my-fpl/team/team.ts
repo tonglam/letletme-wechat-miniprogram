@@ -348,9 +348,9 @@ Page({
       emptyDescription: "",
       emptyActionText: ""
     });
+    const entryId = this.data.entryId;
+    const requestSeason = getApp<IAppOption>().globalData.season || undefined;
     try {
-      const entryId = this.data.entryId;
-      const requestSeason = getApp<IAppOption>().globalData.season || undefined;
       const history = await getEntryTeamStatsHistory(entryId, forceRefresh);
       if (requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
@@ -425,6 +425,7 @@ Page({
       this._loadedAt = Date.now();
     } catch (error) {
       if (requestId === this.loadRequestId) {
+        if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
       }
     } finally {

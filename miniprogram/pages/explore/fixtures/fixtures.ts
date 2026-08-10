@@ -1,9 +1,8 @@
-import { getSeasonFixture } from "../../../services/fixture.service";
+import { getFixtureWindow } from "../../../services/fixture.service";
 import { getTeamList } from "../../../services/common.service";
 import type { Fixture } from "../../../models/common";
 import {
   buildFixtureRuns,
-  maxFixtureEvent,
   normalizeHorizon,
   type FixtureRun,
   type FixtureRunTeam
@@ -27,6 +26,7 @@ Page({
   fixtures: [] as Fixture[],
   teams: [] as FixtureRunTeam[],
   loadedSeason: undefined as string | undefined,
+  loadedWindowKey: "",
   requestId: 0,
   hasShown: false,
 
@@ -62,14 +62,17 @@ Page({
       // must show unavailable, not stale clubs under the new GW picker.
       this.fixtures = [];
       this.teams = [];
+      this.loadedWindowKey = "";
       this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [] });
       return true;
     }
     this.setData({ startEvent: gw });
-    // Recompose retained fixture payload immediately. If the subsequent
-    // refresh fails, the picker and cards still describe the same event.
-    if (this.teams.length) {
+    const windowKey = `${season || "unknown"}:${gw}:${this.data.horizon}`;
+    if (this.teams.length && this.loadedWindowKey === windowKey) {
       this.rebuild();
+    } else {
+      this.fixtures = [];
+      this.setData({ runs: [] });
     }
     return false;
   },
@@ -77,21 +80,27 @@ Page({
   async load(forceRefresh = false) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
-    const hadLastGood = this.teams.length > 0;
+    const season = getApp<IAppOption>().globalData.season;
+    const startEvent = this.data.startEvent;
+    const horizon = this.data.horizon;
+    const windowKey = `${season || "unknown"}:${startEvent}:${horizon}`;
+    const hadLastGood = this.teams.length > 0 && this.loadedWindowKey === windowKey;
+    if (!hadLastGood) {
+      this.fixtures = [];
+      this.setData({ runs: [] });
+    }
     this.setData({ loading: !hadLastGood, error: "" });
     try {
-      const season = getApp<IAppOption>().globalData.season;
       const [fixtures, teams] = await Promise.all([
-        getSeasonFixture(season, forceRefresh),
+        getFixtureWindow(startEvent, horizon, forceRefresh),
         getTeamList(season, forceRefresh)
       ]);
       if (requestId !== this.requestId) return;
       this.fixtures = fixtures;
       this.teams = teams;
       this.loadedSeason = season;
-      const maxEvent = maxFixtureEvent(fixtures) || FALLBACK_MAX_EVENT;
-      const startEvent = Math.min(Math.max(1, this.data.startEvent), maxEvent);
-      this.setData({ loading: false, maxEvent, startEvent });
+      this.loadedWindowKey = windowKey;
+      this.setData({ loading: false, maxEvent: FALLBACK_MAX_EVENT, startEvent });
       this.rebuild();
       // Composition settled (plan §9): window and duration only — team
       // names never enter a record.
@@ -126,12 +135,12 @@ Page({
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.setData({ startEvent: Number(event.detail.value) || 1 });
-    this.rebuild();
+    void this.load();
   },
 
   onHorizonChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { horizon: number }>) {
     this.setData({ horizon: normalizeHorizon(Number(event.currentTarget.dataset.horizon)) });
-    this.rebuild();
+    void this.load();
   },
 
   onRetry() {

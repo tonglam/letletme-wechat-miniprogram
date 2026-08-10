@@ -177,6 +177,7 @@ test("team summary requests discard older GW responses", () => {
     team,
     /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/
   );
+  assert.match(team, /catch \(error\) \{[\s\S]*restartForPrincipalChange\(entryId\)/);
 });
 
 test("unchanged live probes refresh the displayed check time", () => {
@@ -270,9 +271,14 @@ test("league handoff returns bypass the cached official league list", () => {
 
 test("fixture resume reloads instead of relabeling payload across seasons", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  const service = source("miniprogram/services/fixture.service.ts");
   assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /await this\.load\(seasonChanged\)/);
+  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, forceRefresh\)/);
   assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
+  assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
+  assert.match(service, /eventFixtures\(eventId:/);
+  assert.match(service, /fragment FixtureWindowFields on Fixture/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
   assert.match(fixtures, /this\.loadedSeason = season/);

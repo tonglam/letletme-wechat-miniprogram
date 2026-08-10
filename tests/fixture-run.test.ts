@@ -1,5 +1,6 @@
 import {
   buildFixtureRuns,
+  fixtureWindowEvents,
   maxFixtureEvent,
   normalizeHorizon,
   type FixtureRunTeam
@@ -114,6 +115,11 @@ function testMaxFixtureEvent(): void {
   assertEqual(maxFixtureEvent([fixture({ event: 3 }), fixture({ event: 38 }), fixture({ event: undefined })]), 38, "max ignores missing events");
 }
 
+function testFixtureWindowEvents(): void {
+  assertEqual(JSON.stringify(fixtureWindowEvents(12, 3)), "[12,13,14]", "three-event window is exact");
+  assertEqual(JSON.stringify(fixtureWindowEvents(36, 5)), "[36,37,38]", "window never crosses GW38");
+}
+
 function main(): void {
   testHomeAwayAttribution();
   testWindowTruncation();
@@ -123,6 +129,7 @@ function main(): void {
   testFinishedPassthrough();
   testEmptyAndStringIds();
   testMaxFixtureEvent();
+  testFixtureWindowEvents();
   console.log("fixture-run tests passed");
 }
 
