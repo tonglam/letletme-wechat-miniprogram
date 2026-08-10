@@ -24,6 +24,18 @@ export interface LiveRefreshControllerOptions {
   onProbeError?: (message: string) => void;
   /** Probe lifecycle for status rendering (true when a probe actually starts). */
   onProbeChange?: (probing: boolean) => void;
+  /**
+   * One call per settled probe cycle (success, reload, or error) for
+   * telemetry. Stale/discarded responses are not reported.
+   */
+  onProbeSettled?: (info: {
+    snapshotState?: string;
+    revisionChanged: boolean;
+    reloaded: boolean;
+    probeDurationMs: number;
+    reloadDurationMs?: number;
+    error?: string;
+  }) => void;
   /** Connectivity transitions, including an immediately-reported offline state. */
   onOnlineChange?: (online: boolean) => void;
   /** Extra staleness guard (page request-id / context switch). */
@@ -83,18 +95,42 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     probeRequestId = requestId;
     options.onProbeChange?.(true);
     const request = (async () => {
+      const probeStart = Date.now();
       try {
         const observed = await options.probe();
+        const probeDurationMs = Date.now() - probeStart;
         if (isResponseStale(requestId)) return;
         if (!liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed)) {
+          options.onProbeSettled?.({
+            snapshotState: observed?.state,
+            revisionChanged: false,
+            reloaded: false,
+            probeDurationMs
+          });
           options.acceptSnapshot?.(observed);
           sync();
           return;
         }
+        const reloadStart = Date.now();
         await options.reload();
+        if (isResponseStale(requestId)) return;
+        options.onProbeSettled?.({
+          snapshotState: observed?.state,
+          revisionChanged: true,
+          reloaded: true,
+          probeDurationMs,
+          reloadDurationMs: Date.now() - reloadStart
+        });
       } catch (error) {
         if (isResponseStale(requestId)) return;
-        options.onProbeError?.(error instanceof Error ? error.message : "刷新失败");
+        const message = error instanceof Error ? error.message : "刷新失败";
+        options.onProbeSettled?.({
+          revisionChanged: false,
+          reloaded: false,
+          probeDurationMs: Date.now() - probeStart,
+          error: message
+        });
+        options.onProbeError?.(message);
       }
     })();
 

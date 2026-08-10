@@ -17,6 +17,7 @@ import {
   normalizeLiveDisplayState,
   type LiveDisplayState
 } from "../../../utils/live-status";
+import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 
@@ -174,6 +175,19 @@ Page({
       onOnlineChange: (online) => {
         this.networkOnline = online;
         this.syncDisplayState();
+      },
+      onProbeSettled: (info) => {
+        recordLiveTransition({
+          surface: "entry",
+          season: this.liveSnapshot?.season,
+          eventId: this.data.event,
+          isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+          snapshotState: info.snapshotState,
+          revisionChanged: info.revisionChanged,
+          coverageFailed: this.liveSnapshot?.coverageFailed,
+          probeDurationBucket: durationBucket(info.probeDurationMs),
+          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+        });
       },
       subscribeNetwork: subscribeNetworkStatus
     });
@@ -389,16 +403,24 @@ Page({
   },
 
   syncDisplayState() {
-    this.setData({
-      displayState: normalizeLiveDisplayState({
-        snapshot: this.liveSnapshot,
-        hasData: this.data.hasData,
-        loading: this.data.loading || this.data.refreshing,
-        probing: this.probing,
-        lastError: this.data.error,
-        online: this.networkOnline
-      })
+    const next = normalizeLiveDisplayState({
+      snapshot: this.liveSnapshot,
+      hasData: this.data.hasData,
+      loading: this.data.loading || this.data.refreshing,
+      probing: this.probing,
+      lastError: this.data.error,
+      online: this.networkOnline
     });
+    if (next !== this.data.displayState) {
+      recordLiveTransition({
+        surface: "entry",
+        season: this.liveSnapshot?.season,
+        eventId: this.data.event,
+        isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next
+      });
+    }
+    this.setData({ displayState: next });
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {

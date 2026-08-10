@@ -194,6 +194,68 @@ async function testProbeChangeHookFires(): Promise<void> {
   controller.dispose();
 }
 
+async function testProbeSettledHookReportsEachPath(): Promise<void> {
+  interface SettledInfo {
+    snapshotState?: string;
+    revisionChanged: boolean;
+    reloaded: boolean;
+    probeDurationMs: number;
+    reloadDurationMs?: number;
+    error?: string;
+  }
+  const settled: SettledInfo[] = [];
+  let accepted = snapshot("aa");
+  let observed = snapshot("aa");
+  let probeError: Error | null = null;
+  const controller = createLiveRefreshController({
+    isEligible: () => true,
+    getAcceptedSnapshot: () => accepted,
+    probe: () => (probeError ? Promise.reject(probeError) : Promise.resolve(observed)),
+    reload: () => { accepted = observed; return Promise.resolve(); },
+    onProbeSettled: (info) => settled.push(info)
+  });
+
+  await controller.probeNow();
+  assertEqual(settled.length, 1, "settled hook fires for an unchanged probe");
+  assertEqual(settled[0].revisionChanged, false, "unchanged probe reports no revision change");
+  assertEqual(settled[0].reloaded, false, "unchanged probe reports no reload");
+  assertEqual(settled[0].snapshotState, "LIVE", "unchanged probe reports the snapshot state");
+  assert(typeof settled[0].probeDurationMs === "number", "probe duration is recorded");
+
+  observed = snapshot("bb");
+  await controller.probeNow();
+  assertEqual(settled.length, 2, "settled hook fires for a changed probe");
+  assertEqual(settled[1].revisionChanged, true, "changed probe reports the revision change");
+  assertEqual(settled[1].reloaded, true, "changed probe reports the reload");
+  assert(typeof settled[1].reloadDurationMs === "number", "reload duration is recorded");
+
+  probeError = new Error("网络异常");
+  await controller.probeNow();
+  assertEqual(settled.length, 3, "settled hook fires for a failed probe");
+  assertEqual(settled[2].error, "网络异常", "failed probe reports the error message");
+  assertEqual(settled[2].reloaded, false, "failed probe reports no reload");
+  controller.dispose();
+}
+
+async function testProbeSettledSkipsStaleResponse(): Promise<void> {
+  const settled: unknown[] = [];
+  const gate = deferred<LiveSnapshotStatus>();
+  const controller = createLiveRefreshController({
+    isEligible: () => true,
+    getAcceptedSnapshot: () => snapshot("aa"),
+    probe: () => gate.promise,
+    reload: () => Promise.resolve(),
+    onProbeSettled: (info) => settled.push(info)
+  });
+
+  const pending = controller.probeNow();
+  controller.stop();
+  gate.resolve(snapshot("bb"));
+  await pending;
+  assertEqual(settled.length, 0, "a stale response is never reported");
+  controller.dispose();
+}
+
 async function main(): Promise<void> {
   await testUnchangedRevisionOnlyAccepts();
   await testChangedRevisionReloadsOnceUnderConcurrency();
@@ -202,6 +264,8 @@ async function main(): Promise<void> {
   await testNetworkOfflineStopsAndRecoveryProbes();
   await testStopDiscardsLateResponse();
   await testProbeChangeHookFires();
+  await testProbeSettledHookReportsEachPath();
+  await testProbeSettledSkipsStaleResponse();
   console.log("live-refresh-controller tests passed");
 }
 

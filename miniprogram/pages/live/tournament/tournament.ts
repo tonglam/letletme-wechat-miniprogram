@@ -22,6 +22,7 @@ import {
   normalizeLiveDisplayState,
   type LiveDisplayState
 } from "../../../utils/live-status";
+import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -387,6 +388,20 @@ Page({
         this.networkOnline = online;
         this.syncDisplayState();
       },
+      onProbeSettled: (info) => {
+        recordLiveTransition({
+          surface: "tournament",
+          season: this.liveSnapshot?.season,
+          eventId: this.data.event,
+          isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+          snapshotState: info.snapshotState,
+          revisionChanged: info.revisionChanged,
+          coverageFailed: this.liveSnapshot?.coverageFailed,
+          retainedRowCount: this.failedEntryCount,
+          probeDurationBucket: durationBucket(info.probeDurationMs),
+          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+        });
+      },
       subscribeNetwork: subscribeNetworkStatus
     });
   },
@@ -645,16 +660,27 @@ Page({
   },
 
   syncDisplayState() {
+    const next = normalizeLiveDisplayState({
+      snapshot: this.liveSnapshot,
+      hasData: this.data.hasData,
+      loading: this.data.loading || this.data.refreshing,
+      probing: this.probing,
+      lastError: this.data.error,
+      online: this.networkOnline,
+      partialFailedCount: this.failedEntryCount
+    });
+    if (next !== this.data.displayState) {
+      recordLiveTransition({
+        surface: "tournament",
+        season: this.liveSnapshot?.season,
+        eventId: this.data.event,
+        isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next,
+        retainedRowCount: this.failedEntryCount
+      });
+    }
     this.setData({
-      displayState: normalizeLiveDisplayState({
-        snapshot: this.liveSnapshot,
-        hasData: this.data.hasData,
-        loading: this.data.loading || this.data.refreshing,
-        probing: this.probing,
-        lastError: this.data.error,
-        online: this.networkOnline,
-        partialFailedCount: this.failedEntryCount
-      }),
+      displayState: next,
       failedRowCount: this.failedEntryCount
     });
   },

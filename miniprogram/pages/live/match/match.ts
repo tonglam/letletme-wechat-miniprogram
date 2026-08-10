@@ -13,6 +13,7 @@ import {
   normalizeLiveDisplayState,
   type LiveDisplayState
 } from "../../../utils/live-status";
+import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 
 interface StatusOption {
   key: string;
@@ -299,6 +300,19 @@ Page({
         this.networkOnline = online;
         this.syncDisplayState();
       },
+      onProbeSettled: (info) => {
+        recordLiveTransition({
+          surface: "match",
+          season: this.liveSnapshot?.season,
+          eventId: this.currentEventId,
+          isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+          snapshotState: info.snapshotState,
+          revisionChanged: info.revisionChanged,
+          coverageFailed: this.liveSnapshot?.coverageFailed,
+          probeDurationBucket: durationBucket(info.probeDurationMs),
+          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+        });
+      },
       subscribeNetwork: subscribeNetworkStatus
     });
   },
@@ -416,16 +430,24 @@ Page({
   },
 
   syncDisplayState() {
-    this.setData({
-      displayState: normalizeLiveDisplayState({
-        snapshot: this.liveSnapshot,
-        hasData: this.data.hasData,
-        loading: this.data.loading || this.data.refreshing,
-        probing: this.probing,
-        lastError: this.data.error,
-        online: this.networkOnline
-      })
+    const next = normalizeLiveDisplayState({
+      snapshot: this.liveSnapshot,
+      hasData: this.data.hasData,
+      loading: this.data.loading || this.data.refreshing,
+      probing: this.probing,
+      lastError: this.data.error,
+      online: this.networkOnline
     });
+    if (next !== this.data.displayState) {
+      recordLiveTransition({
+        surface: "match",
+        season: this.liveSnapshot?.season,
+        eventId: this.currentEventId,
+        isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next
+      });
+    }
+    this.setData({ displayState: next });
   },
 
   onStatusTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { status: string }>) {

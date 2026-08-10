@@ -8,10 +8,40 @@ export interface ApiRecord {
   ts: number;
 }
 
+/**
+ * Sanitized live-refresh telemetry (high-level design §13 subset).
+ * Never carries tokens, email, openid, team names, or entry/competition IDs.
+ */
+export interface LiveTransitionRecord {
+  surface: "entry" | "match" | "tournament";
+  season?: string;
+  eventId?: number;
+  isCurrentEvent?: boolean;
+  /** LiveSnapshotStatus.state observed by the probe. */
+  snapshotState?: string;
+  revisionChanged?: boolean;
+  /** LiveDisplayState entered by the page. */
+  displayState?: string;
+  coverageFailed?: number;
+  retainedRowCount?: number;
+  probeDurationBucket?: string;
+  fullFetchDurationBucket?: string;
+  ts: number;
+}
+
 export interface StoredPerf {
   apiRecords: ApiRecord[];
+  liveTransitions?: LiveTransitionRecord[];
   launchDuration?: number;
   launchTs?: number;
+}
+
+export function durationBucket(ms: number): string {
+  if (ms < 500) return "<500ms";
+  if (ms < 1000) return "0.5-1s";
+  if (ms < 2000) return "1-2s";
+  if (ms < 5000) return "2-5s";
+  return ">5s";
 }
 
 let _cache: StoredPerf | null = null;
@@ -52,13 +82,25 @@ export function recordApi(name: string, duration: number, ok: boolean): void {
   flush();
 }
 
+export function recordLiveTransition(record: Omit<LiveTransitionRecord, "ts">): void {
+  const d = load();
+  if (!Array.isArray(d.liveTransitions)) {
+    d.liveTransitions = [];
+  }
+  if (d.liveTransitions.length >= MAX_RECORDS) {
+    d.liveTransitions.splice(0, d.liveTransitions.length - MAX_RECORDS + 1);
+  }
+  d.liveTransitions.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function getPerf(): StoredPerf {
   const d = load();
-  return { ...d, apiRecords: d.apiRecords.slice() };
+  return { ...d, apiRecords: d.apiRecords.slice(), liveTransitions: (d.liveTransitions ?? []).slice() };
 }
 
 export function clearPerf(): void {
-  _cache = { apiRecords: [] };
+  _cache = { apiRecords: [], liveTransitions: [] };
   try {
     wx.removeStorage({ key: STORAGE_KEY });
   } catch { /* silent */ }
