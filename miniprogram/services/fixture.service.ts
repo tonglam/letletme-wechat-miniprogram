@@ -29,9 +29,10 @@ interface SeasonFixturesResponse {
   }>;
 }
 
-export async function getSeasonFixture(_season: string): Promise<Fixture[]> {
+export async function getSeasonFixture(_season: string, forceRefresh = false): Promise<Fixture[]> {
   const data = await graphqlRequest<SeasonFixturesResponse>(SEASON_FIXTURES, {}, {
-    cacheTtl: 30 * 60 * 1000
+    cacheTtl: 30 * 60 * 1000,
+    forceRefresh
   });
   return (data.fixtures || []).map((fixture) => ({
     id: fixture.id,

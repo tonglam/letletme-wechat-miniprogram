@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "赛程",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-loading": "../../../components/app-loading/app-loading",
+    "gw-picker": "../../../components/gw-picker/gw-picker",
+    "fixture-chip": "../../../components/fixture-chip/fixture-chip"
+  }
+}

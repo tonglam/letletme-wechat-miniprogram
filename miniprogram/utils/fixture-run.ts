@@ -26,9 +26,9 @@ export interface FixtureRun {
 }
 
 export interface FixtureRunTeam {
-  id: number;
+  id: number | string;
   name: string;
-  shortName: string;
+  shortName?: string;
 }
 
 /** Only 3 and 5 are meaningful windows; anything else clamps to 3. */
@@ -50,7 +50,12 @@ export function buildFixtureRuns(
   const window = normalizeHorizon(horizon);
   const lastEvent = startEvent + window - 1;
 
-  return teams.map((team) => {
+  const runs: FixtureRun[] = [];
+  for (const team of teams) {
+    const teamId = toId(team.id);
+    if (teamId === undefined) {
+      continue; // a team without a real id is dropped, never guessed
+    }
     const chips = fixtures
       .filter((fixture) => {
         const event = Number(fixture.event);
@@ -59,7 +64,7 @@ export function buildFixtureRuns(
         }
         const homeId = toId(fixture.teamId);
         const awayId = toId(fixture.againstTeamId);
-        return homeId === team.id || awayId === team.id;
+        return homeId === teamId || awayId === teamId;
       })
       .sort((a, b) => {
         const byEvent = Number(a.event) - Number(b.event);
@@ -67,7 +72,7 @@ export function buildFixtureRuns(
         return Number(a.id) - Number(b.id);
       })
       .map((fixture): FixtureRunChip => {
-        const isHome = toId(fixture.teamId) === team.id;
+        const isHome = toId(fixture.teamId) === teamId;
         return {
           event: Number(fixture.event),
           opponentShortName: (isHome ? fixture.againstTeamShortName : fixture.teamShortName) || "—",
@@ -76,8 +81,9 @@ export function buildFixtureRuns(
           finished: fixture.finished === true
         };
       });
-    return { teamId: team.id, teamName: team.name, teamShortName: team.shortName, chips };
-  });
+    runs.push({ teamId, teamName: team.name, teamShortName: team.shortName || team.name, chips });
+  }
+  return runs;
 }
 
 export function maxFixtureEvent(fixtures: Fixture[]): number {
