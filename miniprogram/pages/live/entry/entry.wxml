@@ -13,10 +13,10 @@
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时分数" />
   <view wx:elif="{{emptyState}}" class="section">
     <app-empty-state
-      eyebrow="需要账户"
-      title="先关联你的 LetLetMe 账户"
-      description="关联后会自动读取你在网站端已验证的 FPL 球队，并显示实时阵容"
-      actionText="去关联账户"
+      eyebrow="需要球队"
+      title="先选择我的球队"
+      description="查找球队并设为我的球队后，即可显示实时阵容"
+      actionText="去选择球队"
       featured="{{true}}"
       bind:action="onChooseEntry"
     />

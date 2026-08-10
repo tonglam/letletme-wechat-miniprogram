@@ -2,7 +2,6 @@ import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
 import { getApiSessionToken, isLogoutInFlight, refreshWechatApiSession } from "./services/auth.service";
-import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
 import { storageKeys, storagePrefixes } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
@@ -81,10 +80,10 @@ App<IAppOption>({
       if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
         this.globalData.entryId = session.profile.fplEntryId;
       }
-    }).catch((error) => {
-      if (error instanceof MiniProgramLinkRequiredError) {
-        wx.reLaunch({ url: routes.accountLink });
-      }
+    }).catch(() => {
+      // Account linking is optional and sync is best-effort: link-required
+      // and network failures alike leave the locally followed team alone.
+      // Pages render their own no-entry state instead of being redirected.
     }).finally(markAuthReady);
   },
 
@@ -111,11 +110,9 @@ App<IAppOption>({
       if (nextEntry !== boundEntryAtStart) {
         this.reloadCurrentPageForEntryChange(nextEntry);
       }
-    }).catch((error) => {
-      if (error instanceof MiniProgramLinkRequiredError) {
-        wx.reLaunch({ url: routes.accountLink });
-      }
-      // Network failures keep the stored binding and retry on a later launch.
+    }).catch(() => {
+      // Link-required and network failures keep the stored follow and retry
+      // on a later launch — pages own how they render the no-entry state.
     });
   },
 

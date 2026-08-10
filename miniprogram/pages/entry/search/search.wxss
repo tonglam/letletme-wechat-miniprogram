@@ -21,7 +21,7 @@
   line-height: 1.45;
 }
 
-.bind-card,
+.lookup-card,
 .preview-card {
   background: var(--card, #ffffff);
   border: 1rpx solid var(--line, #ddd4de);
@@ -187,4 +187,19 @@
   margin-top: 4rpx;
   color: var(--muted-ink, #6e5a72);
   font-size: 22rpx;
+}
+
+.current-entry-hint {
+  margin-top: 22rpx;
+  text-align: center;
+  color: var(--green-ink, #008545);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.sync-hint {
+  text-align: center;
+  color: var(--green-ink, #008545);
+  font-size: 24rpx;
+  font-weight: 700;
 }

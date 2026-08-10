@@ -1,6 +1,6 @@
 import { getGraphQLEndpoint, REQUEST_TIMEOUT_MS } from "../config/env";
 import {
-  clearApiSession,
+  clearSessionCredentials,
   getApiSessionToken,
   getPendingSessionRefresh,
   isLogoutInFlight,
@@ -214,8 +214,10 @@ function makeRequest<T>(
                   return makeRequest<T>(query, variables, false, freshToken);
                 }
                 // The in-flight refresh produced no usable new credential —
-                // fall back to the classic clear + re-login cycle.
-                clearApiSession();
+                // fall back to the classic clear + re-login cycle. Only the
+                // credential is dropped: the followed entry is display-only
+                // and must survive a server-side revocation.
+                clearSessionCredentials();
                 return refreshWechatApiSession()
                   .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()));
               })
@@ -223,7 +225,7 @@ function makeRequest<T>(
               .catch(reject);
             return;
           }
-          clearApiSession();
+          clearSessionCredentials();
           refreshWechatApiSession()
             .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))
             .then(resolve)

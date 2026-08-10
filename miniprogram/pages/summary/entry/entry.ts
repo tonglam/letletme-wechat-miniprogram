@@ -11,7 +11,7 @@ import {
   type EntryTransferMove
 } from "../../../services/summary.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import { forceEntryBinding } from "../../../utils/navigation";
+import { goToEntrySearch } from "../../../utils/navigation";
 import { formatCompactNumber } from "../../../utils/summary-format";
 
 type EntrySummaryTab = "squad" | "transfer" | "chips" | "history";
@@ -210,10 +210,10 @@ Page({
         loading: false,
         error: "",
         emptyState: "entry",
-        emptyEyebrow: "需要账户",
-        emptyTitle: "先关联你的 LetLetMe 账户",
-        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，并生成每轮总结。",
-        emptyActionText: "去关联账户"
+        emptyEyebrow: "需要球队",
+        emptyTitle: "先选择我的球队",
+        emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
+        emptyActionText: "去选择球队"
       });
       return;
     }
@@ -302,7 +302,7 @@ Page({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      forceEntryBinding();
+      goToEntrySearch();
       return;
     }
     this.loadData();

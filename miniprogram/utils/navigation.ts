@@ -16,10 +16,6 @@ export function goToEntrySearch(): void {
   navigateTo(routes.entrySearch);
 }
 
-export function forceEntryBinding(): void {
-  wx.reLaunch({ url: routes.accountLink });
-}
-
 export function goToEntryProfile(entryId?: number): void {
   navigateTo(routes.entryProfile, { entry: entryId });
 }

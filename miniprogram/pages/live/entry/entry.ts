@@ -3,7 +3,7 @@ import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
-import { forceEntryBinding } from "../../../utils/navigation";
+import { goToEntrySearch } from "../../../utils/navigation";
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
@@ -413,6 +413,6 @@ Page({
   },
 
   onChooseEntry() {
-    forceEntryBinding();
+    goToEntrySearch();
   }
 });

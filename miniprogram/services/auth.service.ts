@@ -124,9 +124,6 @@ function storeApiSession(session: ApiSession): ApiSession {
   if (previousToken !== session.token) {
     clearStoredGraphQLSessionCache();
   }
-  if (previousEntryId !== nextEntryId) {
-    clearEntryScopedStorage();
-  }
 
   sessionMemory = { token: session.token, expiresAt: session.expiresAt };
   wx.setStorageSync(storageKeys.apiSessionToken, session.token);
@@ -135,18 +132,19 @@ function storeApiSession(session: ApiSession): ApiSession {
   // so the 24h revalidation throttle keys off this write.
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
   if (nextEntryId) {
+    // The web-verified entry wins over any local selection: adopt it and drop
+    // the previous team's entry-scoped caches.
+    if (previousEntryId !== nextEntryId) {
+      clearEntryScopedStorage();
+    }
     wx.setStorageSync(storageKeys.entryId, nextEntryId);
     try {
       getApp<IAppOption>().globalData.entryId = nextEntryId;
     } catch {}
-  } else {
-    // Never let a previous account's local selection masquerade as the
-    // newly authenticated account's verified entry.
-    wx.removeStorageSync(storageKeys.entryId);
-    try {
-      getApp<IAppOption>().globalData.entryId = undefined;
-    } catch {}
   }
+  // A profile without a verified entry clears nothing: the locally followed
+  // team is a display-only preference (public FPL data), and the sync is
+  // best-effort — gaps between web and local are allowed.
   return session;
 }
 
@@ -174,20 +172,21 @@ export function getApiSessionToken(): string | null {
   }
   if (!sessionMemory) return null;
   if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
-    clearExpiredSession();
+    clearSessionCredentials();
     return null;
   }
   return sessionMemory.token || null;
 }
 
 /**
- * Session-expiry cleanup. Unlike clearApiSession, the entry binding is
- * kept: the account is the same person and the imminent single-flight
- * refresh re-asserts the binding authoritatively — wiping it here would
- * flash the account-link empty state on pages that open before the
- * refresh lands.
+ * Credentials-only cleanup. Unlike clearApiSession, the followed entry is
+ * kept: it is a display-only preference (public FPL data) with no account
+ * permissions attached, so neither an expiring session nor a lost account
+ * link should wipe it. For expiry specifically, the imminent single-flight
+ * refresh re-asserts the session — wiping anything here would flash empty
+ * states on pages that open before the refresh lands.
  */
-function clearExpiredSession(): void {
+export function clearSessionCredentials(): void {
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   [storageKeys.apiSessionToken, storageKeys.apiSessionExpiresAt].forEach((key) => {
@@ -291,9 +290,11 @@ async function performWechatSessionRefresh(): Promise<ApiSession> {
   }
   if (!response.linked) {
     // The WeChat identity was understood and is not linked, so retaining a
-    // previous account would be unsafe. Network/login failures above retain a
-    // still-valid session for offline resilience.
-    clearApiSession();
+    // previous account's credential would be unsafe. The locally followed
+    // entry stays: it is display-only and carries no account data.
+    // Network/login failures above retain a still-valid session for offline
+    // resilience.
+    clearSessionCredentials();
     throw new MiniProgramLinkRequiredError();
   }
   return storeApiSession(asSession(response));

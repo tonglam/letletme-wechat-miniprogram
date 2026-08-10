@@ -1,5 +1,5 @@
 import { routes } from "../../../config/routes";
-import { forceEntryBinding, navigateTo } from "../../../utils/navigation";
+import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 
 Page({
   data: {
@@ -35,12 +35,18 @@ Page({
     this.setData({ entryId: app.globalData.entryId, event: app.globalData.gw });
   },
 
-  onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
-    if (!this.data.entryId) {
-      forceEntryBinding();
+  onOpenEntryStrip() {
+    if (this.data.entryId) {
+      navigateTo(routes.liveEntry);
       return;
     }
 
+    goToEntrySearch();
+  },
+
+  onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
+    // Cards always open — entry-scoped destinations render their own
+    // no-entry empty state instead of blocking navigation here.
     navigateTo(event.currentTarget.dataset.url);
   }
 });

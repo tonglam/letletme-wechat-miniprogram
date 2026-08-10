@@ -8,8 +8,7 @@ import type { EntryInfo } from "../../../models/entry";
 import type { PlayerValue } from "../../../models/player";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
-import { forceEntryBinding, goToEntryProfile, navigateTo } from "../../../utils/navigation";
-import { clearEntryId, clearEntryScopedStorage } from "../../../utils/storage";
+import { goToEntryProfile, goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
@@ -19,6 +18,7 @@ interface HomeData {
   fixtureLoading: boolean;
   fixtureError: string;
   error: string;
+  entryError: string;
   entry: EntryInfo;
   fixtureRows: HomeFixtureRow[];
   priceRises: HomePriceChangeRow[];
@@ -69,6 +69,7 @@ Page({
     fixtureLoading: false,
     fixtureError: "",
     error: "",
+    entryError: "",
     entry: {},
     fixtureRows: [],
     priceRises: [],
@@ -90,7 +91,6 @@ Page({
   _lastLoadAt: 0,
 
   async onLoad() {
-    if (!this.ensureEntryBound()) return;
     this._initialLoadDone = true;
     await this.ensureAppDataReady();
     this.syncAppState();
@@ -99,7 +99,6 @@ Page({
   },
 
   async onShow() {
-    if (!this.ensureEntryBound()) return;
     if (!this._initialLoadDone) return;
     await this.ensureAppDataReady();
     this.syncAppState();
@@ -116,22 +115,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    if (!this.ensureEntryBound()) {
-      wx.stopPullDownRefresh();
-      return;
-    }
-
     this.refreshHome().finally(() => wx.stopPullDownRefresh());
-  },
-
-  ensureEntryBound(): boolean {
-    const entryId = getApp<IAppOption>().globalData.entryId;
-    if (!entryId) {
-      forceEntryBinding();
-      return false;
-    }
-
-    return true;
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -145,59 +129,60 @@ Page({
   async loadPage(forceRefresh = false) {
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
-      // With no valid session the stored binding is only offline/display
-      // fallback: the account may have been relinked, so wait for the
-      // refreshed profile before snapshotting the entry. Show the loading
-      // state first so the wait never renders placeholder content.
+      // With no valid session the stored follow is only offline/display
+      // fallback: the account may have been linked and synced meanwhile, so
+      // wait for the refreshed profile before snapshotting the entry. Show
+      // the loading state first so the wait never renders placeholder content.
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    // No followed team only means the entry card renders its empty state —
+    // the public sections (fixtures, prices, stats) never depend on it.
     const entryId = app.globalData.entryId;
-    if (!entryId) {
-      this.setData({ loading: false });
-      forceEntryBinding();
-      return;
-    }
 
     if (!app.globalData.gw) {
       await app.initAppData();
     }
 
-    this.syncAppState({ loading: true, error: "" });
+    this.syncAppState({ loading: true, error: "", entryError: "" });
 
     try {
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
       // entryInfo no longer gates the independent fixtures/prices/stats
-      // requests — all four run in parallel; a missing entry still falls
-      // back to the binding flow below.
+      // requests — all four run in parallel, and a failed entry request only
+      // marks the team card. The follow itself is never cleared by failures.
       let fixtureError = "";
+      let entryError = "";
       const fixtureTask = getNextFixture(fixtureGw, forceRefresh).catch((error) => {
         fixtureError = error instanceof Error ? error.message : "赛程加载失败";
         return [] as Fixture[];
       });
+      const entryTask = entryId
+        ? getEntryInfo(entryId, forceRefresh).catch((error) => {
+            entryError = error instanceof Error ? error.message : "球队信息加载失败";
+            return undefined as EntryInfo | undefined;
+          })
+        : Promise.resolve(undefined as EntryInfo | undefined);
       const [entry, fixtures, priceChanges, gameweekStats] = await Promise.all([
-        getEntryInfo(entryId, forceRefresh).catch(() => undefined as EntryInfo | undefined),
+        entryTask,
         fixtureTask,
         getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]),
         getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined)
       ]);
-      if (!entry) {
-        this.handleMissingEntry();
-        return;
-      }
       const priceGroups = mapHomePriceChanges(priceChanges);
 
       this._lastLoadAt = Date.now();
       this.setData({
         fixtureRows: fixtures.map(mapFixtureRow),
         fixtureError,
+        entryError,
         priceRises: priceGroups.rises,
         priceFalls: priceGroups.falls,
         gameweekStats: mapHomeGameweekStats(gameweekStats),
         selectedFixtureGw: fixtureGw,
         minFixtureGw: app.globalData.nextGw,
-        entry
+        entry: entry || {}
       });
       this.loadNotice();
     } catch (error) {
@@ -205,15 +190,6 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
-  },
-
-  handleMissingEntry() {
-    clearEntryId();
-    clearEntryScopedStorage();
-    getApp<IAppOption>().globalData.entryId = undefined;
-    this.setData({ entry: {}, loading: false, error: "" });
-    wx.showToast({ title: "请先绑定球队", icon: "none" });
-    forceEntryBinding();
   },
 
   async refreshHome() {
@@ -286,7 +262,11 @@ Page({
   },
 
   onChangeEntry() {
-    forceEntryBinding();
+    goToEntrySearch();
+  },
+
+  onGoAccountLink() {
+    navigateTo(routes.accountLink);
   },
 
   onOpenEntry() {

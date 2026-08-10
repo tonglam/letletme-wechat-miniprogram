@@ -8,13 +8,13 @@
     <view class="gw-pill-dark">GW {{event || '-'}}</view>
   </view>
 
-  <view class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenCard" data-url="{{cards[0].url}}">
+  <view class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip">
     <view>
-      <view class="strip-label">{{entryId ? '当前球队' : '需要关联账户'}}</view>
+      <view class="strip-label">{{entryId ? '当前球队' : '还没有我的球队'}}</view>
       <view wx:if="{{entryId}}" class="strip-value">Entry #{{entryId}}</view>
-      <view wx:else class="strip-value">关联后自动读取已验证球队</view>
+      <view wx:else class="strip-value">查找球队并设为我的球队</view>
     </view>
-    <text class="strip-action">{{entryId ? '查看' : '关联'}}</text>
+    <text class="strip-action">{{entryId ? '查看' : '选择'}}</text>
   </view>
 
   <view wx:for="{{cards}}" wx:key="url" class="card live-card" data-url="{{item.url}}" bindtap="onOpenCard">

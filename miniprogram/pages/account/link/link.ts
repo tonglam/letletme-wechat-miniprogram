@@ -39,8 +39,10 @@ Page({
     }
     this.setData({ confirming: true, error: '' });
     try {
-      await confirmMiniProgramEmailLink(this.data.email, this.data.code);
-      wx.showToast({ title: '登录成功', icon: 'success' });
+      const session = await confirmMiniProgramEmailLink(this.data.email, this.data.code);
+      const synced = Boolean(session.profile.fplEntryId && session.profile.fplEntryVerifiedAt);
+      // With no web-verified team the user simply picks one manually on Home.
+      wx.showToast({ title: synced ? '已同步网页球队' : '登录成功', icon: 'success' });
       switchToHome();
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '验证失败' });
