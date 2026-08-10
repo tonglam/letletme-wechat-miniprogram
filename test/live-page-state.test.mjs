@@ -23,28 +23,30 @@ test("re-arms current-gameweek polling before loading the switched context", () 
   const context = {
     ...entryPage,
     data: { ...entryPage.data, entryId: 123, event: 32 },
-    cancelFreshnessCheck() {
-      calls.push("cancel");
-    },
-    stopAutoRefresh() {
-      calls.push("stop");
-    },
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
-      calls.push(`set:${this.data.event}`);
-    },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.data.event}`);
+      if (update.event !== undefined) {
+        calls.push(`set:${this.data.event}`);
+      }
     },
     loadData(options) {
       calls.push(`load:${this.data.event}:${options.includeTransfers === true}`);
       return Promise.resolve();
     }
   };
+  context.liveRefresh = {
+    stop() {
+      calls.push("stop");
+    },
+    sync() {
+      calls.push(`sync:${context.data.event}`);
+    }
+  };
 
   entryPage.onGwChange.call(context, { detail: { value: 33 } });
 
-  assert.deepEqual(calls, ["cancel", "stop", "set:33", "sync:33", "load:33:true"]);
+  assert.deepEqual(calls, ["stop", "set:33", "sync:33", "load:33:true"]);
 });
 
 test("an overlapping manual refresh awaits its independent transfer refresh", async () => {
@@ -177,8 +179,10 @@ test("entry resume revalidates current-gameweek transfers independently", () => 
     data: { ...entryPage.data, entryId: 123, event: 33 },
     pageVisible: false,
     hasShown: true,
-    syncAutoRefresh() {
-      calls.push("sync");
+    liveRefresh: {
+      sync() {
+        calls.push("sync");
+      }
     },
     revalidateCachedSnapshot() {
       return false;

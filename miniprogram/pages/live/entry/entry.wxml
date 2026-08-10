@@ -3,10 +3,14 @@
     <view class="row">
       <view>
         <view class="title">实时球队</view>
-        <view class="subtitle">Entry #{{entryId || '-'}}</view>
+        <view class="subtitle">Entry #{{entryId || '-'}}{{viewOnly ? ' · 查看模式' : ''}}</view>
       </view>
       <gw-picker wx:if="{{!emptyState}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
+  </view>
+
+  <view wx:if="{{!emptyState}}" class="section status-section">
+    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
   </view>
 
   <app-error-state wx:if="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />

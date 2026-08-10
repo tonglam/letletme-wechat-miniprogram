@@ -22,6 +22,10 @@ export interface LiveRefreshControllerOptions {
   acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
   /** Probe failure: current data is kept, the page only updates its status. */
   onProbeError?: (message: string) => void;
+  /** Probe lifecycle for status rendering (true when a probe actually starts). */
+  onProbeChange?: (probing: boolean) => void;
+  /** Connectivity transitions, including an immediately-reported offline state. */
+  onOnlineChange?: (online: boolean) => void;
   /** Extra staleness guard (page request-id / context switch). */
   isStale?: () => boolean;
   /** Connectivity injection; defaults to optimistic-online for tests. */
@@ -77,6 +81,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
 
     const requestId = probeRequestId + 1;
     probeRequestId = requestId;
+    options.onProbeChange?.(true);
     const request = (async () => {
       try {
         const observed = await options.probe();
@@ -97,6 +102,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     return request.finally(() => {
       if (probeRequest === request) {
         probeRequest = null;
+        options.onProbeChange?.(false);
       }
     });
   }
@@ -118,6 +124,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     unsubscribeNetwork = options.subscribeNetwork((nextOnline) => {
       const wasOffline = !online;
       online = nextOnline;
+      options.onOnlineChange?.(nextOnline);
       if (!online) {
         stop();
       } else if (wasOffline) {

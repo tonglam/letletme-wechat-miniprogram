@@ -179,6 +179,21 @@ async function testStopDiscardsLateResponse(): Promise<void> {
   controller.dispose();
 }
 
+async function testProbeChangeHookFires(): Promise<void> {
+  const states: boolean[] = [];
+  const controller = createLiveRefreshController({
+    isEligible: () => true,
+    getAcceptedSnapshot: () => snapshot("aa"),
+    probe: () => Promise.resolve(snapshot("aa")),
+    reload: () => Promise.resolve(),
+    onProbeChange: (probing) => states.push(probing)
+  });
+
+  await controller.probeNow();
+  assertEqual(states.join(","), "true,false", "probe lifecycle hook brackets the request");
+  controller.dispose();
+}
+
 async function main(): Promise<void> {
   await testUnchangedRevisionOnlyAccepts();
   await testChangedRevisionReloadsOnceUnderConcurrency();
@@ -186,6 +201,7 @@ async function main(): Promise<void> {
   await testIneligibleNeverStartsTimer();
   await testNetworkOfflineStopsAndRecoveryProbes();
   await testStopDiscardsLateResponse();
+  await testProbeChangeHookFires();
   console.log("live-refresh-controller tests passed");
 }
 

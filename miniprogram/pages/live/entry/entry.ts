@@ -5,11 +5,18 @@ import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
 import {
-  LIVE_REFRESH_INTERVAL_MS,
-  liveSnapshotNeedsRefresh,
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../../../utils/live-refresh";
+import {
+  createLiveRefreshController,
+  type LiveRefreshController
+} from "../../../utils/live-refresh-controller";
+import { subscribeNetworkStatus } from "../../../utils/live-network";
+import {
+  normalizeLiveDisplayState,
+  type LiveDisplayState
+} from "../../../utils/live-status";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 
@@ -26,6 +33,8 @@ interface LiveEntryData {
   error: string;
   transfersError: string;
   emptyState: boolean;
+  displayState: LiveDisplayState;
+  viewOnly: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -77,6 +86,8 @@ Page({
     error: "",
     transfersError: "",
     emptyState: false,
+    displayState: "fresh",
+    viewOnly: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -95,15 +106,15 @@ Page({
     transfers: []
   } as LiveEntryData,
 
-  autoRefreshTimer: undefined as number | undefined,
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
   transfersRequestId: 0,
-  freshnessRequest: null as Promise<void> | null,
-  freshnessRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
+  liveRefresh: null as LiveRefreshController | null,
+  probing: false,
+  networkOnline: true,
   pageVisible: false,
   hasShown: false,
 
@@ -116,31 +127,65 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     if (!hasRouteEntry && !getApiSessionToken()) {
-      // With no valid session the stored binding is only offline/display
-      // fallback: the account may have been relinked to a different entry
+      // With no valid session the stored follow is only offline/display
+      // fallback: the account may have been linked to a different entry
       // since, so wait for the refreshed profile to re-assert it (the login
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    const followedEntry = app.globalData.entryId;
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
+      entryId: hasRouteEntry ? routeEntry : followedEntry,
+      // An explicit route entry that is not the followed team is read-only
+      // view mode; it never changes the stored follow.
+      viewOnly: hasRouteEntry && routeEntry !== followedEntry
     });
+    this.initLiveRefresh();
     // onShow can run while initAppData is still pending. Re-arm here once the
     // entry/event context exists so an initial failure still recovers by poll.
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     this.loadData({ includeTransfers: true });
+    this.syncDisplayState();
+  },
+
+  initLiveRefresh() {
+    if (this.liveRefresh) return;
+    this.liveRefresh = createLiveRefreshController({
+      isEligible: () => this.shouldAutoRefresh(),
+      getAcceptedSnapshot: () => this.liveSnapshot,
+      probe: () => getLiveSnapshot(this.data.event),
+      reload: () => this.loadData({ background: true, forceRefresh: true }),
+      acceptSnapshot: (snapshot) => {
+        this.liveSnapshot = snapshot;
+        this.setData({ error: "" });
+        this.syncDisplayState();
+      },
+      onProbeError: (message) => {
+        this.setData({ error: message });
+        this.syncDisplayState();
+      },
+      onProbeChange: (probing) => {
+        this.probing = probing;
+        this.syncDisplayState();
+      },
+      onOnlineChange: (online) => {
+        this.networkOnline = online;
+        this.syncDisplayState();
+      },
+      subscribeNetwork: subscribeNetworkStatus
+    });
   },
 
   onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
-      this.refreshIfChanged();
+      void this.liveRefresh?.probeNow();
     }
     const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
     if (
@@ -158,14 +203,12 @@ Page({
 
   onHide() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
   },
 
   onUnload() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.dispose();
   },
 
   onPullDownRefresh() {
@@ -177,6 +220,7 @@ Page({
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({ loading: false, error: "", emptyState: true });
+      this.syncDisplayState();
       return Promise.resolve();
     }
 
@@ -252,10 +296,12 @@ Page({
           managers,
           lastUpdated: formatTime(new Date(fetchedAt))
         });
-        this.syncAutoRefresh();
+        this.liveRefresh?.sync();
+        this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+        this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
@@ -338,74 +384,33 @@ Page({
     // Consume this signal before starting the metadata request so onShow and
     // request cleanup cannot launch duplicate stale-while-revalidate checks.
     this.cachedLiveStoredAt = undefined;
-    void this.refreshIfChanged();
+    void this.liveRefresh?.probeNow();
     return true;
   },
 
-  refreshIfChanged(): Promise<void> {
-    if (!this.shouldAutoRefresh()) return Promise.resolve();
-    if (this.freshnessRequest) return this.freshnessRequest;
-
-    const requestId = this.freshnessRequestId + 1;
-    this.freshnessRequestId = requestId;
-    const eventId = this.data.event;
-    const liveRequestId = this.liveRequestId;
-    const request = (async () => {
-      try {
-        const observed = await getLiveSnapshot(eventId);
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
-          this.liveSnapshot = observed;
-          this.setData({ error: "" });
-          this.syncAutoRefresh();
-          return;
-        }
-        await this.loadData({ background: true, forceRefresh: true });
-      } catch (error) {
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时球队刷新失败" });
-      }
-    })();
-
-    this.freshnessRequest = request;
-    void request.finally(() => {
-      if (this.freshnessRequest === request) {
-        this.freshnessRequest = null;
-      }
+  syncDisplayState() {
+    this.setData({
+      displayState: normalizeLiveDisplayState({
+        snapshot: this.liveSnapshot,
+        hasData: this.data.hasData,
+        loading: this.data.loading || this.data.refreshing,
+        probing: this.probing,
+        lastError: this.data.error,
+        online: this.networkOnline
+      })
     });
-    return request;
-  },
-
-  syncAutoRefresh() {
-    this.stopAutoRefresh();
-    if (!this.shouldAutoRefresh()) return;
-    this.autoRefreshTimer = setInterval(() => {
-      this.refreshIfChanged();
-    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
-  },
-
-  stopAutoRefresh() {
-    if (this.autoRefreshTimer !== undefined) {
-      clearInterval(this.autoRefreshTimer);
-      this.autoRefreshTimer = undefined;
-    }
-  },
-
-  cancelFreshnessCheck() {
-    this.freshnessRequestId += 1;
-    this.freshnessRequest = null;
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
-    this.stopAutoRefresh();
     this.setData({ event: event.detail.value, hasData: false, lastUpdated: "" });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     this.loadData({ includeTransfers: true });
+    this.syncDisplayState();
   },
 
   onRetry() {
