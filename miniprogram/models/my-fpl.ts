@@ -8,6 +8,8 @@ import type { LiveSnapshotState } from "./live";
 export type MyFplPhase = "PRESEASON" | "PRE_DEADLINE" | "LIVE" | "SETTLING" | "SETTLED" | "OFFSEASON";
 
 export interface MyFplContext {
+  /** False only when season/event metadata could not be read. */
+  eventContextAvailable: boolean;
   season?: string;
   currentEvent?: number;
   nextEvent?: number;

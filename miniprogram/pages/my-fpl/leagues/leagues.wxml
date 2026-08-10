@@ -26,7 +26,7 @@
       bind:action="onEmptyAction"
     />
   </view>
-  <view wx:elif="{{displayLeagues.length === 0}}" class="section">
+  <view wx:elif="{{displayLeagues.length === 0 && !error}}" class="section">
     <app-empty-state
       title="{{keyword ? '没有匹配的联赛' : '暂无官方联赛'}}"
       description="{{keyword ? '换个关键词试试。' : '加入官方 FPL 联赛后会显示在这里。'}}"

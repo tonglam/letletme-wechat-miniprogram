@@ -616,6 +616,7 @@ Page({
       } finally {
         if (requestId === this.rowsRequestId) {
           this.setData({ loading: false, refreshing: false });
+          this.syncDisplayState();
         }
       }
     })();

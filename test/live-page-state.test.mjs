@@ -18,6 +18,9 @@ capturedPage = undefined;
 await import("../miniprogram/pages/live/match/match.ts");
 const matchPage = capturedPage;
 
+capturedPage = undefined;
+const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
+
 test("re-arms current-gameweek polling before loading the switched context", () => {
   const calls = [];
   const context = {
@@ -91,7 +94,7 @@ test("match cold start waits for the current event before arming recovery", asyn
   const calls = [];
   let resolveAppData;
   const app = {
-    globalData: { gw: 0 },
+    globalData: { gw: 0, currentGw: 0 },
     initAppData() {
       calls.push("init");
       return new Promise((resolve) => {
@@ -130,11 +133,41 @@ test("match cold start waits for the current event before arming recovery", asyn
   const loading = matchPage.onLoad.call(context);
   assert.deepEqual(calls, ["loading", "init"]);
   app.globalData.gw = 33;
+  app.globalData.currentGw = 33;
   resolveAppData();
   await loading;
 
   assert.equal(context.currentEventId, 33);
   assert.deepEqual(calls, ["loading", "init", "sync:33", "load:33"]);
+});
+
+test("match cold start selects the scheduled next round during preseason", async () => {
+  const app = {
+    globalData: { gw: 1, currentGw: 0 },
+    initAppData: async () => {}
+  };
+  globalThis.getApp = () => app;
+  globalThis.wx = { getStorageSync: () => "" };
+  const context = {
+    ...matchPage,
+    data: { ...matchPage.data },
+    currentEventId: 0,
+    liveRefresh: null,
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    initLiveRefresh() {
+      this.liveRefresh = { sync() {} };
+    },
+    loadData: async () => {},
+    syncDisplayState() {}
+  };
+
+  await matchPage.onLoad.call(context);
+
+  assert.equal(context.currentEventId, 1);
+  assert.equal(context.data.status, "next_event");
+  assert.equal(context.data.activeStatusLabel, "下轮");
 });
 
 test("match status changes re-arm polling before the first request", () => {
@@ -264,4 +297,24 @@ test("renders pending transfers and partial tournament rows honestly", () => {
   );
   assert.equal(tournamentPage.data.errorSuffix, "");
   assert.equal(tournamentPage.data.tournamentListError, "");
+});
+
+test("live loaders normalize display state after clearing loading flags", () => {
+  for (const loader of [entryPage.loadData, matchPage.loadData, tournamentPage.loadRows]) {
+    const body = String(loader).replace(/\s+/g, "");
+    const terminalUpdate = body.lastIndexOf("setData({loading:false,refreshing:false})");
+    const finalNormalization = body.indexOf("syncDisplayState()", terminalUpdate);
+    assert.ok(terminalUpdate >= 0, "the loader clears both loading flags");
+    assert.ok(
+      finalNormalization > terminalUpdate,
+      "each loader must recompute status after its terminal loading update"
+    );
+  }
+});
+
+test("team phase banner never invents settling after a failed snapshot probe", () => {
+  assert.equal(teamModule.phaseBannerFromSnapshot(undefined), "");
+  assert.equal(teamModule.phaseBannerFromSnapshot("SCHEDULED"), "");
+  assert.equal(teamModule.phaseBannerFromSnapshot("LIVE"), "live");
+  assert.equal(teamModule.phaseBannerFromSnapshot("SETTLED"), "");
 });

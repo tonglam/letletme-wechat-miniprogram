@@ -60,8 +60,10 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
   let currentEvent: number | undefined;
   let nextEvent: number | undefined;
   let utcDeadline: string | undefined;
+  let eventContextAvailable = false;
   try {
     const eventInfo = await getCurrentEventAndDeadline(forceRefresh);
+    eventContextAvailable = true;
     season = eventInfo.season;
     currentEvent = eventInfo.currentEvent;
     nextEvent = eventInfo.nextEvent;
@@ -82,6 +84,7 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
   }
 
   return {
+    eventContextAvailable,
     season,
     currentEvent,
     nextEvent,

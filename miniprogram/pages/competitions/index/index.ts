@@ -2,7 +2,7 @@ import { getMyCompetitionsCompat } from "../../../services/competition.service";
 import type { CompetitionListItem } from "../../../models/competition";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
-import { currentFollowEntryId } from "../../../utils/follow";
+import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
 import { listCountBucket } from "../../../utils/competition-state";
 import { durationBucket, recordCompetitionVisit } from "../../../utils/perf";
 import { routes } from "../../../config/routes";
@@ -46,7 +46,8 @@ Page({
   requestId: 0,
   hasShown: false,
 
-  onLoad() {
+  async onLoad() {
+    await waitForAuthoritativeFollow();
     void this.loadList();
   },
 

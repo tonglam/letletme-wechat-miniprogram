@@ -3,7 +3,7 @@ import type { MyFplLeagueBrief } from "../../../models/my-fpl";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { recordMyFplVisit } from "../../../utils/perf";
-import { currentFollowEntryId } from "../../../utils/follow";
+import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
 
 interface LeaguesCache {
   entryId: number;
@@ -41,7 +41,8 @@ Page({
   requestId: 0,
   hasShown: false,
 
-  onLoad() {
+  async onLoad() {
+    await waitForAuthoritativeFollow();
     void this.loadLeagues();
   },
 

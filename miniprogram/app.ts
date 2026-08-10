@@ -11,6 +11,7 @@ App<IAppOption>({
   globalData: {
     season: "",
     gw: 0,
+    currentGw: 0,
     lastGw: 0,
     nextGw: 0,
     utcDeadline: "",
@@ -174,6 +175,7 @@ App<IAppOption>({
 
       this.globalData.season = String(current.season || "");
       this.globalData.gw = eventContext.gw;
+      this.globalData.currentGw = Number(current.currentEvent) || 0;
       this.globalData.lastGw = eventContext.lastGw;
       this.globalData.nextGw = eventContext.nextGw;
       this.globalData.utcDeadline = utcDeadline;

@@ -26,7 +26,7 @@
       bind:action="onEmptyAction"
     />
   </view>
-  <view wx:elif="{{items.length === 0}}" class="section">
+  <view wx:elif="{{items.length === 0 && !error}}" class="section">
     <app-empty-state
       title="暂无已筹备赛事"
       description="赛事分两种：追踪官方 FPL 联赛的赛事，以及按自定义规则进行的赛事。创建和筹备请在网页版完成。"

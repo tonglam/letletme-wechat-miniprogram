@@ -12,6 +12,7 @@ import { durationBucket, recordMyFplVisit } from "../../../utils/perf";
 import { formatDeadline } from "../../../utils/date";
 import { goToEntrySearch, goToLiveEntry, navigateTo } from "../../../utils/navigation";
 import { routes } from "../../../config/routes";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 
 interface OverviewCache {
   entryId: number;
@@ -46,6 +47,7 @@ Page({
     teamBrief: null as MyFplTeamBrief | null,
     leagueCount: 0,
     leaguesLoaded: false,
+    eventContextAvailable: false,
     offline: false,
     error: ""
   },
@@ -55,11 +57,12 @@ Page({
   hasShown: false,
   unsubscribeNetwork: undefined as (() => void) | undefined,
 
-  onLoad() {
+  async onLoad() {
     this.unsubscribeNetwork = subscribeNetworkStatus((online) => {
       this.setData({ offline: !online });
       this.syncPrincipalState();
     });
+    await waitForAuthoritativeFollow();
     void this.loadOverview();
   },
 
@@ -100,6 +103,17 @@ Page({
       this.setData({ teamBrief: cached.teamBrief, leagueCount: cached.leagueCount });
     }
 
+    if (!context.eventContextAvailable) {
+      this.setData({
+        loading: false,
+        eventContextAvailable: false,
+        leaguesLoaded: true,
+        error: "赛季信息暂时不可用，请稍后重试"
+      });
+      this.syncPrincipalState();
+      return;
+    }
+
     // Phase renders from context alone — secondary reads must not block it.
     const snapshotState = context.currentEvent
       ? await getCurrentSnapshotState(context.currentEvent)
@@ -115,6 +129,7 @@ Page({
     });
     this.setData({
       loading: false,
+      eventContextAvailable: true,
       phase,
       deadlineText: context.utcDeadline ? formatDeadline(context.utcDeadline) : ""
     });
@@ -142,7 +157,10 @@ Page({
 
     if (brief === null && leagues === null) {
       // Total failure: keep last-good and surface a retryable data state.
-      this.setData({ error: cached ? "刷新失败，当前显示上次成功结果" : "加载失败，请稍后重试" });
+      this.setData({
+        leaguesLoaded: true,
+        error: cached ? "刷新失败，当前显示上次成功结果" : "加载失败，请稍后重试"
+      });
       return;
     }
     const nextBrief = brief ?? cached?.teamBrief ?? null;

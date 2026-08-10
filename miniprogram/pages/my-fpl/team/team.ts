@@ -14,7 +14,16 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import { goToEntrySearch, goToLiveEntry } from "../../../utils/navigation";
 import { formatCompactNumber } from "../../../utils/summary-format";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
-import { deriveMyFplPhase } from "../../../utils/my-fpl-phase";
+import type { LiveSnapshotState } from "../../../models/live";
+
+export function phaseBannerFromSnapshot(
+  snapshotState: LiveSnapshotState | undefined
+): "" | "live" | "settling" {
+  // The current snapshot contract has no explicit SETTLING state. Without a
+  // successful probe (or a deadline passed into this page), absence is
+  // unknown rather than evidence that processing has begun.
+  return snapshotState === "LIVE" ? "live" : "";
+}
 
 type EntrySummaryTab = "squad" | "transfer" | "chips" | "history";
 type EntrySummaryEmptyState = "" | "entry" | "event";
@@ -296,8 +305,7 @@ Page({
       return;
     }
     const snapshotState = await getCurrentSnapshotState(currentGw);
-    const phase = deriveMyFplPhase({ currentEvent: currentGw, now: Date.now(), snapshotState });
-    const banner = phase === "LIVE" ? "live" : phase === "SETTLING" ? "settling" : "";
+    const banner = phaseBannerFromSnapshot(snapshotState);
     if (banner !== this.data.phaseBanner) {
       this.setData({ phaseBanner: banner });
     }

@@ -4,6 +4,7 @@ interface IAppOption extends WechatMiniprogram.IAnyObject {
   globalData: {
     season: string
     gw: number
+    currentGw: number
     lastGw: number
     nextGw: number
     utcDeadline: string

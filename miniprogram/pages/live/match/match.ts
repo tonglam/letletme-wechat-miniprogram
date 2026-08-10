@@ -261,7 +261,7 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     this.currentEventId = Number(app.globalData.gw) || 0;
-    if (!this.currentEventId && !isValidStatus(storedStatus)) {
+    if (!Number(app.globalData.currentGw) && this.currentEventId && !isValidStatus(storedStatus)) {
       // Preseason/offseason with no explicit user choice: the next scheduled
       // event is the meaningful surface, not an empty playing list.
       this.setData({
@@ -389,6 +389,7 @@ Page({
       } finally {
         if (requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          this.syncDisplayState();
         }
       }
     })();

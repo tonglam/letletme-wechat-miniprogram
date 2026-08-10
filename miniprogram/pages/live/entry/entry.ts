@@ -319,6 +319,7 @@ Page({
       } finally {
         if (requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          this.syncDisplayState();
         }
       }
     })();
