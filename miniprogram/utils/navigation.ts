@@ -41,5 +41,7 @@ export function switchToLive(): void {
 }
 
 export function switchToData(): void {
-  wx.redirectTo({ url: routes.dataIndex });
+  // The data hub is now the Explore overview (explore plan §7.3); the data/*
+  // destination routes themselves are unchanged.
+  wx.redirectTo({ url: routes.exploreIndex });
 }

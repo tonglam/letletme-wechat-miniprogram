@@ -1,0 +1,24 @@
+.group-title {
+  margin-bottom: 16rpx;
+  color: var(--muted-ink, #6e5a72);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.route-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.card-desc {
+  margin-top: 8rpx;
+  color: var(--muted-ink, #6e5a72);
+  font-size: 24rpx;
+}

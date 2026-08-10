@@ -22,6 +22,7 @@
     "pages/my-fpl/team/team",
     "pages/my-fpl/leagues/leagues",
     "pages/competitions/index/index",
+    "pages/explore/index/index",
     "pages/explore/fixtures/fixtures",
     "pages/performance/index/index"
   ],

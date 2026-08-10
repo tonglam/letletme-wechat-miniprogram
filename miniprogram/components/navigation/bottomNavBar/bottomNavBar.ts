@@ -31,6 +31,13 @@ const MENU_MAP: Record<string, NavMenu> = {
     url: { 我的赛事: "/pages/competitions/index/index" },
     show: false
   },
+  explore: {
+    // Explore is one permanent destination: the overview routes onward to
+    // the physical pages, which stay put until the deferred rename (plan A2).
+    pages: [],
+    url: { 探索: "/pages/explore/index/index" },
+    show: false
+  },
   live: {
     pages: [
       { name: "球队", subname: "查看球队实时得分" },
@@ -44,34 +51,6 @@ const MENU_MAP: Record<string, NavMenu> = {
     },
     show: true
   },
-  summary: {
-    pages: [
-      { name: "比赛周", subname: "查看比赛周总体数据" },
-      { name: "球队", subname: "查看球队统计数据" },
-      { name: "联赛", subname: "查看联赛统计数据" }
-    ],
-    url: {
-      比赛周: "/pages/summary/gameweek/gameweek",
-      球队: "/pages/summary/entry/entry",
-      联赛: "/pages/summary/tournament/tournament"
-    },
-    show: true
-  },
-  data: {
-    pages: [
-      { name: "身价变化", subname: "查看每日价格涨跌" },
-      { name: "阵容选择", subname: "查看联赛选择率和转会趋势" },
-      { name: "球员数据", subname: "查看球员数据" },
-      { name: "球队数据", subname: "查看球队数据" }
-    ],
-    url: {
-      身价变化: "/pages/data/price/price",
-      阵容选择: "/pages/data/selections/selections",
-      球员数据: "/pages/data/players/players",
-      球队数据: "/pages/data/teams/teams"
-    },
-    show: true
-  },
   perf: {
     pages: [],
     url: { 性能监控: "/pages/performance/index/index" },
@@ -79,12 +58,16 @@ const MENU_MAP: Record<string, NavMenu> = {
   }
 };
 
+// Order matters: the first matching prefix wins. /pages/summary/gameweek is
+// Explore's 本轮 destination; the remaining /pages/summary/ routes are
+// compat-only (plan A3) and intentionally highlight no tab.
 const ROUTE_GROUPS = [
   { prefix: "/pages/my-fpl/", active: "myFpl" },
   { prefix: "/pages/competitions/", active: "competitions" },
+  { prefix: "/pages/summary/gameweek", active: "explore" },
+  { prefix: "/pages/explore/", active: "explore" },
+  { prefix: "/pages/data/", active: "explore" },
   { prefix: "/pages/live/", active: "live" },
-  { prefix: "/pages/summary/", active: "summary" },
-  { prefix: "/pages/data/", active: "data" },
   { prefix: "/pages/performance/", active: "perf" }
 ];
 
