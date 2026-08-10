@@ -20,5 +20,6 @@ export const routes = {
   myFplIndex: "/pages/my-fpl/index/index",
   myFplTeam: "/pages/my-fpl/team/team",
   myFplLeagues: "/pages/my-fpl/leagues/leagues",
+  competitionsIndex: "/pages/competitions/index/index",
   performance: "/pages/performance/index/index"
 } as const;

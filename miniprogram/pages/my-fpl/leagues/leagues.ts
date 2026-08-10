@@ -3,7 +3,7 @@ import type { MyFplLeagueBrief } from "../../../models/my-fpl";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { recordMyFplVisit } from "../../../utils/perf";
-import { storageKeys } from "../../../config/storage-keys";
+import { currentFollowEntryId } from "../../../utils/follow";
 
 interface LeaguesCache {
   entryId: number;
@@ -25,21 +25,6 @@ function readLeaguesCache(entryId: number | undefined): LeaguesCache | null {
     }
   } catch { /* no cache */ }
   return null;
-}
-
-function currentEntryId(): number | undefined {
-  try {
-    const appEntryId = Number(getApp<IAppOption>().globalData.entryId);
-    if (Number.isInteger(appEntryId) && appEntryId > 0) {
-      return appEntryId;
-    }
-  } catch { /* app not ready */ }
-  try {
-    const stored = Number(wx.getStorageSync(storageKeys.entryId));
-    return Number.isInteger(stored) && stored > 0 ? stored : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 Page({
@@ -75,7 +60,7 @@ Page({
 
   async loadLeagues(forceRefresh = false) {
     const requestId = ++this.requestId;
-    const entryId = currentEntryId();
+    const entryId = currentFollowEntryId();
 
     if (!entryId) {
       this.setData({ loading: false, error: "", entryId: undefined, leagues: [], displayLeagues: [], fromCache: false });

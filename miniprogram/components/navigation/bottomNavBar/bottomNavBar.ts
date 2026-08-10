@@ -25,6 +25,12 @@ const MENU_MAP: Record<string, NavMenu> = {
     },
     show: true
   },
+  competitions: {
+    // One permanent destination at section level — no action sheet (§9.1).
+    pages: [],
+    url: { 我的赛事: "/pages/competitions/index/index" },
+    show: false
+  },
   live: {
     pages: [
       { name: "球队", subname: "查看球队实时得分" },
@@ -75,6 +81,7 @@ const MENU_MAP: Record<string, NavMenu> = {
 
 const ROUTE_GROUPS = [
   { prefix: "/pages/my-fpl/", active: "myFpl" },
+  { prefix: "/pages/competitions/", active: "competitions" },
   { prefix: "/pages/live/", active: "live" },
   { prefix: "/pages/summary/", active: "summary" },
   { prefix: "/pages/data/", active: "data" },

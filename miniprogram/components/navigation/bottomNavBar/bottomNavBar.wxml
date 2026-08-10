@@ -3,6 +3,7 @@
   <van-tabbar active="{{activeName}}" bind:change="onChange" border="{{false}}" safe-area-inset-bottom="{{true}}" placeholder="{{true}}">
     <van-tabbar-item name="myFpl" icon="user-o">我的 FPL</van-tabbar-item>
     <van-tabbar-item name="live" icon="fire-o">实时</van-tabbar-item>
+    <van-tabbar-item name="competitions" icon="trophy-o">赛事</van-tabbar-item>
     <van-tabbar-item name="summary" icon="medal-o">统计</van-tabbar-item>
     <van-tabbar-item name="data" icon="bar-chart-o">数据</van-tabbar-item>
     <van-tabbar-item wx:if="{{showPerf}}" name="perf" icon="chart-trending-o">性能</van-tabbar-item>
