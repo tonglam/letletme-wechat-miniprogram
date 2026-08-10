@@ -2,6 +2,7 @@ import { getMyFplLeagues } from "../../../services/my-fpl.service";
 import type { MyFplLeagueBrief } from "../../../models/my-fpl";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
+import { recordMyFplVisit } from "../../../utils/perf";
 import { storageKeys } from "../../../config/storage-keys";
 
 interface LeaguesCache {
@@ -129,7 +130,10 @@ Page({
 
   onOpenWebsite() {
     // Competition preparation and league management are Website-only (§7.3).
-    openWebsiteAction(canonicalAction("LEAGUE_PREPARE"));
+    const action = canonicalAction("LEAGUE_PREPARE");
+    if (openWebsiteAction(action)) {
+      recordMyFplVisit({ surface: "leagues", handoffActionType: action.actionType });
+    }
   },
 
   onEmptyAction() {

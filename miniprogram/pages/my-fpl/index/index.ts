@@ -8,6 +8,7 @@ import type { MyFplContext, MyFplPhase, MyFplTeamBrief } from "../../../models/m
 import type { MyFplPrincipalState } from "../../../models/principal";
 import { deriveMyFplPhase, derivePrincipalDisplay } from "../../../utils/my-fpl-phase";
 import { subscribeNetworkStatus } from "../../../utils/live-network";
+import { durationBucket, recordMyFplVisit } from "../../../utils/perf";
 import { formatDeadline } from "../../../utils/date";
 import { goToEntrySearch, goToLiveEntry, navigateTo } from "../../../utils/navigation";
 import { routes } from "../../../config/routes";
@@ -86,6 +87,7 @@ Page({
 
   async loadOverview(forceRefresh = false) {
     const requestId = ++this.requestId;
+    const loadStart = Date.now();
     this.setData({ loading: true, error: "" });
 
     const context = await getMyFplContext(forceRefresh);
@@ -104,16 +106,25 @@ Page({
       : undefined;
     if (this.isStale(requestId)) return;
 
+    const phase = deriveMyFplPhase({
+      currentEvent: context.currentEvent,
+      nextEvent: context.nextEvent,
+      nextUtcDeadline: context.utcDeadline,
+      now: Date.now(),
+      snapshotState
+    });
     this.setData({
       loading: false,
-      phase: deriveMyFplPhase({
-        currentEvent: context.currentEvent,
-        nextEvent: context.nextEvent,
-        nextUtcDeadline: context.utcDeadline,
-        now: Date.now(),
-        snapshotState
-      }),
+      phase,
       deadlineText: context.utcDeadline ? formatDeadline(context.utcDeadline) : ""
+    });
+    // Primary card render: the observability anchor for time-to-phase-card.
+    recordMyFplVisit({
+      surface: "overview",
+      phase,
+      eventId: event || undefined,
+      cacheOutcome: cached ? "last-good" : "miss",
+      durationBucket: durationBucket(Date.now() - loadStart)
     });
     this.syncPrincipalState();
 
@@ -157,14 +168,21 @@ Page({
     const context = this.context;
     const event = context?.currentEvent ?? context?.nextEvent ?? 0;
     const hasCachedContent = Boolean(readOverviewCache(context?.entryId, event));
-    this.setData({
-      principalState: derivePrincipalDisplay({
-        entryId: context?.entryId,
-        accountLinked: context?.accountLinked ?? false,
-        online: !this.data.offline,
-        hasCachedContent
-      })
+    const next = derivePrincipalDisplay({
+      entryId: context?.entryId,
+      accountLinked: context?.accountLinked ?? false,
+      online: !this.data.offline,
+      hasCachedContent
     });
+    if (next !== this.data.principalState) {
+      recordMyFplVisit({
+        surface: "overview",
+        principalState: next,
+        phase: this.data.phase,
+        eventId: event || undefined
+      });
+    }
+    this.setData({ principalState: next });
   },
 
   onPhasePrimary(event: WechatMiniprogram.CustomEvent<{ phase: MyFplPhase }>) {

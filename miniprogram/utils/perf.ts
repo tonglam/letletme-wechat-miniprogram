@@ -32,8 +32,25 @@ export interface LiveTransitionRecord {
 export interface StoredPerf {
   apiRecords: ApiRecord[];
   liveTransitions?: LiveTransitionRecord[];
+  myFplVisits?: MyFplVisitRecord[];
   launchDuration?: number;
   launchTs?: number;
+}
+
+/**
+ * Sanitized My FPL telemetry (high-level design §16, plan §9.1). Never
+ * carries tokens, email, openid, team/league names, or the follow pointer —
+ * entryId is deliberately absent.
+ */
+export interface MyFplVisitRecord {
+  surface: "overview" | "team" | "leagues";
+  principalState?: string;
+  phase?: string;
+  eventId?: number;
+  cacheOutcome?: "fresh" | "last-good" | "miss";
+  handoffActionType?: string;
+  durationBucket?: string;
+  ts: number;
 }
 
 export function durationBucket(ms: number): string {
@@ -94,13 +111,30 @@ export function recordLiveTransition(record: Omit<LiveTransitionRecord, "ts">): 
   flush();
 }
 
+export function recordMyFplVisit(record: Omit<MyFplVisitRecord, "ts">): void {
+  const d = load();
+  if (!Array.isArray(d.myFplVisits)) {
+    d.myFplVisits = [];
+  }
+  if (d.myFplVisits.length >= MAX_RECORDS) {
+    d.myFplVisits.splice(0, d.myFplVisits.length - MAX_RECORDS + 1);
+  }
+  d.myFplVisits.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function getPerf(): StoredPerf {
   const d = load();
-  return { ...d, apiRecords: d.apiRecords.slice(), liveTransitions: (d.liveTransitions ?? []).slice() };
+  return {
+    ...d,
+    apiRecords: d.apiRecords.slice(),
+    liveTransitions: (d.liveTransitions ?? []).slice(),
+    myFplVisits: (d.myFplVisits ?? []).slice()
+  };
 }
 
 export function clearPerf(): void {
-  _cache = { apiRecords: [], liveTransitions: [] };
+  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [] };
   try {
     wx.removeStorage({ key: STORAGE_KEY });
   } catch { /* silent */ }
