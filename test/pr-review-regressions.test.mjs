@@ -127,6 +127,16 @@ test("My FPL last-good views survive context and refresh failures", () => {
   assert.match(team, /restartForPrincipalChange\(entryId\)/);
   assert.match(template, /error && !hasTeamData/);
   assert.match(template, /当前显示上次成功结果/);
+  assert.match(overview, /cached\.season === season/);
+  assert.match(team, /retainTransferRowsAfterFailure/);
+});
+
+test("match rollover detaches same-status in-flight work", () => {
+  const match = source("miniprogram/pages/live/match/match.ts");
+  assert.match(
+    match,
+    /nextEventId !== this\.currentEventId[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null[\s\S]*this\.liveRequestKey = ""/
+  );
 });
 
 test("Explore labels an upcoming preseason round separately from the current event", () => {

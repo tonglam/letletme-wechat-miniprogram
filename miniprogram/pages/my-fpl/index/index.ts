@@ -22,6 +22,7 @@ import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils
 
 interface OverviewCache {
   entryId: number;
+  season: string;
   event: number;
   teamBrief: MyFplTeamBrief | null;
   leagueCount?: number;
@@ -64,14 +65,23 @@ export function mergeTeamBriefWithCache(
   };
 }
 
-function readOverviewCache(entryId: number | undefined, event: number | undefined): OverviewCache | null {
-  if (!entryId || !event) {
+export function readOverviewCache(
+  entryId: number | undefined,
+  event: number | undefined,
+  season: string | undefined
+): OverviewCache | null {
+  if (!entryId || !event || !season) {
     return null;
   }
   try {
     const cached = wx.getStorageSync(OVERVIEW_CACHE_KEY) as OverviewCache | undefined;
-    // Same-context only: last-good never crosses principal or event (§11).
-    if (cached && cached.entryId === entryId && cached.event === event) {
+    // Same-context only: last-good never crosses principal, season, or event.
+    if (
+      cached
+      && cached.entryId === entryId
+      && cached.season === season
+      && cached.event === event
+    ) {
       return cached;
     }
   } catch { /* no cache */ }
@@ -141,11 +151,15 @@ Page({
     const fallbackEvent = previousContext?.currentEvent
       ?? previousContext?.nextEvent
       ?? (Number(app.globalData.gw) || 0);
+    const fallbackSeason = previousContext?.season
+      ?? (String(app.globalData.season || "") || undefined);
     const event = context.currentEvent ?? context.nextEvent ?? fallbackEvent;
+    const season = context.season ?? fallbackSeason;
     const effectiveContext = context.eventContextAvailable || !event
       ? context
       : {
           ...context,
+          season,
           currentEvent: previousContext?.currentEvent
             ?? (Number(app.globalData.currentGw) || undefined)
             ?? event,
@@ -157,7 +171,7 @@ Page({
         };
     this.context = effectiveContext;
 
-    const cached = readOverviewCache(context.entryId, event);
+    const cached = readOverviewCache(context.entryId, event, season);
     // Never carry secondary content across principal/event boundaries. Only
     // the same-context cache is allowed to survive while fresh reads settle.
     this.setData({
@@ -290,13 +304,16 @@ Page({
       error: partialError
     });
     try {
-      wx.setStorageSync(OVERVIEW_CACHE_KEY, {
-        entryId: context.entryId,
-        event,
-        teamBrief: nextBrief,
-        ...(leagueState.leaguesLoaded ? { leagueCount: leagueState.leagueCount } : {}),
-        storedAt: (briefPartial || retainedBrief || retainedLeagues) && cached ? cached.storedAt : Date.now()
-      } satisfies OverviewCache);
+      if (season) {
+        wx.setStorageSync(OVERVIEW_CACHE_KEY, {
+          entryId: context.entryId,
+          season,
+          event,
+          teamBrief: nextBrief,
+          ...(leagueState.leaguesLoaded ? { leagueCount: leagueState.leagueCount } : {}),
+          storedAt: (briefPartial || retainedBrief || retainedLeagues) && cached ? cached.storedAt : Date.now()
+        } satisfies OverviewCache);
+      }
     } catch { /* cache is best effort */ }
     this.syncPrincipalState();
   },
@@ -304,7 +321,7 @@ Page({
   syncPrincipalState() {
     const context = this.context;
     const event = context?.currentEvent ?? context?.nextEvent ?? 0;
-    const hasCachedContent = Boolean(readOverviewCache(context?.entryId, event));
+    const hasCachedContent = Boolean(readOverviewCache(context?.entryId, event, context?.season));
     const next = derivePrincipalDisplay({
       entryId: context?.entryId,
       accountLinked: context?.accountLinked ?? false,

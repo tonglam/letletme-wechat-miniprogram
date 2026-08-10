@@ -24,6 +24,26 @@ test("league summary never fabricates zero after an unavailable read", () => {
   );
 });
 
+test("overview cache never crosses season boundaries", () => {
+  globalThis.wx = {
+    getStorageSync() {
+      return {
+        entryId: 123,
+        season: "2025-26",
+        event: 1,
+        teamBrief: { eventPoints: 77 },
+        storedAt: 1
+      };
+    }
+  };
+
+  assert.equal(overviewModule.readOverviewCache(123, 1, "2026-27"), null);
+  assert.equal(
+    overviewModule.readOverviewCache(123, 1, "2025-26")?.teamBrief?.eventPoints,
+    77
+  );
+});
+
 test("NO_FOLLOW primary goes to team search, never to a personal page", () => {
   const urls = [];
   globalThis.wx = {

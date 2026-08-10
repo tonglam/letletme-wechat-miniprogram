@@ -64,6 +64,14 @@ interface TransferRow {
   moves: TransferMoveRow[];
 }
 
+export function retainTransferRowsAfterFailure(
+  freshRows: TransferRow[],
+  previousRows: TransferRow[],
+  transferFailed: boolean
+): TransferRow[] {
+  return transferFailed && previousRows.length > 0 ? previousRows : freshRows;
+}
+
 interface SimpleRow {
   id: string;
   label: string;
@@ -360,6 +368,11 @@ Page({
       }
 
       const viewModel = mapApiDataToTeamStats(eventResult, history, transferHistory);
+      viewModel.transferRows = retainTransferRowsAfterFailure(
+        viewModel.transferRows,
+        this.data.transferRows,
+        Boolean(transferError)
+      );
       this.setData({
         ...viewModel,
         event: selectedEvent,

@@ -332,6 +332,12 @@ Page({
     const nextEventId = Number(app.globalData.gw) || 0;
     if (nextEventId && nextEventId !== this.currentEventId) {
       this.liveRefresh?.stop();
+      // The request key is otherwise only the status, which can be unchanged
+      // across a GW rollover. Detach and invalidate the old event request
+      // before the replacement load so its result can never enter this view.
+      this.liveRequestId += 1;
+      this.liveRequest = null;
+      this.liveRequestKey = "";
       this.currentEventId = nextEventId;
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;

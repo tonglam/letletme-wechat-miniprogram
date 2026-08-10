@@ -218,6 +218,41 @@ test("match status changes re-arm polling before the first request", () => {
   ]);
 });
 
+test("match rollover invalidates an in-flight same-status request", async () => {
+  globalThis.getApp = () => ({
+    globalData: { gw: 34 },
+    initAppData: async () => {}
+  });
+  const calls = [];
+  const context = {
+    ...matchPage,
+    data: { ...matchPage.data, status: "playing", hasData: true },
+    pageVisible: false,
+    hasShown: true,
+    currentEventId: 33,
+    liveRequestId: 7,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "playing",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push("sync"); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData() {
+      calls.push(`load:${this.currentEventId}:${this.liveRequestId}:${this.liveRequestKey}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() {}
+  };
+
+  await matchPage.onShow.call(context);
+
+  assert.equal(context.currentEventId, 34);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.liveRequest, null);
+  assert.deepEqual(calls, ["stop", "sync", "load:34:8:"]);
+});
+
 test("entry resume revalidates current-gameweek transfers independently", async () => {
   const calls = [];
   globalThis.getApp = () => ({
@@ -510,4 +545,18 @@ test("team principal changes clear the old view before restarting", () => {
   assert.deepEqual(context.data.squadRows, []);
   assert.equal(context.loadRequestId, 3);
   assert.deepEqual(calls, ["load:true"]);
+});
+
+test("team transfer refresh failures retain last-good detail rows", () => {
+  const previous = [{ id: "gw-4", gameweek: "GW4" }];
+  const freshFallback = [{ id: "gw-4", gameweek: "GW4", emptyText: "暂无转会详情" }];
+
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true),
+    previous
+  );
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, false),
+    freshFallback
+  );
 });
