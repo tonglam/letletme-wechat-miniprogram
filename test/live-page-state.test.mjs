@@ -358,6 +358,41 @@ test("tournament list errors are retried by their owning request", () => {
   assert.equal(tournamentModule.shouldClearTournamentRowsError(0), true);
 });
 
+test("tournament principal changes clear old lists before restarting", () => {
+  const calls = [];
+  globalThis.getApp = () => ({ globalData: { entryId: 456 } });
+  const context = {
+    data: {
+      ...tournamentPage.data,
+      entryId: 123,
+      hasData: true,
+      tournaments: [{ id: "old", name: "Old" }],
+      selectedTournament: { id: "old", name: "Old" },
+      rows: [{ entry: 123 }],
+      displayedRows: [{ entry: 123 }]
+    },
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    failedEntryCount: 1,
+    retainedRowCount: 1,
+    rowsRequestId: 4,
+    rowsRequest: Promise.resolve(),
+    rowsRequestKey: "old:33:",
+    liveRefresh: { stop() { calls.push("stop"); } },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) { calls.push(`load:${forceRefresh}`); }
+  };
+
+  const restarted = tournamentPage.restartForPrincipalChange.call(context, 123);
+
+  assert.equal(restarted, true);
+  assert.equal(context.data.entryId, 456);
+  assert.deepEqual(context.data.tournaments, []);
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.rowsRequestId, 5);
+  assert.deepEqual(calls, ["stop", "load:true"]);
+});
+
 test("renders pending transfers and partial tournament rows honestly", () => {
   const entryTemplate = readFileSync(
     new URL("../miniprogram/pages/live/entry/entry.wxml", import.meta.url),

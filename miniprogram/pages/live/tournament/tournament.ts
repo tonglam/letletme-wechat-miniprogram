@@ -9,6 +9,7 @@ import type { LiveSnapshotStatus, LiveTournamentRow } from "../../../models/live
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch } from "../../../utils/navigation";
+import { currentFollowEntryId } from "../../../utils/follow";
 import {
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
@@ -328,6 +329,7 @@ Page({
   rowsRequest: null as Promise<void> | null,
   rowsRequestKey: "",
   rowsRequestId: 0,
+  tournamentListRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
   liveRefresh: null as LiveRefreshController | null,
@@ -487,6 +489,38 @@ Page({
     this.loadMore();
   },
 
+  restartForPrincipalChange(entryId: number): boolean {
+    const nextEntryId = currentFollowEntryId();
+    if (nextEntryId === entryId) return false;
+
+    this.liveRefresh?.stop();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this.failedEntryCount = 0;
+    this.retainedRowCount = 0;
+    this.rowsRequestId += 1;
+    this.rowsRequest = null;
+    this.rowsRequestKey = "";
+    this.setData({
+      entryId: nextEntryId,
+      loading: false,
+      refreshing: false,
+      hasData: false,
+      error: "",
+      errorSuffix: "",
+      tournamentListError: "",
+      tournamentListErrorSuffix: "",
+      tournaments: [],
+      tournamentNames: [],
+      selectedTournament: undefined,
+      rows: [],
+      displayedRows: [],
+      lastUpdated: ""
+    });
+    void this.loadTournaments(true);
+    return true;
+  },
+
   async loadTournaments(forceRefresh = false) {
     const entryId = this.data.entryId;
     if (!entryId) {
@@ -514,6 +548,9 @@ Page({
       });
       return;
     }
+    if (this.restartForPrincipalChange(entryId)) return;
+
+    const requestId = ++this.tournamentListRequestId;
 
     this.setData({
       loading: true,
@@ -529,6 +566,8 @@ Page({
     });
     try {
       const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
+      if (requestId !== this.tournamentListRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (tournaments.length === 0) {
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
@@ -583,12 +622,16 @@ Page({
         forceRefresh
       });
     } catch (error) {
+      if (requestId !== this.tournamentListRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       this.setData({
         tournamentListError: error instanceof Error ? error.message : "实时竞赛加载失败",
         tournamentListErrorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
       });
     } finally {
-      this.setData({ loading: false });
+      if (requestId === this.tournamentListRequestId) {
+        this.setData({ loading: false });
+      }
     }
   },
 

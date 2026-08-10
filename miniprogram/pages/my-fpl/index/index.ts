@@ -166,6 +166,7 @@ Page({
     const initialPhase = deriveMyFplPhase({
       currentEvent: context.currentEvent,
       nextEvent: context.nextEvent,
+      nextUtcDeadline: context.utcDeadline,
       now: Date.now()
     });
     this.setData({
@@ -226,6 +227,7 @@ Page({
     const phase = deriveMyFplPhase({
       currentEvent: context.currentEvent,
       nextEvent: context.nextEvent,
+      nextUtcDeadline: context.utcDeadline,
       now: Date.now(),
       snapshotState
     });

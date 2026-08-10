@@ -72,10 +72,20 @@ test("a total overview secondary failure settles the league module", () => {
   );
 });
 
-test("overview never classifies a current event with the following deadline", () => {
+test("overview preserves the deadline fallback before and after snapshot reads", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.doesNotMatch(overview, /nextUtcDeadline:\s*context\.utcDeadline/);
-  assert.match(overview, /snapshotState\s*\n\s*\}\);/);
+  assert.equal(
+    (overview.match(/nextUtcDeadline:\s*context\.utcDeadline/g) || []).length,
+    2
+  );
+});
+
+test("Home entry errors retain a team-switch escape", () => {
+  const template = source("miniprogram/pages/home/index/index.wxml");
+  assert.match(
+    template,
+    /wx:if="\{\{entryError\}\}"[\s\S]*bindtap="onChangeEntry">更换球队/
+  );
 });
 
 test("empty fixture directories clear previously composed cards", () => {

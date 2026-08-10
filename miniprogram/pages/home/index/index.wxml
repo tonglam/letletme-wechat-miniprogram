@@ -29,7 +29,10 @@
     </view>
 
     <view class="section">
-      <app-error-state wx:if="{{entryError}}" message="{{entryError}}" bind:retry="onRetry" />
+      <block wx:if="{{entryError}}">
+        <app-error-state message="{{entryError}}" bind:retry="onRetry" />
+        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry">更换球队</view>
+      </block>
       <block wx:else>
         <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
         <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
