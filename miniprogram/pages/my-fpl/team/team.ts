@@ -206,6 +206,7 @@ Page({
   },
 
   _loadedAt: 0,
+  phaseBannerRequestId: 0,
 
   onPullDownRefresh() {
     this.loadData(true).finally(() => wx.stopPullDownRefresh());
@@ -297,14 +298,23 @@ Page({
    * events never show a banner. (High-level design §7.2.)
    */
   async syncPhaseBanner() {
+    const requestId = ++this.phaseBannerRequestId;
     const currentGw = Number(getApp<IAppOption>().globalData.gw) || 0;
-    if (!this.data.entryId || !currentGw || this.data.event !== currentGw) {
+    const selectedEvent = this.data.event;
+    if (!this.data.entryId || !currentGw || selectedEvent !== currentGw) {
       if (this.data.phaseBanner) {
         this.setData({ phaseBanner: "" });
       }
       return;
     }
     const snapshotState = await getCurrentSnapshotState(currentGw);
+    if (
+      requestId !== this.phaseBannerRequestId
+      || this.data.event !== selectedEvent
+      || Number(getApp<IAppOption>().globalData.gw) !== currentGw
+    ) {
+      return;
+    }
     const banner = phaseBannerFromSnapshot(snapshotState);
     if (banner !== this.data.phaseBanner) {
       this.setData({ phaseBanner: banner });
@@ -316,7 +326,8 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
+    this.phaseBannerRequestId += 1;
+    this.setData({ event: event.detail.value, phaseBanner: "" });
     this.loadData();
   },
 

@@ -2,6 +2,14 @@ import { getPlayersByElementType } from "../../../services/player.service";
 import type { PlayerOption } from "../../../models/player";
 import { goToPlayerDetail } from "../../../utils/navigation";
 
+export function resolveKeywordAfterPlayerLoad(
+  pendingKeyword: string,
+  currentKeyword: string,
+  searchEditedWhileLoading: boolean
+): string {
+  return searchEditedWhileLoading ? currentKeyword : pendingKeyword || currentKeyword;
+}
+
 Page({
   data: {
     loading: false,
@@ -21,13 +29,19 @@ Page({
   },
 
   pendingKeyword: "",
+  searchRevision: 0,
 
   async loadPlayers(forceRefresh = false) {
+    const searchRevision = this.searchRevision;
     this.setData({ loading: true, error: "" });
     try {
       const players = await getPlayersByElementType("all", forceRefresh);
       this.setData({ players });
-      this.applyKeyword(this.pendingKeyword);
+      this.applyKeyword(resolveKeywordAfterPlayerLoad(
+        this.pendingKeyword,
+        this.data.keyword,
+        this.searchRevision !== searchRevision
+      ));
       this.pendingKeyword = "";
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球员数据加载失败" });
@@ -47,10 +61,12 @@ Page({
   },
 
   onSearch(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    this.searchRevision += 1;
     this.applyKeyword(event.detail.keyword);
   },
 
   onResetSearch() {
+    this.searchRevision += 1;
     this.setData({
       keyword: "",
       displayedPlayers: this.data.players.slice(0, 50)

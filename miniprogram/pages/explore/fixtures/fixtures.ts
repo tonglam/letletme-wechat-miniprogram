@@ -84,6 +84,7 @@ Page({
 
   rebuild() {
     if (!this.teams.length) {
+      this.setData({ runs: [] });
       return;
     }
     const runs = buildFixtureRuns(this.fixtures, this.teams, this.data.startEvent, this.data.horizon);

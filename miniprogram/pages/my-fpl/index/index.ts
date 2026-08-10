@@ -116,14 +116,14 @@ Page({
 
     const event = context.currentEvent ?? context.nextEvent ?? 0;
     const cached = readOverviewCache(context.entryId, event);
-    if (cached) {
-      this.setData({
-        teamBrief: cached.teamBrief,
-        ...(cached.leagueCount === undefined
-          ? {}
-          : { leagueCount: cached.leagueCount, leaguesLoaded: true })
-      });
-    }
+    // Never carry secondary content across principal/event boundaries. Only
+    // the same-context cache is allowed to survive while fresh reads settle.
+    this.setData({
+      teamBrief: cached?.teamBrief ?? null,
+      leagueCount: cached?.leagueCount ?? 0,
+      leaguesLoaded: cached?.leagueCount !== undefined,
+      leaguesUnavailable: false
+    });
 
     if (!context.eventContextAvailable) {
       this.setData({
@@ -184,6 +184,7 @@ Page({
     if (brief === null && leagues === null) {
       // Total failure: keep last-good and surface a retryable data state.
       this.setData({
+        teamBrief: cached?.teamBrief ?? null,
         ...resolveOverviewLeagueState(null, cached?.leagueCount),
         error: cached ? "刷新失败，当前显示上次成功结果" : "加载失败，请稍后重试"
       });

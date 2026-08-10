@@ -20,6 +20,7 @@ const matchPage = capturedPage;
 
 capturedPage = undefined;
 const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
+const teamPage = capturedPage;
 
 test("re-arms current-gameweek polling before loading the switched context", () => {
   const calls = [];
@@ -317,4 +318,22 @@ test("team phase banner never invents settling after a failed snapshot probe", (
   assert.equal(teamModule.phaseBannerFromSnapshot("SCHEDULED"), "");
   assert.equal(teamModule.phaseBannerFromSnapshot("LIVE"), "live");
   assert.equal(teamModule.phaseBannerFromSnapshot("SETTLED"), "");
+});
+
+test("team phase banner invalidates an in-flight probe when the GW changes", () => {
+  const context = {
+    ...teamPage,
+    data: { ...teamPage.data, event: 10, phaseBanner: "live" },
+    phaseBannerRequestId: 4,
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    loadData() {}
+  };
+
+  teamPage.onGwChange.call(context, { detail: { value: 9 } });
+
+  assert.equal(context.phaseBannerRequestId, 5);
+  assert.equal(context.data.event, 9);
+  assert.equal(context.data.phaseBanner, "");
 });

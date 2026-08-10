@@ -16,8 +16,10 @@ const app = {
   globalData: { entryId: 22 }
 };
 globalThis.getApp = () => app;
+globalThis.Page = () => {};
 
 const { waitForAuthoritativeFollow } = await import("../miniprogram/utils/follow.ts");
+const { resolveKeywordAfterPlayerLoad } = await import("../miniprogram/pages/data/players/players.ts");
 
 function source(relativePath) {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -73,4 +75,33 @@ test("overview never classifies a current event with the following deadline", ()
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   assert.doesNotMatch(overview, /nextUtcDeadline:\s*context\.utcDeadline/);
   assert.match(overview, /snapshotState\s*\n\s*\}\);/);
+});
+
+test("empty fixture directories clear previously composed cards", () => {
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  assert.match(fixtures, /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/);
+});
+
+test("Explore waits for shared launch context before syncing its context row", () => {
+  const explore = source("miniprogram/pages/explore/index/index.ts");
+  assert.match(explore, /async onLoad\(\)/);
+  assert.match(explore, /await app\.initAppData\(\)[\s\S]*this\.syncContext\(\)/);
+});
+
+test("player directory completion preserves edits made during the request", () => {
+  assert.equal(resolveKeywordAfterPlayerLoad("saka", "palmer", true), "palmer");
+  assert.equal(resolveKeywordAfterPlayerLoad("saka", "", false), "saka");
+  assert.equal(resolveKeywordAfterPlayerLoad("", "palmer", false), "palmer");
+  const players = source("miniprogram/pages/data/players/players.ts");
+  assert.match(players, /this\.searchRevision !== searchRevision/);
+  assert.match(players, /searchEditedWhileLoading \? currentKeyword/);
+});
+
+test("overview clears secondary content when the event has no matching cache", () => {
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  assert.match(overview, /teamBrief: cached\?\.teamBrief \?\? null/);
+  assert.match(
+    overview,
+    /if \(brief === null && leagues === null\)[\s\S]*teamBrief: cached\?\.teamBrief \?\? null/
+  );
 });

@@ -27,9 +27,8 @@ Page({
     groups: [] as CardGroup[]
   },
 
-  onLoad() {
+  async onLoad() {
     const loadStart = Date.now();
-    this.syncContext();
     this.buildGroups();
     // First paint of the router page (plan §9): no payload fetch, so no
     // cacheOutcome — just the surface and how long composing the cards took.
@@ -38,6 +37,11 @@ Page({
       contractSource: "compat",
       durationBucket: durationBucket(Date.now() - loadStart)
     });
+    const app = getApp<IAppOption>();
+    if (!app.globalData.season && !app.globalData.gw) {
+      try { await app.initAppData(); } catch { /* the context row stays hidden */ }
+    }
+    this.syncContext();
   },
 
   onShow() {
