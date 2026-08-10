@@ -193,6 +193,7 @@ test("fixture windows force-refresh event context on open and resume", () => {
   const app = source("miniprogram/app.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(app, /getCurrentEventAndDeadline\(forceRefresh\)/);
+  assert.match(app, /await this\._pendingInit;[\s\S]*return this\.initAppData\(true\)/);
   assert.match(fixtures, /await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
@@ -280,6 +281,30 @@ test("historical Live selections reset when the season changes", () => {
     assert.match(page, /seasonChanged \|\| wasCurrentEvent/, path);
     assert.match(page, /event: nextEventId,[\s\S]*maxGw: nextEventId/, path);
   }
+});
+
+test("season rollover clears row filters derived from player ids", () => {
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(
+    tournament,
+    /seasonChanged \? \{[\s\S]*selectedOwnershipPlayers: \[\][\s\S]*ownershipAvailablePlayers: \[\][\s\S]*selectedTeamExposure: null/
+  );
+});
+
+test("live competition Website handoff uses the guarded canonical action", () => {
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(
+    tournament,
+    /async onCopyCompetitionLink\(\)[\s\S]*openWebsiteAction\(canonicalAction\("MANAGE_COMPETITION"\)\)/
+  );
+});
+
+test("player route keywords are consumed before the first directory request settles", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  assert.match(
+    players,
+    /const pendingKeyword = this\.pendingKeyword;\s*this\.pendingKeyword = "";[\s\S]*await getPlayersByElementType/
+  );
 });
 
 test("personal responses never cross an authoritative follow change", () => {

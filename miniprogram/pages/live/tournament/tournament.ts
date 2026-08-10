@@ -24,6 +24,7 @@ import {
   type LiveDisplayState
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
+import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -443,7 +444,26 @@ Page({
             ...(seasonChanged ? {
               tournaments: [],
               tournamentNames: [],
-              selectedTournament: undefined
+              selectedTournament: undefined,
+              ownershipPlayers: [],
+              ownershipTeamOptions: [],
+              ownershipTeamNames: [],
+              ownershipPositionOptions: [],
+              selectedOwnershipPlayers: [],
+              ownershipPlayerNames: [],
+              ownershipSummary: "未筛选",
+              ownershipScope: "any",
+              ownershipCaptainMode: "any",
+              selectedOwnershipTeamIndex: 0,
+              selectedOwnershipTeam: null,
+              selectedOwnershipPositionIndex: 0,
+              selectedOwnershipPosition: "",
+              ownershipAvailablePlayers: [],
+              ownershipAvailablePlayerNames: [],
+              selectedTeamExposureIndex: 0,
+              selectedTeamExposure: null,
+              teamExposureCount: 1,
+              teamExposureScope: "any"
             } : {}),
             rows: [],
             displayedRows: [],
@@ -1076,15 +1096,10 @@ Page({
     goToEntrySearch();
   },
 
-  onCopyCompetitionLink() {
+  async onCopyCompetitionLink() {
     // Competition creation and management live on the Website; web-view is
     // unavailable to this Mini Program, so the handoff is a copied link.
-    wx.setClipboardData({
-      data: "https://www.letletme.top/zh-CN/tournament",
-      success: () => {
-        wx.showToast({ title: "链接已复制，请在浏览器打开", icon: "none" });
-      }
-    });
+    await openWebsiteAction(canonicalAction("MANAGE_COMPETITION"));
   },
 
   onEmptyAction() {

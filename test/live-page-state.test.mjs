@@ -334,7 +334,13 @@ test("tournament resume drops a historical selection after a season rollover", a
       maxGw: 38,
       hasData: true,
       rows: [{ entry: 1 }],
-      displayedRows: [{ entry: 1 }]
+      displayedRows: [{ entry: 1 }],
+      selectedOwnershipPlayers: [{ element: 999, name: "Old player" }],
+      ownershipPlayerNames: ["Old player"],
+      ownershipSummary: "Old player",
+      selectedOwnershipTeam: { id: 1, name: "Old team" },
+      ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
+      selectedTeamExposure: { id: 1, name: "Old team" }
     },
     pageVisible: false,
     hasShown: true,
@@ -361,8 +367,28 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.maxGw, 1);
   assert.deepEqual(context.data.rows, []);
   assert.equal(context.data.selectedTournament, undefined);
+  assert.deepEqual(context.data.selectedOwnershipPlayers, []);
+  assert.deepEqual(context.data.ownershipAvailablePlayers, []);
+  assert.equal(context.data.ownershipSummary, "未筛选");
+  assert.equal(context.data.selectedOwnershipTeam, null);
+  assert.equal(context.data.selectedTeamExposure, null);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["init:true", "stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
+test("tournament Website handoff reports clipboard failures", async () => {
+  const toasts = [];
+  globalThis.wx = {
+    setClipboardData: ({ fail }) => fail?.({ errMsg: "denied" }),
+    showToast: ({ title }) => toasts.push(title)
+  };
+
+  await tournamentPage.onCopyCompetitionLink.call({
+    ...tournamentPage,
+    data: { ...tournamentPage.data }
+  });
+
+  assert.deepEqual(toasts, ["复制失败，请重试"]);
 });
 
 test("tournament list errors are retried by their owning request", () => {
@@ -494,13 +520,14 @@ test("team phase banner invalidates an in-flight probe when the GW changes", () 
 test("team resume advances a current selection to the new gameweek", async () => {
   const calls = [];
   globalThis.getApp = () => ({
-    globalData: { entryId: 123, gw: 34 },
+    globalData: { entryId: 123, gw: 34, season: "2025-26" },
     initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
   });
   const context = {
     ...teamPage,
     data: { ...teamPage.data, entryId: 123, event: 33, maxGw: 33, hasTeamData: true },
     hasShown: true,
+    loadedSeason: "2025-26",
     _loadedAt: Date.now(),
     phaseBannerRequestId: 0,
     setData(update) { Object.assign(this.data, update); },
@@ -515,6 +542,42 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.equal(context.data.event, 34);
   assert.equal(context.data.maxGw, 34);
   assert.equal(context.data.hasTeamData, false);
+  assert.deepEqual(calls, ["init:true", "load:true"]);
+});
+
+test("team season rollover clears retained transfers before reloading", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123, gw: 1, season: "2026-27" },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 38,
+      transferRows: [{ id: "old-season" }],
+      hasTransfers: true,
+      hasTeamData: true
+    },
+    hasShown: true,
+    loadedSeason: "2025-26",
+    loadedDataSeason: "2025-26",
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.deepEqual(context.data.transferRows, []);
+  assert.equal(context.data.hasTransfers, false);
   assert.deepEqual(calls, ["init:true", "load:true"]);
 });
 
@@ -552,11 +615,16 @@ test("team transfer refresh failures retain last-good detail rows", () => {
   const freshFallback = [{ id: "gw-4", gameweek: "GW4", emptyText: "暂无转会详情" }];
 
   assert.equal(
-    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true),
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true, true),
     previous
   );
   assert.equal(
-    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, false),
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, false, true),
     freshFallback
+  );
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true, false),
+    freshFallback,
+    "last season's transfer rows are never retained"
   );
 });

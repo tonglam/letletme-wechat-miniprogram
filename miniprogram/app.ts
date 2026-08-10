@@ -21,6 +21,7 @@ App<IAppOption>({
   },
 
   _pendingInit: null as Promise<void> | null,
+  _pendingInitForced: false,
   _authReadyResolve: null as (() => void) | null,
   /** Resolves once the first cold-start login attempt has settled (either
    *  path). Pages that need the authoritative entry binding should await it
@@ -155,15 +156,26 @@ App<IAppOption>({
 
   async initAppData(forceRefresh = false) {
     if (this._pendingInit) {
-      return this._pendingInit;
+      if (!forceRefresh || this._pendingInitForced) {
+        return this._pendingInit;
+      }
+      // A cache-bypassing caller must not be downgraded to an ordinary read.
+      // Wait for the existing single-flight request, then start (or join) the
+      // forced refresh that supersedes it.
+      await this._pendingInit;
+      return this.initAppData(true);
     }
 
     const promise = this._initAppDataInner(forceRefresh);
     this._pendingInit = promise;
+    this._pendingInitForced = forceRefresh;
     try {
       return await promise;
     } finally {
-      this._pendingInit = null;
+      if (this._pendingInit === promise) {
+        this._pendingInit = null;
+        this._pendingInitForced = false;
+      }
     }
   },
 

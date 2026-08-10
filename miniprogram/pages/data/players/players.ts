@@ -33,16 +33,19 @@ Page({
 
   async loadPlayers(forceRefresh = false) {
     const searchRevision = this.searchRevision;
+    // A route keyword is a one-shot handoff. Consume it before the request so
+    // a failed first attempt cannot overwrite a newer user query on retry.
+    const pendingKeyword = this.pendingKeyword;
+    this.pendingKeyword = "";
     this.setData({ loading: true, error: "" });
     try {
       const players = await getPlayersByElementType("all", forceRefresh);
       this.setData({ players });
       this.applyKeyword(resolveKeywordAfterPlayerLoad(
-        this.pendingKeyword,
+        pendingKeyword,
         this.data.keyword,
         this.searchRevision !== searchRevision
       ));
-      this.pendingKeyword = "";
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球员数据加载失败" });
     } finally {

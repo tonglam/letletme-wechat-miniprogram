@@ -67,9 +67,10 @@ interface TransferRow {
 export function retainTransferRowsAfterFailure(
   freshRows: TransferRow[],
   previousRows: TransferRow[],
-  transferFailed: boolean
+  transferFailed: boolean,
+  sameSeason: boolean
 ): TransferRow[] {
-  return transferFailed && previousRows.length > 0 ? previousRows : freshRows;
+  return transferFailed && sameSeason && previousRows.length > 0 ? previousRows : freshRows;
 }
 
 interface SimpleRow {
@@ -201,6 +202,7 @@ Page({
       try { await app.authReady; } catch {}
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    this.loadedSeason = app.globalData.season || undefined;
     this.setData({
       entryId: app.globalData.entryId,
       event: currentGw,
@@ -220,17 +222,21 @@ Page({
     if (this.restartForPrincipalChange(entryId)) return;
 
     const nextGw = Number(app.globalData.gw) || 0;
+    const nextSeason = app.globalData.season || undefined;
+    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
     let contextChanged = false;
-    if (nextGw > 0 && nextGw !== this.data.maxGw) {
-      contextChanged = wasCurrentEvent;
+    if (nextGw > 0 && (seasonChanged || nextGw !== this.data.maxGw)) {
+      contextChanged = seasonChanged || wasCurrentEvent;
       this.phaseBannerRequestId += 1;
       this.setData({
         maxGw: nextGw,
-        ...(wasCurrentEvent ? {
+        ...(contextChanged ? {
           event: nextGw,
           phaseBanner: "",
-          hasTeamData: false
+          hasTeamData: false,
+          ...(seasonChanged ? { transferRows: [], hasTransfers: false } : {})
         } : {})
       });
     }
@@ -244,6 +250,8 @@ Page({
   loadRequestId: 0,
   phaseBannerRequestId: 0,
   hasShown: false,
+  loadedSeason: undefined as string | undefined,
+  loadedDataSeason: undefined as string | undefined,
 
   async onPullDownRefresh() {
     const app = getApp<IAppOption>();
@@ -254,12 +262,20 @@ Page({
       return;
     }
     const nextGw = Number(app.globalData.gw) || 0;
+    const nextSeason = app.globalData.season || undefined;
+    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
-    if (nextGw > 0 && nextGw !== this.data.maxGw) {
+    if (nextGw > 0 && (seasonChanged || nextGw !== this.data.maxGw)) {
       this.phaseBannerRequestId += 1;
       this.setData({
         maxGw: nextGw,
-        ...(wasCurrentEvent ? { event: nextGw, phaseBanner: "", hasTeamData: false } : {})
+        ...(seasonChanged || wasCurrentEvent ? {
+          event: nextGw,
+          phaseBanner: "",
+          hasTeamData: false,
+          ...(seasonChanged ? { transferRows: [], hasTransfers: false } : {})
+        } : {})
       });
     }
     await this.loadData(true).finally(() => wx.stopPullDownRefresh());
@@ -334,6 +350,7 @@ Page({
     });
     try {
       const entryId = this.data.entryId;
+      const requestSeason = getApp<IAppOption>().globalData.season || undefined;
       const history = await getEntryTeamStatsHistory(entryId, forceRefresh);
       if (requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
@@ -371,7 +388,8 @@ Page({
       viewModel.transferRows = retainTransferRowsAfterFailure(
         viewModel.transferRows,
         this.data.transferRows,
-        Boolean(transferError)
+        Boolean(transferError),
+        Boolean(requestSeason && this.loadedDataSeason === requestSeason)
       );
       this.setData({
         ...viewModel,
@@ -385,6 +403,7 @@ Page({
         hasHistory: viewModel.historyRows.length > 0 || viewModel.seasonHistoryRows.length > 0,
         hasTeamData: true
       });
+      this.loadedDataSeason = requestSeason;
       this._loadedAt = Date.now();
     } catch (error) {
       if (requestId === this.loadRequestId) {
