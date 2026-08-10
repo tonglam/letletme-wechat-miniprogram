@@ -8,6 +8,7 @@ import {
   type FixtureRun,
   type FixtureRunTeam
 } from "../../../utils/fixture-run";
+import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 
 const FALLBACK_MAX_EVENT = 38;
 
@@ -43,7 +44,9 @@ Page({
 
   async load(forceRefresh = false) {
     const requestId = ++this.requestId;
-    this.setData({ loading: this.teams.length === 0, error: "" });
+    const loadStart = Date.now();
+    const hadLastGood = this.teams.length > 0;
+    this.setData({ loading: !hadLastGood, error: "" });
     try {
       const season = getApp<IAppOption>().globalData.season;
       const [fixtures, teams] = await Promise.all([
@@ -57,6 +60,16 @@ Page({
       const startEvent = Math.min(Math.max(1, this.data.startEvent), maxEvent);
       this.setData({ loading: false, maxEvent, startEvent });
       this.rebuild();
+      // Composition settled (plan §9): window and duration only — team
+      // names never enter a record.
+      recordExploreVisit({
+        surface: "fixtures",
+        contractSource: "compat",
+        eventId: startEvent,
+        horizon: this.data.horizon,
+        cacheOutcome: hadLastGood ? "last-good" : "miss",
+        durationBucket: durationBucket(Date.now() - loadStart)
+      });
     } catch (error) {
       if (requestId !== this.requestId) return;
       // Last-good retention: a failed refresh keeps the previous cards.

@@ -1,5 +1,6 @@
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
+import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 
 const PERF_ENTRY_ID = 15702;
 
@@ -26,8 +27,16 @@ Page({
   },
 
   onLoad() {
+    const loadStart = Date.now();
     this.syncContext();
     this.buildGroups();
+    // First paint of the router page (plan §9): no payload fetch, so no
+    // cacheOutcome — just the surface and how long composing the cards took.
+    recordExploreVisit({
+      surface: "overview",
+      contractSource: "compat",
+      durationBucket: durationBucket(Date.now() - loadStart)
+    });
   },
 
   onShow() {

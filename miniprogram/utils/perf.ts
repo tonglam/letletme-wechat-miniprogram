@@ -34,6 +34,7 @@ export interface StoredPerf {
   liveTransitions?: LiveTransitionRecord[];
   myFplVisits?: MyFplVisitRecord[];
   competitionVisits?: CompetitionVisitRecord[];
+  exploreVisits?: ExploreVisitRecord[];
   launchDuration?: number;
   launchTs?: number;
 }
@@ -66,6 +67,23 @@ export interface CompetitionVisitRecord {
   listCountBucket?: "0" | "1" | "2-5" | "6-20" | ">20";
   cacheOutcome?: "fresh" | "last-good" | "miss";
   handoffActionType?: string;
+  durationBucket?: string;
+  ts: number;
+}
+
+/**
+ * Sanitized Explore telemetry (explore plan §9). Search text, team names,
+ * and player names never enter a record — the high-level design §16 bars
+ * full search text, and entity names are identifiers in disguise.
+ */
+export interface ExploreVisitRecord {
+  surface: "overview" | "fixtures";
+  /** Contract generation serving the surface; "compat" until exploreOverview ships. */
+  contractSource: "compat";
+  /** Fixtures window start (gameweek number, not an identity). */
+  eventId?: number;
+  horizon?: 3 | 5;
+  cacheOutcome?: "fresh" | "last-good" | "miss";
   durationBucket?: string;
   ts: number;
 }
@@ -152,6 +170,18 @@ export function recordCompetitionVisit(record: Omit<CompetitionVisitRecord, "ts"
   flush();
 }
 
+export function recordExploreVisit(record: Omit<ExploreVisitRecord, "ts">): void {
+  const d = load();
+  if (!Array.isArray(d.exploreVisits)) {
+    d.exploreVisits = [];
+  }
+  if (d.exploreVisits.length >= MAX_RECORDS) {
+    d.exploreVisits.splice(0, d.exploreVisits.length - MAX_RECORDS + 1);
+  }
+  d.exploreVisits.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function getPerf(): StoredPerf {
   const d = load();
   return {
@@ -159,12 +189,13 @@ export function getPerf(): StoredPerf {
     apiRecords: d.apiRecords.slice(),
     liveTransitions: (d.liveTransitions ?? []).slice(),
     myFplVisits: (d.myFplVisits ?? []).slice(),
-    competitionVisits: (d.competitionVisits ?? []).slice()
+    competitionVisits: (d.competitionVisits ?? []).slice(),
+    exploreVisits: (d.exploreVisits ?? []).slice()
   };
 }
 
 export function clearPerf(): void {
-  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [], competitionVisits: [] };
+  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [], competitionVisits: [], exploreVisits: [] };
   try {
     wx.removeStorage({ key: STORAGE_KEY });
   } catch { /* silent */ }
