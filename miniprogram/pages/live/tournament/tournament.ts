@@ -370,7 +370,13 @@ Page({
         // Per-entry partial errors survive an unchanged revision; only a fully
         // fresh rows payload clears them.
         if (shouldClearTournamentRowsError(this.failedEntryCount)) {
-          this.setData({ error: "", errorSuffix: "" });
+          this.setData({
+            error: "",
+            errorSuffix: "",
+            ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+          });
+        } else if (snapshot?.checkedAt) {
+          this.setData({ lastUpdated: formatTime(new Date(snapshot.checkedAt)) });
         }
         this.syncDisplayState();
       },
@@ -398,7 +404,7 @@ Page({
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
           coverageFailed: this.liveSnapshot?.coverageFailed,
-          retainedRowCount: this.failedEntryCount,
+          retainedRowCount: this.retainedRowCount,
           probeDurationBucket: durationBucket(info.probeDurationMs),
           fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
         });

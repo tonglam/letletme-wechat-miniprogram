@@ -133,3 +133,34 @@ test("tournament status reports only rows actually retained", () => {
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
 });
+
+test("team summary requests discard older GW responses", () => {
+  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  assert.match(team, /const requestId = \+\+this\.loadRequestId/);
+  assert.match(team, /if \(requestId !== this\.loadRequestId\) return/);
+  assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
+});
+
+test("unchanged live probes refresh the displayed check time", () => {
+  for (const path of [
+    "miniprogram/pages/live/entry/entry.ts",
+    "miniprogram/pages/live/match/match.ts",
+    "miniprogram/pages/live/tournament/tournament.ts"
+  ]) {
+    const page = source(path);
+    assert.match(
+      page,
+      /acceptSnapshot:[\s\S]*snapshot\?\.checkedAt[\s\S]*lastUpdated: formatTime\(new Date\(snapshot\.checkedAt\)\)/,
+      path
+    );
+  }
+});
+
+test("fixture windows force-refresh event context on open and resume", () => {
+  const app = source("miniprogram/app.ts");
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  assert.match(app, /getCurrentEventAndDeadline\(forceRefresh\)/);
+  assert.match(fixtures, /await this\.syncEventContext\(true\)/);
+  assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(true\)/);
+  assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
+});

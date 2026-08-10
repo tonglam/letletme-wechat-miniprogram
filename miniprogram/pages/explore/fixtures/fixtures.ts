@@ -27,19 +27,32 @@ Page({
   fixtures: [] as Fixture[],
   teams: [] as FixtureRunTeam[],
   requestId: 0,
+  hasShown: false,
 
   async onLoad() {
-    const app = getApp<IAppOption>();
-    if (!app.globalData.gw) {
-      try { await app.initAppData(); } catch { /* the picker just falls back to GW 1 */ }
-    }
-    const gw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
-    this.setData({ startEvent: gw });
+    await this.syncEventContext(true);
     await this.load();
   },
 
+  async onShow() {
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return;
+    await this.syncEventContext(true);
+    this.rebuild();
+  },
+
   onPullDownRefresh() {
-    this.load(true).finally(() => wx.stopPullDownRefresh());
+    this.syncEventContext(true)
+      .then(() => this.load(true))
+      .finally(() => wx.stopPullDownRefresh());
+  },
+
+  async syncEventContext(forceRefresh = false) {
+    const app = getApp<IAppOption>();
+    try { await app.initAppData(forceRefresh); } catch { /* the picker falls back to GW 1 */ }
+    const gw = Math.max(1, Number(app.globalData.gw) || 1);
+    this.setData({ startEvent: gw });
   },
 
   async load(forceRefresh = false) {

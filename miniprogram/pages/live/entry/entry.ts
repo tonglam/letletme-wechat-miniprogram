@@ -161,7 +161,10 @@ Page({
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
-        this.setData({ error: "" });
+        this.setData({
+          error: "",
+          ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+        });
         this.syncDisplayState();
       },
       onProbeError: (message) => {

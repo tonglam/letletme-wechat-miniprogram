@@ -153,12 +153,12 @@ App<IAppOption>({
     } catch {}
   },
 
-  async initAppData() {
+  async initAppData(forceRefresh = false) {
     if (this._pendingInit) {
       return this._pendingInit;
     }
 
-    const promise = this._initAppDataInner();
+    const promise = this._initAppDataInner(forceRefresh);
     this._pendingInit = promise;
     try {
       return await promise;
@@ -167,9 +167,9 @@ App<IAppOption>({
     }
   },
 
-  async _initAppDataInner() {
+  async _initAppDataInner(forceRefresh = false) {
     try {
-      const current = await getCurrentEventAndDeadline();
+      const current = await getCurrentEventAndDeadline(forceRefresh);
       const eventContext = resolveEventContext(current.currentEvent, current.nextEvent);
       const utcDeadline = String(current.utcDeadline || current.deadline || "");
 

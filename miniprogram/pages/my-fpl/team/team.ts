@@ -206,6 +206,7 @@ Page({
   },
 
   _loadedAt: 0,
+  loadRequestId: 0,
   phaseBannerRequestId: 0,
 
   onPullDownRefresh() {
@@ -220,6 +221,7 @@ Page({
   },
 
   async loadData(forceRefresh = false) {
+    const requestId = ++this.loadRequestId;
     if (!this.data.entryId) {
       this.setData({
         loading: false,
@@ -246,6 +248,7 @@ Page({
     try {
       const entryId = this.data.entryId;
       const history = await getEntryTeamStatsHistory(entryId, forceRefresh);
+      if (requestId !== this.loadRequestId) return;
       const latestEvent = latestEventId(history.results);
       const selectedEvent = clampEvent(this.data.event, latestEvent);
       let transferError = "";
@@ -256,6 +259,7 @@ Page({
           return [] as EntryGameweekTransfers[];
         })
       ]);
+      if (requestId !== this.loadRequestId) return;
 
       if (!eventResult) {
         this.setData({
@@ -285,10 +289,14 @@ Page({
       });
       this._loadedAt = Date.now();
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
+      if (requestId === this.loadRequestId) {
+        this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
+      }
     } finally {
-      this.setData({ loading: false });
-      void this.syncPhaseBanner();
+      if (requestId === this.loadRequestId) {
+        this.setData({ loading: false });
+        void this.syncPhaseBanner();
+      }
     }
   },
 
