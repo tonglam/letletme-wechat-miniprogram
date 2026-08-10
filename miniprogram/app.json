@@ -18,6 +18,7 @@
     "pages/summary/entry/entry",
     "pages/summary/tournament/tournament",
     "pages/summary/gameweek/gameweek",
+    "pages/my-fpl/index/index",
     "pages/performance/index/index"
   ],
   "window": {

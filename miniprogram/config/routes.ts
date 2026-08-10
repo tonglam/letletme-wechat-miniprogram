@@ -17,5 +17,8 @@ export const routes = {
   summaryEntry: "/pages/summary/entry/entry",
   summaryTournament: "/pages/summary/tournament/tournament",
   summaryGameweek: "/pages/summary/gameweek/gameweek",
+  myFplIndex: "/pages/my-fpl/index/index",
+  myFplTeam: "/pages/my-fpl/team/team",
+  myFplLeagues: "/pages/my-fpl/leagues/leagues",
   performance: "/pages/performance/index/index"
 } as const;

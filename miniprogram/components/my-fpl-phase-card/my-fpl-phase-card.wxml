@@ -1,0 +1,9 @@
+<view class="phase-card">
+  <view class="phase-title">{{title}}</view>
+  <view class="phase-description">{{description}}</view>
+  <view wx:if="{{metricsText}}" class="phase-metrics">{{metricsText}}</view>
+  <view class="phase-actions">
+    <view class="phase-primary" hover-class="phase-primary-hover" bindtap="onPrimary">{{primaryLabel}}</view>
+    <view wx:if="{{showSecondary}}" class="phase-secondary" hover-class="phase-secondary-hover" bindtap="onSecondary">{{secondaryLabel}}</view>
+  </view>
+</view>

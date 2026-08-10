@@ -12,6 +12,19 @@ interface NavMenu {
 const PERF_ENTRY_ID = 15702;
 
 const MENU_MAP: Record<string, NavMenu> = {
+  myFpl: {
+    pages: [
+      { name: "总览", subname: "现在与我的 FPL 最相关的内容" },
+      { name: "球队", subname: "阵容、转会、开卡和历史" },
+      { name: "联赛", subname: "我的官方 FPL 联赛" }
+    ],
+    url: {
+      总览: "/pages/my-fpl/index/index",
+      球队: "/pages/my-fpl/team/team",
+      联赛: "/pages/my-fpl/leagues/leagues"
+    },
+    show: true
+  },
   live: {
     pages: [
       { name: "球队", subname: "查看球队实时得分" },
@@ -61,6 +74,7 @@ const MENU_MAP: Record<string, NavMenu> = {
 };
 
 const ROUTE_GROUPS = [
+  { prefix: "/pages/my-fpl/", active: "myFpl" },
   { prefix: "/pages/live/", active: "live" },
   { prefix: "/pages/summary/", active: "summary" },
   { prefix: "/pages/data/", active: "data" },
