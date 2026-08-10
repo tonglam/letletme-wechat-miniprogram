@@ -5,7 +5,7 @@
   </view>
 
   <view class="section">
-    <filter-bar placeholder="搜索球员" actionText="查询" bind:search="onSearch" bind:submit="onSearch" />
+    <filter-bar keyword="{{keyword}}" placeholder="搜索球员" actionText="查询" bind:search="onSearch" bind:submit="onSubmitSearch" bind:reset="onResetSearch" />
   </view>
 
   <view wx:for="{{groups}}" wx:key="title" class="section">

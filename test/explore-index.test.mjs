@@ -62,16 +62,25 @@ test("season and gameweek context renders, and degrades to hidden", () => {
   assert.equal(missing.data.contextText, "", "a failed context read never fabricates a GW");
 });
 
-test("player search hands the keyword to the players page", () => {
+test("keystrokes only sync the input; submit hands the keyword to players", () => {
   const urls = [];
   globalThis.wx = { navigateTo: ({ url }) => urls.push(url) };
   const context = loadedContext({ season: "2025-26", gw: 12, entryId: 1 });
 
-  explorePage.onSearch.call(context, { detail: { keyword: "  Haaland  " } });
+  // filter-bar emits `search` per keystroke — that must never navigate.
+  explorePage.onSearch.call(context, { detail: { keyword: "H" } });
+  explorePage.onSearch.call(context, { detail: { keyword: "Haaland" } });
+  assert.equal(urls.length, 0, "keystrokes stay local");
+  assert.equal(context.data.keyword, "Haaland", "the input value tracks keystrokes");
+
+  explorePage.onSubmitSearch.call(context, { detail: { keyword: "  Haaland  " } });
   assert.deepEqual(urls, ["/pages/data/players/players?keyword=Haaland"], "trimmed keyword travels as a query param");
 
-  explorePage.onSearch.call(context, { detail: { keyword: "   " } });
+  explorePage.onSubmitSearch.call(context, { detail: { keyword: "   " } });
   assert.deepEqual(urls[1], "/pages/data/players/players", "an empty keyword navigates without a query");
+
+  explorePage.onResetSearch.call(context);
+  assert.equal(context.data.keyword, "", "reset clears the input");
 });
 
 test("the data hub shell redirects to the explore overview", () => {

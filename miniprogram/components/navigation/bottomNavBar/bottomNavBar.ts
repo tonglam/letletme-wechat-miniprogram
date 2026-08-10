@@ -139,7 +139,10 @@ Component({
         } else {
           const firstKey = Object.keys(menu.url)[0];
           const url = menu.url[firstKey];
-          if (url && name !== this.data.activeName) {
+          // Guard on the route, not the active name: destination pages share
+          // their group's active name (explore owns gameweek/data routes),
+          // and the tab must still return to the section page from them.
+          if (url && getCurrentRoute() !== url) {
             wx.redirectTo({ url });
           }
         }

@@ -23,6 +23,7 @@ interface CardGroup {
 Page({
   data: {
     contextText: "",
+    keyword: "",
     groups: [] as CardGroup[]
   },
 
@@ -92,12 +93,21 @@ Page({
     this.setData({ groups });
   },
 
-  /** Local-filter degrade (plan §7.1): the keyword pre-fills the players
-   * page, which filters its cached 600-row directory client-side until the
-   * server-bounded playerSearch contract ships (plan §10). */
+  /** filter-bar fires `search` on every keystroke — that only syncs the
+   * local input. Navigation happens on submit (confirm or the 查询 button);
+   * the players page then filters its cached directory client-side until
+   * the server-bounded playerSearch contract ships (plan §10). */
   onSearch(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    this.setData({ keyword: event.detail.keyword });
+  },
+
+  onSubmitSearch(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
     const keyword = (event.detail.keyword || "").trim();
     navigateTo(routes.dataPlayers, keyword ? { keyword } : {});
+  },
+
+  onResetSearch() {
+    this.setData({ keyword: "" });
   },
 
   onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
