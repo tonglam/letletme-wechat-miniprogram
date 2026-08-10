@@ -6,8 +6,27 @@ globalThis.Page = (definition) => {
   capturedPage = definition;
 };
 
-await import("../miniprogram/pages/competitions/index/index.ts");
+const competitionsModule = await import("../miniprogram/pages/competitions/index/index.ts");
 const competitionsPage = capturedPage;
+
+test("competition cache never crosses season boundaries", () => {
+  globalThis.wx = {
+    getStorageSync() {
+      return {
+        entryId: 123,
+        season: "2025-26",
+        items: [{ competitionId: 1, name: "Old competition" }],
+        storedAt: 1
+      };
+    }
+  };
+
+  assert.equal(competitionsModule.readListCache(123, "2026-27"), null);
+  assert.equal(
+    competitionsModule.readListCache(123, "2025-26")?.items[0]?.name,
+    "Old competition"
+  );
+});
 
 test("opening a competition preselects it for Live and navigates there", () => {
   const storage = new Map();
@@ -33,8 +52,12 @@ test("opening a competition preselects it for Live and navigates there", () => {
   assert.deepEqual(urls, ["/pages/live/tournament/tournament"], "current results continue into Live");
 });
 
-test("resume revalidates the list; first show does not double-load", () => {
+test("resume refreshes context and revalidates the list; first show does not double-load", async () => {
   const loads = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2025-26" },
+    initAppData: async (forceRefresh) => { loads.push(`init:${forceRefresh}`); }
+  });
   const context = {
     ...competitionsPage,
     data: { ...competitionsPage.data },
@@ -45,11 +68,11 @@ test("resume revalidates the list; first show does not double-load", () => {
     }
   };
 
-  competitionsPage.onShow.call(context);
+  await competitionsPage.onShow.call(context);
   assert.deepEqual(loads, [], "first show skips the reload that onLoad already started");
 
-  competitionsPage.onShow.call(context);
-  assert.deepEqual(loads, [true], "resume bypasses the cache while revalidating principal and list");
+  await competitionsPage.onShow.call(context);
+  assert.deepEqual(loads, ["init:true", true], "resume refreshes context and bypasses the list cache");
 });
 
 test("empty-state create hands off to the Website create action", () => {

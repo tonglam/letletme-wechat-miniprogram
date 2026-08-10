@@ -173,6 +173,10 @@ test("team summary requests discard older GW responses", () => {
   assert.match(team, /const requestId = \+\+this\.loadRequestId/);
   assert.match(team, /if \(requestId !== this\.loadRequestId\) return/);
   assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
+  assert.match(
+    team,
+    /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/
+  );
 });
 
 test("unchanged live probes refresh the displayed check time", () => {
@@ -246,6 +250,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
   assert.match(competitions, /if \(resumed\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(competitions, /cached\.season === season/);
   assert.match(
     competitions,
     /if \(currentFollowEntryId\(\) !== entryId\) \{[\s\S]*this\.loadList\(true\)/,

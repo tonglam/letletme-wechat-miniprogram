@@ -371,10 +371,28 @@ Page({
       if (this.restartForPrincipalChange(entryId)) return;
 
       if (!eventResult) {
+        this.loadedDataSeason = undefined;
         this.setData({
           event: selectedEvent,
           maxGw: latestEvent,
           error: "",
+          headerTitle: "球队数据",
+          headerSubtitle: "",
+          overviewStats: [],
+          eventStats: [],
+          squadRows: [],
+          transferRows: [],
+          chipSummaryStats: [],
+          chipCountRows: [],
+          chipUsageRows: [],
+          historyRows: [],
+          seasonHistoryRows: [],
+          hasSquad: false,
+          hasTransfers: false,
+          hasChips: false,
+          hasHistory: false,
+          hasTeamData: false,
+          phaseBanner: "",
           emptyState: "event",
           emptyEyebrow: "本轮待就绪",
           emptyTitle: `GW${selectedEvent} 球队总结还没生成`,

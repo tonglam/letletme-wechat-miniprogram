@@ -9,6 +9,7 @@ import { routes } from "../../../config/routes";
 
 interface CompetitionsCache {
   entryId: number;
+  season: string;
   items: CompetitionListItem[];
   storedAt: number;
 }
@@ -17,15 +18,21 @@ const LIST_CACHE_KEY = "my-competitions:list";
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
 
-function readListCache(entryId: number | undefined): CompetitionsCache | null {
-  if (!entryId) {
+export function readListCache(
+  entryId: number | undefined,
+  season: string | undefined
+): CompetitionsCache | null {
+  if (!entryId || !season) {
     return null;
   }
   try {
     const cached = wx.getStorageSync(LIST_CACHE_KEY) as CompetitionsCache | undefined;
-    // Same-principal only (§13.1 simplified: the follow pointer is the
-    // principal boundary until the signed principal contract ships).
-    if (cached && cached.entryId === entryId && Array.isArray(cached.items)) {
+    if (
+      cached
+      && cached.entryId === entryId
+      && cached.season === season
+      && Array.isArray(cached.items)
+    ) {
       return cached;
     }
   } catch { /* no cache */ }
@@ -48,26 +55,30 @@ Page({
 
   async onLoad() {
     await waitForAuthoritativeFollow();
+    try { await getApp<IAppOption>().initAppData(true); } catch { /* load without cache identity */ }
     void this.loadList();
   },
 
-  onShow() {
+  async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
       // Website return / team switch: principal and list revalidate (§10.1).
+      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
       void this.loadList(true);
     }
   },
 
-  onPullDownRefresh() {
-    this.loadList(true).finally(() => wx.stopPullDownRefresh());
+  async onPullDownRefresh() {
+    try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+    await this.loadList(true).finally(() => wx.stopPullDownRefresh());
   },
 
   async loadList(forceRefresh = false) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
     const entryId = currentFollowEntryId();
+    const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
       this.setData({ loading: false, error: "", entryId: undefined, items: [], displayItems: [], fromCache: false });
@@ -84,7 +95,7 @@ Page({
     if (principalChanged) {
       this.setData({ items: [], displayItems: [], fromCache: false });
     }
-    const cached = readListCache(entryId);
+    const cached = readListCache(entryId, season);
     if (cached && (principalChanged || !this.data.items.length)) {
       this.setData({ items: cached.items, fromCache: true });
       this.syncDisplay();
@@ -94,6 +105,12 @@ Page({
     try {
       const items = await getMyCompetitionsCompat(entryId, forceRefresh);
       if (requestId !== this.requestId) return;
+      const currentSeason = getApp<IAppOption>().globalData.season || undefined;
+      if (season !== currentSeason) {
+        this.setData({ items: [], displayItems: [], fromCache: false });
+        void this.loadList(true);
+        return;
+      }
       if (currentFollowEntryId() !== entryId) {
         // A 401 recovery can authoritatively change the followed entry while
         // this request is in flight. Never paint/cache the old principal.
@@ -112,10 +129,23 @@ Page({
         durationBucket: durationBucket(Date.now() - loadStart)
       });
       try {
-        wx.setStorageSync(LIST_CACHE_KEY, { entryId, items, storedAt: Date.now() } satisfies CompetitionsCache);
+        if (season) {
+          wx.setStorageSync(LIST_CACHE_KEY, {
+            entryId,
+            season,
+            items,
+            storedAt: Date.now()
+          } satisfies CompetitionsCache);
+        }
       } catch { /* cache is best effort */ }
     } catch (error) {
       if (requestId !== this.requestId) return;
+      const currentSeason = getApp<IAppOption>().globalData.season || undefined;
+      if (season !== currentSeason) {
+        this.setData({ items: [], displayItems: [], fromCache: false });
+        void this.loadList(true);
+        return;
+      }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ items: [], displayItems: [], fromCache: false });
         void this.loadList(true);
