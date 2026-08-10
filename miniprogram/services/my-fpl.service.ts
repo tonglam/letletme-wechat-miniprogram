@@ -117,9 +117,13 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
  * value so a caller can retain only fields whose source failed, rather than
  * mistaking a partial object for a fully fresh response.
  */
-export async function getMyFplTeamBrief(entryId: number, event: number): Promise<MyFplTeamBriefResult> {
+export async function getMyFplTeamBrief(
+  entryId: number,
+  event: number,
+  forceRefresh = false
+): Promise<MyFplTeamBriefResult> {
   const [entryRead, eventRead] = await Promise.all([
-    settleRead(getEntryInfo(entryId)),
+    settleRead(getEntryInfo(entryId, forceRefresh)),
     event > 0
       ? settleRead(getEntryEventResult(entryId, event).then((res) => res as EntryEventResultPayload | null))
       : Promise.resolve({ available: true, value: null } as ReadResult<EntryEventResultPayload | null>)

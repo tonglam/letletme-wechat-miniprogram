@@ -32,7 +32,9 @@ Page({
 
   async onLoad() {
     await this.syncEventContext(true);
-    await this.load();
+    // A fresh page has no local season owner to compare. Bypass the
+    // seasonless service caches so a rollover cannot reuse prior-year data.
+    await this.load(true);
   },
 
   async onShow() {
@@ -117,7 +119,7 @@ Page({
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,
-        error: this.teams.length
+        error: hadLastGood
           ? "刷新失败，当前显示上次成功结果"
           : error instanceof Error ? error.message : "赛程加载失败"
       });

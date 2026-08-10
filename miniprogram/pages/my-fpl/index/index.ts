@@ -244,7 +244,7 @@ Page({
       context.currentEvent
         ? getCurrentSnapshotState(context.currentEvent)
         : Promise.resolve(undefined),
-      getMyFplTeamBrief(context.entryId, event).catch(() => null),
+      getMyFplTeamBrief(context.entryId, event, forceRefresh).catch(() => null),
       getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
     ]);
     if (this.isStale(requestId)) return;
