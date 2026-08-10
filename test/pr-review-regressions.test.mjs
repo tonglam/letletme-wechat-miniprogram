@@ -50,6 +50,7 @@ test("initial request failures do not also claim an empty list", () => {
   const competitions = source("miniprogram/pages/competitions/index/index.wxml");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.wxml");
   assert.match(competitions, /items\.length === 0 && !error/);
+  assert.match(competitions, /displayItems\.length === 0 && keyword && !error/);
   assert.match(leagues, /displayLeagues\.length === 0 && !error/);
 });
 
@@ -258,7 +259,8 @@ test("website returns bypass competition cache and accepted handoffs await clipb
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed\)[\s\S]*this\.loadLeagues\(true\)/);
+  assert.match(leagues, /if \(resumed\)[\s\S]*initAppData\(true\)[\s\S]*this\.loadLeagues\(true\)/);
+  assert.match(leagues, /cached\.season === season/);
 });
 
 test("fixture resume reloads instead of relabeling payload across seasons", () => {

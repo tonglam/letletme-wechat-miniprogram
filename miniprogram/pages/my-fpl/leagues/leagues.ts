@@ -7,20 +7,29 @@ import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils
 
 interface LeaguesCache {
   entryId: number;
+  season: string;
   leagues: MyFplLeagueBrief[];
   storedAt: number;
 }
 
 const LEAGUES_CACHE_KEY = "my-fpl:leagues";
 
-function readLeaguesCache(entryId: number | undefined): LeaguesCache | null {
-  if (!entryId) {
+export function readLeaguesCache(
+  entryId: number | undefined,
+  season: string | undefined
+): LeaguesCache | null {
+  if (!entryId || !season) {
     return null;
   }
   try {
     const cached = wx.getStorageSync(LEAGUES_CACHE_KEY) as LeaguesCache | undefined;
-    // Same-principal only: league lists never cross the follow pointer (§11).
-    if (cached && cached.entryId === entryId && Array.isArray(cached.leagues)) {
+    // Same-context only: official league membership never crosses a season.
+    if (
+      cached
+      && cached.entryId === entryId
+      && cached.season === season
+      && Array.isArray(cached.leagues)
+    ) {
       return cached;
     }
   } catch { /* no cache */ }
@@ -43,25 +52,29 @@ Page({
 
   async onLoad() {
     await waitForAuthoritativeFollow();
+    try { await getApp<IAppOption>().initAppData(true); } catch { /* load without cache identity */ }
     void this.loadLeagues();
   },
 
-  onShow() {
+  async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
       // Re-read the follow pointer after a handoff or team switch (§9).
+      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
       void this.loadLeagues(true);
     }
   },
 
-  onPullDownRefresh() {
-    this.loadLeagues(true).finally(() => wx.stopPullDownRefresh());
+  async onPullDownRefresh() {
+    try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+    await this.loadLeagues(true).finally(() => wx.stopPullDownRefresh());
   },
 
   async loadLeagues(forceRefresh = false) {
     const requestId = ++this.requestId;
     const entryId = currentFollowEntryId();
+    const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
       this.setData({ loading: false, error: "", entryId: undefined, leagues: [], displayLeagues: [], fromCache: false });
@@ -72,7 +85,7 @@ Page({
     if (principalChanged) {
       this.setData({ leagues: [], displayLeagues: [], fromCache: false });
     }
-    const cached = readLeaguesCache(entryId);
+    const cached = readLeaguesCache(entryId, season);
     if (cached && (principalChanged || !this.data.leagues.length)) {
       this.setData({ leagues: cached.leagues, fromCache: true });
       this.syncDisplay();
@@ -82,6 +95,12 @@ Page({
     try {
       const leagues = await getMyFplLeagues(entryId, forceRefresh);
       if (requestId !== this.requestId) return;
+      const currentSeason = getApp<IAppOption>().globalData.season || undefined;
+      if (season !== currentSeason) {
+        this.setData({ leagues: [], displayLeagues: [], fromCache: false });
+        void this.loadLeagues(true);
+        return;
+      }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
         void this.loadLeagues(true);
@@ -90,10 +109,23 @@ Page({
       this.setData({ loading: false, leagues, fromCache: false });
       this.syncDisplay();
       try {
-        wx.setStorageSync(LEAGUES_CACHE_KEY, { entryId, leagues, storedAt: Date.now() } satisfies LeaguesCache);
+        if (season) {
+          wx.setStorageSync(LEAGUES_CACHE_KEY, {
+            entryId,
+            season,
+            leagues,
+            storedAt: Date.now()
+          } satisfies LeaguesCache);
+        }
       } catch { /* cache is best effort */ }
     } catch (error) {
       if (requestId !== this.requestId) return;
+      const currentSeason = getApp<IAppOption>().globalData.season || undefined;
+      if (season !== currentSeason) {
+        this.setData({ leagues: [], displayLeagues: [], fromCache: false });
+        void this.loadLeagues(true);
+        return;
+      }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
         void this.loadLeagues(true);

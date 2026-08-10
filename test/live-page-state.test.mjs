@@ -545,6 +545,18 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.deepEqual(calls, ["init:true", "load:true"]);
 });
 
+test("team first load force-refreshes resident event context", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { gw: 33 },
+    initAppData: async (forceRefresh) => { calls.push(forceRefresh); }
+  });
+
+  await teamPage.ensureAppDataReady.call({ ...teamPage });
+
+  assert.deepEqual(calls, [true]);
+});
+
 test("team season rollover clears retained transfers before reloading", async () => {
   const calls = [];
   globalThis.getApp = () => ({

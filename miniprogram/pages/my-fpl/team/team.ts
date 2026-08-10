@@ -283,9 +283,9 @@ Page({
 
   async ensureAppDataReady(): Promise<void> {
     const app = getApp<IAppOption>();
-    if (!app.globalData.gw) {
-      await app.initAppData();
-    }
+    // A newly opened Team page can inherit a non-zero but stale resident GW.
+    // Always bypass shared caches before snapshotting its initial selection.
+    await app.initAppData(true);
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {
