@@ -232,10 +232,23 @@ test("league handoff returns bypass the cached official league list", () => {
 test("fixture resume reloads instead of relabeling payload across seasons", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(true\)/);
-  assert.match(fixtures, /if \(seasonChanged\) \{\s*await this\.load\(true\)/);
+  assert.match(fixtures, /await this\.load\(seasonChanged\)/);
+  assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
   assert.match(fixtures, /this\.loadedSeason = season/);
+});
+
+test("historical Live selections reset when the season changes", () => {
+  for (const path of [
+    "miniprogram/pages/live/entry/entry.ts",
+    "miniprogram/pages/live/tournament/tournament.ts"
+  ]) {
+    const page = source(path);
+    assert.match(page, /loadedSeason: undefined/, path);
+    assert.match(page, /seasonChanged \|\| wasCurrentEvent/, path);
+    assert.match(page, /event: nextEventId,[\s\S]*maxGw: nextEventId/, path);
+  }
 });
 
 test("personal responses never cross an authoritative follow change", () => {

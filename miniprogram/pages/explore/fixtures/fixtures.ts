@@ -40,9 +40,9 @@ Page({
     this.hasShown = true;
     if (!resumed) return;
     const seasonChanged = await this.syncEventContext(true);
-    if (seasonChanged) {
-      await this.load(true);
-    }
+    // A normal cached read lets the fixture service's 30-minute TTL bound
+    // staleness. A season rollover bypasses both fixture and team caches.
+    await this.load(seasonChanged);
   },
 
   onPullDownRefresh() {
@@ -83,7 +83,7 @@ Page({
       const season = getApp<IAppOption>().globalData.season;
       const [fixtures, teams] = await Promise.all([
         getSeasonFixture(season, forceRefresh),
-        getTeamList(season)
+        getTeamList(season, forceRefresh)
       ]);
       if (requestId !== this.requestId) return;
       this.fixtures = fixtures;

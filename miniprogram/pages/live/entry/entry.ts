@@ -118,6 +118,7 @@ Page({
   networkOnline: true,
   pageVisible: false,
   hasShown: false,
+  loadedSeason: undefined as string | undefined,
 
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
@@ -127,6 +128,7 @@ Page({
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
     await app.initAppData();
+    this.loadedSeason = app.globalData.season || undefined;
     if (!hasRouteEntry && !getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
       // fallback: the account may have been linked to a different entry
@@ -204,10 +206,13 @@ Page({
       const app = getApp<IAppOption>();
       try { await app.initAppData(true); } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
+      const nextSeason = app.globalData.season || undefined;
+      const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+      if (nextSeason) this.loadedSeason = nextSeason;
       const nextEventId = Number(app.globalData.gw) || 0;
       const wasCurrentEvent = this.data.event === this.data.maxGw;
-      if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
-        if (wasCurrentEvent) {
+      if (nextEventId > 0 && (seasonChanged || nextEventId !== this.data.maxGw)) {
+        if (seasonChanged || wasCurrentEvent) {
           this.liveRefresh?.stop();
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = undefined;

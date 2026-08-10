@@ -253,6 +253,83 @@ test("entry resume revalidates current-gameweek transfers independently", async 
   assert.deepEqual(calls, ["init:true", "sync", "transfers:123:33:false"]);
 });
 
+test("entry resume drops a historical selection after a season rollover", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 1 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: { ...entryPage.data, entryId: 123, event: 30, maxGw: 38, hasData: true },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData(options) {
+      calls.push(`load:${this.data.event}:${options.forceRefresh}:${options.includeTransfers}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.equal(context.data.hasData, false);
+  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
+});
+
+test("tournament resume drops a historical selection after a season rollover", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 1 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: {
+      ...tournamentPage.data,
+      event: 30,
+      maxGw: 38,
+      hasData: true,
+      rows: [{ entry: 1 }],
+      displayedRows: [{ entry: 1 }]
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    failedEntryCount: 2,
+    retainedRowCount: 1,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) {
+      calls.push(`tournaments:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.data.selectedTournament, undefined);
+  assert.equal(context.failedEntryCount, 0);
+  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
 test("tournament list errors are retried by their owning request", () => {
   const calls = [];
   const context = {
