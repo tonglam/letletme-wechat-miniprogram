@@ -1,5 +1,5 @@
 <view class="page">
-  <view wx:if="{{eventContextAvailable}}" class="section">
+  <view wx:if="{{eventContextAvailable || principalState === 'NO_FOLLOW'}}" class="section">
     <my-fpl-phase-card
       phase="{{phase}}"
       principalState="{{principalState}}"

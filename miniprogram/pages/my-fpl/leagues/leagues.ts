@@ -49,6 +49,7 @@ Page({
 
   requestId: 0,
   hasShown: false,
+  loadedSeason: undefined as string | undefined,
 
   async onLoad() {
     await waitForAuthoritativeFollow();
@@ -77,17 +78,21 @@ Page({
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
+      this.loadedSeason = undefined;
       this.setData({ loading: false, error: "", entryId: undefined, leagues: [], displayLeagues: [], fromCache: false });
       return;
     }
 
     const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
-    if (principalChanged) {
+    const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
+    if (principalChanged || seasonChanged) {
+      this.loadedSeason = undefined;
       this.setData({ leagues: [], displayLeagues: [], fromCache: false });
     }
     const cached = readLeaguesCache(entryId, season);
-    if (cached && (principalChanged || !this.data.leagues.length)) {
+    if (cached && (principalChanged || seasonChanged || !this.data.leagues.length)) {
       this.setData({ leagues: cached.leagues, fromCache: true });
+      this.loadedSeason = season;
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
@@ -107,6 +112,7 @@ Page({
         return;
       }
       this.setData({ loading: false, leagues, fromCache: false });
+      this.loadedSeason = season;
       this.syncDisplay();
       try {
         if (season) {

@@ -61,7 +61,7 @@ test("failed event metadata is represented as unavailable, not offseason", () =>
   assert.match(service, /eventContextAvailable = false/);
   assert.match(service, /eventContextAvailable = true/);
   assert.match(overview, /if \(!context\.eventContextAvailable\)/);
-  assert.match(template, /wx:if="\{\{eventContextAvailable\}\}"/);
+  assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
 });
 
 test("a total overview secondary failure settles the league module", () => {
@@ -294,6 +294,29 @@ test("initial league and competition payloads bypass seasonless service caches",
   assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(true\)/);
   assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(true\)/);
   assert.match(common, /getTeamList[\s\S]*cacheVariant: _season \? `season:\$\{_season\}` : "season:unknown"/);
+});
+
+test("resident league and competition rows never cross a season", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+  assert.match(leagues, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*leagues: \[\], displayLeagues: \[\]/);
+  assert.match(competitions, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*items: \[\], displayItems: \[\]/);
+});
+
+test("tournament row requests are principal- and season-generation guarded", () => {
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(tournament, /seasonChanged \|\| wasCurrentEvent[\s\S]*this\.rowsRequestId \+= 1/);
+  assert.match(tournament, /const entryId = this\.data\.entryId[\s\S]*const requestKey = `\$\{entryId\}:/);
+  assert.match(tournament, /await getLivePointsByTournamentSnapshot[\s\S]*restartForPrincipalChange\(entryId\)/);
+  assert.match(tournament, /catch \(error\)[\s\S]*restartForPrincipalChange\(entryId\)/);
+});
+
+test("no-follow actions survive context failure and profile checks compare the retained follow", () => {
+  const template = source("miniprogram/pages/my-fpl/index/index.wxml");
+  const app = source("miniprogram/app.ts");
+  assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
+  assert.match(app, /const nextEntry = this\.globalData\.entryId/);
+  assert.doesNotMatch(app, /const nextEntry = session\.profile\.fplEntryId/);
 });
 
 test("forced My FPL refresh reaches the cached team identity read", () => {

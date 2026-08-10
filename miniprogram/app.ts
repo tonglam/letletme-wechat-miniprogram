@@ -102,13 +102,13 @@ App<IAppOption>({
       return;
     }
     const boundEntryAtStart = this.globalData.entryId;
-    refreshWechatApiSession().then((session) => {
+    refreshWechatApiSession().then(() => {
       // storeApiSession has applied the fresh binding to globalData and
       // cleared stale caches. If the binding actually changed, the open page
       // is still showing the previously bound team — rebuild it.
-      const nextEntry = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
-        ? session.profile.fplEntryId
-        : undefined;
+      // storeApiSession retains a local display-only follow when the profile
+      // has no verified entry, so compare the state it actually applied.
+      const nextEntry = this.globalData.entryId;
       if (nextEntry !== boundEntryAtStart) {
         this.reloadCurrentPageForEntryChange(nextEntry);
       }

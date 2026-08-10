@@ -434,6 +434,9 @@ Page({
       if (nextEventId > 0 && (seasonChanged || nextEventId !== this.data.maxGw)) {
         if (seasonChanged || wasCurrentEvent) {
           this.liveRefresh?.stop();
+          this.rowsRequestId += 1;
+          this.rowsRequest = null;
+          this.rowsRequestKey = "";
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = undefined;
           this.failedEntryCount = 0;
@@ -662,6 +665,11 @@ Page({
   _submittedKeyword: "",
 
   loadRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
+    const entryId = this.data.entryId;
+    if (!entryId) {
+      this.setData({ rows: [], displayedRows: [], hasMore: false });
+      return Promise.resolve();
+    }
     const selected = this.data.selectedTournament;
     if (!selected) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
@@ -670,7 +678,7 @@ Page({
 
     const eventId = this.data.event;
     const keyword = this._submittedKeyword;
-    const requestKey = `${selected.id}:${eventId}:${keyword}`;
+    const requestKey = `${entryId}:${selected.id}:${eventId}:${keyword}`;
     if (this.rowsRequest && this.rowsRequestKey === requestKey) {
       return this.rowsRequest;
     }
@@ -691,6 +699,7 @@ Page({
           ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword, options.forceRefresh === true)
           : await getLivePointsByTournamentSnapshot(selected.id, eventId, options.forceRefresh === true);
         if (requestId !== this.rowsRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);
         const failedEntryIds = new Set(liveResult.failedEntryIds || []);
         this.failedEntryCount = Math.max(
@@ -725,6 +734,7 @@ Page({
         this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.rowsRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
         this.setData({
           error: error instanceof Error ? error.message : "实时竞赛加载失败",
           errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""

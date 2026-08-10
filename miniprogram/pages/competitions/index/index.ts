@@ -52,6 +52,7 @@ Page({
 
   requestId: 0,
   hasShown: false,
+  loadedSeason: undefined as string | undefined,
 
   async onLoad() {
     await waitForAuthoritativeFollow();
@@ -81,6 +82,7 @@ Page({
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
+      this.loadedSeason = undefined;
       this.setData({ loading: false, error: "", entryId: undefined, items: [], displayItems: [], fromCache: false });
       recordCompetitionVisit({
         surface: "list",
@@ -92,12 +94,15 @@ Page({
     }
 
     const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
-    if (principalChanged) {
+    const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
+    if (principalChanged || seasonChanged) {
+      this.loadedSeason = undefined;
       this.setData({ items: [], displayItems: [], fromCache: false });
     }
     const cached = readListCache(entryId, season);
-    if (cached && (principalChanged || !this.data.items.length)) {
+    if (cached && (principalChanged || seasonChanged || !this.data.items.length)) {
       this.setData({ items: cached.items, fromCache: true });
+      this.loadedSeason = season;
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
@@ -119,6 +124,7 @@ Page({
         return;
       }
       this.setData({ loading: false, items, fromCache: false });
+      this.loadedSeason = season;
       this.syncDisplay();
       recordCompetitionVisit({
         surface: "list",
