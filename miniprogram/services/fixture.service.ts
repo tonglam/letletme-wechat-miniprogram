@@ -47,6 +47,7 @@ export async function getSeasonFixture(_season: string): Promise<Fixture[]> {
     kickoffTime: fixture.kickoffTime || undefined,
     difficulty: fixture.homeTeamDifficulty ?? undefined,
     homeDifficulty: fixture.homeTeamDifficulty ?? undefined,
-    awayDifficulty: fixture.awayTeamDifficulty ?? undefined
+    awayDifficulty: fixture.awayTeamDifficulty ?? undefined,
+    finished: fixture.finished
   }));
 }
