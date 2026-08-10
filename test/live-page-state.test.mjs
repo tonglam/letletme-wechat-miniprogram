@@ -455,3 +455,59 @@ test("team phase banner invalidates an in-flight probe when the GW changes", () 
   assert.equal(context.data.event, 9);
   assert.equal(context.data.phaseBanner, "");
 });
+
+test("team resume advances a current selection to the new gameweek", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123, gw: 34 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    ...teamPage,
+    data: { ...teamPage.data, entryId: 123, event: 33, maxGw: 33, hasTeamData: true },
+    hasShown: true,
+    _loadedAt: Date.now(),
+    phaseBannerRequestId: 0,
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.equal(context.data.hasTeamData, false);
+  assert.deepEqual(calls, ["init:true", "load:true"]);
+});
+
+test("team principal changes clear the old view before restarting", () => {
+  const calls = [];
+  globalThis.getApp = () => ({ globalData: { entryId: 456 } });
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      headerTitle: "Old team",
+      squadRows: [{ id: "old" }],
+      hasSquad: true,
+      hasTeamData: true
+    },
+    loadRequestId: 2,
+    phaseBannerRequestId: 3,
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) { calls.push(`load:${forceRefresh}`); }
+  };
+
+  const restarted = teamPage.restartForPrincipalChange.call(context, 123);
+
+  assert.equal(restarted, true);
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.hasTeamData, false);
+  assert.deepEqual(context.data.squadRows, []);
+  assert.equal(context.loadRequestId, 3);
+  assert.deepEqual(calls, ["load:true"]);
+});

@@ -134,11 +134,29 @@ Page({
     const loadStart = Date.now();
     this.setData({ loading: true, error: "", leaguesUnavailable: false });
 
+    const previousContext = this.context;
     const context = await getMyFplContext(forceRefresh);
     if (this.isStale(requestId)) return;
-    this.context = context;
+    const app = getApp<IAppOption>();
+    const fallbackEvent = previousContext?.currentEvent
+      ?? previousContext?.nextEvent
+      ?? (Number(app.globalData.gw) || 0);
+    const event = context.currentEvent ?? context.nextEvent ?? fallbackEvent;
+    const effectiveContext = context.eventContextAvailable || !event
+      ? context
+      : {
+          ...context,
+          currentEvent: previousContext?.currentEvent
+            ?? (Number(app.globalData.currentGw) || undefined)
+            ?? event,
+          nextEvent: previousContext?.nextEvent
+            ?? (Number(app.globalData.nextGw) || undefined),
+          utcDeadline: previousContext?.utcDeadline
+            ?? app.globalData.utcDeadline
+            ?? undefined
+        };
+    this.context = effectiveContext;
 
-    const event = context.currentEvent ?? context.nextEvent ?? 0;
     const cached = readOverviewCache(context.entryId, event);
     // Never carry secondary content across principal/event boundaries. Only
     // the same-context cache is allowed to survive while fresh reads settle.
@@ -150,6 +168,17 @@ Page({
     });
 
     if (!context.eventContextAvailable) {
+      if (cached) {
+        this.setData({
+          loading: false,
+          eventContextAvailable: true,
+          teamBrief: cached.teamBrief,
+          ...resolveOverviewLeagueState(null, cached.leagueCount),
+          error: "赛季信息刷新失败，当前显示上次成功结果"
+        });
+        this.syncPrincipalState();
+        return;
+      }
       this.setData({
         loading: false,
         eventContextAvailable: false,

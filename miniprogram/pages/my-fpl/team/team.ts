@@ -15,6 +15,7 @@ import { goToEntrySearch, goToLiveEntry } from "../../../utils/navigation";
 import { formatCompactNumber } from "../../../utils/summary-format";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
+import { currentFollowEntryId } from "../../../utils/follow";
 
 export function phaseBannerFromSnapshot(
   snapshotState: LiveSnapshotState | undefined
@@ -138,6 +139,7 @@ interface EntrySummaryData {
   hasTransfers: boolean;
   hasChips: boolean;
   hasHistory: boolean;
+  hasTeamData: boolean;
   /** LIVE/SETTLING banner for the current gameweek; "" otherwise. */
   phaseBanner: "" | "live" | "settling";
 }
@@ -175,6 +177,7 @@ Page({
     hasTransfers: false,
     hasChips: false,
     hasHistory: false,
+    hasTeamData: false,
     phaseBanner: ""
   } as EntrySummaryData,
 
@@ -198,19 +201,60 @@ Page({
     this.loadData();
   },
 
-  onShow() {
-    // Summary data moves slowly; only reload when the cached view is 5min+ old.
-    if (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000) {
-      this.loadData();
+  async onShow() {
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return;
+
+    const app = getApp<IAppOption>();
+    try { await app.initAppData(true); } catch { /* retain the last known context */ }
+    const entryId = this.data.entryId;
+    if (this.restartForPrincipalChange(entryId)) return;
+
+    const nextGw = Number(app.globalData.gw) || 0;
+    const wasCurrentEvent = this.data.event === this.data.maxGw;
+    let contextChanged = false;
+    if (nextGw > 0 && nextGw !== this.data.maxGw) {
+      contextChanged = wasCurrentEvent;
+      this.phaseBannerRequestId += 1;
+      this.setData({
+        maxGw: nextGw,
+        ...(wasCurrentEvent ? {
+          event: nextGw,
+          phaseBanner: "",
+          hasTeamData: false
+        } : {})
+      });
+    }
+    // Summary data moves slowly, but an advancing current GW reloads now.
+    if (contextChanged || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
+      await this.loadData(contextChanged);
     }
   },
 
   _loadedAt: 0,
   loadRequestId: 0,
   phaseBannerRequestId: 0,
+  hasShown: false,
 
-  onPullDownRefresh() {
-    this.loadData(true).finally(() => wx.stopPullDownRefresh());
+  async onPullDownRefresh() {
+    const app = getApp<IAppOption>();
+    try { await app.initAppData(true); } catch { /* reload the retained context */ }
+    const entryId = this.data.entryId;
+    if (this.restartForPrincipalChange(entryId)) {
+      wx.stopPullDownRefresh();
+      return;
+    }
+    const nextGw = Number(app.globalData.gw) || 0;
+    const wasCurrentEvent = this.data.event === this.data.maxGw;
+    if (nextGw > 0 && nextGw !== this.data.maxGw) {
+      this.phaseBannerRequestId += 1;
+      this.setData({
+        maxGw: nextGw,
+        ...(wasCurrentEvent ? { event: nextGw, phaseBanner: "", hasTeamData: false } : {})
+      });
+    }
+    await this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -218,6 +262,41 @@ Page({
     if (!app.globalData.gw) {
       await app.initAppData();
     }
+  },
+
+  restartForPrincipalChange(entryId: number | undefined): boolean {
+    const nextEntryId = currentFollowEntryId();
+    if (nextEntryId === entryId) return false;
+
+    this.loadRequestId += 1;
+    this.phaseBannerRequestId += 1;
+    this._loadedAt = 0;
+    this.setData({
+      entryId: nextEntryId,
+      loading: false,
+      error: "",
+      transferError: "",
+      emptyState: "",
+      headerTitle: "球队数据",
+      headerSubtitle: "",
+      overviewStats: [],
+      eventStats: [],
+      squadRows: [],
+      transferRows: [],
+      chipSummaryStats: [],
+      chipCountRows: [],
+      chipUsageRows: [],
+      historyRows: [],
+      seasonHistoryRows: [],
+      hasSquad: false,
+      hasTransfers: false,
+      hasChips: false,
+      hasHistory: false,
+      hasTeamData: false,
+      phaseBanner: ""
+    });
+    void this.loadData(true);
+    return true;
   },
 
   async loadData(forceRefresh = false) {
@@ -249,8 +328,12 @@ Page({
       const entryId = this.data.entryId;
       const history = await getEntryTeamStatsHistory(entryId, forceRefresh);
       if (requestId !== this.loadRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       const latestEvent = latestEventId(history.results);
       const selectedEvent = clampEvent(this.data.event, latestEvent);
+      if (selectedEvent !== this.data.event) {
+        this.setData({ event: selectedEvent, maxGw: latestEvent, hasTeamData: false });
+      }
       let transferError = "";
       const [eventResult, transferHistory] = await Promise.all([
         getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh),
@@ -260,6 +343,7 @@ Page({
         })
       ]);
       if (requestId !== this.loadRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
 
       if (!eventResult) {
         this.setData({
@@ -285,7 +369,8 @@ Page({
         hasSquad: viewModel.squadRows.length > 0,
         hasTransfers: viewModel.transferRows.length > 0,
         hasChips: viewModel.chipUsageRows.length > 0 || viewModel.chipCountRows.length > 0,
-        hasHistory: viewModel.historyRows.length > 0 || viewModel.seasonHistoryRows.length > 0
+        hasHistory: viewModel.historyRows.length > 0 || viewModel.seasonHistoryRows.length > 0,
+        hasTeamData: true
       });
       this._loadedAt = Date.now();
     } catch (error) {
@@ -335,7 +420,7 @@ Page({
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.phaseBannerRequestId += 1;
-    this.setData({ event: event.detail.value, phaseBanner: "" });
+    this.setData({ event: event.detail.value, phaseBanner: "", hasTeamData: false });
     this.loadData();
   },
 

@@ -118,6 +118,17 @@ test("overview clears secondary content when the event has no matching cache", (
   );
 });
 
+test("My FPL last-good views survive context and refresh failures", () => {
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const template = source("miniprogram/pages/my-fpl/team/team.wxml");
+  assert.match(overview, /fallbackEvent[\s\S]*if \(cached\)[\s\S]*eventContextAvailable: true/);
+  assert.match(team, /await app\.initAppData\(true\)[\s\S]*wasCurrentEvent/);
+  assert.match(team, /restartForPrincipalChange\(entryId\)/);
+  assert.match(template, /error && !hasTeamData/);
+  assert.match(template, /当前显示上次成功结果/);
+});
+
 test("Explore labels an upcoming preseason round separately from the current event", () => {
   const explore = source("miniprogram/pages/explore/index/index.ts");
   assert.match(explore, /const currentGw = Number\(app\.globalData\.currentGw\)/);
