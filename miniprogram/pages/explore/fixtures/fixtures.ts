@@ -26,6 +26,7 @@ Page({
   // refetch, and setData never carries the full season fixture list.
   fixtures: [] as Fixture[],
   teams: [] as FixtureRunTeam[],
+  loadedSeason: undefined as string | undefined,
   requestId: 0,
   hasShown: false,
 
@@ -38,7 +39,10 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
-    await this.syncEventContext(true);
+    const seasonChanged = await this.syncEventContext(true);
+    if (seasonChanged) {
+      await this.load(true);
+    }
   },
 
   onPullDownRefresh() {
@@ -50,13 +54,24 @@ Page({
   async syncEventContext(forceRefresh = false) {
     const app = getApp<IAppOption>();
     try { await app.initAppData(forceRefresh); } catch { /* the picker falls back to GW 1 */ }
+    const season = app.globalData.season;
+    const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
     const gw = Math.max(1, Number(app.globalData.gw) || 1);
+    if (seasonChanged) {
+      // Never relabel last season's payload as the new season. A failed reload
+      // must show unavailable, not stale clubs under the new GW picker.
+      this.fixtures = [];
+      this.teams = [];
+      this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [] });
+      return true;
+    }
     this.setData({ startEvent: gw });
     // Recompose retained fixture payload immediately. If the subsequent
     // refresh fails, the picker and cards still describe the same event.
     if (this.teams.length) {
       this.rebuild();
     }
+    return false;
   },
 
   async load(forceRefresh = false) {
@@ -73,6 +88,7 @@ Page({
       if (requestId !== this.requestId) return;
       this.fixtures = fixtures;
       this.teams = teams;
+      this.loadedSeason = season;
       const maxEvent = maxFixtureEvent(fixtures) || FALLBACK_MAX_EVENT;
       const startEvent = Math.min(Math.max(1, this.data.startEvent), maxEvent);
       this.setData({ loading: false, maxEvent, startEvent });

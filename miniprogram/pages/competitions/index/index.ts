@@ -90,6 +90,12 @@ Page({
     try {
       const items = await getMyCompetitionsCompat(entryId, forceRefresh);
       if (requestId !== this.requestId) return;
+      if (currentFollowEntryId() !== entryId) {
+        // A 401 recovery can authoritatively change the followed entry while
+        // this request is in flight. Never paint/cache the old principal.
+        void this.loadList(true);
+        return;
+      }
       this.setData({ loading: false, items, fromCache: false });
       this.syncDisplay();
       recordCompetitionVisit({
@@ -105,6 +111,10 @@ Page({
       } catch { /* cache is best effort */ }
     } catch (error) {
       if (requestId !== this.requestId) return;
+      if (currentFollowEntryId() !== entryId) {
+        void this.loadList(true);
+        return;
+      }
       // No previous data plus failure renders unavailable/retry, not an
       // empty list (§13.2).
       this.setData({

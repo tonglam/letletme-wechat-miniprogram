@@ -213,10 +213,29 @@ test("website returns bypass competition cache and accepted handoffs await clipb
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
   assert.match(competitions, /if \(resumed\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(
+    competitions,
+    /if \(currentFollowEntryId\(\) !== entryId\) \{[\s\S]*this\.loadList\(true\)/,
+    "an authoritative principal change restarts rather than applying the old response"
+  );
   assert.match(competitions, /if \(await openWebsiteAction\(action\)\)/);
   assert.match(leagues, /if \(await openWebsiteAction\(action\)\)/);
   assert.match(action, /success:[\s\S]*resolve\(true\)/);
   assert.match(action, /fail[\s\S]*resolve\(false\)/);
+});
+
+test("league handoff returns bypass the cached official league list", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(leagues, /if \(resumed\)[\s\S]*this\.loadLeagues\(true\)/);
+});
+
+test("fixture resume reloads instead of relabeling payload across seasons", () => {
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(true\)/);
+  assert.match(fixtures, /if \(seasonChanged\) \{\s*await this\.load\(true\)/);
+  assert.match(fixtures, /this\.loadedSeason !== season/);
+  assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
+  assert.match(fixtures, /this\.loadedSeason = season/);
 });
 
 test("unknown fixture difficulty uses a neutral style", () => {

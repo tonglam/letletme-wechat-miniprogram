@@ -51,7 +51,7 @@ Page({
     this.hasShown = true;
     if (resumed) {
       // Re-read the follow pointer after a handoff or team switch (§9).
-      void this.loadLeagues();
+      void this.loadLeagues(true);
     }
   },
 
