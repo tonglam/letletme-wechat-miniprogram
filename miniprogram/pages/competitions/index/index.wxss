@@ -57,6 +57,6 @@
   display: block;
 }
 
-.competition-list > * + * {
+.competition-list competition-card + competition-card {
   margin-top: 20rpx;
 }
