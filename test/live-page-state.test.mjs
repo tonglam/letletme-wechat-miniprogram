@@ -108,13 +108,19 @@ test("match cold start waits for the current event before arming recovery", asyn
   const context = {
     data: { ...matchPage.data },
     currentEventId: 0,
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
       if (update.loading) calls.push("loading");
     },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.currentEventId}`);
+    initLiveRefresh() {
+      this.liveRefresh = {
+        sync() {
+          calls.push(`sync:${context.currentEventId}`);
+        }
+      };
     },
+    syncDisplayState() {},
     loadData() {
       calls.push(`load:${this.currentEventId}`);
       return Promise.resolve();
@@ -142,21 +148,27 @@ test("match status changes re-arm polling before the first request", () => {
     data: { ...matchPage.data, status: "finished" },
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
-    cancelFreshnessCheck() {
-      calls.push("cancel");
-    },
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
-      calls.push(`set:${this.data.status}`);
-    },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.data.status}`);
+      if (update.status !== undefined) {
+        calls.push(`set:${this.data.status}`);
+      }
     },
     loadData() {
       calls.push(`load:${this.data.status}`);
       return Promise.resolve();
     }
   };
+  context.liveRefresh = {
+    stop() {
+      calls.push("stop");
+    },
+    sync() {
+      calls.push(`sync:${context.data.status}`);
+    }
+  };
+  context.syncDisplayState = () => {};
 
   matchPage.onStatusTap.call(context, {
     currentTarget: { dataset: { status: "playing" } }
@@ -165,7 +177,7 @@ test("match status changes re-arm polling before the first request", () => {
   assert.equal(context.liveSnapshot, null);
   assert.deepEqual(calls, [
     "store:playing",
-    "cancel",
+    "stop",
     "set:playing",
     "sync:playing",
     "load:playing"
