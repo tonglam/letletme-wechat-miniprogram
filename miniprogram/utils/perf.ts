@@ -33,6 +33,7 @@ export interface StoredPerf {
   apiRecords: ApiRecord[];
   liveTransitions?: LiveTransitionRecord[];
   myFplVisits?: MyFplVisitRecord[];
+  competitionVisits?: CompetitionVisitRecord[];
   launchDuration?: number;
   launchTs?: number;
 }
@@ -47,6 +48,22 @@ export interface MyFplVisitRecord {
   principalState?: string;
   phase?: string;
   eventId?: number;
+  cacheOutcome?: "fresh" | "last-good" | "miss";
+  handoffActionType?: string;
+  durationBucket?: string;
+  ts: number;
+}
+
+/**
+ * Sanitized Competitions telemetry (high-level design §18, plan §8.1).
+ * Competition names and IDs never enter a record; counts are bucketed.
+ */
+export interface CompetitionVisitRecord {
+  surface: "list";
+  principalState?: string;
+  /** Contract generation serving the surface; "compat" until myCompetitions ships. */
+  contractSource: "compat";
+  listCountBucket?: "0" | "1" | "2-5" | "6-20" | ">20";
   cacheOutcome?: "fresh" | "last-good" | "miss";
   handoffActionType?: string;
   durationBucket?: string;
@@ -123,18 +140,31 @@ export function recordMyFplVisit(record: Omit<MyFplVisitRecord, "ts">): void {
   flush();
 }
 
+export function recordCompetitionVisit(record: Omit<CompetitionVisitRecord, "ts">): void {
+  const d = load();
+  if (!Array.isArray(d.competitionVisits)) {
+    d.competitionVisits = [];
+  }
+  if (d.competitionVisits.length >= MAX_RECORDS) {
+    d.competitionVisits.splice(0, d.competitionVisits.length - MAX_RECORDS + 1);
+  }
+  d.competitionVisits.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function getPerf(): StoredPerf {
   const d = load();
   return {
     ...d,
     apiRecords: d.apiRecords.slice(),
     liveTransitions: (d.liveTransitions ?? []).slice(),
-    myFplVisits: (d.myFplVisits ?? []).slice()
+    myFplVisits: (d.myFplVisits ?? []).slice(),
+    competitionVisits: (d.competitionVisits ?? []).slice()
   };
 }
 
 export function clearPerf(): void {
-  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [] };
+  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [], competitionVisits: [] };
   try {
     wx.removeStorage({ key: STORAGE_KEY });
   } catch { /* silent */ }

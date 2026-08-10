@@ -3,6 +3,8 @@ import type { CompetitionListItem } from "../../../models/competition";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { currentFollowEntryId } from "../../../utils/follow";
+import { listCountBucket } from "../../../utils/competition-state";
+import { durationBucket, recordCompetitionVisit } from "../../../utils/perf";
 import { routes } from "../../../config/routes";
 
 interface CompetitionsCache {
@@ -63,10 +65,17 @@ Page({
 
   async loadList(forceRefresh = false) {
     const requestId = ++this.requestId;
+    const loadStart = Date.now();
     const entryId = currentFollowEntryId();
 
     if (!entryId) {
       this.setData({ loading: false, error: "", entryId: undefined, items: [], displayItems: [], fromCache: false });
+      recordCompetitionVisit({
+        surface: "list",
+        principalState: "NO_FOLLOW",
+        contractSource: "compat",
+        durationBucket: durationBucket(Date.now() - loadStart)
+      });
       return;
     }
 
@@ -82,6 +91,14 @@ Page({
       if (requestId !== this.requestId) return;
       this.setData({ loading: false, items, fromCache: false });
       this.syncDisplay();
+      recordCompetitionVisit({
+        surface: "list",
+        principalState: "READY",
+        contractSource: "compat",
+        listCountBucket: listCountBucket(items.length),
+        cacheOutcome: cached ? "last-good" : "miss",
+        durationBucket: durationBucket(Date.now() - loadStart)
+      });
       try {
         wx.setStorageSync(LIST_CACHE_KEY, { entryId, items, storedAt: Date.now() } satisfies CompetitionsCache);
       } catch { /* cache is best effort */ }
@@ -133,12 +150,18 @@ Page({
   },
 
   onManageCompetition() {
-    openWebsiteAction(canonicalAction("MANAGE_COMPETITION"));
+    const action = canonicalAction("MANAGE_COMPETITION");
+    if (openWebsiteAction(action)) {
+      recordCompetitionVisit({ surface: "list", contractSource: "compat", handoffActionType: action.actionType });
+    }
   },
 
   onCreateCompetition() {
     // Creation is Website-only (§1); the empty state hands off.
-    openWebsiteAction(canonicalAction("CREATE_COMPETITION"));
+    const action = canonicalAction("CREATE_COMPETITION");
+    if (openWebsiteAction(action)) {
+      recordCompetitionVisit({ surface: "list", contractSource: "compat", handoffActionType: action.actionType });
+    }
   },
 
   onEmptyAction() {
