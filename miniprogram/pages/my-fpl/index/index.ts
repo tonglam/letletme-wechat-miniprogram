@@ -125,7 +125,7 @@ Page({
     // Bounded secondary summaries, independently degraded on failure.
     const [brief, leagues] = await Promise.all([
       getMyFplTeamBrief(context.entryId, event).catch(() => null),
-      getMyFplLeagues(context.entryId).catch(() => null)
+      getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
     ]);
     if (this.isStale(requestId)) return;
 

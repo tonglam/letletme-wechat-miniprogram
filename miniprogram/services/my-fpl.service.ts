@@ -118,8 +118,8 @@ export async function getMyFplTeamBrief(entryId: number, event: number): Promise
  * fields (viewerRank, associationCount) arrive with plan §10 and stay absent
  * until then.
  */
-export async function getMyFplLeagues(entryId: number): Promise<MyFplLeagueBrief[]> {
-  const leagues = await getEntryLeagueInfo(entryId);
+export async function getMyFplLeagues(entryId: number, forceRefresh = false): Promise<MyFplLeagueBrief[]> {
+  const leagues = await getEntryLeagueInfo(entryId, forceRefresh);
   return leagues
     .map((league) => ({
       id: Number(league.id),

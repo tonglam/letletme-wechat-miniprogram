@@ -146,9 +146,10 @@ export async function getEntryInfo(entry: number, forceRefresh = false): Promise
   return result;
 }
 
-export async function getEntryLeagueInfo(entry: number): Promise<EntryLeague[]> {
+export async function getEntryLeagueInfo(entry: number, forceRefresh = false): Promise<EntryLeague[]> {
   const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
-    cacheTtl: 3600 * 1000
+    cacheTtl: 3600 * 1000,
+    forceRefresh
   });
   return (data.entryLeagues || []).map((league) => ({
     id: league.id,

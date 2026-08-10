@@ -20,6 +20,7 @@
     "pages/summary/gameweek/gameweek",
     "pages/my-fpl/index/index",
     "pages/my-fpl/team/team",
+    "pages/my-fpl/leagues/leagues",
     "pages/performance/index/index"
   ],
   "window": {
