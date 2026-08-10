@@ -94,7 +94,7 @@ Page({
     this.setData({ loading: !hadLastGood, error: "" });
     try {
       const [fixtures, teams] = await Promise.all([
-        getFixtureWindow(startEvent, horizon, forceRefresh),
+        getFixtureWindow(startEvent, horizon, season, forceRefresh),
         getTeamList(season, forceRefresh)
       ]);
       if (requestId !== this.requestId) return;

@@ -53,7 +53,7 @@ Page({
   async onLoad() {
     await waitForAuthoritativeFollow();
     try { await getApp<IAppOption>().initAppData(true); } catch { /* load without cache identity */ }
-    void this.loadLeagues();
+    void this.loadLeagues(true);
   },
 
   async onShow() {

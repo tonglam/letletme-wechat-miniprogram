@@ -275,15 +275,25 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(true\)/);
   assert.match(fixtures, /await this\.load\(seasonChanged\)/);
-  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, forceRefresh\)/);
+  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh\)/);
   assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
   assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
   assert.match(service, /eventFixtures\(eventId:/);
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
+  assert.match(service, /cacheVariant: season \? `season:\$\{season\}` : "season:unknown"/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
   assert.match(fixtures, /this\.loadedSeason = season/);
+});
+
+test("initial league and competition payloads bypass seasonless service caches", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+  const common = source("miniprogram/services/common.service.ts");
+  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(true\)/);
+  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(common, /getTeamList[\s\S]*cacheVariant: _season \? `season:\$\{_season\}` : "season:unknown"/);
 });
 
 test("forced My FPL refresh reaches the cached team identity read", () => {
