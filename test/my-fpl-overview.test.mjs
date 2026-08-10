@@ -6,8 +6,23 @@ globalThis.Page = (definition) => {
   capturedPage = definition;
 };
 
-await import("../miniprogram/pages/my-fpl/index/index.ts");
+const overviewModule = await import("../miniprogram/pages/my-fpl/index/index.ts");
 const overviewPage = capturedPage;
+
+test("league summary never fabricates zero after an unavailable read", () => {
+  assert.deepEqual(
+    overviewModule.resolveOverviewLeagueState(null),
+    { leagueCount: 0, leaguesLoaded: false, leaguesUnavailable: true }
+  );
+  assert.deepEqual(
+    overviewModule.resolveOverviewLeagueState(null, 7),
+    { leagueCount: 7, leaguesLoaded: true, leaguesUnavailable: false }
+  );
+  assert.deepEqual(
+    overviewModule.resolveOverviewLeagueState([]),
+    { leagueCount: 0, leaguesLoaded: true, leaguesUnavailable: false }
+  );
+});
 
 test("NO_FOLLOW primary goes to team search, never to a personal page", () => {
   const urls = [];

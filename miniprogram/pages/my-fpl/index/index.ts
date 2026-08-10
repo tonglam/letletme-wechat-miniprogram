@@ -4,7 +4,12 @@ import {
   getMyFplLeagues,
   getMyFplTeamBrief
 } from "../../../services/my-fpl.service";
-import type { MyFplContext, MyFplPhase, MyFplTeamBrief } from "../../../models/my-fpl";
+import type {
+  MyFplContext,
+  MyFplLeagueBrief,
+  MyFplPhase,
+  MyFplTeamBrief
+} from "../../../models/my-fpl";
 import type { MyFplPrincipalState } from "../../../models/principal";
 import { deriveMyFplPhase, derivePrincipalDisplay } from "../../../utils/my-fpl-phase";
 import { subscribeNetworkStatus } from "../../../utils/live-network";
@@ -18,11 +23,22 @@ interface OverviewCache {
   entryId: number;
   event: number;
   teamBrief: MyFplTeamBrief | null;
-  leagueCount: number;
+  leagueCount?: number;
   storedAt: number;
 }
 
 const OVERVIEW_CACHE_KEY = "my-fpl:overview";
+
+export function resolveOverviewLeagueState(
+  leagues: MyFplLeagueBrief[] | null,
+  cachedLeagueCount?: number
+): { leagueCount: number; leaguesLoaded: boolean; leaguesUnavailable: boolean } {
+  const leagueCount = leagues === null ? cachedLeagueCount : leagues.length;
+  if (leagueCount === undefined) {
+    return { leagueCount: 0, leaguesLoaded: false, leaguesUnavailable: true };
+  }
+  return { leagueCount, leaguesLoaded: true, leaguesUnavailable: false };
+}
 
 function readOverviewCache(entryId: number | undefined, event: number | undefined): OverviewCache | null {
   if (!entryId || !event) {
@@ -47,6 +63,7 @@ Page({
     teamBrief: null as MyFplTeamBrief | null,
     leagueCount: 0,
     leaguesLoaded: false,
+    leaguesUnavailable: false,
     eventContextAvailable: false,
     offline: false,
     error: ""
@@ -91,7 +108,7 @@ Page({
   async loadOverview(forceRefresh = false) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", leaguesUnavailable: false });
 
     const context = await getMyFplContext(forceRefresh);
     if (this.isStale(requestId)) return;
@@ -100,7 +117,12 @@ Page({
     const event = context.currentEvent ?? context.nextEvent ?? 0;
     const cached = readOverviewCache(context.entryId, event);
     if (cached) {
-      this.setData({ teamBrief: cached.teamBrief, leagueCount: cached.leagueCount });
+      this.setData({
+        teamBrief: cached.teamBrief,
+        ...(cached.leagueCount === undefined
+          ? {}
+          : { leagueCount: cached.leagueCount, leaguesLoaded: true })
+      });
     }
 
     if (!context.eventContextAvailable) {
@@ -123,7 +145,6 @@ Page({
     const phase = deriveMyFplPhase({
       currentEvent: context.currentEvent,
       nextEvent: context.nextEvent,
-      nextUtcDeadline: context.utcDeadline,
       now: Date.now(),
       snapshotState
     });
@@ -144,7 +165,12 @@ Page({
     this.syncPrincipalState();
 
     if (!context.entryId) {
-      this.setData({ teamBrief: null, leagueCount: 0, leaguesLoaded: true });
+      this.setData({
+        teamBrief: null,
+        leagueCount: 0,
+        leaguesLoaded: true,
+        leaguesUnavailable: false
+      });
       return;
     }
 
@@ -158,24 +184,23 @@ Page({
     if (brief === null && leagues === null) {
       // Total failure: keep last-good and surface a retryable data state.
       this.setData({
-        leaguesLoaded: true,
+        ...resolveOverviewLeagueState(null, cached?.leagueCount),
         error: cached ? "刷新失败，当前显示上次成功结果" : "加载失败，请稍后重试"
       });
       return;
     }
     const nextBrief = brief ?? cached?.teamBrief ?? null;
-    const nextLeagueCount = leagues ? leagues.length : cached?.leagueCount ?? 0;
+    const leagueState = resolveOverviewLeagueState(leagues, cached?.leagueCount);
     this.setData({
       teamBrief: nextBrief,
-      leagueCount: nextLeagueCount,
-      leaguesLoaded: true
+      ...leagueState
     });
     try {
       wx.setStorageSync(OVERVIEW_CACHE_KEY, {
         entryId: context.entryId,
         event,
         teamBrief: nextBrief,
-        leagueCount: nextLeagueCount,
+        ...(leagueState.leaguesLoaded ? { leagueCount: leagueState.leagueCount } : {}),
         storedAt: Date.now()
       } satisfies OverviewCache);
     } catch { /* cache is best effort */ }

@@ -64,7 +64,13 @@ test("a total overview secondary failure settles the league module", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   assert.match(
     overview,
-    /if \(brief === null && leagues === null\)[\s\S]*leaguesLoaded: true/,
-    "terminal failure keeps last-good values but stops the loading label"
+    /if \(brief === null && leagues === null\)[\s\S]*resolveOverviewLeagueState\(null, cached\?\.leagueCount\)/,
+    "terminal failure renders cached availability or an explicit unavailable state"
   );
+});
+
+test("overview never classifies a current event with the following deadline", () => {
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  assert.doesNotMatch(overview, /nextUtcDeadline:\s*context\.utcDeadline/);
+  assert.match(overview, /snapshotState\s*\n\s*\}\);/);
 });

@@ -22,7 +22,7 @@
     <view class="module" bindtap="onOpenLeagues">
       <view>
         <view class="module-title">我的联赛</view>
-        <view class="module-subtitle">{{leaguesLoaded ? (leagueCount > 0 ? leagueCount + ' 个官方联赛' : '暂无官方联赛') : '加载中'}}</view>
+        <view class="module-subtitle">{{leaguesUnavailable ? '暂时无法读取' : (leaguesLoaded ? (leagueCount > 0 ? leagueCount + ' 个官方联赛' : '暂无官方联赛') : '加载中')}}</view>
       </view>
       <text class="module-arrow">查看</text>
     </view>
