@@ -68,8 +68,11 @@ Page({
       this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [] });
       return true;
     }
-    this.setData({ startEvent: gw });
-    const windowKey = `${season || "unknown"}:${gw}:${this.data.horizon}`;
+    // Keep an explicitly selected historical window across same-season
+    // context refreshes. Only a first load or rollover defaults to current GW.
+    const startEvent = this.loadedSeason ? Math.max(1, Number(this.data.startEvent) || gw) : gw;
+    this.setData({ startEvent });
+    const windowKey = `${season || "unknown"}:${startEvent}:${this.data.horizon}`;
     if (this.teams.length && this.loadedWindowKey === windowKey) {
       this.rebuild();
     } else {

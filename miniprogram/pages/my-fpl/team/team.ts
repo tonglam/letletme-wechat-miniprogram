@@ -474,7 +474,7 @@ Page({
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.phaseBannerRequestId += 1;
     this.setData({ event: event.detail.value, phaseBanner: "", hasTeamData: false });
-    this.loadData();
+    this.loadData(true);
   },
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
@@ -493,7 +493,7 @@ Page({
   },
 
   onRetry() {
-    this.loadData();
+    this.loadData(true);
   },
 
   onEmptyAction() {
@@ -501,7 +501,7 @@ Page({
       goToEntrySearch();
       return;
     }
-    this.loadData();
+    this.loadData(true);
   }
 });
 

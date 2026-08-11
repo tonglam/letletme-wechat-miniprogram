@@ -241,6 +241,7 @@ Page({
   probing: false,
   networkOnline: true,
   currentEventId: 0,
+  loadedSeason: undefined as string | undefined,
   pageVisible: false,
   hasShown: false,
 
@@ -261,6 +262,7 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     this.currentEventId = Number(app.globalData.gw) || 0;
+    this.loadedSeason = app.globalData.season || undefined;
     if (!Number(app.globalData.currentGw) && this.currentEventId && !isValidStatus(storedStatus)) {
       // Preseason/offseason with no explicit user choice: the next scheduled
       // event is the meaningful surface, not an empty playing list.
@@ -330,7 +332,10 @@ Page({
       if (!this.pageVisible) return;
     }
     const nextEventId = Number(app.globalData.gw) || 0;
-    if (nextEventId && nextEventId !== this.currentEventId) {
+    const nextSeason = app.globalData.season || undefined;
+    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    if (nextSeason) this.loadedSeason = nextSeason;
+    if (seasonChanged || (nextEventId && nextEventId !== this.currentEventId)) {
       this.liveRefresh?.stop();
       // The request key is otherwise only the status, which can be unchanged
       // across a GW rollover. Detach and invalidate the old event request

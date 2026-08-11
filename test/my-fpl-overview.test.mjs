@@ -61,6 +61,11 @@ test("overview cache accepts the stable offseason event identity", () => {
   const cached = overviewModule.readOverviewCache(123, 0, "2026-27");
   assert.equal(cached?.teamBrief?.overallPoints, 2400);
   assert.equal(cached?.leagueCount, 5);
+  assert.equal(
+    overviewModule.readOverviewCache(123, 0, undefined)?.teamBrief?.overallPoints,
+    2400,
+    "event 0 can be restored when cold-start context has no season"
+  );
 });
 
 test("NO_FOLLOW primary goes to team search, never to a personal page", () => {

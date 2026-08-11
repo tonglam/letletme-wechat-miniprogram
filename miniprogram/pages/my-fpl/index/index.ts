@@ -72,17 +72,20 @@ export function readOverviewCache(
 ): OverviewCache | null {
   // Event 0 is the stable OFFSEASON identity (valid context with no current
   // or next event), not a missing context.
-  if (!entryId || event === undefined || !season) {
+  if (!entryId || event === undefined || (!season && event !== 0)) {
     return null;
   }
   try {
     const cached = wx.getStorageSync(OVERVIEW_CACHE_KEY) as OverviewCache | undefined;
     // Same-context only: last-good never crosses principal, season, or event.
+    // If event context is unavailable during a cold offseason launch, event 0
+    // is still safe to match against the stored event-0 identity; the cache's
+    // own season remains the only season evidence available offline.
     if (
       cached
       && cached.entryId === entryId
-      && cached.season === season
       && cached.event === event
+      && (cached.season === season || (event === 0 && season === undefined))
     ) {
       return cached;
     }
