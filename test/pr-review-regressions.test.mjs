@@ -343,10 +343,11 @@ test("historical Live selections reset when the season changes", () => {
   assert.match(entry, /eventContextChanged && \(seasonChanged \|\| wasCurrentEvent\)/);
   assert.match(entry, /error: nextEventId > 0 \? "" : "当前赛季暂无实时比赛周"/);
   assert.match(entry, /const currentGw = Math\.max\(0, Number\(app\.globalData\.gw\)/);
-  assert.match(entry, /if \(currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*当前赛季暂无实时比赛周/);
+  assert.match(entry, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*当前赛季暂无实时比赛周/);
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(tournament, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
   assert.match(tournament, /this\.tournamentListRequestId \+= 1[\s\S]*nextEventId === 0/);
+  assert.match(tournament, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadTournaments/);
 });
 
 test("first personal paints bypass previous-season event and summary caches", () => {

@@ -359,7 +359,7 @@ Page({
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
-    if (currentGw > 0) {
+    if (!this.data.entryId || currentGw > 0) {
       this.loadTournaments(false);
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });

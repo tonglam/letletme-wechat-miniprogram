@@ -151,7 +151,7 @@ Page({
     // onShow can run while initAppData is still pending. Re-arm here once the
     // entry/event context exists so an initial failure still recovers by poll.
     this.liveRefresh?.sync();
-    if (currentGw > 0) {
+    if (!this.data.entryId || currentGw > 0) {
       this.loadData({ includeTransfers: true });
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
