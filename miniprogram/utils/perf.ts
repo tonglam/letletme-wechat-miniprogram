@@ -42,8 +42,16 @@ export interface LiveTransitionRecord {
   ts: number;
 }
 
+export interface RenderCommitRecord {
+  surface: "home-fixtures";
+  itemCount: number;
+  duration: number;
+  ts: number;
+}
+
 export interface StoredPerf {
   apiRecords: ApiRecord[];
+  renderCommits?: RenderCommitRecord[];
   liveTransitions?: LiveTransitionRecord[];
   myFplVisits?: MyFplVisitRecord[];
   competitionVisits?: CompetitionVisitRecord[];
@@ -144,6 +152,16 @@ export function recordApi(
   flush();
 }
 
+export function recordRenderCommit(record: Omit<RenderCommitRecord, "ts">): void {
+  const data = load();
+  if (!Array.isArray(data.renderCommits)) data.renderCommits = [];
+  if (data.renderCommits.length >= MAX_RECORDS) {
+    data.renderCommits.splice(0, data.renderCommits.length - MAX_RECORDS + 1);
+  }
+  data.renderCommits.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function recordLiveTransition(record: Omit<LiveTransitionRecord, "ts">): void {
   const data = load();
   if (!Array.isArray(data.liveTransitions)) data.liveTransitions = [];
@@ -189,6 +207,7 @@ export function getPerf(): StoredPerf {
   return {
     ...data,
     apiRecords: data.apiRecords.slice(),
+    renderCommits: (data.renderCommits ?? []).slice(),
     liveTransitions: (data.liveTransitions ?? []).slice(),
     myFplVisits: (data.myFplVisits ?? []).slice(),
     competitionVisits: (data.competitionVisits ?? []).slice(),
@@ -199,6 +218,7 @@ export function getPerf(): StoredPerf {
 export function clearPerf(): void {
   _cache = {
     apiRecords: [],
+    renderCommits: [],
     liveTransitions: [],
     myFplVisits: [],
     competitionVisits: [],

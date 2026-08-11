@@ -89,6 +89,22 @@ test("Home entry errors retain a team-switch escape", () => {
   );
 });
 
+test("Home commits Fixtures before starting secondary network reads", () => {
+  const home = source("miniprogram/pages/home/index/index.ts");
+  const fixtureResult = home.indexOf("const fixtureResult = await fixtureTask");
+  const fixtureCommit = home.indexOf("await new Promise<void>", fixtureResult);
+  const entryTask = home.indexOf("const entryTask", fixtureCommit);
+  const priceTask = home.indexOf("const priceTask", fixtureCommit);
+  const noticeTask = home.indexOf("void this.loadNotice()", fixtureCommit);
+
+  assert.ok(fixtureResult >= 0);
+  assert.ok(fixtureCommit > fixtureResult);
+  assert.ok(entryTask > fixtureCommit);
+  assert.ok(priceTask > fixtureCommit);
+  assert.ok(noticeTask > fixtureCommit);
+  assert.ok(home.indexOf("await this.loadPage(true)") < home.indexOf("await refreshEventAndDeadline()"));
+});
+
 test("empty fixture directories clear previously composed cards", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(fixtures, /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/);
@@ -273,6 +289,8 @@ test("league handoff returns bypass the cached official league list", () => {
 test("fixture resume reloads instead of relabeling payload across seasons", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   const service = source("miniprogram/services/fixture.service.ts");
+  const common = source("miniprogram/services/common.service.ts");
+  const home = source("miniprogram/pages/home/index/index.ts");
   assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false\)/);
   assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false\)/);
   assert.match(fixtures, /await this\.load\(seasonChanged\)/);
@@ -280,6 +298,14 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
   assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
   assert.match(service, /eventFixtures\(eventId:/);
+  assert.match(service, /query CoreEventFixtureSchedule/);
+  assert.doesNotMatch(common, /query EventFixtures/);
+  assert.match(home, /getCoreEventFixtureSchedule/);
+  assert.ok(
+    home.indexOf("const fixtureResult = await fixtureTask") <
+      home.indexOf("const [entry, priceChanges, gameweekStats] = await Promise.all"),
+    "the fixture response releases the first screen before auxiliary Home data settles"
+  );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
   assert.match(service, /cacheVariant: season \? `season:\$\{season\}` : "season:unknown"/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);

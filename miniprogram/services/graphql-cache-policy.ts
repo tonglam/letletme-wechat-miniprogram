@@ -45,7 +45,7 @@ export const GRAPHQL_CACHE_POLICIES: Record<GraphQLCachePolicyName, GraphQLCache
 const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   CurrentEvent: { authMode: "public", cachePolicy: "deadline" },
   CurrentEventInfo: { authMode: "public", cachePolicy: "deadline" },
-  EventFixtures: { authMode: "public", cachePolicy: "fixtures" },
+  CoreEventFixtureSchedule: { authMode: "public", cachePolicy: "fixtures" },
   FixtureWindow: { authMode: "public", cachePolicy: "fixtures" },
   MiniProgramNotice: { authMode: "public", cachePolicy: "notice" },
   Teams: { authMode: "public", cachePolicy: "team-directory" },
