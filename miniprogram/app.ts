@@ -42,11 +42,13 @@ App<IAppOption>({
   },
 
   onError(error: string) {
-    console.error("[app] uncaught error:", error);
+    wx.reportError?.(`[app] uncaught error: ${error}`);
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
-    console.error("[app] unhandled rejection:", event && event.reason);
+    wx.reportError?.(
+      `[app] unhandled rejection: ${event?.reason ? JSON.stringify(event.reason) : String(event?.reason)}`
+    );
   },
 
   onPageNotFound() {
