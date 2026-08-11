@@ -41,12 +41,18 @@ App<IAppOption>({
     this.purgeExpiredGraphQLCache();
   },
 
+  reportError(message: string) {
+    (wx as unknown as { reportError?: (message: string) => void }).reportError?.(message);
+  },
+
   onError(error: string) {
-    console.error("[app] uncaught error:", error);
+    this.reportError(`[app] uncaught error: ${error}`);
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
-    console.error("[app] unhandled rejection:", event && event.reason);
+    this.reportError(
+      `[app] unhandled rejection: ${event?.reason ? JSON.stringify(event.reason) : String(event?.reason)}`
+    );
   },
 
   onPageNotFound() {
