@@ -22,6 +22,6 @@ export const storageKeys = {
 
 export const storagePrefixes = {
   graphqlCache: "gql:",
-  graphqlPublicCache: "gql:public:",
-  graphqlSessionCache: "gql:session:"
+  graphqlPublicCache: "gql:v2:public:",
+  graphqlSessionCache: "gql:v2:session:"
 } as const;

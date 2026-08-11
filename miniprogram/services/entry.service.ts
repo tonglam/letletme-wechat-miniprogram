@@ -136,7 +136,7 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
 
 export async function getEntryInfo(entry: number, forceRefresh = false): Promise<EntryInfo> {
   const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
-    cacheTtl: 3600 * 1000,
+    cachePolicy: "reporting",
     forceRefresh
   });
   const result = mapGraphQLEntry(data.entry);
@@ -148,7 +148,7 @@ export async function getEntryInfo(entry: number, forceRefresh = false): Promise
 
 export async function getEntryLeagueInfo(entry: number, forceRefresh = false): Promise<EntryLeague[]> {
   const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
-    cacheTtl: 3600 * 1000,
+    cachePolicy: "reporting",
     forceRefresh
   });
   return (data.entryLeagues || []).map((league) => ({
@@ -223,9 +223,6 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
-const TRANSFERS_HISTORY_CACHE_TTL_MS = 30 * 60 * 1000;
-const LIVE_EVENT_TRANSFERS_CACHE_TTL_MS = 30 * 1000;
-
 export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
   // The history payload covers the live gameweek too: while the deadline is
   // open the manager can still make moves, so current-GW views must churn
@@ -241,7 +238,7 @@ export async function getEntryEventTransfers(entry: number, event: number, force
     // live view, and a memory-only live write could never replace a
     // persisted stale entry.
     cacheVariant: isLiveEvent ? "live" : "history",
-    cacheTtl: isLiveEvent ? LIVE_EVENT_TRANSFERS_CACHE_TTL_MS : TRANSFERS_HISTORY_CACHE_TTL_MS,
+    cachePolicy: isLiveEvent ? "live" : "reporting",
     forceRefresh
   });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);
@@ -264,7 +261,7 @@ export async function getEntryAllTransfers(entry: number, forceRefresh = false):
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
     // Same freshness class as historical per-event views: share their entry.
     cacheVariant: "history",
-    cacheTtl: 30 * 60 * 1000,
+    cachePolicy: "reporting",
     forceRefresh
   });
   return (data.entryTransferHistory || []).flatMap((gw) => gw.transfers.map((t) => ({

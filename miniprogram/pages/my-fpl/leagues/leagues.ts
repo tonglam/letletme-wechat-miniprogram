@@ -59,8 +59,8 @@ Page({
 
   async onLoad() {
     await waitForAuthoritativeFollow();
-    try { await getApp<IAppOption>().initAppData(true); } catch { /* load without cache identity */ }
-    void this.loadLeagues(true);
+    try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
+    void this.loadLeagues(false);
   },
 
   async onShow() {
@@ -68,8 +68,8 @@ Page({
     this.hasShown = true;
     if (resumed) {
       // Re-read the follow pointer after a handoff or team switch (§9).
-      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-      void this.loadLeagues(true);
+      try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
+      void this.loadLeagues(false);
     }
   },
 

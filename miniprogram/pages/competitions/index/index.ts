@@ -62,8 +62,8 @@ Page({
 
   async onLoad() {
     await waitForAuthoritativeFollow();
-    try { await getApp<IAppOption>().initAppData(true); } catch { /* load without cache identity */ }
-    void this.loadList(true);
+    try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
+    void this.loadList(false);
   },
 
   async onShow() {
@@ -71,8 +71,8 @@ Page({
     this.hasShown = true;
     if (resumed) {
       // Website return / team switch: principal and list revalidate (§10.1).
-      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-      void this.loadList(true);
+      try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
+      void this.loadList(false);
     }
   },
 

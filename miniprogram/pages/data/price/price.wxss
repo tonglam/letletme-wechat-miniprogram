@@ -274,3 +274,16 @@
   font-size: 24rpx;
   text-align: center;
 }
+.load-more-error {
+  margin-top: 18rpx;
+  color: var(--warning, #924a07);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.load-more-button {
+  margin: 20rpx auto 0;
+  border-color: var(--line, #ddd4de);
+  background: var(--card, #fff);
+  color: var(--ink, #301333);
+}

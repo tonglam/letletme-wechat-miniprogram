@@ -145,7 +145,7 @@ test("match cold start waits for the current event before arming recovery", asyn
   assert.deepEqual(calls, ["loading", "init", "sync:33", "load:33"]);
 });
 
-test("match cold start selects the scheduled next round during preseason", async () => {
+test("match cold start selects the schema-backed not-started bucket during preseason", async () => {
   const app = {
     globalData: { gw: 1, currentGw: 0 },
     initAppData: async () => {}
@@ -170,8 +170,8 @@ test("match cold start selects the scheduled next round during preseason", async
   await matchPage.onLoad.call(context);
 
   assert.equal(context.currentEventId, 1);
-  assert.equal(context.data.status, "next_event");
-  assert.equal(context.data.activeStatusLabel, "下轮");
+  assert.equal(context.data.status, "not_start");
+  assert.equal(context.data.activeStatusLabel, "未开始");
 });
 
 test("match status changes re-arm polling before the first request", () => {
@@ -291,7 +291,7 @@ test("entry resume revalidates current-gameweek transfers independently", async 
 
   await entryPage.onShow.call(context);
 
-  assert.deepEqual(calls, ["init:true", "sync", "transfers:123:33:false"]);
+  assert.deepEqual(calls, ["init:false", "sync", "transfers:123:33:false"]);
 });
 
 test("entry resume drops a historical selection after a season rollover", async () => {
@@ -335,7 +335,7 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
   assert.equal(context.liveRequestKey, "");
-  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
+  assert.deepEqual(calls, ["init:false", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 
 test("entry resume clears live data when a new season has no event yet", async () => {
@@ -375,7 +375,7 @@ test("entry resume clears live data when a new season has no event yet", async (
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
   assert.equal(context.liveRequestKey, "");
-  assert.deepEqual(calls, ["init:true", "stop", "sync:0", "display"]);
+  assert.deepEqual(calls, ["init:false", "stop", "sync:0", "display"]);
 });
 
 test("entry principal changes clear old live data and restart the followed team", () => {
@@ -482,7 +482,7 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.selectedOwnershipTeam, null);
   assert.equal(context.data.selectedTeamExposure, null);
   assert.equal(context.failedEntryCount, 0);
-  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "tournaments:1:true", "display"]);
+  assert.deepEqual(calls, ["init:false", "stop", "sync:1", "tournaments:1:true", "display"]);
 });
 
 test("tournament Website handoff reports clipboard failures", async () => {
@@ -651,10 +651,10 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.equal(context.data.event, 34);
   assert.equal(context.data.maxGw, 34);
   assert.equal(context.data.hasTeamData, false);
-  assert.deepEqual(calls, ["init:true", "load:true"]);
+  assert.deepEqual(calls, ["init:false", "load:true"]);
 });
 
-test("team first load force-refreshes resident event context", async () => {
+test("team first load honors deadline-derived event context freshness", async () => {
   const calls = [];
   globalThis.getApp = () => ({
     globalData: { gw: 33 },
@@ -663,7 +663,7 @@ test("team first load force-refreshes resident event context", async () => {
 
   await teamPage.ensureAppDataReady.call({ ...teamPage });
 
-  assert.deepEqual(calls, [true]);
+  assert.deepEqual(calls, [false]);
 });
 
 test("team season rollover clears retained transfers before reloading", async () => {
@@ -699,7 +699,7 @@ test("team season rollover clears retained transfers before reloading", async ()
   assert.equal(context.data.maxGw, 1);
   assert.deepEqual(context.data.transferRows, []);
   assert.equal(context.data.hasTransfers, false);
-  assert.deepEqual(calls, ["init:true", "load:true"]);
+  assert.deepEqual(calls, ["init:false", "load:true"]);
 });
 
 test("team principal changes clear the old view before restarting", () => {

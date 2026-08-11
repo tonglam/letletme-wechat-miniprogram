@@ -74,7 +74,11 @@
   <!-- API Breakdown -->
   <view wx:if="{{hasData}}" class="section card">
     <view class="card-heading">API 接口</view>
-    <view class="muted api-summary">共 {{totalApiCalls}} 次请求，按平均耗时排序</view>
+    <view class="muted api-summary">
+      逻辑 {{totalApiCalls}} 次 · 网络 {{networkApiCalls}} 次 · 命中率 {{cacheHitRate}}%
+    </view>
+    <view class="muted api-summary">网络 p50 {{networkP50}}ms · p95 {{networkP95}}ms</view>
+    <view wx:if="{{failedOperations}}" class="muted api-summary">失败 operation：{{failedOperations}}</view>
     <app-empty-state wx:if="{{apiGroups.length === 0}}" title="还没有 API 请求样本" description="打开一个需要加载数据的页面后再回来查看" />
     <view wx:for="{{apiGroups}}" wx:key="name" class="api-row">
       <view class="api-name">{{item.name}}</view>

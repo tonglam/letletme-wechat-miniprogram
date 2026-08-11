@@ -101,12 +101,9 @@ function clearStoredGraphQLSessionCache(): void {
   } catch {}
 }
 
-// In-memory mirror of the persisted session so hot paths (every GraphQL
-// request) never hit synchronous storage. `undefined` = unknown, re-read
-// storage on next access; `null` = storage was checked and has no session.
-// clearApiSession resets to `undefined` (not `null`) so the next read
-// reconciles with storage — one extra sync read per sign-out, and resilient
-// to any out-of-band storage write.
+// In-memory mirror of the platform-encrypted session so hot paths (every
+// GraphQL request) never touch storage. `undefined` = encrypted storage has
+// not been restored yet; `null` = restoration found no usable session.
 let sessionMemory: { token: string; expiresAt: string } | null | undefined;
 
 // Bumped on every session clear so a login round trip that was in flight
@@ -114,8 +111,80 @@ let sessionMemory: { token: string; expiresAt: string } | null | undefined;
 // afterwards.
 let sessionEpoch = 0;
 
-function storeApiSession(session: ApiSession): ApiSession {
-  const previousToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
+function supportsEncryptedSessionStorage(): boolean {
+  try {
+    const api = wx as unknown as { canIUse?: (schema: string) => boolean };
+    return Boolean(
+      api.canIUse?.("setStorage.object.encrypt")
+      && api.canIUse?.("getStorage.object.encrypt")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function readEncryptedSessionToken(): Promise<string | null> {
+  if (!supportsEncryptedSessionStorage()) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    wx.getStorage({
+      key: storageKeys.apiSessionToken,
+      encrypt: true,
+      success(result: WechatMiniprogram.GetStorageSuccessCallbackResult) {
+        resolve(typeof result.data === "string" ? result.data : null);
+      },
+      fail() {
+        resolve(null);
+      }
+    } as WechatMiniprogram.GetStorageOption);
+  });
+}
+
+async function persistEncryptedSessionToken(token: string): Promise<boolean> {
+  // Remove a legacy synchronous value before writing the encrypted row. If
+  // encryption is unavailable or fails, the session remains memory-only.
+  try { wx.removeStorageSync(storageKeys.apiSessionToken); } catch {}
+  if (!supportsEncryptedSessionStorage()) return false;
+  return new Promise((resolve) => {
+    wx.setStorage({
+      key: storageKeys.apiSessionToken,
+      data: token,
+      encrypt: true,
+      success() {
+        resolve(true);
+      },
+      fail() {
+        try { wx.removeStorageSync(storageKeys.apiSessionToken); } catch {}
+        resolve(false);
+      }
+    } as WechatMiniprogram.SetStorageOption);
+  });
+}
+
+/** Restores an encrypted credential and upgrades legacy plaintext in place. */
+export async function restoreApiSessionCredentials(): Promise<void> {
+  if (sessionMemory !== undefined) return;
+  const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
+  const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
+  const encryptedToken = await readEncryptedSessionToken();
+  const token = encryptedToken || legacyToken || "";
+
+  if (!isStoredSessionUsable(token, expiresAt || "")) {
+    clearSessionCredentials();
+    sessionMemory = null;
+    return;
+  }
+
+  sessionMemory = { token, expiresAt: expiresAt || "" };
+  if (legacyToken) {
+    const persisted = await persistEncryptedSessionToken(token);
+    if (!persisted) {
+      try { wx.removeStorageSync(storageKeys.apiSessionExpiresAt); } catch {}
+    }
+  }
+}
+
+async function storeApiSession(session: ApiSession): Promise<ApiSession> {
+  const previousToken = sessionMemory?.token;
   const previousEntryId = Number(wx.getStorageSync(storageKeys.entryId));
   const nextEntryId = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
     ? session.profile.fplEntryId
@@ -126,7 +195,6 @@ function storeApiSession(session: ApiSession): ApiSession {
   }
 
   sessionMemory = { token: session.token, expiresAt: session.expiresAt };
-  wx.setStorageSync(storageKeys.apiSessionToken, session.token);
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
   // Every persisted session carries a freshly fetched authoritative profile,
   // so the 24h revalidation throttle keys off this write.
@@ -145,6 +213,10 @@ function storeApiSession(session: ApiSession): ApiSession {
   // A profile without a verified entry clears nothing: the locally followed
   // team is a display-only preference (public FPL data), and the sync is
   // best-effort — gaps between web and local are allowed.
+  const persisted = await persistEncryptedSessionToken(session.token);
+  if (!persisted) {
+    try { wx.removeStorageSync(storageKeys.apiSessionExpiresAt); } catch {}
+  }
   return session;
 }
 
@@ -165,11 +237,9 @@ export function clearApiSession(): void {
 }
 
 export function getApiSessionToken(): string | null {
-  if (sessionMemory === undefined) {
-    const token = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
-    const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
-    sessionMemory = token || expiresAt ? { token: token || "", expiresAt: expiresAt || "" } : null;
-  }
+  // Cold starts restore the encrypted value asynchronously before callers
+  // may read it. Never fall back to a synchronous plaintext token read.
+  if (sessionMemory === undefined) return null;
   if (!sessionMemory) return null;
   if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
     clearSessionCredentials();

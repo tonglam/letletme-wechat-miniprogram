@@ -167,7 +167,7 @@ interface TournamentSelectionStatsResponse {
 
 export async function getEntryPointsRaceTournament(entry: number, forceRefresh = false): Promise<TournamentOption[]> {
   const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
-    cacheTtl: 5 * 60 * 1000,
+    cachePolicy: "reporting",
     forceRefresh
   });
   return (data.entryTournaments || []).map((t) => ({ id: t.id, name: t.name }));
@@ -180,7 +180,7 @@ export async function getEntryPointsRaceTournament(entry: number, forceRefresh =
  */
 export async function getEntryAllTournaments(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
   const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
-    cacheTtl: 5 * 60 * 1000,
+    cachePolicy: "reporting",
     forceRefresh
   });
   return data.entryTournaments || [];

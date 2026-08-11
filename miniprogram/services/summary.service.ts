@@ -1,7 +1,56 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { GraphQLReadMeta, GraphQLErrorInfo } from "./graphql.service";
 import type { GameweekOverallSummary } from "../models/summary";
 
-const EVENT_OVERALL_RESULT = `
+export const MINI_GAMEWEEK_SUMMARY_QUERY = `
+  query MiniGameweekSummary($eventId: Int!, $limit: Int!) {
+    eventOverallResult {
+      event
+      averageScore
+      highestScore
+      highestScoringEntry
+      transfersMade
+      mostViceCaptainedPlayer { id webName }
+      mostTransferInPlayer { id webName }
+      mostSelectedPlayer { id webName }
+      mostCaptainedPlayer { id webName }
+      topElementInfo {
+        element
+        points
+        teamShortName
+        player { ...MiniSummaryPlayerFields }
+      }
+      chipPlays { chipName numberPlayed }
+    }
+    eventLive(eventId: $eventId) {
+      dreamTeam {
+        player { ...MiniSummaryPlayerFields }
+        totalPoints
+      }
+      topPerformers(limit: 20) {
+        player { ...MiniSummaryPlayerFields }
+        totalPoints
+      }
+    }
+    topTransfersIn(eventId: $eventId, limit: $limit) {
+      transfersInEvent
+      player { ...MiniSummaryPlayerFields }
+    }
+    topTransfersOut(eventId: $eventId, limit: $limit) {
+      transfersOutEvent
+      player { ...MiniSummaryPlayerFields }
+    }
+  }
+
+  fragment MiniSummaryPlayerFields on Player {
+    id
+    webName
+    team { name shortName }
+    position
+  }
+`;
+
+const HOME_EVENT_OVERALL_RESULT = `
   query EventOverallResult {
     eventOverallResult {
       event
@@ -9,94 +58,17 @@ const EVENT_OVERALL_RESULT = `
       highestScore
       highestScoringEntry
       transfersMade
-      mostViceCaptainedPlayer {
-        id
-        webName
-      }
-      mostTransferInPlayer {
-        id
-        webName
-      }
-      mostSelectedPlayer {
-        id
-        webName
-      }
-      mostCaptainedPlayer {
-        id
-        webName
-      }
+      mostViceCaptainedPlayer { id webName }
+      mostTransferInPlayer { id webName }
+      mostSelectedPlayer { id webName }
+      mostCaptainedPlayer { id webName }
       topElementInfo {
         element
         points
         teamShortName
-        player {
-          id
-          webName
-          team {
-            name
-            shortName
-          }
-        }
+        player { id webName team { name shortName } }
       }
-      chipPlays {
-        chipName
-        numberPlayed
-      }
-    }
-  }
-`;
-
-const EVENT_DREAM_TEAM = `
-  query EventDreamTeam($eventId: Int!) {
-    eventLive(eventId: $eventId) {
-      dreamTeam {
-        player {
-          id
-          webName
-          team { shortName name }
-          position
-        }
-        totalPoints
-      }
-    }
-  }
-`;
-
-const EVENT_ELITE_ELEMENTS = `
-  query EventEliteElements($eventId: Int!) {
-    eventLive(eventId: $eventId) {
-      topPerformers(limit: 20) {
-        player {
-          id
-          webName
-          team { shortName name }
-          position
-        }
-        totalPoints
-      }
-    }
-  }
-`;
-
-const EVENT_OVERALL_TRANSFERS = `
-  query EventOverallTransfers($eventId: Int!, $limit: Int!) {
-    topTransfersIn(eventId: $eventId, limit: $limit) {
-      transfersInEvent
-      player {
-        id
-        webName
-        team { shortName name }
-        position
-      }
-    }
-    topTransfersOut(eventId: $eventId, limit: $limit) {
-      transfersOutEvent
-      player {
-        id
-        webName
-        team { shortName name }
-        position
-      }
+      chipPlays { chipName numberPlayed }
     }
   }
 `;
@@ -192,15 +164,6 @@ interface EventOverallResultResponse {
   eventOverallResult: GameweekOverallSummary | GameweekOverallSummary[] | null;
 }
 
-interface PlayerTeamsResponse {
-  [alias: string]: {
-    id: number;
-    team: {
-      shortName: string;
-    };
-  } | null;
-}
-
 interface GraphQLEventPlayer {
   player: {
     id: number;
@@ -213,21 +176,30 @@ interface GraphQLEventPlayer {
   transfersOutEvent?: number;
 }
 
-interface EventDreamTeamResponse {
+interface MiniGameweekSummaryResponse extends EventOverallResultResponse {
   eventLive: {
     dreamTeam: GraphQLEventPlayer[];
-  } | null;
-}
-
-interface EventEliteElementsResponse {
-  eventLive: {
     topPerformers: GraphQLEventPlayer[];
   } | null;
-}
-
-interface EventOverallTransfersResponse {
   topTransfersIn: GraphQLEventPlayer[];
   topTransfersOut: GraphQLEventPlayer[];
+}
+
+export interface MiniGameweekSummaryResult {
+  summary?: GameweekOverallSummary;
+  dreamTeam: unknown[];
+  elite: unknown[];
+  transfers: {
+    transfers_in: unknown[];
+    transfers_out: unknown[];
+  };
+  errors: {
+    summary: string;
+    dreamTeam: string;
+    elite: string;
+    transfers: string;
+  };
+  meta: GraphQLReadMeta;
 }
 
 export interface EntryEventPick {
@@ -353,12 +325,12 @@ function mapEventPlayer(row: GraphQLEventPlayer): Record<string, unknown> {
 }
 
 export async function getEntryTeamStatsEventResult(entry: number, event: number, forceRefresh = false): Promise<EntryEventResult | undefined> {
-  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
+  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event }, { cachePolicy: "reporting", forceRefresh });
   return data.entryEventResult || undefined;
 }
 
 export async function getEntryTeamStatsHistory(entry: number, forceRefresh = false): Promise<EntryHistoryPayload> {
-  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
+  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry }, { cachePolicy: "reporting", forceRefresh });
   const payload = data.entryHistory;
   return {
     results: payload?.results || [],
@@ -367,44 +339,129 @@ export async function getEntryTeamStatsHistory(entry: number, forceRefresh = fal
 }
 
 export async function getEntryTeamStatsTransfers(entry: number, forceRefresh = false): Promise<EntryGameweekTransfers[]> {
-  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cacheTtl: 30 * 60 * 1000, forceRefresh });
+  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cachePolicy: "reporting", forceRefresh });
   return data.entryTransferHistory || [];
 }
 
-export async function getGameweekOverallSummary(event: number): Promise<GameweekOverallSummary> {
-  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {});
-  const result = pickEventOverallResult(data.eventOverallResult, event);
-  if (!result) {
-    throw new Error(`GW${event} 暂时还没有总结数据`);
-  }
-  return enrichGameweekSummaryPlayers(result);
+function hasGraphQLError(
+  errors: GraphQLErrorInfo[],
+  rootField: string,
+  childField?: string
+): boolean {
+  return errors.some((error) => {
+    if (String(error.path?.[0] || "") !== rootField) return false;
+    return childField ? String(error.path?.[1] || "") === childField : true;
+  });
 }
 
-export async function getGameweekStatsForHome(event: number, forceRefresh = false): Promise<GameweekOverallSummary | undefined> {
-  const data = await graphqlRequest<EventOverallResultResponse>(EVENT_OVERALL_RESULT, {}, { cacheTtl: 30 * 60 * 1000, forceRefresh });
+function attachTeamNames(summary: GameweekOverallSummary): GameweekOverallSummary {
+  const record = summary as unknown as Record<string, unknown>;
+  [
+    "mostSelectedPlayer",
+    "mostCaptainedPlayer",
+    "mostViceCaptainedPlayer",
+    "mostTransferInPlayer"
+  ].forEach((key) => {
+    const player = record[key] as {
+      team?: { shortName?: string };
+      teamShortName?: string;
+    } | undefined;
+    if (player?.team?.shortName && !player.teamShortName) {
+      player.teamShortName = player.team.shortName;
+    }
+  });
+  return summary;
+}
+
+export async function getMiniGameweekSummary(
+  event: number,
+  forceRefresh = false
+): Promise<MiniGameweekSummaryResult> {
+  const result = await graphqlRead<MiniGameweekSummaryResponse>(
+    MINI_GAMEWEEK_SUMMARY_QUERY,
+    { eventId: event, limit: 10 },
+    {
+      authMode: "public",
+      cachePolicy: "historical",
+      cacheVariant: `event:${event}`,
+      forceRefresh
+    }
+  );
+  const data = result.data;
+  const summary = pickEventOverallResult(data.eventOverallResult, event);
+  const dreamTeam = (data.eventLive?.dreamTeam || []).map(mapEventPlayer);
+  const elite = (data.eventLive?.topPerformers || []).map(mapEventPlayer);
+  const transfersIn = (data.topTransfersIn || []).map(mapEventPlayer);
+  const transfersOut = (data.topTransfersOut || []).map(mapEventPlayer);
+
+  return {
+    summary: summary ? attachTeamNames(summary) : undefined,
+    dreamTeam,
+    elite,
+    transfers: {
+      transfers_in: transfersIn,
+      transfers_out: transfersOut
+    },
+    errors: {
+      summary: !summary || hasGraphQLError(result.errors, "eventOverallResult")
+        ? `GW${event} 暂时还没有总结数据`
+        : "",
+      dreamTeam: hasGraphQLError(result.errors, "eventLive", "dreamTeam")
+        ? "梦之队加载失败"
+        : "",
+      elite: hasGraphQLError(result.errors, "eventLive", "topPerformers")
+        ? "高分球员加载失败"
+        : "",
+      transfers: hasGraphQLError(result.errors, "topTransfersIn")
+        || hasGraphQLError(result.errors, "topTransfersOut")
+        ? "转会趋势加载失败"
+        : ""
+    },
+    meta: result.meta
+  };
+}
+
+export async function getGameweekOverallSummary(
+  event: number,
+  forceRefresh = false
+): Promise<GameweekOverallSummary> {
+  const result = await getMiniGameweekSummary(event, forceRefresh);
+  if (!result.summary) {
+    throw new Error(result.errors.summary || `GW${event} 暂时还没有总结数据`);
+  }
+  return result.summary;
+}
+
+export async function getGameweekStatsForHome(
+  event: number,
+  forceRefresh = false
+): Promise<GameweekOverallSummary | undefined> {
+  const data = await graphqlRequest<EventOverallResultResponse>(
+    HOME_EVENT_OVERALL_RESULT,
+    {},
+    {
+      authMode: "public",
+      cachePolicy: "reporting",
+      forceRefresh
+    }
+  );
   return pickEventOverallResult(data.eventOverallResult, event);
 }
 
 export async function getEventDreamTeam(event: number): Promise<unknown[]> {
-  const data = await graphqlRequest<EventDreamTeamResponse>(EVENT_DREAM_TEAM, { eventId: event });
-  return (data.eventLive?.dreamTeam || []).map(mapEventPlayer);
+  return (await getMiniGameweekSummary(event)).dreamTeam;
 }
 
 export async function getEventEliteElements(event: number): Promise<unknown[]> {
-  const data = await graphqlRequest<EventEliteElementsResponse>(EVENT_ELITE_ELEMENTS, { eventId: event });
-  return (data.eventLive?.topPerformers || []).map(mapEventPlayer);
+  return (await getMiniGameweekSummary(event)).elite;
 }
 
 export async function getEventOverallTransfers(event: number): Promise<unknown> {
-  const data = await graphqlRequest<EventOverallTransfersResponse>(EVENT_OVERALL_TRANSFERS, { eventId: event, limit: 10 });
-  return {
-    transfers_in: (data.topTransfersIn || []).map(mapEventPlayer),
-    transfers_out: (data.topTransfersOut || []).map(mapEventPlayer)
-  };
+  return (await getMiniGameweekSummary(event)).transfers;
 }
 
 export function refreshEventOverallSummary(event: number): Promise<unknown> {
-  return getGameweekOverallSummary(event);
+  return getMiniGameweekSummary(event, true);
 }
 
 function pickEventOverallResult(
@@ -420,46 +477,4 @@ function pickEventOverallResult(
   return list
     .filter((result) => typeof result.event === "number" && Number(result.event) <= event)
     .sort((a, b) => Number(b.event || 0) - Number(a.event || 0))[0];
-}
-
-async function enrichGameweekSummaryPlayers(summary: GameweekOverallSummary): Promise<GameweekOverallSummary> {
-  const players = [
-    summary.mostSelectedPlayer,
-    summary.mostCaptainedPlayer,
-    summary.mostViceCaptainedPlayer,
-    summary.mostTransferInPlayer,
-    summary.topElementInfo?.player
-  ].filter((player): player is NonNullable<typeof player> => Boolean(player?.id));
-  const ids = [...new Set(players.map((player) => Number(player.id)).filter((id) => Number.isInteger(id) && id > 0))];
-
-  if (ids.length === 0) {
-    return summary;
-  }
-
-  const variables = ids.reduce<Record<string, number>>((acc, id, index) => {
-    acc[`id${index}`] = id;
-    return acc;
-  }, {});
-  const fields = ids
-    .map((_, index) => `p${index}: player(id: $id${index}) { id team { shortName } }`)
-    .join("\n");
-  const variableDefs = ids.map((_, index) => `$id${index}: Int!`).join(", ");
-  const query = `query SummaryPlayerTeams(${variableDefs}) { ${fields} }`;
-  const data: Partial<PlayerTeamsResponse> = await graphqlRequest<PlayerTeamsResponse>(query, variables).catch(() => ({}));
-  const teamById = ids.reduce<Record<number, string>>((acc, id, index) => {
-    const teamShortName = data[`p${index}`]?.team?.shortName;
-    if (teamShortName) {
-      acc[id] = teamShortName;
-    }
-    return acc;
-  }, {});
-
-  players.forEach((player) => {
-    const teamShortName = teamById[Number(player.id)];
-    if (teamShortName) {
-      player.teamShortName = teamShortName;
-    }
-  });
-
-  return summary;
 }

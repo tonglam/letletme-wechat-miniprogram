@@ -32,17 +32,17 @@ Page({
   hasShown: false,
 
   async onLoad() {
-    await this.syncEventContext(true);
-    // A fresh page has no local season owner to compare. Bypass the
-    // seasonless service caches so a rollover cannot reuse prior-year data.
-    await this.load(true);
+    await this.syncEventContext(false);
+    // Season is part of fixture/team cache identity, so an ordinary first
+    // read can reuse fresh data without crossing a rollover.
+    await this.load(false);
   },
 
   async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
-    const seasonChanged = await this.syncEventContext(true);
+    const seasonChanged = await this.syncEventContext(false);
     // A normal cached read lets the fixture service's 30-minute TTL bound
     // staleness. A season rollover bypasses both fixture and team caches.
     await this.load(seasonChanged);

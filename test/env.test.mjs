@@ -65,3 +65,14 @@ test("develop endpoints support explicit local overrides", () => {
     globalThis.wx = previous;
   }
 });
+
+test("develop GraphQL defaults to the local Web proxy", () => {
+  const previous = globalThis.wx;
+  try {
+    installWx("develop", {});
+    assert.equal(getGraphQLEndpoint(), "http://localhost:3000/api/graphql");
+    assert.equal(getMiniProgramApiBase(), "http://localhost:3000/api/miniprogram");
+  } finally {
+    globalThis.wx = previous;
+  }
+});

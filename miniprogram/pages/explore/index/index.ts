@@ -52,7 +52,7 @@ Page({
 
   async refreshContext() {
     const app = getApp<IAppOption>();
-    try { await app.initAppData(true); } catch { /* retain the last known context, if any */ }
+    try { await app.initAppData(false); } catch { /* retain the last known context, if any */ }
     this.syncContext();
   },
 

@@ -14,7 +14,6 @@ import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGra
 // short-lived enough to stay process-local (graphql.service does not persist
 // sub-minute entries). Snapshot polling bypasses this cache when a new backend
 // revision is observed.
-const LIVE_CACHE_TTL_MS = 30 * 1000;
 
 export const LIVE_SNAPSHOT_QUERY = `
   query GetLiveSnapshot($eventId: Int!) {
@@ -165,7 +164,7 @@ export async function getLivePointsByEntrySnapshot(
 ): Promise<LiveSnapshotResult<LiveEntryResult>> {
   const variables = { eventId: event, entryId: entry };
   const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
-    cacheTtl: LIVE_CACHE_TTL_MS,
+    cachePolicy: "live",
     forceRefresh
   });
   const result = data.calcLivePointsByEntry;
@@ -206,10 +205,7 @@ export const LIVE_MATCHES_QUERY = `
       publishedAt
       checkedAt
     }
-    liveMatches(upcoming: true) {
-      nextEvent {
-        ...LiveMatchFields
-      }
+    liveMatches {
       notStarted {
         ...LiveMatchFields
       }
@@ -292,7 +288,6 @@ interface GraphQLMatchData {
 interface LiveMatchesResponse {
   liveSnapshot: LiveSnapshotStatus | null;
   liveMatches: {
-    nextEvent: GraphQLMatchData[];
     notStarted: GraphQLMatchData[];
     playing: GraphQLMatchData[];
     finished: GraphQLMatchData[];
@@ -322,7 +317,7 @@ export async function getLiveMatchByStatusSnapshot(
 ): Promise<LiveSnapshotResult<LiveMatch[]>> {
   const variables = {};
   const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
-    cacheTtl: LIVE_CACHE_TTL_MS,
+    cachePolicy: "live",
     forceRefresh
   });
   const result = data.liveMatches;
@@ -337,13 +332,9 @@ export async function getLiveMatchByStatusSnapshot(
     case "not_start":
       matches = result.notStarted.map(mapGraphQLMatch);
       break;
-    case "next_event":
-      matches = result.nextEvent.map(mapGraphQLMatch);
-      break;
     case "all":
     default:
       matches = [
-        ...result.nextEvent.map(mapGraphQLMatch),
         ...result.notStarted.map(mapGraphQLMatch),
         ...result.playing.map(mapGraphQLMatch),
         ...result.finished.map(mapGraphQLMatch)
@@ -434,7 +425,7 @@ export async function getLivePointsByTournamentSnapshot(
     eventId: numericId(event)
   };
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
-    cacheTtl: LIVE_CACHE_TTL_MS,
+    cachePolicy: "live",
     forceRefresh
   });
   const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);

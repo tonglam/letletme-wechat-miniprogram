@@ -1,26 +1,39 @@
 const STORAGE_KEY = "perf:v1";
+const MAX_API_RECORDS = 300;
 const MAX_RECORDS = 100;
+
+export type ApiRecordSource =
+  | "network"
+  | "memory"
+  | "storage"
+  | "in-flight"
+  | "stale";
 
 export interface ApiRecord {
   name: string;
+  operationName?: string;
   duration: number;
   ok: boolean;
+  source?: ApiRecordSource;
+  networkAttempted?: boolean;
+  cacheAgeBucket?: string;
   ts: number;
 }
 
-/**
- * Sanitized live-refresh telemetry (high-level design §13 subset).
- * Never carries tokens, email, openid, team names, or entry/competition IDs.
- */
+export interface ApiRecordDetails {
+  operationName?: string;
+  source?: ApiRecordSource;
+  networkAttempted?: boolean;
+  cacheAgeBucket?: string;
+}
+
 export interface LiveTransitionRecord {
   surface: "entry" | "match" | "tournament";
   season?: string;
   eventId?: number;
   isCurrentEvent?: boolean;
-  /** LiveSnapshotStatus.state observed by the probe. */
   snapshotState?: string;
   revisionChanged?: boolean;
-  /** LiveDisplayState entered by the page. */
   displayState?: string;
   coverageFailed?: number;
   retainedRowCount?: number;
@@ -39,11 +52,6 @@ export interface StoredPerf {
   launchTs?: number;
 }
 
-/**
- * Sanitized My FPL telemetry (high-level design §16, plan §9.1). Never
- * carries tokens, email, openid, team/league names, or the follow pointer —
- * entryId is deliberately absent.
- */
 export interface MyFplVisitRecord {
   surface: "overview" | "team" | "leagues";
   principalState?: string;
@@ -55,14 +63,9 @@ export interface MyFplVisitRecord {
   ts: number;
 }
 
-/**
- * Sanitized Competitions telemetry (high-level design §18, plan §8.1).
- * Competition names and IDs never enter a record; counts are bucketed.
- */
 export interface CompetitionVisitRecord {
   surface: "list";
   principalState?: string;
-  /** Contract generation serving the surface; "compat" until myCompetitions ships. */
   contractSource: "compat";
   listCountBucket?: "0" | "1" | "2-5" | "6-20" | ">20";
   cacheOutcome?: "fresh" | "last-good" | "miss";
@@ -71,16 +74,9 @@ export interface CompetitionVisitRecord {
   ts: number;
 }
 
-/**
- * Sanitized Explore telemetry (explore plan §9). Search text, team names,
- * and player names never enter a record — the high-level design §16 bars
- * full search text, and entity names are identifiers in disguise.
- */
 export interface ExploreVisitRecord {
   surface: "overview" | "fixtures";
-  /** Contract generation serving the surface; "compat" until exploreOverview ships. */
   contractSource: "compat";
-  /** Fixtures window start (gameweek number, not an identity). */
   eventId?: number;
   horizon?: 3 | 5;
   cacheOutcome?: "fresh" | "last-good" | "miss";
@@ -106,7 +102,7 @@ function load(): StoredPerf {
       _cache = val;
       return _cache;
     }
-  } catch { /* silent */ }
+  } catch {}
   _cache = { apiRecords: [] };
   return _cache;
 }
@@ -115,88 +111,100 @@ function flush(): void {
   if (!_cache) return;
   try {
     wx.setStorage({ key: STORAGE_KEY, data: _cache });
-  } catch { /* instrumentation must never break callers */ }
+  } catch {}
 }
 
 export function recordLaunch(duration: number): void {
-  const d = load();
-  d.launchDuration = duration;
-  d.launchTs = Date.now();
+  const data = load();
+  data.launchDuration = duration;
+  data.launchTs = Date.now();
   flush();
 }
 
-export function recordApi(name: string, duration: number, ok: boolean): void {
-  const d = load();
-  if (d.apiRecords.length >= MAX_RECORDS) {
-    d.apiRecords.splice(0, d.apiRecords.length - MAX_RECORDS + 1);
+export function recordApi(
+  name: string,
+  duration: number,
+  ok: boolean,
+  details: ApiRecordDetails = {}
+): void {
+  const data = load();
+  if (data.apiRecords.length >= MAX_API_RECORDS) {
+    data.apiRecords.splice(0, data.apiRecords.length - MAX_API_RECORDS + 1);
   }
-  d.apiRecords.push({ name, duration, ok, ts: Date.now() });
+  data.apiRecords.push({
+    name,
+    operationName: details.operationName || name,
+    duration,
+    ok,
+    source: details.source,
+    networkAttempted: details.networkAttempted,
+    cacheAgeBucket: details.cacheAgeBucket,
+    ts: Date.now()
+  });
   flush();
 }
 
 export function recordLiveTransition(record: Omit<LiveTransitionRecord, "ts">): void {
-  const d = load();
-  if (!Array.isArray(d.liveTransitions)) {
-    d.liveTransitions = [];
+  const data = load();
+  if (!Array.isArray(data.liveTransitions)) data.liveTransitions = [];
+  if (data.liveTransitions.length >= MAX_RECORDS) {
+    data.liveTransitions.splice(0, data.liveTransitions.length - MAX_RECORDS + 1);
   }
-  if (d.liveTransitions.length >= MAX_RECORDS) {
-    d.liveTransitions.splice(0, d.liveTransitions.length - MAX_RECORDS + 1);
-  }
-  d.liveTransitions.push({ ...record, ts: Date.now() });
+  data.liveTransitions.push({ ...record, ts: Date.now() });
   flush();
 }
 
 export function recordMyFplVisit(record: Omit<MyFplVisitRecord, "ts">): void {
-  const d = load();
-  if (!Array.isArray(d.myFplVisits)) {
-    d.myFplVisits = [];
+  const data = load();
+  if (!Array.isArray(data.myFplVisits)) data.myFplVisits = [];
+  if (data.myFplVisits.length >= MAX_RECORDS) {
+    data.myFplVisits.splice(0, data.myFplVisits.length - MAX_RECORDS + 1);
   }
-  if (d.myFplVisits.length >= MAX_RECORDS) {
-    d.myFplVisits.splice(0, d.myFplVisits.length - MAX_RECORDS + 1);
-  }
-  d.myFplVisits.push({ ...record, ts: Date.now() });
+  data.myFplVisits.push({ ...record, ts: Date.now() });
   flush();
 }
 
 export function recordCompetitionVisit(record: Omit<CompetitionVisitRecord, "ts">): void {
-  const d = load();
-  if (!Array.isArray(d.competitionVisits)) {
-    d.competitionVisits = [];
+  const data = load();
+  if (!Array.isArray(data.competitionVisits)) data.competitionVisits = [];
+  if (data.competitionVisits.length >= MAX_RECORDS) {
+    data.competitionVisits.splice(0, data.competitionVisits.length - MAX_RECORDS + 1);
   }
-  if (d.competitionVisits.length >= MAX_RECORDS) {
-    d.competitionVisits.splice(0, d.competitionVisits.length - MAX_RECORDS + 1);
-  }
-  d.competitionVisits.push({ ...record, ts: Date.now() });
+  data.competitionVisits.push({ ...record, ts: Date.now() });
   flush();
 }
 
 export function recordExploreVisit(record: Omit<ExploreVisitRecord, "ts">): void {
-  const d = load();
-  if (!Array.isArray(d.exploreVisits)) {
-    d.exploreVisits = [];
+  const data = load();
+  if (!Array.isArray(data.exploreVisits)) data.exploreVisits = [];
+  if (data.exploreVisits.length >= MAX_RECORDS) {
+    data.exploreVisits.splice(0, data.exploreVisits.length - MAX_RECORDS + 1);
   }
-  if (d.exploreVisits.length >= MAX_RECORDS) {
-    d.exploreVisits.splice(0, d.exploreVisits.length - MAX_RECORDS + 1);
-  }
-  d.exploreVisits.push({ ...record, ts: Date.now() });
+  data.exploreVisits.push({ ...record, ts: Date.now() });
   flush();
 }
 
 export function getPerf(): StoredPerf {
-  const d = load();
+  const data = load();
   return {
-    ...d,
-    apiRecords: d.apiRecords.slice(),
-    liveTransitions: (d.liveTransitions ?? []).slice(),
-    myFplVisits: (d.myFplVisits ?? []).slice(),
-    competitionVisits: (d.competitionVisits ?? []).slice(),
-    exploreVisits: (d.exploreVisits ?? []).slice()
+    ...data,
+    apiRecords: data.apiRecords.slice(),
+    liveTransitions: (data.liveTransitions ?? []).slice(),
+    myFplVisits: (data.myFplVisits ?? []).slice(),
+    competitionVisits: (data.competitionVisits ?? []).slice(),
+    exploreVisits: (data.exploreVisits ?? []).slice()
   };
 }
 
 export function clearPerf(): void {
-  _cache = { apiRecords: [], liveTransitions: [], myFplVisits: [], competitionVisits: [], exploreVisits: [] };
+  _cache = {
+    apiRecords: [],
+    liveTransitions: [],
+    myFplVisits: [],
+    competitionVisits: [],
+    exploreVisits: []
+  };
   try {
     wx.removeStorage({ key: STORAGE_KEY });
-  } catch { /* silent */ }
+  } catch {}
 }

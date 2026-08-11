@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildGraphQLRequestCacheKey
+  buildGraphQLRequestCacheKey,
+  buildGraphQLRequestPayload,
+  isTransientGraphQLStatus
 } from "../miniprogram/services/graphql.service.ts";
+import { getGraphQLOperationPolicy } from "../miniprogram/services/graphql-cache-policy.ts";
+import { storagePrefixes } from "../miniprogram/config/storage-keys.ts";
+import { PLAYERS_FOR_PICKER_QUERY } from "../miniprogram/services/player.service.ts";
+import { MINI_GAMEWEEK_SUMMARY_QUERY } from "../miniprogram/services/summary.service.ts";
 import { buildFixtureWindowRequest } from "../miniprogram/services/fixture.service.ts";
 import {
   LIVE_MATCHES_QUERY,
@@ -57,10 +63,53 @@ test("keeps the live matches query compact with shared fragments", () => {
   assert.match(LIVE_MATCHES_QUERY, /fragment LiveMatchPlayerFields on ElementEventResultData/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bmatchId\b/g) || []).length, 1);
   assert.ok(LIVE_MATCHES_QUERY.length < 2_000);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /upcoming\s*:/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEvent\b/);
 });
 
 test("uses a metadata-only query for automatic live freshness checks", () => {
   assert.match(LIVE_SNAPSHOT_QUERY, /liveSnapshot\(eventId: \$eventId\)/);
   assert.doesNotMatch(LIVE_SNAPSHOT_QUERY, /liveMatches|calcLivePoints/);
   assert.ok(LIVE_SNAPSHOT_QUERY.length < 300);
+});
+
+test("sends operationName and classifies public/session operations explicitly", () => {
+  assert.deepEqual(
+    buildGraphQLRequestPayload("query Teams { teams { id } }", {}),
+    {
+      query: "query Teams { teams { id } }",
+      variables: {},
+      operationName: "Teams"
+    }
+  );
+  assert.equal(getGraphQLOperationPolicy("Teams").authMode, "public");
+  assert.equal(getGraphQLOperationPolicy("EntryHistory").authMode, "session");
+  assert.equal(getGraphQLOperationPolicy("UnknownPrivateQuery").cachePolicy, "network-only");
+});
+
+test("uses v2 public/session storage namespaces", () => {
+  assert.equal(storagePrefixes.graphqlPublicCache, "gql:v2:public:");
+  assert.equal(storagePrefixes.graphqlSessionCache, "gql:v2:session:");
+});
+
+test("limits player picker pages and removes the unsupported full directory query", () => {
+  assert.match(PLAYERS_FOR_PICKER_QUERY, /playersForPicker/);
+  assert.match(PLAYERS_FOR_PICKER_QUERY, /limit:\s*\$limit/);
+  assert.match(PLAYERS_FOR_PICKER_QUERY, /cursor:\s*\$cursor/);
+  assert.doesNotMatch(PLAYERS_FOR_PICKER_QUERY, /players\s*\(\s*limit:\s*600/);
+});
+
+test("gameweek summary uses one four-root operation with a shared player fragment", () => {
+  assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /query MiniGameweekSummary/);
+  assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /fragment MiniSummaryPlayerFields on Player/);
+  assert.equal((MINI_GAMEWEEK_SUMMARY_QUERY.match(/^\s{4}(eventOverallResult|eventLive|topTransfersIn|topTransfersOut)\b/gm) || []).length, 4);
+  assert.ok((MINI_GAMEWEEK_SUMMARY_QUERY.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || []).length <= 200);
+});
+
+test("only gateway failures are transient HTTP failures", () => {
+  assert.equal(isTransientGraphQLStatus(502), true);
+  assert.equal(isTransientGraphQLStatus(503), true);
+  assert.equal(isTransientGraphQLStatus(504), true);
+  assert.equal(isTransientGraphQLStatus(400), false);
+  assert.equal(isTransientGraphQLStatus(401), false);
 });

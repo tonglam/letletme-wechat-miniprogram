@@ -24,6 +24,7 @@ interface CurrentEventInfoResponse {
 
 export async function getCurrentEventAndDeadline(forceRefresh = false): Promise<CurrentEventDeadline> {
   const data = await graphqlRequest<CurrentEventInfoResponse>(CURRENT_EVENT_INFO, {}, {
+    cachePolicy: "deadline",
     forceRefresh,
     getCacheExpiry: (res) => {
       const deadline = (res as CurrentEventInfoResponse).currentEventInfo?.nextUtcDeadline;
@@ -102,7 +103,7 @@ export async function getNextFixture(event?: number, forceRefresh = false): Prom
     return [];
   }
   const data = await graphqlRequest<EventFixturesResponse>(EVENT_FIXTURES, { eventId: event }, {
-    cacheTtl: 30 * 60 * 1000,
+    cachePolicy: "fixtures",
     forceRefresh
   });
   return (data.eventFixtures || []).map((f) => ({
@@ -125,7 +126,7 @@ export async function getNextFixture(event?: number, forceRefresh = false): Prom
 
 export async function getMiniProgramNotice(): Promise<string> {
   const data = await graphqlRequest<MiniProgramNoticeResponse>(MINI_PROGRAM_NOTICE, {}, {
-    cacheTtl: 3600 * 1000
+    cachePolicy: "notice"
   });
   return data.miniProgramNotice || "";
 }
@@ -170,7 +171,7 @@ interface EntryLeaguesResponse {
 
 export async function getTeamList(_season: string, forceRefresh = false): Promise<TeamOption[]> {
   const data = await graphqlRequest<TeamsResponse>(TEAMS, {}, {
-    cacheTtl: 24 * 3600 * 1000,
+    cachePolicy: "team-directory",
     cacheVariant: _season ? `season:${_season}` : "season:unknown",
     forceRefresh
   });
@@ -198,7 +199,7 @@ export async function getAllLeagueName(_season: string): Promise<string[]> {
   }
 
   const data = await graphqlRequest<EntryLeaguesResponse>(ENTRY_LEAGUES, { entryId }, {
-    cacheTtl: 3600 * 1000
+    cachePolicy: "reporting"
   });
   return [...new Set((data.entryLeagues || []).map((league) => league.name).filter(Boolean))];
 }
