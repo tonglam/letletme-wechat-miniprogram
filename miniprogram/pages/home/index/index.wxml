@@ -68,7 +68,7 @@
       <view wx:else class="deadline-empty">赛程更新后显示倒计时</view>
     </view>
 
-    <view wx:if="{{priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
+    <view wx:if="{{supplementLoading || priceError || priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
       <view class="price-head">
         <view>
           <view class="section-title">身价变化</view>
@@ -76,6 +76,8 @@
         </view>
         <view class="section-link" catchtap="onOpenPriceChanges">更多</view>
       </view>
+      <view wx:if="{{priceError}}" class="section-status section-status-error">{{priceError}}，已保留上次成功数据</view>
+      <view wx:if="{{supplementLoading && priceRises.length === 0 && priceFalls.length === 0}}" class="section-status">身价数据加载中</view>
       <view class="price-groups">
         <view class="price-group price-rise">
           <view class="price-group-head">
@@ -120,10 +122,12 @@
       </view>
     </view>
 
-    <view wx:if="{{gameweekStats.length > 0}}" class="section card gw-stats-card">
+    <view wx:if="{{supplementLoading || gameweekStatsError || gameweekStats.length > 0}}" class="section card gw-stats-card">
       <view class="gw-stats-head">
         <view class="section-title">GW{{gw || '-'}} 数据</view>
       </view>
+      <view wx:if="{{gameweekStatsError}}" class="section-status section-status-error">{{gameweekStatsError}}，已保留上次成功数据</view>
+      <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
         <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
           <text class="gw-stat-label">{{item.label}}</text>

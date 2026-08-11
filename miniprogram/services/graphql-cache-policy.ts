@@ -54,6 +54,7 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   Player: { authMode: "public", cachePolicy: "reporting" },
   PlayerDetail: { authMode: "public", cachePolicy: "reporting" },
   GetPlayerValues: { authMode: "public", cachePolicy: "market" },
+  MiniHomeSupplement: { authMode: "public", cachePolicy: "market" },
   PlayerValues: { authMode: "public", cachePolicy: "market" },
   GetPlayerValueHistory: { authMode: "public", cachePolicy: "historical" },
   PlayerValueHistory: { authMode: "public", cachePolicy: "historical" },

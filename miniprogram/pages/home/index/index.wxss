@@ -139,6 +139,16 @@
   text-align: center;
 }
 
+.section-status {
+  margin: 12rpx 0;
+  color: var(--muted-ink, #6e5a72);
+  font-size: 22rpx;
+}
+
+.section-status-error {
+  color: var(--danger, #c9183f);
+}
+
 /* Price changes */
 .price-card {
   padding-bottom: 20rpx;
