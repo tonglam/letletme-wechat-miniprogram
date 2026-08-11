@@ -203,7 +203,7 @@ test("fixture windows force-refresh event context on open and resume", () => {
   assert.match(fixtures, /await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(true\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
-  assert.match(fixtures, /const startEvent = this\.loadedSeason \?[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
+  assert.match(fixtures, /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
 });
 
 test("My FPL partial brief reads retain only fields from the failed source", () => {
@@ -344,6 +344,7 @@ test("first personal paints bypass previous-season event and summary caches", ()
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(true\)/);
+  assert.match(overview, /if \(resumed\)[\s\S]*this\.loadOverview\(true\)/);
   assert.match(team, /async onLoad\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(overview, /event === undefined/);
 });
@@ -355,7 +356,7 @@ test("Match and Team retries bypass repeating-season caches", () => {
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
   assert.match(team, /onRetry\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(team, /onEmptyAction\(\)[\s\S]*this\.loadData\(true\)/);
-  assert.match(fixtures, /const startEvent = this\.loadedSeason \? Math\.max\(1, Number\(this\.data\.startEvent\) \|\| gw\) : gw/);
+  assert.match(fixtures, /selectedWindowByUser[\s\S]*const startEvent = this\.selectedWindowByUser/);
 });
 
 test("season rollover clears row filters derived from player ids", () => {

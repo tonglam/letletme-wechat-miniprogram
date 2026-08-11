@@ -132,7 +132,7 @@ test("resume re-reads the follow pointer; first show does not double-load", () =
   assert.deepEqual(loads, [], "first show skips the reload that onLoad already started");
 
   overviewPage.onShow.call(context);
-  assert.deepEqual(loads, [false], "resume reloads so a website handoff takes effect");
+  assert.deepEqual(loads, [true], "resume force-refreshes so a website handoff and season rollover take effect");
 });
 
 test("NO_FOLLOW secondary opens the optional account sync page", () => {

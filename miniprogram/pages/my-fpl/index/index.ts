@@ -130,7 +130,7 @@ Page({
     if (resumed) {
       // Return from the website handoff or team search: re-read the follow
       // pointer before any personal content (§9 return refresh).
-      void this.loadOverview();
+      void this.loadOverview(true);
     }
   },
 

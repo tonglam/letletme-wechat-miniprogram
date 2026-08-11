@@ -27,6 +27,7 @@ Page({
   teams: [] as FixtureRunTeam[],
   loadedSeason: undefined as string | undefined,
   loadedWindowKey: "",
+  selectedWindowByUser: false,
   requestId: 0,
   hasShown: false,
 
@@ -65,12 +66,15 @@ Page({
       this.fixtures = [];
       this.teams = [];
       this.loadedWindowKey = "";
+      this.selectedWindowByUser = false;
       this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [] });
       return true;
     }
     // Keep an explicitly selected historical window across same-season
-    // context refreshes. Only a first load or rollover defaults to current GW.
-    const startEvent = this.loadedSeason ? Math.max(1, Number(this.data.startEvent) || gw) : gw;
+    // context refreshes. An untouched default window follows the current GW.
+    const startEvent = this.selectedWindowByUser
+      ? Math.max(1, Number(this.data.startEvent) || gw)
+      : gw;
     this.setData({ startEvent });
     const windowKey = `${season || "unknown"}:${startEvent}:${this.data.horizon}`;
     if (this.teams.length && this.loadedWindowKey === windowKey) {
@@ -139,7 +143,10 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ startEvent: Number(event.detail.value) || 1 });
+    const startEvent = Number(event.detail.value) || 1;
+    const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
+    this.selectedWindowByUser = startEvent !== currentGw;
+    this.setData({ startEvent });
     void this.load();
   },
 
