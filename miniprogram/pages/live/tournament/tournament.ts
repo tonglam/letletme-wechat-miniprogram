@@ -431,20 +431,20 @@ Page({
       if (nextSeason) this.loadedSeason = nextSeason;
       const nextEventId = Number(app.globalData.gw) || 0;
       const wasCurrentEvent = this.data.event === this.data.maxGw;
-      if (nextEventId > 0 && (seasonChanged || nextEventId !== this.data.maxGw)) {
-        if (seasonChanged || wasCurrentEvent) {
-          this.liveRefresh?.stop();
-          this.rowsRequestId += 1;
-          this.rowsRequest = null;
-          this.rowsRequestKey = "";
-          this.liveSnapshot = null;
-          this.cachedLiveStoredAt = undefined;
-          this.failedEntryCount = 0;
-          this.retainedRowCount = 0;
-          this.setData({
-            event: nextEventId,
-            maxGw: nextEventId,
-            ...(seasonChanged ? {
+      const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
+        this.liveRefresh?.stop();
+        this.rowsRequestId += 1;
+        this.rowsRequest = null;
+        this.rowsRequestKey = "";
+        this.liveSnapshot = null;
+        this.cachedLiveStoredAt = undefined;
+        this.failedEntryCount = 0;
+        this.retainedRowCount = 0;
+        this.setData({
+          event: nextEventId,
+          maxGw: nextEventId,
+          ...(seasonChanged ? {
               tournaments: [],
               tournamentNames: [],
               selectedTournament: undefined,
@@ -467,21 +467,27 @@ Page({
               selectedTeamExposure: null,
               teamExposureCount: 1,
               teamExposureScope: "any"
-            } : {}),
-            rows: [],
-            displayedRows: [],
-            hasData: false,
-            lastUpdated: ""
-          });
-          this.liveRefresh?.sync();
-          if (seasonChanged) {
-            await this.loadTournaments(true);
-          } else {
-            await this.loadRows({ forceRefresh: true });
-          }
+          } : {}),
+          rows: [],
+          displayedRows: [],
+          hasData: false,
+          lastUpdated: "",
+          ...(nextEventId === 0 ? { error: "当前赛季暂无实时比赛周" } : {})
+        });
+        this.liveRefresh?.sync();
+        if (nextEventId === 0) {
           this.syncDisplayState();
           return;
         }
+        if (seasonChanged) {
+          await this.loadTournaments(true);
+        } else {
+          await this.loadRows({ forceRefresh: true });
+        }
+        this.syncDisplayState();
+        return;
+      }
+      if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
     }
@@ -504,8 +510,23 @@ Page({
   onPullDownRefresh() {
     // Always re-pull the tournament list (it chains into loadRows): a cached
     // list must not hide a league the user just joined until the TTL expires.
-    const task = this.loadTournaments(true);
+    const task = this.retryWithContext();
     task.finally(() => wx.stopPullDownRefresh());
+  },
+
+  async retryWithContext() {
+    if (this.data.event === 0) {
+      const app = getApp<IAppOption>();
+      try { await app.initAppData(true); } catch { /* retain the eventless state */ }
+      const nextEventId = Number(app.globalData.gw) || 0;
+      if (nextEventId > 0) {
+        this.loadedSeason = app.globalData.season || this.loadedSeason;
+        this.setData({ event: nextEventId, maxGw: nextEventId, error: "" });
+        return this.loadTournaments(true);
+      }
+      return;
+    }
+    return this.loadTournaments(true);
   },
 
   onReachBottom() {
@@ -1095,6 +1116,14 @@ Page({
   },
 
   onRetry() {
+    if (this.data.event === 0) {
+      if (this.retryWithContext) {
+        this.retryWithContext();
+      } else {
+        this.loadTournaments(true);
+      }
+      return;
+    }
     if (this.data.tournamentListError || this.data.tournaments.length === 0) {
       this.loadTournaments(true);
       return;

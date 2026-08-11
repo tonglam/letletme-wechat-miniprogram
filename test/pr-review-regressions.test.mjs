@@ -175,8 +175,9 @@ test("team summary requests discard older GW responses", () => {
   assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
   assert.match(
     team,
-    /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/
+    /if \(!eventResult\) \{[\s\S]*const historySupport = mapHistorySupportRows[\s\S]*hasTeamData: hasHistory[\s\S]*emptyState: hasHistory \? "" : "event"/
   );
+  assert.match(team, /function mapHistorySupportRows[\s\S]*seasonHistoryRows: \[\.\.\.history\.history\]/);
   assert.match(team, /catch \(error\) \{[\s\S]*restartForPrincipalChange\(entryId\)/);
 });
 

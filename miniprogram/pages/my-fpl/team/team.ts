@@ -373,6 +373,8 @@ Page({
       if (this.restartForPrincipalChange(entryId)) return;
 
       if (!eventResult) {
+        const historySupport = mapHistorySupportRows(history, transferHistory);
+        const hasHistory = historySupport.historyRows.length > 0 || historySupport.seasonHistoryRows.length > 0;
         this.loadedDataSeason = undefined;
         this.setData({
           event: selectedEvent,
@@ -383,19 +385,19 @@ Page({
           overviewStats: [],
           eventStats: [],
           squadRows: [],
-          transferRows: [],
+          transferRows: historySupport.transferRows,
           chipSummaryStats: [],
-          chipCountRows: [],
-          chipUsageRows: [],
-          historyRows: [],
-          seasonHistoryRows: [],
+          chipCountRows: historySupport.chipCountRows,
+          chipUsageRows: historySupport.chipUsageRows,
+          historyRows: historySupport.historyRows,
+          seasonHistoryRows: historySupport.seasonHistoryRows,
           hasSquad: false,
-          hasTransfers: false,
-          hasChips: false,
-          hasHistory: false,
-          hasTeamData: false,
+          hasTransfers: historySupport.transferRows.length > 0,
+          hasChips: historySupport.chipUsageRows.length > 0 || historySupport.chipCountRows.length > 0,
+          hasHistory,
+          hasTeamData: hasHistory,
           phaseBanner: "",
-          emptyState: "event",
+          emptyState: hasHistory ? "" : "event",
           emptyEyebrow: "本轮待就绪",
           emptyTitle: `GW${selectedEvent} 球队总结还没生成`,
           emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
@@ -510,16 +512,7 @@ function mapApiDataToTeamStats(
   history: EntryHistoryPayload,
   transferHistory: EntryGameweekTransfers[]
 ): TeamStatsViewModel {
-  const transferByEvent = new Map<number, EntryGameweekTransfers>();
-  transferHistory.forEach((item) => transferByEvent.set(item.eventId, item));
-  const sortedHistory = [...history.results].sort((a, b) => b.eventId - a.eventId);
-  const chipUsageRows = sortedHistory
-    .filter((item) => Boolean(item.eventChip) && item.eventChip !== "NONE")
-    .map((item) => ({
-      id: `chip-${item.eventId}`,
-      label: `GW${item.eventId}`,
-      value: formatChip(item.eventChip)
-    }));
+  const historySupport = mapHistorySupportRows(history, transferHistory);
 
   return {
     headerTitle: eventResult.entry.entryName,
@@ -540,11 +533,43 @@ function mapApiDataToTeamStats(
       { label: "队长", value: `${eventResult.eventPlayedCaptain?.webName || "-"} (${eventResult.eventCaptainPoints})` }
     ],
     squadRows: mapSquadRows(eventResult.eventPicks || []),
-    transferRows: mapTransferRows(sortedHistory, transferByEvent),
+    transferRows: historySupport.transferRows,
     chipSummaryStats: [
       { label: "本轮开卡", value: formatChip(eventResult.eventChip) },
-      { label: "开卡次数", value: String(chipUsageRows.length) }
+      { label: "开卡次数", value: String(historySupport.chipUsageRows.length) }
     ],
+    chipCountRows: historySupport.chipCountRows,
+    chipUsageRows: historySupport.chipUsageRows,
+    historyRows: historySupport.historyRows,
+    seasonHistoryRows: historySupport.seasonHistoryRows
+  };
+}
+
+interface HistorySupportViewModel {
+  transferRows: TransferRow[];
+  chipCountRows: SimpleRow[];
+  chipUsageRows: SimpleRow[];
+  historyRows: HistoryRow[];
+  seasonHistoryRows: SeasonHistoryRow[];
+}
+
+function mapHistorySupportRows(
+  history: EntryHistoryPayload,
+  transferHistory: EntryGameweekTransfers[]
+): HistorySupportViewModel {
+  const transferByEvent = new Map<number, EntryGameweekTransfers>();
+  transferHistory.forEach((item) => transferByEvent.set(item.eventId, item));
+  const sortedHistory = [...history.results].sort((a, b) => b.eventId - a.eventId);
+  const chipUsageRows = sortedHistory
+    .filter((item) => Boolean(item.eventChip) && item.eventChip !== "NONE")
+    .map((item) => ({
+      id: `chip-${item.eventId}`,
+      label: `GW${item.eventId}`,
+      value: formatChip(item.eventChip)
+    }));
+
+  return {
+    transferRows: mapTransferRows(sortedHistory, transferByEvent),
     chipCountRows: mapChipCounts(history.results),
     chipUsageRows,
     historyRows: sortedHistory.map(mapHistoryRow),

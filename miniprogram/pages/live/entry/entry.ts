@@ -287,8 +287,25 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadData({ background: true, includeTransfers: true, forceRefresh: true })
+    this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true })
       .finally(() => wx.stopPullDownRefresh());
+  },
+
+  async retryWithContext(options: LiveEntryLoadOptions = {}) {
+    // An offseason page has event=0 by design. Refresh the shared event
+    // context before retrying so a newly opened GW can be discovered without
+    // requiring a hide/resume cycle.
+    if (this.data.event === 0) {
+      const app = getApp<IAppOption>();
+      try { await app.initAppData(true); } catch { /* retain the eventless state */ }
+      const nextEventId = Number(app.globalData.gw) || 0;
+      if (nextEventId > 0) {
+        this.loadedSeason = app.globalData.season || this.loadedSeason;
+        this.setData({ event: nextEventId, maxGw: nextEventId, error: "", hasData: false });
+        this.liveRefresh?.sync();
+      }
+    }
+    return this.loadData(options);
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {
@@ -551,7 +568,7 @@ Page({
   },
 
   onRetry() {
-    this.loadData({ includeTransfers: true, forceRefresh: true });
+    this.retryWithContext({ includeTransfers: true, forceRefresh: true });
   },
 
   onChooseEntry() {
