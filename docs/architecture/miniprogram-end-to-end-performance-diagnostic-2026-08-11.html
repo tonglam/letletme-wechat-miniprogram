@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LetLetMe 小程序端到端性能诊断</title>
+  <style>
+    :root {
+      --ink: #17221f;
+      --muted: #60706a;
+      --paper: #f4f0e7;
+      --card: #fffdf8;
+      --line: #d8d0bf;
+      --teal: #0e766e;
+      --teal-soft: #dceee9;
+      --orange: #dc6b2f;
+      --orange-soft: #fae2d4;
+      --red: #a83e32;
+      --red-soft: #f4dcd7;
+      --gold: #9b711b;
+      --shadow: 0 18px 48px rgba(48, 53, 45, .10);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 7% 2%, rgba(220, 107, 47, .15), transparent 25rem),
+        radial-gradient(circle at 92% 14%, rgba(14, 118, 110, .13), transparent 28rem),
+        linear-gradient(180deg, #f7f3ea 0%, var(--paper) 68%, #ece5d8 100%);
+      font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      line-height: 1.62;
+    }
+
+    a { color: var(--teal); }
+    code {
+      padding: .12rem .36rem;
+      border-radius: .3rem;
+      background: #eee8dc;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .9em;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 42px 0 80px;
+    }
+
+    header {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(30px, 5vw, 66px);
+      border: 1px solid rgba(23, 34, 31, .12);
+      border-radius: 26px;
+      background: #183c37;
+      color: #fffaf0;
+      box-shadow: var(--shadow);
+    }
+
+    header::after {
+      content: "";
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      right: -90px;
+      top: -120px;
+      border: 42px solid rgba(248, 171, 92, .26);
+      border-radius: 50%;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: #f4b276;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-family: "Iowan Old Style", "Songti SC", serif;
+      font-size: clamp(34px, 6vw, 70px);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+
+    .subtitle {
+      max-width: 790px;
+      margin: 24px 0 0;
+      color: #dce9e4;
+      font-size: 18px;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 26px;
+    }
+
+    .badge {
+      padding: 7px 11px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .09);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    section {
+      margin-top: 28px;
+      padding: clamp(24px, 4vw, 42px);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 253, 248, .94);
+      box-shadow: 0 10px 30px rgba(48, 53, 45, .06);
+    }
+
+    h2 {
+      margin: 0 0 20px;
+      font-family: "Iowan Old Style", "Songti SC", serif;
+      font-size: clamp(26px, 4vw, 40px);
+      line-height: 1.2;
+    }
+
+    h3 { margin: 30px 0 12px; font-size: 20px; }
+    p { margin: 10px 0; }
+    .muted { color: var(--muted); }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 13px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      min-height: 145px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--teal);
+      font-family: "Iowan Old Style", "Songti SC", serif;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .metric span { color: var(--muted); font-size: 14px; }
+    .metric.alert strong { color: var(--orange); }
+
+    .callout {
+      margin: 22px 0;
+      padding: 18px 20px;
+      border-left: 5px solid var(--orange);
+      border-radius: 8px 14px 14px 8px;
+      background: var(--orange-soft);
+    }
+
+    .callout.red {
+      border-left-color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(90px, 1fr));
+      gap: 8px;
+      align-items: stretch;
+      margin: 24px 0;
+    }
+
+    .flow-item {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 94px;
+      padding: 12px 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #f8f5ed;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .flow-item:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      z-index: 2;
+      right: -13px;
+      color: var(--orange);
+      font-size: 18px;
+    }
+
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 11px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #38524b;
+      background: #edf2ed;
+      font-size: 12px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    .good { color: var(--teal); font-weight: 800; }
+    .warn { color: var(--orange); font-weight: 800; }
+    .bad { color: var(--red); font-weight: 800; }
+
+    .waterfall {
+      display: grid;
+      gap: 10px;
+      margin: 18px 0 26px;
+    }
+
+    .water-row {
+      display: grid;
+      grid-template-columns: 180px 1fr 92px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .track {
+      overflow: hidden;
+      height: 22px;
+      border-radius: 999px;
+      background: #e8e2d6;
+    }
+
+    .bar {
+      height: 100%;
+      min-width: 4px;
+      border-radius: inherit;
+      background: var(--teal);
+    }
+
+    .bar.orange { background: var(--orange); }
+    .bar.gold { background: #c79a3d; }
+    .bar.ink { background: #36564f; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .panel {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #f9f6ef;
+    }
+
+    .panel h3 { margin-top: 0; }
+
+    .rank {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 16px;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rank:last-child { border-bottom: 0; }
+    .rank-no {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .rank h3 { margin: 0 0 5px; }
+    .rank p { margin: 0; color: var(--muted); }
+
+    .verdict {
+      padding: 24px;
+      border-radius: 18px;
+      background: var(--teal-soft);
+      font-size: 18px;
+    }
+
+    footer {
+      padding: 30px 10px 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 920px) {
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .flow { grid-template-columns: 1fr; }
+      .flow-item:not(:last-child)::after {
+        content: "↓";
+        right: auto;
+        bottom: -18px;
+      }
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 620px) {
+      .page { width: min(100% - 18px, 1180px); padding-top: 10px; }
+      header, section { border-radius: 17px; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .water-row { grid-template-columns: 112px 1fr 68px; font-size: 12px; }
+      th, td { min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <p class="eyebrow">End-to-end performance diagnostic · 2026-08-11</p>
+      <h1>10 条 fixture 没有渲染 1–2 秒</h1>
+      <p class="subtitle">历史慢路径由 DevTools 页面装载、Web proxy 固定成本、GraphQL admission，以及 EventFixtures 错误进入 Live snapshot 后的 PostgreSQL fallback 共同构成。热缓存下，Home 的业务内容约 0.31 秒提交、约 0.35 秒完成首次内容绘制。</p>
+      <div class="badges">
+        <span class="badge">诊断报告，不是 main 验收声明</span>
+        <span class="badge">WeChat DevTools</span>
+        <span class="badge">Web :3001 → GraphQL :4000</span>
+        <span class="badge">后端到 setData 全链路</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>整改状态</h2>
+      <div class="callout red">
+        <strong>代码已实施，尚未验收。</strong> 报告口径已经纠正，GraphQL 与小程序的正向链路修改位于独立功能分支；下方数值仍是修复前证据。只有完成 4000、3000、WeChat DevTools 冷暖样本并证明 EventFixtures 未进入 Live snapshot，才能标记为“已修复并验收”。
+      </div>
+    </section>
+
+    <section>
+      <h2>结论先行</h2>
+      <div class="summary-grid">
+        <div class="metric">
+          <strong>346ms</strong>
+          <span>Home 热缓存 FCP p50；0 次网络请求</span>
+        </div>
+        <div class="metric">
+          <strong>313ms</strong>
+          <span>热缓存业务内容 setData 提交 p50</span>
+        </div>
+        <div class="metric alert">
+          <strong>3.49s</strong>
+          <span>冷页面真正业务内容提交；不是 10 行渲染耗时</span>
+        </div>
+        <div class="metric alert">
+          <strong>0 hit</strong>
+          <span>当前 EventFixtures 的 GraphQL fixture Redis 命中</span>
+        </div>
+      </div>
+
+      <div class="callout red">
+        <strong>指标更正：</strong>此前报告中的“完全稳定”是“loading 结束、最后 API 完成后再等待 550ms 无活动”的自动化确认点。静态页也会因此显示约 1.3 秒。它可用于判断页面是否停止变化，但不能当作首屏渲染时间或用户等待时间。本报告以业务内容 <code>setData</code> callback、原生 FCP、最后一条核心请求和可选尾请求分别计时。
+      </div>
+
+      <p>直接回答质疑：10 条 fixture 返回体约 3,081 bytes；热缓存时四个 Home 数据任务在路由后约 282ms 全部完成，业务内容在约 313ms 提交，原生 FCP 约 346ms。渲染桥接只占几十毫秒。慢的是冷链路，不是列表循环。</p>
+    </section>
+
+    <section>
+      <h2>测试边界与环境完整性</h2>
+      <div class="flow" aria-label="本地诊断调用链">
+        <div class="flow-item">WeChat<br>DevTools</div>
+        <div class="flow-item">小程序<br>L1 / L2 cache</div>
+        <div class="flow-item">Web proxy<br>localhost:3001</div>
+        <div class="flow-item">DB limiter<br>+ session path</div>
+        <div class="flow-item">GraphQL<br>127.0.0.1:4000</div>
+        <div class="flow-item">Remote Redis<br>publication/cache</div>
+        <div class="flow-item">Supabase<br>PostgreSQL</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>项目</th><th>实际状态</th><th>对结果的影响</th></tr></thead>
+          <tbody>
+            <tr><td>标准端口 3000</td><td>被本机 <code>open-webui</code> 占用；本次 develop override 使用 3001</td><td>诊断有效，但不能声明标准 main 链路验收完成</td></tr>
+            <tr><td>Web 源码</td><td>运行仓库与 origin/main 的运行时代码等价；分支差异仅 workflow 文件</td><td>可用于定位 proxy 源码成本</td></tr>
+            <tr><td>GraphQL 源码</td><td>运行仓库与 origin/main 的运行时代码等价；分支差异仅 deploy workflow</td><td>可用于定位 resolver 和 admission 路径</td></tr>
+            <tr><td>Core publication</td><td class="good">存在有效 active manifest</td><td>team/event 等核心快照可从 Redis publication 获取</td></tr>
+            <tr><td>Live publication</td><td class="bad">缺少 event 1 active manifest</td><td>修复前 <code>eventFixtures</code> 被错误绑定到 Live snapshot 并转 PostgreSQL；正向链路不再依赖该 manifest</td></tr>
+            <tr><td>依赖位置</td><td>GraphQL 本机；Redis 与 Supabase 均为远端</td><td>每个 limiter、manifest、cache miss 和 SQL 都包含真实网络 RTT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Home：从路由到可用内容</h2>
+      <h3>热缓存，连续进入 Home，第 2–6 次样本</h3>
+      <div class="waterfall">
+        <div class="water-row"><span>route → onLoad</span><div class="track"><div class="bar ink" style="width:78%"></div></div><strong>270ms</strong></div>
+        <div class="water-row"><span>缓存与业务映射</span><div class="track"><div class="bar" style="width:3.5%"></div></div><strong>12ms</strong></div>
+        <div class="water-row"><span>setData 提交</span><div class="track"><div class="bar gold" style="width:9%"></div></div><strong>31ms</strong></div>
+        <div class="water-row"><span>提交 → FCP</span><div class="track"><div class="bar orange" style="width:9.5%"></div></div><strong>33ms</strong></div>
+      </div>
+      <p class="muted">p50：业务数据全部 resolve 282ms，内容提交 313ms，loading 提交 319ms，原生 FCP 346ms。五条 GraphQL 逻辑调用全部来自 memory cache，实际网络 operation 为 0。</p>
+
+      <h3>冷页面，客户端 Home 缓存清空</h3>
+      <div class="waterfall">
+        <div class="water-row"><span>route → onLoad</span><div class="track"><div class="bar ink" style="width:46%"></div></div><strong>1,604ms</strong></div>
+        <div class="water-row"><span>请求调度</span><div class="track"><div class="bar gold" style="width:.3%"></div></div><strong>9ms</strong></div>
+        <div class="water-row"><span>最慢核心网络请求</span><div class="track"><div class="bar orange" style="width:53.6%"></div></div><strong>1,868ms</strong></div>
+        <div class="water-row"><span>resolve → 内容提交</span><div class="track"><div class="bar" style="width:.3%"></div></div><strong>8ms</strong></div>
+      </div>
+      <p><strong>真正业务内容提交：3,486ms。</strong>原生 FCP 在 1,676ms 发生，但当时画出来的是全局 loading，不是 fixtures、entry、价格和总结内容。可选 notice 在 3,933ms 才提交，不应被定义为首屏完成。</p>
+
+      <div class="callout">
+        冷路径约 46% 是 DevTools 页面模块/运行时从 route 到 <code>onLoad</code> 的装载，约 54% 是最慢网络请求控制的 <code>Promise.all</code> 临界路径；内容 resolve 后到 <code>setData</code> callback 不到 10ms。不能把 3.49 秒归因给 10 条 fixture 渲染。
+      </div>
+    </section>
+
+    <section>
+      <h2>四条核心请求和一条尾请求</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operation</th><th>冷样本</th><th>客户端策略</th><th>GraphQL / 数据源路径</th><th>诊断</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>EventOverallResult</code></td>
+              <td>1,271ms</td>
+              <td>public，historical，L1/L2</td>
+              <td>Core publication；当前返回全部 event 后由客户端挑一个</td>
+              <td>不是 SQL 主因，但过量返回和映射 38 个 event；应改 event-specific read</td>
+            </tr>
+            <tr>
+              <td><code>GetEntry</code></td>
+              <td>1,396ms</td>
+              <td>session，reporting 5min</td>
+              <td>Redis MGET；miss 后查询 <code>competition.entries</code>，再写 Redis</td>
+              <td>服务端 metadata TTL 仅 60 秒，冷 miss 需要 Redis + DB + Redis write</td>
+            </tr>
+            <tr>
+              <td><code>GetPlayerValues</code></td>
+              <td>1,569ms</td>
+              <td>public，market 30min</td>
+              <td>服务端 query cache；miss 后 reporting SQL/补充数据，TTL 5min</td>
+              <td>冷 miss 成本较高；客户端命中时不是问题</td>
+            </tr>
+            <tr>
+              <td><code>EventFixtures</code></td>
+              <td class="bad">1,868ms</td>
+              <td>public，fixtures 30min</td>
+              <td>live manifest 缺失 → coherent PostgreSQL fallback；team 从 core Map</td>
+              <td>当前临界请求；不是一次 fixture Redis cache read</td>
+            </tr>
+            <tr>
+              <td><code>MiniProgramNotice</code></td>
+              <td>448ms</td>
+              <td>public，notice 1h</td>
+              <td>简单 Redis HGETALL，但仍支付完整 proxy + GraphQL 固定成本</td>
+              <td>独立尾请求价值低，且产生第二次页面提交</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">四条核心请求并发，所以墙钟时间不是五个耗时相加；但每一条都会单独执行 Web limiter、GraphQL admission、上下文和 publication 检查，后端总负载仍按 operation 次数增长。</p>
+    </section>
+
+    <section>
+      <h2>EventFixtures 的实测拆分</h2>
+      <div class="summary-grid">
+        <div class="metric">
+          <strong>158ms</strong>
+          <span>直连 GraphQL <code>__typename</code> 热 p50，代表请求固定基线</span>
+        </div>
+        <div class="metric">
+          <strong>364ms</strong>
+          <span>直连 GraphQL 实际 EventFixtures 热 p50</span>
+        </div>
+        <div class="metric alert">
+          <strong>574ms</strong>
+          <span>经 Web proxy 的 EventFixtures 热 p50</span>
+        </div>
+        <div class="metric alert">
+          <strong>+210ms</strong>
+          <span>proxy 相对直连的聚合固定增量</span>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>GraphQL 每次请求的固定链</h3>
+          <p>全局 Redis rate limit → trusted ingress 分类 → preauthorization Redis rate limit → parse/limits → principal/context → current season → core active manifest → weighted rate limit → Apollo execute/serialize。</p>
+          <p>修复前 EventFixtures 会额外读取 live snapshot；当前 active manifest 缺失后继续查询 PostgreSQL。历史 metrics 增量为 <code>fixtures/postgres +1</code>、<code>fixtures/redis +0</code>。修复后的目标是只读取 Core fixture source，并以 trace 证明 Live snapshot 调用为 0。</p>
+        </div>
+        <div class="panel">
+          <h3>Web 每次请求的固定链</h3>
+          <p>body bound → database rate limit → authorization session path → signed ingress → upstream fetch → no-store response。</p>
+          <p>当前没有 public operation fast path。实测 proxy 相对直连增加约 210ms；在加入分段 <code>Server-Timing</code> 前，不能把这 210ms 武断分配给 session 或 limiter 的某一个步骤。</p>
+        </div>
+      </div>
+
+      <h3>远端依赖基线</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>依赖</th><th>实测</th><th>意义</th></tr></thead>
+          <tbody>
+            <tr><td>Supabase <code>SELECT 1</code></td><td>热 p50 约 99ms；新/空闲连接 507–607ms</td><td>DB fallback 和 DB limiter 会把跨网 RTT 带入每次冷请求</td></tr>
+            <tr><td>新 Redis client</td><td>p50 约 142ms，存在网络波动</td><td>多个串行 limiter/manifest/cache round-trip 会形成固定税</td></tr>
+            <tr><td>GraphQL health</td><td>约 788ms</td><td>当前 health 也受远端依赖影响，不是纯本机事件循环探针</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>渲染层为什么放大了后端尾延迟</h2>
+      <div class="rank">
+        <div class="rank-no">1</div>
+        <div><h3>全页被一个 <code>loading</code> 挡住</h3><p>Home WXML 使用全局 <code>wx:elif="{{loading}}"</code>；业务内容全部位于 <code>wx:else</code>。用户在四条请求全部完成前看不到任何可用 section。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">2</div>
+        <div><h3><code>Promise.all</code> 把最慢请求变成整页临界路径</h3><p>entry、fixtures、player values、overall result 同时开始，但只在全部 resolve 后进行一次内容提交。1,868ms 的 fixture fallback 因此控制整页。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">3</div>
+        <div><h3>FCP 画的是 loading，不是业务内容</h3><p>冷样本 FCP 1,676ms，内容 3,486ms 才提交。只看 FCP 会高估体验；只看“静默稳定”又会额外多算 550ms。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">4</div>
+        <div><h3>Notice 是独立尾请求和晚到 setData</h3><p>它不应决定首屏完成，也不值得为一个 Redis hash 支付完整的独立 GraphQL 固定链。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">5</div>
+        <div><h3>每秒 countdown 更新不是本次主因</h3><p>它发生在首屏后，不解释 3.49 秒，但会持续触发 bridge 更新。可隔离为组件，或在非临界时段降低更新频率。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>缓存全景</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>层</th><th>当前行为</th><th>有效之处</th><th>缺口</th></tr></thead>
+          <tbody>
+            <tr><td>小程序 L1</td><td>内存缓存，single-flight；Home 热进入 0 network</td><td class="good">热路径已经足够快</td><td>全局 loader 仍隐藏分区可用性</td></tr>
+            <tr><td>小程序 L2</td><td><code>gql:v2</code> 持久缓存；fixture 30min fresh / 24h stale</td><td class="good">重启后的 storage read 为 0–1ms</td><td>首次页面模块装载仍可在 DevTools 达约 0.7s</td></tr>
+            <tr><td>Web</td><td>upstream 与响应 no-store；每 operation 单独 limiter/session path</td><td>身份边界清晰</td><td class="bad">没有 public fast path，固定税重复</td></tr>
+            <tr><td>GraphQL core publication</td><td>active manifest + process payload cache</td><td class="good">event/team 等读取稳定</td><td>每请求仍检查 manifest，current season TTL 仅 30s</td></tr>
+            <tr><td>GraphQL live publication</td><td>event 1 manifest 缺失</td><td>fallback 保证功能可用</td><td class="bad">fixture 每次 client miss 都可进入 PostgreSQL</td></tr>
+            <tr><td>Entry query cache</td><td>Redis metadata TTL 60s</td><td>短时间复用</td><td class="warn">与 5min 客户端 reporting TTL 不匹配，服务端 miss 过频</td></tr>
+            <tr><td>Player values query cache</td><td>Redis 5min，客户端 30min</td><td>多数用户热路径由客户端吸收</td><td>后端 cache miss 的组合查询需要分段观测</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>根因排序</h2>
+      <div class="rank">
+        <div class="rank-no">P0</div>
+        <div><h3>Fixture publication 缺失导致错误数据路径</h3><p>这是当前本地 EventFixtures 不是“一次缓存读取”的直接原因。应先恢复 scheduled/live snapshot，或让未开始 fixture 从 core publication 提供，避免正常读路径依赖 PostgreSQL fallback。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">P0</div>
+        <div><h3>Home 采用全页等待，而不是渐进呈现</h3><p>即使后端暂时慢，deadline/header、缓存 entry、已返回的 summary 和 fixture section 也应独立显示。用户体验不应等于最慢 resolver。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">P1</div>
+        <div><h3>Proxy 和 GraphQL 固定成本按 operation 重复</h3><p>Home 冷加载包含四条核心 operation 和一条 notice。应增加 public fast path、把 DB limiter 迁至 Redis/edge，并按 requestId/operationName 输出分段耗时。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">P1</div>
+        <div><h3>查询粒度与页面 read model 不匹配</h3><p><code>EventOverallResult</code> 返回全部 event；notice 单独请求；public 数据可聚合为一个 Home overview，session entry 保持单独请求，避免混淆 public/session 缓存。</p></div>
+      </div>
+      <div class="rank">
+        <div class="rank-no">P2</div>
+        <div><h3>DevTools 冷启动与产品性能混在一起</h3><p>代码编译冷启动样本可达约 5 秒，温编译约 1.3 秒；这属于工具/runtime 指标，必须与真机冷启动、页面冷路由、缓存冷请求分列。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>具体整改建议</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>优先级</th><th>小程序</th><th>Web / GraphQL</th><th>预期作用</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>P0</td>
+              <td>Home 去掉全局阻塞；按 header、entry、fixtures、market、summary 独立 skeleton 和独立状态；使用 <code>Promise.allSettled</code> 或每 section 单独 commit</td>
+              <td>恢复 event fixture publication，或从 core 快照直接提供 scheduled fixture</td>
+              <td>把“整页等待最慢请求”改为“首个可用 section 尽快出现”</td>
+            </tr>
+            <tr>
+              <td>P0</td>
+              <td>埋点增加 <code>route/onLoad/primaryContentCommitted/coreComplete/tailComplete</code>，刷新单独计时</td>
+              <td>输出 proxy/session/limiter/upstream/parse/context/resolver/Redis/SQL/serialize 分段 timing</td>
+              <td>消除错误指标，能把 210ms 和 364ms 精确归因</td>
+            </tr>
+            <tr>
+              <td>P1</td>
+              <td>public Home overview 与 session entry 分成最多两条请求；notice 合并到 public overview 或 app bootstrap</td>
+              <td>新增高效 Home read model；<code>eventOverallResult(eventId)</code> 只取单 event</td>
+              <td>网络 operation 从 5 降至 2，减少重复固定成本和后端并发</td>
+            </tr>
+            <tr>
+              <td>P1</td>
+              <td>刷新保留 last-good，各 section 独立错误提示，不清空整页</td>
+              <td>public allowlist 跳过 session lookup；DB limiter 改 Redis/edge；保持 fail-closed</td>
+              <td>弱网刷新立即有反馈，proxy 固定开销目标降低 50% 以上</td>
+            </tr>
+            <tr>
+              <td>P2</td>
+              <td>countdown 隔离组件；非最后一小时降为分钟级更新</td>
+              <td>Entry mutable summary 与 profile 拆 key，或将 metadata TTL 提升至 5min 并在 refresh 后失效</td>
+              <td>减少长期 bridge 更新和过短服务端 cache miss</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>新的性能验收口径</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>场景</th><th>必须单独报告</th><th>建议门槛</th></tr></thead>
+          <tbody>
+            <tr><td>页面热进入</td><td>route → primary content；network count；L1 hit</td><td>p95 ≤ 500ms；fresh TTL 内 0 network</td></tr>
+            <tr><td>App 重启 + L2</td><td>appLaunch → route、route → onLoad、storage resolve、primary content</td><td>primary content p95 ≤ 1,000ms；storage hit p95 &lt; 50ms</td></tr>
+            <tr><td>页面冷数据</td><td>shell FCP、核心请求 critical path、primary content、core complete、tail complete</td><td>shell ≤ 500ms；primary content ≤ 1,500ms；核心完成 ≤ 2,000ms</td></tr>
+            <tr><td>刷新</td><td>用户反馈、保留 last-good、network complete、fresh commit</td><td>反馈 ≤ 100ms；p95 ≤ 1,000ms；失败不清空可用数据</td></tr>
+            <tr><td>Fixture 服务热路径</td><td>direct GraphQL、proxy、数据源命中</td><td>direct p95 ≤ 250ms；proxy p95 ≤ 350ms；正常路径不得 PG fallback</td></tr>
+            <tr><td>渲染</td><td>data resolve → setData callback；列表条数和 payload</td><td>10 条 fixture ≤ 50ms；不得由全页 loader 等待非关键 section</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>每个场景至少 5 次样本，报告 p50/p95，并将代码编译、DevTools runtime、真机 app cold start、页面 cold route、客户端 cold cache 分开。25 个注册页面的既有逐页结果仍在 <a href="./miniprogram-ux-performance-acceptance-2026-08-11.md">原验收报告</a>；其中“完全稳定”列只保留为自动化静默确认，不再用于渲染排名。下一轮逐页报告必须按上述新口径重采。</p>
+    </section>
+
+    <section>
+      <h2>最终判断</h2>
+      <div class="verdict">
+        <strong>前端不是在花 1–2 秒渲染 10 条 fixture。</strong>热缓存证据显示渲染与 bridge 提交是几十毫秒级。修复前冷慢由两个主要临界段组成：DevTools 页面模块装载约 1.60 秒，以及 EventFixtures 错误进入 Live snapshot 后的约 1.87 秒请求。页面架构又用全局 loader 和 <code>Promise.all</code> 把这条尾延迟放大为整页不可用。正确顺序是：修正指标 → 修正 Core/Live 依赖方向 → 渐进渲染 → 分段复测；本轮不通过新增缓存掩盖问题。
+      </div>
+      <p class="muted">尚未完成的证据：proxy 内部 210ms 的精确分段、GraphQL baseline 158ms 的精确分段、真机而非 DevTools 的冷/热启动。没有这些证据前，不应按猜测加 SQL index，也不应声明整套 main 性能验收通过。</p>
+    </section>
+
+    <footer>
+      LetLetMe Mini Program · local diagnostic evidence · 2026-08-11
+    </footer>
+<section id="event-fixtures-acceptance-2026-08-12" style="margin:32px 0;padding:28px;border:1px solid #e1b9ae;border-radius:18px;background:#fff8f5;color:#2c211d">
+  <p style="margin:0 0 8px;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#a33b2b">Acceptance update · 2026-08-12</p>
+  <h2 style="margin:0 0 12px">EventFixtures 修复后验收：未通过全部硬门槛</h2>
+  <p><strong>状态仍为“代码已实施，尚未验收”。</strong> 正向依赖已修复，但性能门槛未全部通过，因此不得合并、部署或上传微信开发版。</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:20px 0">
+    <div style="padding:16px;border-radius:12px;background:#eef8f0"><strong>暖页面 p95</strong><br><span style="font-size:28px">308ms</span><br>门槛 800ms · PASS</div>
+    <div style="padding:16px;border-radius:12px;background:#fff0ec"><strong>冷启动 Fixture p95</strong><br><span style="font-size:28px">2961ms</span><br>门槛 2000ms · FAIL</div>
+    <div style="padding:16px;border-radius:12px;background:#fff0ec"><strong>刷新 Fixture p95</strong><br><span style="font-size:28px">1499ms</span><br>门槛 800ms · FAIL</div>
+    <div style="padding:16px;border-radius:12px;background:#eef8f0"><strong>response → callback p95</strong><br><span style="font-size:28px">22ms</span><br>门槛 50ms · PASS</div>
+  </div>
+  <h3>固定环境与代码</h3>
+  <p>DevTools Stable 2.01.2510290，iPhone 12/13 (Pro)，390 × 844，基础库 3.15.2。GraphQL <code>7c5d719</code>；小程序 <code>7b70de9</code>；Web main <code>35c8b773</code>。样本为 3 次 App runtime 冷启动、10 次暖页面、10 次刷新。</p>
+  <div style="overflow:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr><th style="text-align:left;padding:10px;border-bottom:1px solid #d8c8c2">指标</th><th style="padding:10px;border-bottom:1px solid #d8c8c2">p50</th><th style="padding:10px;border-bottom:1px solid #d8c8c2">p95</th><th style="padding:10px;border-bottom:1px solid #d8c8c2">门槛</th><th style="padding:10px;border-bottom:1px solid #d8c8c2">结果</th></tr></thead>
+    <tbody>
+      <tr><td style="padding:10px">GraphQL 4000 直连</td><td style="text-align:center">581.7ms</td><td style="text-align:center">1278.9ms</td><td style="text-align:center">≤500ms</td><td style="text-align:center;color:#a33b2b;font-weight:800">FAIL</td></tr>
+      <tr><td style="padding:10px">Web 3000 完整代理</td><td style="text-align:center">801.7ms</td><td style="text-align:center">2205.3ms</td><td style="text-align:center">≤750ms</td><td style="text-align:center;color:#a33b2b;font-weight:800">FAIL</td></tr>
+      <tr><td style="padding:10px">冷启动 App launch → FCP</td><td style="text-align:center">693ms</td><td style="text-align:center">768ms</td><td style="text-align:center">观察项</td><td style="text-align:center;color:#20713b;font-weight:800">PASS</td></tr>
+      <tr><td style="padding:10px">冷启动 App launch → 10 条 Fixture 可见</td><td style="text-align:center">2334ms</td><td style="text-align:center">2961ms</td><td style="text-align:center">≤2000ms</td><td style="text-align:center;color:#a33b2b;font-weight:800">FAIL</td></tr>
+      <tr><td style="padding:10px">暖页面 route → 10 条 Fixture 可见</td><td style="text-align:center">299ms</td><td style="text-align:center">308ms</td><td style="text-align:center">≤800ms</td><td style="text-align:center;color:#20713b;font-weight:800">PASS</td></tr>
+      <tr><td style="padding:10px">刷新 → 新 Fixture 可见</td><td style="text-align:center">971ms</td><td style="text-align:center">1499ms</td><td style="text-align:center">≤800ms</td><td style="text-align:center;color:#a33b2b;font-weight:800">FAIL</td></tr>
+      <tr><td style="padding:10px">response → setData callback</td><td style="text-align:center">19ms</td><td style="text-align:center">22ms</td><td style="text-align:center">≤50ms</td><td style="text-align:center;color:#20713b;font-weight:800">PASS</td></tr>
+    </tbody>
+  </table></div>
+  <h3>调用链结论</h3>
+  <p><code>Core Fixtures → eventFixtures</code>；<code>Core Fixtures + Live Data → liveSnapshot</code>。23 次 Fixture 逻辑调用包含 13 次网络调用和 10 次本地缓存调用，每次均得到 10 条 Fixture；页面触发的 LiveSnapshot 为 0。后端 trace 每次只出现一次 Core acquisition，source 为 Redis、revision 为 2。</p>
+  <h3>为什么不是“10 条 Fixture 渲染 1–2 秒”</h3>
+  <p>刷新 response 到 setData callback 的 p95 仅 22ms，callback 自身 p95 仅 18ms。秒级时间主要在 GraphQL 公共请求路径和 Web 上游等待；冷启动还包含 CurrentEventInfo 到 CoreEventFixtureSchedule 的串行依赖。Redis manifest 热 GET p95 只有 0.2ms，同 ingress 的 MiniProgramNotice p50 也约 577ms，说明固定请求路径而非 10 行渲染是主要瓶颈。</p>
+  <p>辅助请求延后到 Fixture commit 后，刷新 p95 已从 3002ms 降至 1499ms，但仍未达到 800ms。IDE 重开产生的 7–9 秒编译数据和 550ms 静默窗口均未计入本表。</p>
+</section>
+  </main>
+</body>
+</html>
