@@ -67,6 +67,9 @@ test("an overlapping manual refresh awaits its independent transfer refresh", as
     data: { entryId: 123, event: 33 },
     liveRequest: scoreRequest,
     liveRequestKey: "123:33",
+    restartForPrincipalChange() {
+      return false;
+    },
     loadTransfers(entryId, eventId, forceRefresh) {
       transferCalls.push([entryId, eventId, forceRefresh]);
       return transfersRequest;
@@ -277,6 +280,9 @@ test("entry resume revalidates current-gameweek transfers independently", async 
     shouldAutoRefresh() {
       return false;
     },
+    restartForPrincipalChange() {
+      return false;
+    },
     loadTransfers(entryId, eventId, forceRefresh) {
       calls.push(`transfers:${entryId}:${eventId}:${forceRefresh}`);
       return Promise.resolve();
@@ -305,6 +311,9 @@ test("entry resume drops a historical selection after a season rollover", async 
       stop() { calls.push("stop"); },
       sync() { calls.push(`sync:${context.data.event}`); }
     },
+    restartForPrincipalChange() {
+      return false;
+    },
     setData(update) { Object.assign(this.data, update); },
     loadData(options) {
       calls.push(`load:${this.data.event}:${options.forceRefresh}:${options.includeTransfers}`);
@@ -319,6 +328,58 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.equal(context.data.maxGw, 1);
   assert.equal(context.data.hasData, false);
   assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
+});
+
+test("entry principal changes clear old live data and restart the followed team", () => {
+  globalThis.getApp = () => ({ globalData: { entryId: 456, gw: 33 } });
+  globalThis.wx = { getStorageSync: () => undefined };
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      viewOnly: false,
+      hasData: true,
+      total: 77,
+      starters: [{ element: 1 }],
+      transfers: [{ inText: "old" }]
+    },
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:33",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push("sync"); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); },
+    loadData(options) {
+      calls.push(`load:${this.data.entryId}:${options.includeTransfers}:${options.forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  assert.equal(entryPage.restartForPrincipalChange.call(context, 123), true);
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.hasData, false);
+  assert.equal(context.data.total, 0);
+  assert.deepEqual(context.data.starters, []);
+  assert.deepEqual(context.data.transfers, []);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
+  assert.deepEqual(calls, ["stop", "sync", "load:456:true:true", "display"]);
+
+  context.data.viewOnly = true;
+  context.data.entryId = 999;
+  assert.equal(entryPage.restartForPrincipalChange.call(context, 999), false);
+  assert.equal(context.data.entryId, 999);
 });
 
 test("tournament resume drops a historical selection after a season rollover", async () => {

@@ -18,6 +18,7 @@ import {
   type LiveDisplayState
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
+import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 
@@ -206,6 +207,7 @@ Page({
       const app = getApp<IAppOption>();
       try { await app.initAppData(true); } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
+      if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason = app.globalData.season || undefined;
       const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
       if (nextSeason) this.loadedSeason = nextSeason;
@@ -263,8 +265,57 @@ Page({
       .finally(() => wx.stopPullDownRefresh());
   },
 
+  restartForPrincipalChange(entryId: number | undefined): boolean {
+    // An explicit non-followed route entry is a stable read-only view. The
+    // normal personal surface, however, must track the authoritative follow
+    // even when a request's 401 recovery changes it mid-flight.
+    if (this.data.viewOnly) return false;
+    const nextEntryId = currentFollowEntryId();
+    if (nextEntryId === entryId) return false;
+
+    this.liveRefresh?.stop();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this.liveRequestId += 1;
+    this.transfersRequestId += 1;
+    this.liveRequest = null;
+    this.liveRequestKey = "";
+    this.setData({
+      entryId: nextEntryId,
+      loading: false,
+      refreshing: false,
+      transfersLoading: false,
+      hasData: false,
+      error: "",
+      transfersError: "",
+      emptyState: !nextEntryId,
+      total: 0,
+      livePoints: 0,
+      netPoints: 0,
+      transferCost: 0,
+      captainText: "-",
+      chipText: "-",
+      playedText: "-",
+      lastUpdated: "",
+      summaryTiles: [],
+      starters: [],
+      bench: [],
+      managers: [],
+      transfers: []
+    });
+    if (nextEntryId) {
+      this.liveRefresh?.sync();
+      void this.loadData({ includeTransfers: true, forceRefresh: true });
+    }
+    this.syncDisplayState();
+    return true;
+  },
+
   loadData(options: LiveEntryLoadOptions = {}): Promise<void> {
     const entryId = this.data.entryId;
+    if (this.restartForPrincipalChange(entryId)) {
+      return Promise.resolve();
+    }
     if (!entryId) {
       this.setData({ loading: false, error: "", emptyState: true });
       this.syncDisplayState();
@@ -309,6 +360,7 @@ Page({
           options.forceRefresh === true
         );
         if (requestId !== this.liveRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
         const players = (result.players || result.pickList || []).map(normalizePlayer);
@@ -347,6 +399,7 @@ Page({
         this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
         this.syncDisplayState();
       } finally {
@@ -377,18 +430,20 @@ Page({
     this.setData({ transfersLoading: true, transfersError: "" });
     try {
       const transfers: EntryTransfer[] = await getEntryEventTransfers(entryId, eventId, forceRefresh);
+      if (requestId !== this.transfersRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (
-        requestId !== this.transfersRequestId
-        || entryId !== this.data.entryId
+        entryId !== this.data.entryId
         || eventId !== this.data.event
       ) {
         return;
       }
       this.setData({ transfers: transfers.map(normalizeTransfer), transfersError: "" });
     } catch (error) {
+      if (requestId !== this.transfersRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (
-        requestId !== this.transfersRequestId
-        || entryId !== this.data.entryId
+        entryId !== this.data.entryId
         || eventId !== this.data.event
       ) {
         return;

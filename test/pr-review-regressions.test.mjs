@@ -366,9 +366,20 @@ test("personal responses never cross an authoritative follow change", () => {
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(competitions, /principalChanged[\s\S]*items: \[\], displayItems: \[\]/);
   assert.match(leagues, /currentFollowEntryId\(\) !== entryId[\s\S]*this\.loadLeagues\(true\)/);
   assert.match(overview, /currentFollowEntryId\(\) !== context\.entryId[\s\S]*this\.loadOverview\(true\)/);
+  assert.match(liveEntry, /restartForPrincipalChange\(entryId[\s\S]*currentFollowEntryId\(\)/);
+  assert.match(
+    liveEntry,
+    /await getLivePointsByEntrySnapshot[\s\S]*restartForPrincipalChange\(entryId\)/
+  );
+  assert.match(
+    liveEntry,
+    /await getEntryEventTransfers[\s\S]*restartForPrincipalChange\(entryId\)/
+  );
+  assert.match(liveEntry, /if \(this\.data\.viewOnly\) return false/);
 });
 
 test("all Live surfaces refresh event context before resume polling", () => {
