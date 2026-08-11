@@ -342,6 +342,11 @@ test("historical Live selections reset when the season changes", () => {
   assert.match(entry, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
   assert.match(entry, /eventContextChanged && \(seasonChanged \|\| wasCurrentEvent\)/);
   assert.match(entry, /error: nextEventId > 0 \? "" : "当前赛季暂无实时比赛周"/);
+  assert.match(entry, /const currentGw = Math\.max\(0, Number\(app\.globalData\.gw\)/);
+  assert.match(entry, /if \(currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*当前赛季暂无实时比赛周/);
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(tournament, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
+  assert.match(tournament, /this\.tournamentListRequestId \+= 1[\s\S]*nextEventId === 0/);
 });
 
 test("first personal paints bypass previous-season event and summary caches", () => {
@@ -360,6 +365,8 @@ test("Match and Team retries bypass repeating-season caches", () => {
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
   assert.match(team, /onRetry\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(team, /onEmptyAction\(\)[\s\S]*this\.loadData\(true\)/);
+  assert.match(team, /const contextChanged = seasonChanged \|\| \(eventChanged && wasCurrentEvent\)/);
+  assert.match(team, /if \(!eventResult\) \{[\s\S]*transferError,[\s\S]*hasTeamData: hasHistory/);
   assert.match(fixtures, /selectedWindowByUser[\s\S]*const startEvent = this\.selectedWindowByUser/);
 });
 

@@ -137,7 +137,7 @@ Page({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
-    const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     const followedEntry = app.globalData.entryId;
     this.setData({
       event: currentGw,
@@ -151,7 +151,11 @@ Page({
     // onShow can run while initAppData is still pending. Re-arm here once the
     // entry/event context exists so an initial failure still recovers by poll.
     this.liveRefresh?.sync();
-    this.loadData({ includeTransfers: true });
+    if (currentGw > 0) {
+      this.loadData({ includeTransfers: true });
+    } else {
+      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+    }
     this.syncDisplayState();
   },
 
@@ -303,6 +307,10 @@ Page({
         this.loadedSeason = app.globalData.season || this.loadedSeason;
         this.setData({ event: nextEventId, maxGw: nextEventId, error: "", hasData: false });
         this.liveRefresh?.sync();
+      } else {
+        this.setData({ error: "当前赛季暂无实时比赛周" });
+        this.syncDisplayState();
+        return;
       }
     }
     return this.loadData(options);

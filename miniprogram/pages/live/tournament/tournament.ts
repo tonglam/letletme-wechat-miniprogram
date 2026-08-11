@@ -356,10 +356,14 @@ Page({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
-    const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
-    this.loadTournaments(false);
+    if (currentGw > 0) {
+      this.loadTournaments(false);
+    } else {
+      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+    }
     this.syncDisplayState();
   },
 
@@ -435,6 +439,7 @@ Page({
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
         this.rowsRequestId += 1;
+        this.tournamentListRequestId += 1;
         this.rowsRequest = null;
         this.rowsRequestKey = "";
         this.liveSnapshot = null;
@@ -472,7 +477,16 @@ Page({
           displayedRows: [],
           hasData: false,
           lastUpdated: "",
-          ...(nextEventId === 0 ? { error: "当前赛季暂无实时比赛周" } : {})
+          ...(nextEventId === 0 ? {
+            error: "当前赛季暂无实时比赛周",
+            tournamentListError: "",
+            tournamentListErrorSuffix: "",
+            emptyState: "",
+            emptyEyebrow: "",
+            emptyTitle: "",
+            emptyDescription: "",
+            emptyActionText: ""
+          } : {})
         });
         this.liveRefresh?.sync();
         if (nextEventId === 0) {

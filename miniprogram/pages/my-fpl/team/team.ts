@@ -201,7 +201,7 @@ Page({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
-    const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
     this.setData({
       entryId: app.globalData.entryId,
@@ -228,19 +228,37 @@ Page({
     const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
     if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
-    let contextChanged = false;
-    if (nextGw > 0 && (seasonChanged || nextGw !== this.data.maxGw)) {
-      contextChanged = seasonChanged || wasCurrentEvent;
+    const eventChanged = nextGw > 0 && nextGw !== this.data.maxGw;
+    const contextChanged = seasonChanged || (eventChanged && wasCurrentEvent);
+    if (contextChanged) {
       this.phaseBannerRequestId += 1;
       this.setData({
         maxGw: nextGw,
-        ...(contextChanged ? {
-          event: nextGw,
-          phaseBanner: "",
-          hasTeamData: false,
-          ...(seasonChanged ? { transferRows: [], hasTransfers: false } : {})
+        event: nextGw,
+        phaseBanner: "",
+        hasTeamData: false,
+        ...(seasonChanged ? {
+          error: "",
+          transferError: "",
+          headerTitle: "球队数据",
+          headerSubtitle: "",
+          overviewStats: [],
+          eventStats: [],
+          squadRows: [],
+          transferRows: [],
+          chipSummaryStats: [],
+          chipCountRows: [],
+          chipUsageRows: [],
+          historyRows: [],
+          seasonHistoryRows: [],
+          hasSquad: false,
+          hasTransfers: false,
+          hasChips: false,
+          hasHistory: false
         } : {})
       });
+    } else if (eventChanged) {
+      this.setData({ maxGw: nextGw });
     }
     // Summary data moves slowly, but an advancing current GW reloads now.
     if (contextChanged || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
@@ -268,17 +286,37 @@ Page({
     const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
     if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
-    if (nextGw > 0 && (seasonChanged || nextGw !== this.data.maxGw)) {
+    const eventChanged = nextGw > 0 && nextGw !== this.data.maxGw;
+    const contextChanged = seasonChanged || (eventChanged && wasCurrentEvent);
+    if (contextChanged) {
       this.phaseBannerRequestId += 1;
       this.setData({
         maxGw: nextGw,
-        ...(seasonChanged || wasCurrentEvent ? {
-          event: nextGw,
-          phaseBanner: "",
-          hasTeamData: false,
-          ...(seasonChanged ? { transferRows: [], hasTransfers: false } : {})
+        event: nextGw,
+        phaseBanner: "",
+        hasTeamData: false,
+        ...(seasonChanged ? {
+          error: "",
+          transferError: "",
+          headerTitle: "球队数据",
+          headerSubtitle: "",
+          overviewStats: [],
+          eventStats: [],
+          squadRows: [],
+          transferRows: [],
+          chipSummaryStats: [],
+          chipCountRows: [],
+          chipUsageRows: [],
+          historyRows: [],
+          seasonHistoryRows: [],
+          hasSquad: false,
+          hasTransfers: false,
+          hasChips: false,
+          hasHistory: false
         } : {})
       });
+    } else if (eventChanged) {
+      this.setData({ maxGw: nextGw });
     }
     await this.loadData(true).finally(() => wx.stopPullDownRefresh());
   },
@@ -357,13 +395,16 @@ Page({
       if (requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       const latestEvent = latestEventId(history.results);
-      const selectedEvent = clampEvent(this.data.event, latestEvent);
+      const authoritativeEvent = Number(getApp<IAppOption>().globalData.gw) || 0;
+      const selectedEvent = authoritativeEvent > 0 ? clampEvent(this.data.event, latestEvent) : 0;
       if (selectedEvent !== this.data.event) {
-        this.setData({ event: selectedEvent, maxGw: latestEvent, hasTeamData: false });
+        this.setData({ event: selectedEvent, maxGw: authoritativeEvent > 0 ? latestEvent : 0, hasTeamData: false });
       }
       let transferError = "";
       const [eventResult, transferHistory] = await Promise.all([
-        getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh),
+        selectedEvent > 0
+          ? getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh)
+          : Promise.resolve(undefined),
         getEntryTeamStatsTransfers(entryId, forceRefresh).catch((error) => {
           transferError = error instanceof Error ? error.message : "转会历史加载失败";
           return [] as EntryGameweekTransfers[];
@@ -376,10 +417,12 @@ Page({
         const historySupport = mapHistorySupportRows(history, transferHistory);
         const hasHistory = historySupport.historyRows.length > 0 || historySupport.seasonHistoryRows.length > 0;
         this.loadedDataSeason = undefined;
+        this._loadedAt = Date.now();
         this.setData({
           event: selectedEvent,
-          maxGw: latestEvent,
+          maxGw: authoritativeEvent > 0 ? latestEvent : 0,
           error: "",
+          transferError,
           headerTitle: "球队数据",
           headerSubtitle: "",
           overviewStats: [],
