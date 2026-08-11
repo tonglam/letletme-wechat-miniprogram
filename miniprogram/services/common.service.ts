@@ -1,5 +1,5 @@
 import { graphqlRequest } from "./graphql.service";
-import type { CurrentEventDeadline, Fixture, TeamOption } from "../models/common";
+import type { CurrentEventDeadline, TeamOption } from "../models/common";
 import { storageKeys } from "../config/storage-keys";
 
 const CURRENT_EVENT_INFO = `
@@ -52,76 +52,14 @@ export function refreshEventAndDeadline(): Promise<CurrentEventDeadline> {
   return getCurrentEventAndDeadline(true);
 }
 
-const EVENT_FIXTURES = `
-  query EventFixtures($eventId: Int!) {
-    eventFixtures(eventId: $eventId) {
-      id
-      code
-      kickoffTime
-      finished
-      started
-      minutes
-      homeTeam { id name shortName }
-      awayTeam { id name shortName }
-      homeScore
-      awayScore
-      homeTeamDifficulty
-      awayTeamDifficulty
-    }
-  }
-`;
-
 const MINI_PROGRAM_NOTICE = `
   query MiniProgramNotice {
     miniProgramNotice
   }
 `;
 
-interface EventFixturesResponse {
-  eventFixtures: {
-    id: number;
-    code: number;
-    kickoffTime: string | null;
-    finished: boolean;
-    started: boolean | null;
-    minutes: number;
-    homeTeam: { id: number; name: string; shortName: string };
-    awayTeam: { id: number; name: string; shortName: string };
-    homeScore: number | null;
-    awayScore: number | null;
-    homeTeamDifficulty: number | null;
-    awayTeamDifficulty: number | null;
-  }[];
-}
-
 interface MiniProgramNoticeResponse {
   miniProgramNotice: string;
-}
-
-export async function getNextFixture(event?: number, forceRefresh = false): Promise<Fixture[]> {
-  if (!event) {
-    return [];
-  }
-  const data = await graphqlRequest<EventFixturesResponse>(EVENT_FIXTURES, { eventId: event }, {
-    cachePolicy: "fixtures",
-    forceRefresh
-  });
-  return (data.eventFixtures || []).map((f) => ({
-    id: f.id,
-    event,
-    homeTeam: f.homeTeam.name,
-    awayTeam: f.awayTeam.name,
-    teamId: f.homeTeam.id,
-    againstTeamId: f.awayTeam.id,
-    teamName: f.homeTeam.name,
-    againstTeamName: f.awayTeam.name,
-    teamShortName: f.homeTeam.shortName,
-    againstTeamShortName: f.awayTeam.shortName,
-    kickoffTime: f.kickoffTime || undefined,
-    difficulty: f.homeTeamDifficulty ?? undefined,
-    homeDifficulty: f.homeTeamDifficulty ?? undefined,
-    awayDifficulty: f.awayTeamDifficulty ?? undefined
-  }));
 }
 
 export async function getMiniProgramNotice(): Promise<string> {

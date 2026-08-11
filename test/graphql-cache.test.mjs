@@ -10,7 +10,10 @@ import { getGraphQLOperationPolicy } from "../miniprogram/services/graphql-cache
 import { storagePrefixes } from "../miniprogram/config/storage-keys.ts";
 import { PLAYERS_FOR_PICKER_QUERY } from "../miniprogram/services/player.service.ts";
 import { MINI_GAMEWEEK_SUMMARY_QUERY } from "../miniprogram/services/summary.service.ts";
-import { buildFixtureWindowRequest } from "../miniprogram/services/fixture.service.ts";
+import {
+  buildFixtureWindowRequest,
+  CORE_EVENT_FIXTURE_SCHEDULE_QUERY
+} from "../miniprogram/services/fixture.service.ts";
 import {
   LIVE_MATCHES_QUERY,
   LIVE_SNAPSHOT_QUERY
@@ -47,6 +50,16 @@ test("fixture windows use one production-compatible aliased request", () => {
   assert.equal((request.query.match(/eventFixtures\(eventId:/g) || []).length, 5);
   assert.match(request.query, /fragment FixtureWindowFields on Fixture/);
   assert.doesNotMatch(request.query, /fixtures\(limit:/);
+});
+
+test("core event fixture schedule is a named public fixture operation", () => {
+  assert.match(CORE_EVENT_FIXTURE_SCHEDULE_QUERY, /query CoreEventFixtureSchedule/);
+  assert.match(CORE_EVENT_FIXTURE_SCHEDULE_QUERY, /eventFixtures\(eventId: \$eventId\)/);
+  assert.doesNotMatch(CORE_EVENT_FIXTURE_SCHEDULE_QUERY, /liveSnapshot|liveMatches/);
+  assert.deepEqual(getGraphQLOperationPolicy("CoreEventFixtureSchedule"), {
+    authMode: "public",
+    cachePolicy: "fixtures"
+  });
 });
 
 test("does not expose raw HTTP status codes to users", () => {

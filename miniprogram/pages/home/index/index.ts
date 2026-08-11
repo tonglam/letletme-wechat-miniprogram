@@ -1,4 +1,5 @@
-import { getMiniProgramNotice, getNextFixture, refreshEventAndDeadline } from "../../../services/common.service";
+import { getMiniProgramNotice, refreshEventAndDeadline } from "../../../services/common.service";
+import { getCoreEventFixtureSchedule } from "../../../services/fixture.service";
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import { getPlayerValues } from "../../../services/price.service";
@@ -12,6 +13,7 @@ import { goToEntryProfile, goToEntrySearch, navigateTo } from "../../../utils/na
 import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
+import { recordRenderCommit } from "../../../utils/perf";
 
 interface HomeData {
   loading: boolean;
@@ -89,6 +91,7 @@ Page({
   countdownTimer: undefined as number | undefined,
   _initialLoadDone: false,
   _lastLoadAt: 0,
+  _loadRequestId: 0,
 
   async onLoad() {
     this._initialLoadDone = false;
@@ -116,7 +119,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.refreshHome().finally(() => wx.stopPullDownRefresh());
+    return this.refreshHome().finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -128,55 +131,90 @@ Page({
   },
 
   async loadPage(forceRefresh = false) {
+    const requestId = ++this._loadRequestId;
     const app = getApp<IAppOption>();
-    if (!getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked and synced meanwhile, so
-      // wait for the refreshed profile before snapshotting the entry. Show
-      // the loading state first so the wait never renders placeholder content.
-      this.setData({ loading: true });
-      try { await app.authReady; } catch {}
-    }
-    // No followed team only means the entry card renders its empty state —
-    // the public sections (fixtures, prices, stats) never depend on it.
-    const entryId = app.globalData.entryId;
-
     if (!app.globalData.gw) {
       await app.initAppData();
     }
 
-    this.syncAppState({ loading: true, error: "", entryError: "" });
-
     try {
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
-      // entryInfo no longer gates the independent fixtures/prices/stats
-      // requests — all four run in parallel, and a failed entry request only
-      // marks the team card. The follow itself is never cleared by failures.
+      const hadFixtureRows = this.data.fixtureRows.length > 0 && this.data.selectedFixtureGw === fixtureGw;
+      this.syncAppState({
+        loading: !this._initialLoadDone && !hadFixtureRows,
+        fixtureLoading: !hadFixtureRows,
+        error: "",
+        fixtureError: "",
+        entryError: "",
+        selectedFixtureGw: fixtureGw,
+        minFixtureGw: app.globalData.nextGw
+      });
+
       let fixtureError = "";
       let entryError = "";
-      const fixtureTask = getNextFixture(fixtureGw, forceRefresh).catch((error) => {
+      const fixtureTask = getCoreEventFixtureSchedule(
+        fixtureGw,
+        app.globalData.season,
+        forceRefresh
+      ).then((fixtures) => ({ fixtures, failed: false })).catch((error) => {
         fixtureError = error instanceof Error ? error.message : "赛程加载失败";
-        return [] as Fixture[];
+        return { fixtures: hadFixtureRows ? null : [] as Fixture[], failed: true };
       });
-      const entryTask = entryId
-        ? getEntryInfo(entryId, forceRefresh).catch((error) => {
+      const fixtureResult = await fixtureTask;
+      if (requestId !== this._loadRequestId) return;
+      if (fixtureResult.failed && hadFixtureRows) {
+        fixtureError = "";
+        wx.showToast({ title: "刷新失败，显示上次赛程", icon: "none" });
+      }
+      const fixtureCommitStartedAt = Date.now();
+      await new Promise<void>((resolve) => {
+        this.setData({
+          ...(fixtureResult.fixtures === null
+            ? {}
+            : { fixtureRows: fixtureResult.fixtures.map(mapFixtureRow) }),
+          fixtureError,
+          fixtureLoading: false,
+          loading: false
+        }, () => {
+          recordRenderCommit({
+            surface: "home-fixtures",
+            itemCount: this.data.fixtureRows.length,
+            duration: Date.now() - fixtureCommitStartedAt
+          });
+          resolve();
+        });
+      });
+      if (requestId !== this._loadRequestId) return;
+
+      // Do not compete with the first-paint Fixture request for proxy or
+      // GraphQL capacity. Secondary reads begin only after the list is visible.
+      const entryTask = (async (): Promise<EntryInfo | undefined> => {
+        if (!getApiSessionToken()) {
+          try { await app.authReady; } catch {}
+        }
+        const entryId = app.globalData.entryId;
+        return entryId
+          ? getEntryInfo(entryId, forceRefresh).catch((error) => {
             entryError = error instanceof Error ? error.message : "球队信息加载失败";
             return undefined as EntryInfo | undefined;
           })
-        : Promise.resolve(undefined as EntryInfo | undefined);
-      const [entry, fixtures, priceChanges, gameweekStats] = await Promise.all([
+          : undefined;
+      })();
+      const priceTask = getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]);
+      const gameweekStatsTask = getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined);
+      void this.loadNotice();
+
+      const [entry, priceChanges, gameweekStats] = await Promise.all([
         entryTask,
-        fixtureTask,
-        getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]),
-        getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined)
+        priceTask,
+        gameweekStatsTask
       ]);
+      if (requestId !== this._loadRequestId) return;
       const priceGroups = mapHomePriceChanges(priceChanges);
 
       this._lastLoadAt = Date.now();
       this.setData({
-        fixtureRows: fixtures.map(mapFixtureRow),
-        fixtureError,
         entryError,
         priceRises: priceGroups.rises,
         priceFalls: priceGroups.falls,
@@ -185,20 +223,23 @@ Page({
         minFixtureGw: app.globalData.nextGw,
         entry: entry || {}
       });
-      this.loadNotice();
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
+      if (requestId === this._loadRequestId) {
+        this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (requestId === this._loadRequestId) {
+        this.setData({ loading: false, fixtureLoading: false });
+      }
     }
   },
 
   async refreshHome() {
-    this.setData({ loading: true, error: "" });
+    this.setData({ error: "" });
     try {
+      await this.loadPage(true);
       await refreshEventAndDeadline().catch(() => undefined);
       await getApp<IAppOption>().initAppData();
-      await this.loadPage(true);
       this.syncAppState();
       this.startCountdown();
       wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
@@ -303,10 +344,14 @@ Page({
     }
   },
 
-  async loadFixtureGw(event: number) {
+  async loadFixtureGw(event: number, forceRefresh = false) {
     this.setData({ fixtureLoading: true, fixtureError: "", selectedFixtureGw: event });
     try {
-      const fixtures = await getNextFixture(event);
+      const fixtures = await getCoreEventFixtureSchedule(
+        event,
+        getApp<IAppOption>().globalData.season,
+        forceRefresh
+      );
       this.setData({ fixtureRows: fixtures.map(mapFixtureRow) });
     } catch (error) {
       this.setData({
@@ -319,7 +364,7 @@ Page({
   },
 
   onRetryFixtures() {
-    this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw);
+    this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
   }
 });
 
