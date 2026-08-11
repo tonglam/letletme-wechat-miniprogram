@@ -93,16 +93,15 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   const fixtureResult = home.indexOf("const fixtureResult = await fixtureTask");
   const fixtureCommit = home.indexOf("await new Promise<void>", fixtureResult);
-  const entryTask = home.indexOf("const entryTask", fixtureCommit);
-  const priceTask = home.indexOf("const priceTask", fixtureCommit);
-  const noticeTask = home.indexOf("void this.loadNotice()", fixtureCommit);
+  const secondaryStart = home.indexOf("void this.loadSecondaryData", fixtureCommit);
 
   assert.ok(fixtureResult >= 0);
   assert.ok(fixtureCommit > fixtureResult);
-  assert.ok(entryTask > fixtureCommit);
-  assert.ok(priceTask > fixtureCommit);
-  assert.ok(noticeTask > fixtureCommit);
-  assert.ok(home.indexOf("await this.loadPage(true)") < home.indexOf("await refreshEventAndDeadline()"));
+  assert.ok(secondaryStart > fixtureCommit);
+  assert.match(
+    home,
+    /if \(contextMissing \|\| deadlineExpired\) \{[\s\S]*await app\.initAppData\(true\)[\s\S]*await this\.loadPage\(true\)/
+  );
 });
 
 test("empty fixture directories clear previously composed cards", () => {
@@ -303,7 +302,7 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(home, /getCoreEventFixtureSchedule/);
   assert.ok(
     home.indexOf("const fixtureResult = await fixtureTask") <
-      home.indexOf("const [entry, priceChanges, gameweekStats] = await Promise.all"),
+      home.indexOf("void this.loadSecondaryData"),
     "the fixture response releases the first screen before auxiliary Home data settles"
   );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);

@@ -1,9 +1,7 @@
-import { getMiniProgramNotice, refreshEventAndDeadline } from "../../../services/common.service";
 import { getCoreEventFixtureSchedule } from "../../../services/fixture.service";
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import { getPlayerValues } from "../../../services/price.service";
-import { getGameweekStatsForHome } from "../../../services/summary.service";
+import { getMiniHomeSupplement } from "../../../services/home.service";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { PlayerValue } from "../../../models/player";
@@ -21,6 +19,9 @@ interface HomeData {
   fixtureError: string;
   error: string;
   entryError: string;
+  priceError: string;
+  gameweekStatsError: string;
+  supplementLoading: boolean;
   entry: EntryInfo;
   fixtureRows: HomeFixtureRow[];
   priceRises: HomePriceChangeRow[];
@@ -72,6 +73,9 @@ Page({
     fixtureError: "",
     error: "",
     entryError: "",
+    priceError: "",
+    gameweekStatsError: "",
+    supplementLoading: false,
     entry: {},
     fixtureRows: [],
     priceRises: [],
@@ -152,7 +156,6 @@ Page({
       });
 
       let fixtureError = "";
-      let entryError = "";
       const fixtureTask = getCoreEventFixtureSchedule(
         fixtureGw,
         app.globalData.season,
@@ -187,42 +190,8 @@ Page({
       });
       if (requestId !== this._loadRequestId) return;
 
-      // Do not compete with the first-paint Fixture request for proxy or
-      // GraphQL capacity. Secondary reads begin only after the list is visible.
-      const entryTask = (async (): Promise<EntryInfo | undefined> => {
-        if (!getApiSessionToken()) {
-          try { await app.authReady; } catch {}
-        }
-        const entryId = app.globalData.entryId;
-        return entryId
-          ? getEntryInfo(entryId, forceRefresh).catch((error) => {
-            entryError = error instanceof Error ? error.message : "球队信息加载失败";
-            return undefined as EntryInfo | undefined;
-          })
-          : undefined;
-      })();
-      const priceTask = getPlayerValues(formatDateKey(), forceRefresh).catch(() => [] as PlayerValue[]);
-      const gameweekStatsTask = getGameweekStatsForHome(currentGw, forceRefresh).catch(() => undefined);
-      void this.loadNotice();
-
-      const [entry, priceChanges, gameweekStats] = await Promise.all([
-        entryTask,
-        priceTask,
-        gameweekStatsTask
-      ]);
-      if (requestId !== this._loadRequestId) return;
-      const priceGroups = mapHomePriceChanges(priceChanges);
-
       this._lastLoadAt = Date.now();
-      this.setData({
-        entryError,
-        priceRises: priceGroups.rises,
-        priceFalls: priceGroups.falls,
-        gameweekStats: mapHomeGameweekStats(gameweekStats),
-        selectedFixtureGw: fixtureGw,
-        minFixtureGw: app.globalData.nextGw,
-        entry: entry || {}
-      });
+      void this.loadSecondaryData(requestId, currentGw, forceRefresh);
     } catch (error) {
       if (requestId === this._loadRequestId) {
         this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
@@ -237,10 +206,15 @@ Page({
   async refreshHome() {
     this.setData({ error: "" });
     try {
+      const app = getApp<IAppOption>();
+      const contextMissing = !app.globalData.gw || !app.globalData.nextGw;
+      const deadlineExpired = Boolean(app.globalData.utcDeadline)
+        && getDeadlineDiffMs(app.globalData.utcDeadline) <= 0;
+      if (contextMissing || deadlineExpired) {
+        await app.initAppData(true);
+        this.syncAppState();
+      }
       await this.loadPage(true);
-      await refreshEventAndDeadline().catch(() => undefined);
-      await getApp<IAppOption>().initAppData();
-      this.syncAppState();
       this.startCountdown();
       wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
     } catch (error) {
@@ -248,6 +222,57 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  async loadSecondaryData(requestId: number, currentGw: number, forceRefresh: boolean) {
+    const app = getApp<IAppOption>();
+    this.setData({
+      supplementLoading: true,
+      priceError: "",
+      gameweekStatsError: "",
+      entryError: ""
+    });
+    let entryError = "";
+    const entryTask = (async (): Promise<EntryInfo | undefined> => {
+      if (!getApiSessionToken()) {
+        try { await app.authReady; } catch {}
+      }
+      const entryId = app.globalData.entryId;
+      return entryId
+        ? getEntryInfo(entryId, forceRefresh).catch((error) => {
+          entryError = error instanceof Error ? error.message : "球队信息加载失败";
+          return undefined;
+        })
+        : undefined;
+    })();
+    const supplementTask = getMiniHomeSupplement(currentGw, formatDateKey(), forceRefresh)
+      .catch((error) => ({
+        notice: "",
+        summary: undefined,
+        playerValues: [] as PlayerValue[],
+        errors: {
+          notice: "",
+          summary: error instanceof Error ? error.message : "GW 数据加载失败",
+          playerValues: error instanceof Error ? error.message : "身价数据加载失败"
+        }
+      }));
+    const [entry, supplement] = await Promise.all([entryTask, supplementTask]);
+    if (requestId !== this._loadRequestId) return;
+    const priceGroups = mapHomePriceChanges(supplement.playerValues);
+    this.setData({
+      entryError,
+      priceError: supplement.errors.playerValues,
+      gameweekStatsError: supplement.errors.summary,
+      supplementLoading: false,
+      ...(this.data.noticeClosed ? {} : { noticeText: supplement.notice }),
+      ...(supplement.errors.playerValues && supplement.playerValues.length === 0
+        ? {}
+        : { priceRises: priceGroups.rises, priceFalls: priceGroups.falls }),
+      ...(supplement.errors.summary && !supplement.summary
+        ? {}
+        : { gameweekStats: mapHomeGameweekStats(supplement.summary) }),
+      entry: entry || this.data.entry
+    });
   },
 
   syncAppState(extra: Partial<HomeData> = {}) {
@@ -288,15 +313,6 @@ Page({
 
   onRetry() {
     this.loadPage().finally(() => this.startCountdown());
-  },
-
-  async loadNotice() {
-    const notice = await getMiniProgramNotice().catch(() => "");
-    const noticeText = typeof notice === "string" ? notice : "";
-    if (this.data.noticeClosed) {
-      return;
-    }
-    this.setData({ noticeText });
   },
 
   onCloseNotice() {
