@@ -338,6 +338,46 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 
+test("entry resume clears live data when a new season has no event yet", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 0 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: { ...entryPage.data, entryId: 123, event: 1, maxGw: 1, hasData: true, total: 77 },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:1",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    restartForPrincipalChange() { return false; },
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.event, 0);
+  assert.equal(context.data.maxGw, 0);
+  assert.equal(context.data.hasData, false);
+  assert.equal(context.data.total, 0);
+  assert.equal(context.data.error, "当前赛季暂无实时比赛周");
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
+  assert.deepEqual(calls, ["init:true", "stop", "sync:0", "display"]);
+});
+
 test("entry principal changes clear old live data and restart the followed team", () => {
   globalThis.getApp = () => ({ globalData: { entryId: 456, gw: 33 } });
   globalThis.wx = { getStorageSync: () => undefined };

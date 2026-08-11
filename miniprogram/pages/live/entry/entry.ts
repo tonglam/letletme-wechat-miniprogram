@@ -213,31 +213,48 @@ Page({
       if (nextSeason) this.loadedSeason = nextSeason;
       const nextEventId = Number(app.globalData.gw) || 0;
       const wasCurrentEvent = this.data.event === this.data.maxGw;
-      if (nextEventId > 0 && (seasonChanged || nextEventId !== this.data.maxGw)) {
-        if (seasonChanged || wasCurrentEvent) {
-          this.liveRefresh?.stop();
-          this.liveSnapshot = null;
-          this.cachedLiveStoredAt = undefined;
-          if (seasonChanged) {
-            // A new season can reuse the same numeric GW, so entry:event is
-            // not enough to distinguish pending score/transfer work. Detach
-            // the previous season before the forced replacement request.
-            this.liveRequestId += 1;
-            this.transfersRequestId += 1;
-            this.liveRequest = null;
-            this.liveRequestKey = "";
-          }
-          this.setData({
-            event: nextEventId,
-            maxGw: nextEventId,
-            hasData: false,
-            lastUpdated: ""
-          });
-          this.liveRefresh?.sync();
-          await this.loadData({ includeTransfers: true, forceRefresh: true });
-          this.syncDisplayState();
-          return;
+      const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
+        this.liveRefresh?.stop();
+        this.liveSnapshot = null;
+        this.cachedLiveStoredAt = undefined;
+        if (seasonChanged) {
+          // A new season can reuse the same numeric GW, so entry:event is
+          // not enough to distinguish pending score/transfer work. Detach
+          // the previous season before the forced replacement request.
+          this.liveRequestId += 1;
+          this.transfersRequestId += 1;
+          this.liveRequest = null;
+          this.liveRequestKey = "";
         }
+        this.setData({
+          event: nextEventId,
+          maxGw: nextEventId,
+          hasData: false,
+          lastUpdated: "",
+          error: nextEventId > 0 ? "" : "当前赛季暂无实时比赛周",
+          transfersError: "",
+          total: 0,
+          livePoints: 0,
+          netPoints: 0,
+          transferCost: 0,
+          captainText: "-",
+          chipText: "-",
+          playedText: "-",
+          summaryTiles: [],
+          starters: [],
+          bench: [],
+          managers: [],
+          transfers: []
+        });
+        this.liveRefresh?.sync();
+        if (nextEventId > 0) {
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+        }
+        this.syncDisplayState();
+        return;
+      }
+      if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
     }

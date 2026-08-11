@@ -338,6 +338,9 @@ test("historical Live selections reset when the season changes", () => {
   }
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(entry, /if \(seasonChanged\) \{[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null/);
+  assert.match(entry, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
+  assert.match(entry, /eventContextChanged && \(seasonChanged \|\| wasCurrentEvent\)/);
+  assert.match(entry, /error: nextEventId > 0 \? "" : "当前赛季暂无实时比赛周"/);
 });
 
 test("first personal paints bypass previous-season event and summary caches", () => {
