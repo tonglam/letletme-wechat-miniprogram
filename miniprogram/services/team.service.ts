@@ -23,7 +23,7 @@ interface TeamResponse {
 
 export async function getTeamSummary(teamId: number | string, _season: string): Promise<TeamSummary> {
   const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) }, {
-    cacheTtl: 24 * 3600 * 1000
+    cachePolicy: "team-directory"
   });
   if (!data.team) {
     throw new Error("没有找到这支球队，请返回后重试");

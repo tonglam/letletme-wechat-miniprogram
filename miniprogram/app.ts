@@ -1,9 +1,15 @@
 import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
-import { getApiSessionToken, isLogoutInFlight, refreshWechatApiSession } from "./services/auth.service";
+import {
+  getApiSessionToken,
+  isLogoutInFlight,
+  refreshWechatApiSession,
+  restoreApiSessionCredentials
+} from "./services/auth.service";
+import { purgeGraphQLStorageCache } from "./services/graphql.service";
 import { routes } from "./config/routes";
-import { storageKeys, storagePrefixes } from "./config/storage-keys";
+import { storageKeys } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import { resolveEventContext } from "./utils/event-context";
 
@@ -31,6 +37,9 @@ App<IAppOption>({
 
   async onLaunch() {
     const launchStart = Date.now();
+    // Older builds persisted openid even though the current session contract
+    // does not consume it. Remove the legacy identifier during migration.
+    wx.removeStorageSync("openid");
     this.globalData.entryId = getEntryId();
     this.authReady = new Promise<void>((resolve) => {
       this._authReadyResolve = resolve;
@@ -70,10 +79,12 @@ App<IAppOption>({
     });
   },
 
-  doLogin() {
-    // A still-valid 30-day session needs no login round trip: the local
-    // entry binding is restored from storage, and a later 401 triggers the
-    // single-flight refresh path in graphql.service.
+  async doLogin() {
+    // Restore only through WeChat's encrypted asynchronous storage. Legacy
+    // plaintext is migrated before any GraphQL request can read the token.
+    await restoreApiSessionCredentials();
+    // A still-valid 30-day session needs no login round trip: the local entry
+    // binding is restored, and a later 401 triggers the central refresh path.
     this.globalData.entryId = getEntryId();
     const markAuthReady = () => {
       this._authReadyResolve?.();
@@ -203,23 +214,10 @@ App<IAppOption>({
     }
   },
 
-  /** Drop expired gql:* cache rows once per launch, off the critical path. */
+  /** Prune invalid, expired, and excess GraphQL cache rows off the launch path. */
   purgeExpiredGraphQLCache() {
     setTimeout(() => {
-      try {
-        const { keys } = wx.getStorageInfoSync();
-        const now = Date.now();
-        keys
-          .filter((key) => key.startsWith(storagePrefixes.graphqlCache))
-          .forEach((key) => {
-            try {
-              const entry = wx.getStorageSync(key) as { expiresAt?: number } | undefined;
-              if (!entry || typeof entry.expiresAt !== "number" || now >= entry.expiresAt) {
-                wx.removeStorageSync(key);
-              }
-            } catch {}
-          });
-      } catch {}
+      purgeGraphQLStorageCache();
     }, 0);
   }
 });

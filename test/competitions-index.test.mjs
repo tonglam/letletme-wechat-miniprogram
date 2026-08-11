@@ -52,7 +52,7 @@ test("opening a competition preselects it for Live and navigates there", () => {
   assert.deepEqual(urls, ["/pages/live/tournament/tournament"], "current results continue into Live");
 });
 
-test("resume refreshes context and revalidates the list; first show does not double-load", async () => {
+test("resume honors context/list freshness; first show does not double-load", async () => {
   const loads = [];
   globalThis.getApp = () => ({
     globalData: { season: "2025-26" },
@@ -72,7 +72,7 @@ test("resume refreshes context and revalidates the list; first show does not dou
   assert.deepEqual(loads, [], "first show skips the reload that onLoad already started");
 
   await competitionsPage.onShow.call(context);
-  assert.deepEqual(loads, ["init:true", true], "resume refreshes context and bypasses the list cache");
+  assert.deepEqual(loads, ["init:false", false], "resume revalidates through the named cache policies");
 });
 
 test("empty-state create hands off to the Website create action", () => {

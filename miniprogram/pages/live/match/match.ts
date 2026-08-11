@@ -33,8 +33,7 @@ interface LiveMatchLoadOptions {
 const STATUS_OPTIONS: StatusOption[] = [
   { key: "playing", label: "比赛中" },
   { key: "not_start", label: "未开始" },
-  { key: "finished", label: "已完赛" },
-  { key: "next_event", label: "下轮" }
+  { key: "finished", label: "已完赛" }
 ];
 
 const STORAGE_STATUS_KEY = "letletme_live_match_status";
@@ -70,9 +69,6 @@ function statusLabel(match: LiveMatch, fallbackStatus: string): string {
   if (status === "playing") {
     return "比赛中";
   }
-  if (status === "next_event") {
-    return "下轮";
-  }
   if (status === "not_start" || status === "not_started") {
     return "未开始";
   }
@@ -89,9 +85,6 @@ function statusClass(match: LiveMatch, fallbackStatus: string): string {
   }
   if (status === "playing") {
     return "status-playing";
-  }
-  if (status === "next_event") {
-    return "status-next";
   }
   if (numberValue(match.minutes) > 0) {
     return "status-playing";
@@ -122,7 +115,7 @@ function minuteText(match: LiveMatch): string {
 
 function scoreText(match: LiveMatch, fallbackStatus: string): string {
   const status = match.status || match.playStatus || fallbackStatus;
-  if (status === "not_start" || status === "not_started" || status === "next_event") {
+  if (status === "not_start" || status === "not_started") {
     return "VS";
   }
   return `${numberValue(match.homeScore)}-${numberValue(match.awayScore)}`;
@@ -205,7 +198,7 @@ function groupMatches(matches: LiveMatch[], status: string): MatchGroup[] {
 
 function emptyDescription(status: string): string {
   if (status === "playing") {
-    return "目前没有正在进行的比赛，可以切换到未开始或下轮";
+    return "目前没有正在进行的比赛，可以切换到未开始";
   }
   if (status === "not_start") {
     return "本轮暂时没有待开球比赛，赛程更新后会自动出现";
@@ -213,7 +206,7 @@ function emptyDescription(status: string): string {
   if (status === "finished") {
     return "本轮还没有完赛记录，比赛结束后会显示比分";
   }
-  return "下一轮赛程还没公布，稍后回来重新加载";
+  return "暂时没有比赛数据，稍后回来重新加载";
 }
 
 Page({
@@ -248,7 +241,11 @@ Page({
   async onLoad() {
     const app = getApp<IAppOption>();
     this.currentEventId = Number(app.globalData.gw) || 0;
-    const storedStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
+    const rawStoredStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
+    const storedStatus = rawStoredStatus === "next_event" ? "not_start" : rawStoredStatus;
+    if (rawStoredStatus === "next_event") {
+      wx.setStorageSync(STORAGE_STATUS_KEY, "not_start");
+    }
     if (isValidStatus(storedStatus)) {
       this.setData({
         status: storedStatus,
@@ -264,12 +261,11 @@ Page({
     this.currentEventId = Number(app.globalData.gw) || 0;
     this.loadedSeason = app.globalData.season || undefined;
     if (!Number(app.globalData.currentGw) && this.currentEventId && !isValidStatus(storedStatus)) {
-      // Preseason/offseason with no explicit user choice: the next scheduled
-      // event is the meaningful surface, not an empty playing list.
+      // Preseason/offseason uses the schema-backed not-started bucket.
       this.setData({
-        status: "next_event",
-        activeStatusLabel: "下轮",
-        emptyDescription: emptyDescription("next_event")
+        status: "not_start",
+        activeStatusLabel: "未开始",
+        emptyDescription: emptyDescription("not_start")
       });
     }
     this.initLiveRefresh();
@@ -328,7 +324,7 @@ Page({
     this.hasShown = true;
     const app = getApp<IAppOption>();
     if (resumed) {
-      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      try { await app.initAppData(false); } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
     }
     const nextEventId = Number(app.globalData.gw) || 0;

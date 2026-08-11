@@ -36,10 +36,10 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadEntry(Number(this.data.entryId)).finally(() => wx.stopPullDownRefresh());
+    this.loadEntry(Number(this.data.entryId), true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadEntry(entryId: number) {
+  async loadEntry(entryId: number, forceRefresh = false) {
     if (!Number.isFinite(entryId) || entryId <= 0) {
       this.setData({ loading: false, error: "", emptyState: true, entry: {} });
       return;
@@ -47,7 +47,7 @@ Page({
 
     this.setData({ loading: true, error: "", emptyState: false, entryId });
     try {
-      const entry = await getEntryInfo(entryId);
+      const entry = await getEntryInfo(entryId, forceRefresh);
       this.setData({ entry });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球队资料加载失败" });

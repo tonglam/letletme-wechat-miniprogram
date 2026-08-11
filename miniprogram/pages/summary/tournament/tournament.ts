@@ -121,7 +121,7 @@ Page({
     }
   },
 
-  async loadTournaments() {
+  async loadTournaments(forceRefresh = false) {
     if (!this.data.entryId) {
       this.setData({
         loading: false,
@@ -148,7 +148,7 @@ Page({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntrySummaryTournaments(this.data.entryId);
+      const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh);
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -173,7 +173,7 @@ Page({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadSummary();
+      await this.loadSummary(forceRefresh);
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
@@ -181,7 +181,7 @@ Page({
     }
   },
 
-  async loadSummary() {
+  async loadSummary(forceRefresh = false) {
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
     if (!tournament || !this.data.entryId) {
       return;
@@ -189,7 +189,7 @@ Page({
 
     this.setData({ loading: true, error: "" });
     try {
-      const payload = await getTournamentSummary(tournament.id, this.data.event, this.data.entryId);
+      const payload = await getTournamentSummary(tournament.id, this.data.event, this.data.entryId, forceRefresh);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentName, tournament.name);
       this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, this.data.entryId, this.data.event));
@@ -201,11 +201,7 @@ Page({
   },
 
   async refreshData() {
-    if (this.data.tournaments.length === 0) {
-      await this.loadTournaments();
-    } else {
-      await this.loadSummary();
-    }
+    await this.loadTournaments(true);
 
     if (!this.data.error && this.data.emptyState !== "entry") {
       wx.showToast({
@@ -246,7 +242,7 @@ Page({
   },
 
   onRetry() {
-    this.loadTournaments();
+    this.loadTournaments(true);
   },
 
   onEmptyAction() {
@@ -255,7 +251,7 @@ Page({
       return;
     }
 
-    this.loadTournaments();
+    this.loadTournaments(true);
   }
 });
 

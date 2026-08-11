@@ -1,4 +1,8 @@
-import { getPlayersByElementType } from "../../../services/player.service";
+import {
+  getPlayersForPickerPage,
+  type PlayerPickerFilter
+} from "../../../services/player.service";
+import { getTeamList } from "../../../services/common.service";
 import { getPlayerValueByDate, getPlayerValueByElement } from "../../../services/price.service";
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
 
@@ -9,10 +13,17 @@ interface FilterOption {
   value: string;
 }
 
+interface TeamDirectoryItem {
+  id: number;
+  name: string;
+  shortName?: string;
+}
+
 interface PricePageData {
   activeMode: PriceMode;
   loading: boolean;
   playerLoading: boolean;
+  loadingMore: boolean;
   historyLoading: boolean;
   error: string;
   playersError: string;
@@ -34,20 +45,21 @@ interface PricePageData {
   positionOptions: FilterOption[];
   positionOptionNames: string[];
   selectedPositionIndex: number;
+  nextCursor: number | null;
+  hasMorePlayers: boolean;
   riseChanges: PlayerValueChange[];
   fallChanges: PlayerValueChange[];
   historyRows: PlayerValueChange[];
 }
 
 const ALL_VALUE = "ALL";
-const FILTERED_PLAYER_LIMIT = 80;
 
 const POSITION_OPTIONS: FilterOption[] = [
   { label: "全部位置", value: ALL_VALUE },
-  { label: "门将", value: "GKP" },
-  { label: "后卫", value: "DEF" },
-  { label: "中场", value: "MID" },
-  { label: "前锋", value: "FWD" }
+  { label: "门将", value: "GOALKEEPER" },
+  { label: "后卫", value: "DEFENDER" },
+  { label: "中场", value: "MIDFIELDER" },
+  { label: "前锋", value: "FORWARD" }
 ];
 
 function formatPickerDate(date = new Date()): string {
@@ -57,64 +69,14 @@ function formatPickerDate(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-function sortByName(left: PlayerOption, right: PlayerOption): number {
-  return left.name.localeCompare(right.name);
-}
-
 function sortByChangeDateDesc(left: PlayerValueChange, right: PlayerValueChange): number {
   return getTime(right.changeDate) - getTime(left.changeDate);
 }
 
 function getTime(value?: string): number {
-  if (!value) {
-    return 0;
-  }
-
+  if (!value) return 0;
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
-}
-
-function buildTeamOptions(players: PlayerOption[]): FilterOption[] {
-  const teams = new Map<string, string>();
-  players.forEach((player) => {
-    const value = player.team || player.teamName || "";
-    if (!value) {
-      return;
-    }
-
-    teams.set(value, player.teamName ? `${player.teamName} (${value})` : value);
-  });
-
-  return [
-    { label: "全部球队", value: ALL_VALUE },
-    ...Array.from(teams.entries())
-      .map(([value, label]) => ({ label, value }))
-      .sort((left, right) => left.label.localeCompare(right.label))
-  ];
-}
-
-function filterPlayers(
-  players: PlayerOption[],
-  keyword: string,
-  teamFilter: string,
-  positionFilter: string
-): PlayerOption[] {
-  const lowerKeyword = keyword.trim().toLowerCase();
-  const hasKeyword = lowerKeyword.length > 0;
-
-  return players
-    .filter((player) => {
-      const matchesKeyword = !hasKeyword ||
-        [player.name, player.team, player.teamName, player.position]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(lowerKeyword);
-      const matchesTeam = teamFilter === ALL_VALUE || player.team === teamFilter || player.teamName === teamFilter;
-      const matchesPosition = positionFilter === ALL_VALUE || player.position === positionFilter;
-      return matchesKeyword && matchesTeam && matchesPosition;
-    })
-    .sort(sortByName);
 }
 
 function splitChanges(changes: PlayerValueChange[]): {
@@ -131,11 +93,21 @@ function splitChanges(changes: PlayerValueChange[]): {
   };
 }
 
+function mergePlayers(existing: PlayerOption[], incoming: PlayerOption[]): PlayerOption[] {
+  const seen = new Set(existing.map((player) => player.element));
+  return existing.concat(incoming.filter((player) => {
+    if (seen.has(player.element)) return false;
+    seen.add(player.element);
+    return true;
+  }));
+}
+
 Page({
   data: {
     activeMode: "daily",
     loading: false,
     playerLoading: false,
+    loadingMore: false,
     historyLoading: false,
     error: "",
     playersError: "",
@@ -157,13 +129,24 @@ Page({
     positionOptions: POSITION_OPTIONS,
     positionOptionNames: POSITION_OPTIONS.map((option) => option.label),
     selectedPositionIndex: 0,
+    nextCursor: null,
+    hasMorePlayers: false,
     riseChanges: [],
     fallChanges: [],
     historyRows: []
   } as PricePageData,
 
+  playerRequestRevision: 0,
+  playerSearchTimer: undefined as number | undefined,
+
   onLoad() {
     this.loadDailyChanges();
+  },
+
+  onUnload() {
+    if (this.playerSearchTimer !== undefined) {
+      clearTimeout(this.playerSearchTimer);
+    }
   },
 
   onPullDownRefresh() {
@@ -178,19 +161,16 @@ Page({
       this.refreshPlayerMode();
       return;
     }
-
     this.loadDailyChanges();
   },
 
   onModeChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { mode: PriceMode }>) {
     const mode = event.currentTarget.dataset.mode;
-    if (!mode || mode === this.data.activeMode) {
-      return;
-    }
+    if (!mode || mode === this.data.activeMode) return;
 
     this.setData({ activeMode: mode });
     if (mode === "player") {
-      this.ensurePlayersLoaded();
+      this.ensurePlayerModeReady();
     }
   },
 
@@ -211,96 +191,209 @@ Page({
     }
   },
 
-  async refreshPlayerMode(): Promise<void> {
-    // An empty directory is transient: pull-to-refresh must refetch it even
-    // though the attempt completed (playersLoaded) — the wxml retry button
-    // keys off `playersLoaded && players.length === 0`.
-    await this.ensurePlayersLoaded(this.data.playersLoaded && this.data.players.length === 0);
-    if (this.data.selectedPlayer?.element) {
-      await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
+  async ensurePlayerModeReady(): Promise<void> {
+    if (this.data.teamOptions.length === 1) {
+      await this.loadTeamOptions();
+    }
+    if (this.isPlayerListReady() && !this.data.playersLoaded) {
+      await this.startPlayerSearch(false);
     }
   },
 
-  async ensurePlayersLoaded(forceRefresh = false): Promise<void> {
-    if (this.data.playerLoading) {
-      return;
-    }
-    if (this.data.playersLoaded && !forceRefresh) {
-      return;
-    }
-
+  async loadTeamOptions(): Promise<void> {
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const players = await getPlayersByElementType("all", forceRefresh);
-      const sortedPlayers = players.sort(sortByName);
-      const teamOptions = buildTeamOptions(sortedPlayers);
+      const season = String(getApp<IAppOption>().globalData.season || "unknown");
+      const teams = await getTeamList(season) as TeamDirectoryItem[];
+      const teamOptions: FilterOption[] = [
+        { label: "全部球队", value: ALL_VALUE },
+        ...teams
+          .map((team) => ({
+            label: team.shortName ? `${team.name} (${team.shortName})` : team.name,
+            value: String(team.id)
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label))
+      ];
       this.setData({
-        players: sortedPlayers,
-        playersLoaded: true,
         teamOptions,
         teamOptionNames: teamOptions.map((option) => option.label)
       });
-      this.syncFilteredPlayers();
     } catch (error) {
-      this.setData({ playersError: error instanceof Error ? error.message : "球员列表加载失败" });
+      this.setData({ playersError: error instanceof Error ? error.message : "球队列表加载失败" });
     } finally {
       this.setData({ playerLoading: false });
     }
   },
 
-  syncFilteredPlayers() {
-    const playerListReady = this.data.teamFilter !== ALL_VALUE && this.data.positionFilter !== ALL_VALUE;
-    if (!playerListReady) {
-      this.setData({
-        filteredPlayers: [],
-        filteredPlayerCount: 0,
-        playerListReady,
-        playerListVisible: false
-      });
-      return;
+  isPlayerListReady(): boolean {
+    const hasKeyword = this.data.playerKeyword.trim().length > 0;
+    const hasTeamAndPosition =
+      this.data.teamFilter !== ALL_VALUE
+      && this.data.positionFilter !== ALL_VALUE;
+    return hasKeyword || hasTeamAndPosition;
+  },
+
+  pickerFilter(): PlayerPickerFilter | undefined {
+    const filter: PlayerPickerFilter = {};
+    if (this.data.teamFilter !== ALL_VALUE) {
+      filter.teamId = Number(this.data.teamFilter);
     }
+    if (this.data.positionFilter !== ALL_VALUE) {
+      filter.position = this.data.positionFilter as PlayerPickerFilter["position"];
+    }
+    return Object.keys(filter).length ? filter : undefined;
+  },
 
-    const filteredPlayers = filterPlayers(
-      this.data.players,
-      this.data.playerKeyword,
-      this.data.teamFilter,
-      this.data.positionFilter
-    );
+  invalidatePlayerRequest(): number {
+    this.playerRequestRevision += 1;
+    return this.playerRequestRevision;
+  },
 
+  startPlayerSearch(forceRefresh = false): Promise<void> {
+    const revision = this.invalidatePlayerRequest();
+    const ready = this.isPlayerListReady();
     this.setData({
-      filteredPlayers: filteredPlayers.slice(0, FILTERED_PLAYER_LIMIT),
-      filteredPlayerCount: filteredPlayers.length,
-      playerListReady,
-      playerListVisible: true
+      players: [],
+      filteredPlayers: [],
+      filteredPlayerCount: 0,
+      playersLoaded: false,
+      playerListReady: ready,
+      playerListVisible: ready && !this.data.selectedPlayer,
+      nextCursor: null,
+      hasMorePlayers: false,
+      playersError: ""
     });
+    if (!ready) return Promise.resolve();
+    return this.loadPlayerPage(revision, null, false, forceRefresh);
+  },
+
+  async loadPlayerPage(
+    revision: number,
+    cursor: number | null,
+    append: boolean,
+    forceRefresh: boolean
+  ): Promise<void> {
+    this.setData(append
+      ? { loadingMore: true, playersError: "" }
+      : { playerLoading: true, playersError: "" });
+
+    try {
+      const page = await getPlayersForPickerPage({
+        search: this.data.playerKeyword,
+        filter: this.pickerFilter(),
+        limit: 50,
+        cursor,
+        forceRefresh
+      });
+      if (revision !== this.playerRequestRevision) return;
+
+      const players = append
+        ? mergePlayers(this.data.players, page.items)
+        : page.items;
+      this.setData({
+        players,
+        filteredPlayers: players,
+        filteredPlayerCount: page.totalCount,
+        playersLoaded: true,
+        playerListReady: true,
+        playerListVisible: !this.data.selectedPlayer,
+        nextCursor: page.nextCursor,
+        hasMorePlayers: page.nextCursor !== null,
+        playersError: ""
+      });
+    } catch (error) {
+      if (revision !== this.playerRequestRevision) return;
+      this.setData({
+        playersError: error instanceof Error ? error.message : "球员列表加载失败",
+        ...(append ? {} : { playersLoaded: false })
+      });
+    } finally {
+      if (revision === this.playerRequestRevision) {
+        this.setData({ playerLoading: false, loadingMore: false });
+      }
+    }
+  },
+
+  loadMorePlayers(): Promise<void> {
+    if (
+      this.data.playerLoading
+      || this.data.loadingMore
+      || !this.data.hasMorePlayers
+      || this.data.nextCursor === null
+    ) {
+      return Promise.resolve();
+    }
+    return this.loadPlayerPage(
+      this.playerRequestRevision,
+      this.data.nextCursor,
+      true,
+      false
+    );
   },
 
   onPlayerKeywordInput(event: WechatMiniprogram.Input) {
     this.setData({ playerKeyword: event.detail.value });
-    this.syncFilteredPlayers();
+    const revision = this.invalidatePlayerRequest();
+    if (this.playerSearchTimer !== undefined) {
+      clearTimeout(this.playerSearchTimer);
+    }
+    this.playerSearchTimer = setTimeout(() => {
+      this.playerSearchTimer = undefined;
+      const ready = this.isPlayerListReady();
+      this.setData({
+        players: [],
+        filteredPlayers: [],
+        filteredPlayerCount: 0,
+        playersLoaded: false,
+        playerListReady: ready,
+        playerListVisible: ready && !this.data.selectedPlayer,
+        nextCursor: null,
+        hasMorePlayers: false
+      });
+      if (ready && revision === this.playerRequestRevision) {
+        this.loadPlayerPage(revision, null, false, false);
+      }
+    }, 300) as unknown as number;
   },
 
   onClearPlayerKeyword() {
+    if (this.playerSearchTimer !== undefined) {
+      clearTimeout(this.playerSearchTimer);
+      this.playerSearchTimer = undefined;
+    }
     this.setData({ playerKeyword: "" });
-    this.syncFilteredPlayers();
+    this.startPlayerSearch();
   },
 
   onRetryPlayers() {
-    this.setData({ players: [], playersLoaded: false });
-    this.ensurePlayersLoaded(true);
+    if (this.data.teamOptions.length === 1) {
+      this.loadTeamOptions().then(() => this.startPlayerSearch(true));
+      return;
+    }
+    this.startPlayerSearch(true);
   },
 
   onClearPlayerFilters() {
+    if (this.playerSearchTimer !== undefined) {
+      clearTimeout(this.playerSearchTimer);
+      this.playerSearchTimer = undefined;
+    }
+    this.invalidatePlayerRequest();
     this.setData({
       playerKeyword: "",
       teamFilter: ALL_VALUE,
       positionFilter: ALL_VALUE,
       selectedTeamIndex: 0,
       selectedPositionIndex: 0,
+      players: [],
       filteredPlayers: [],
       filteredPlayerCount: 0,
+      playersLoaded: false,
       playerListReady: false,
-      playerListVisible: false
+      playerListVisible: false,
+      nextCursor: null,
+      hasMorePlayers: false,
+      playersError: ""
     });
   },
 
@@ -317,7 +410,7 @@ Page({
       selectedTeamIndex,
       teamFilter: option.value
     });
-    this.syncFilteredPlayers();
+    this.startPlayerSearch();
   },
 
   onPositionFilterChange(event: WechatMiniprogram.PickerChange) {
@@ -327,17 +420,14 @@ Page({
       selectedPositionIndex,
       positionFilter: option.value
     });
-    this.syncFilteredPlayers();
+    this.startPlayerSearch();
   },
 
   onSelectPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { index: string }>) {
     const player = this.data.filteredPlayers[Number(event.currentTarget.dataset.index)];
-    if (!player || !player.element) {
-      return;
-    }
+    if (!player?.element) return;
 
     this.setData({
-      activeMode: "player",
       selectedPlayer: player,
       playerListVisible: false,
       historyRows: [],
@@ -365,5 +455,17 @@ Page({
       historyRows: [],
       historyError: ""
     });
+  },
+
+  async refreshPlayerMode(): Promise<void> {
+    if (this.data.teamOptions.length === 1) {
+      await this.loadTeamOptions();
+    }
+    if (this.isPlayerListReady()) {
+      await this.startPlayerSearch(true);
+    }
+    if (this.data.selectedPlayer?.element) {
+      await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
+    }
   }
 });

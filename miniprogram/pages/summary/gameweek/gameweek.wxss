@@ -145,3 +145,12 @@
 .transfer-card {
   min-width: 0;
 }
+.last-good-notice {
+  margin: 16rpx 24rpx 0;
+  padding: 14rpx 18rpx;
+  border: 1rpx solid var(--warning, #924a07);
+  border-radius: 12rpx;
+  background: var(--warning-tint, #f6ead9);
+  color: var(--warning, #924a07);
+  font-size: 24rpx;
+}

@@ -7,15 +7,25 @@ import {
   refreshWechatApiSession
 } from "./auth.service";
 import { recordApi } from "../utils/perf";
+import type { ApiRecordSource } from "../utils/perf";
 import { storagePrefixes } from "../config/storage-keys";
 import {
   graphQLErrorMessage,
   httpErrorMessage,
   networkErrorMessage
 } from "../utils/request-error";
+import {
+  getGraphQLCachePolicy,
+  getGraphQLOperationPolicy
+} from "./graphql-cache-policy";
+import type {
+  GraphQLAuthMode,
+  GraphQLCachePolicyName
+} from "./graphql-cache-policy";
 
-interface GraphQLError {
+export interface GraphQLErrorInfo {
   message?: string;
+  path?: Array<string | number>;
   extensions?: {
     code?: string;
   };
@@ -23,93 +33,146 @@ interface GraphQLError {
 
 interface GraphQLResponse<T> {
   data?: T;
-  errors?: GraphQLError[];
+  errors?: GraphQLErrorInfo[];
 }
 
 interface CacheEntry {
+  version: 2;
   requestKey: string;
   data: unknown;
-  expiresAt: number;
-  /** Fetch time of the cached payload; absent in entries persisted by older builds. */
-  storedAt?: number;
+  freshUntil: number;
+  staleUntil: number;
+  storedAt: number;
 }
 
 export interface GraphQLOptions {
+  authMode?: GraphQLAuthMode;
+  cachePolicy?: GraphQLCachePolicyName;
   cacheTtl?: number;
+  staleTtl?: number;
   getCacheExpiry?: (data: unknown) => number;
-  /** Skip the cache read (fresh result still re-populates the cache). */
   forceRefresh?: boolean;
-  /**
-   * Suffix separating cache entries that share a query and variables but
-   * follow different freshness policies (e.g. live vs historical views of
-   * one payload). Without it, a long-TTL entry can satisfy a short-TTL read.
-   */
   cacheVariant?: string;
 }
 
-const inFlightRequests = new Map<string, Promise<unknown>>();
+export interface GraphQLReadMeta {
+  operationName: string;
+  authMode: GraphQLAuthMode;
+  source: ApiRecordSource;
+  stale: boolean;
+  storedAt?: number;
+}
 
-// L1 in-process cache in front of the persisted storage cache. Entries are
-// keyed by the same storage key, so a token change naturally orphans old
-// session entries (they expire by TTL and vanish on restart).
-const memoryCache = new Map<string, CacheEntry>();
+export interface GraphQLReadResult<T> {
+  data: T;
+  errors: GraphQLErrorInfo[];
+  meta: GraphQLReadMeta;
+}
+
+interface ResolvedRequestPolicy {
+  operationName: string;
+  authMode: GraphQLAuthMode;
+  cachePolicy: GraphQLCachePolicyName;
+  freshTtl: number;
+  emptyFreshTtl?: number;
+  staleTtl: number;
+  persist: boolean;
+  cacheVariant: string;
+  cacheable: boolean;
+}
+
+interface CachedRead {
+  entry: CacheEntry;
+  source: "memory" | "storage";
+}
+
+class GraphQLTransportError extends Error {
+  statusCode?: number;
+  transient: boolean;
+
+  constructor(message: string, transient: boolean, statusCode?: number) {
+    super(message);
+    this.name = "GraphQLTransportError";
+    this.transient = transient;
+    this.statusCode = statusCode;
+  }
+}
+
+class GraphQLApplicationError extends Error {
+  constructor(errors: GraphQLErrorInfo[]) {
+    super(graphQLErrorMessage(errors));
+    this.name = "GraphQLApplicationError";
+  }
+}
+
+const CACHE_VERSION = 2;
 const MEMORY_CACHE_LIMIT = 120;
+const STORAGE_CACHE_LIMIT = 150;
+const MIN_PERSIST_TTL_MS = 60 * 1000;
+const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
+  "fixtures",
+  "player-picker",
+  "team-directory"
+]);
 
-/** requestKey -> fetch time of the payload most recently served from cache. */
+const inFlightRequests = new Map<string, Promise<GraphQLReadResult<unknown>>>();
+const memoryCache = new Map<string, CacheEntry>();
 const servedFromCache = new Map<string, number>();
 
-function recordServedFromCache(requestKey: string, storedAt: number): void {
-  if (servedFromCache.size >= MEMORY_CACHE_LIMIT) {
-    // Same bounding policy as the L1 cache it mirrors: request keys embed the
-    // full query text and variables, so the map must not grow for the whole
-    // process lifetime as distinct cached entries are revisited.
-    servedFromCache.clear();
-  }
-  servedFromCache.set(requestKey, storedAt);
-}
-
-function readMemoryCache(cacheKey: string, requestKey: string): unknown | undefined {
-  const entry = memoryCache.get(cacheKey);
-  if (!entry || entry.requestKey !== requestKey) return undefined;
-  if (Date.now() >= entry.expiresAt) {
-    memoryCache.delete(cacheKey);
-    return undefined;
-  }
-  recordServedFromCache(requestKey, entry.storedAt ?? Date.now());
-  return entry.data;
-}
-
-function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
-  if (memoryCache.size >= MEMORY_CACHE_LIMIT) {
-    memoryCache.clear();
-  }
-  memoryCache.set(cacheKey, entry);
-}
-
-function readCacheEntry(cacheKey: string, requestKey: string): unknown | undefined {
-  const fromMemory = readMemoryCache(cacheKey, requestKey);
-  if (fromMemory !== undefined) {
-    return fromMemory;
-  }
+export function purgeGraphQLStorageCache(now = Date.now()): void {
   try {
-    const cached = wx.getStorageSync(cacheKey) as CacheEntry | undefined;
-    if (cached && cached.requestKey === requestKey && Date.now() < cached.expiresAt) {
-      writeMemoryCache(cacheKey, cached);
-      recordServedFromCache(requestKey, cached.storedAt ?? Date.now());
-      return cached.data;
-    }
-    try { wx.removeStorageSync(cacheKey); } catch {}
+    const { keys } = wx.getStorageInfoSync();
+    const valid: Array<{ key: string; storedAt: number }> = [];
+    keys
+      .filter((key) => key.startsWith(storagePrefixes.graphqlCache))
+      .forEach((key) => {
+        try {
+          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
+          const currentVersion =
+            key.startsWith(storagePrefixes.graphqlPublicCache)
+            || key.startsWith(storagePrefixes.graphqlSessionCache);
+          if (
+            !currentVersion
+            || entry?.version !== CACHE_VERSION
+            || typeof entry.staleUntil !== "number"
+            || now >= entry.staleUntil
+          ) {
+            wx.removeStorageSync(key);
+            return;
+          }
+          valid.push({ key, storedAt: Number(entry.storedAt) || 0 });
+        } catch {
+          try { wx.removeStorageSync(key); } catch {}
+        }
+      });
+    valid
+      .sort((left, right) => left.storedAt - right.storedAt)
+      .slice(0, Math.max(0, valid.length - STORAGE_CACHE_LIMIT))
+      .forEach(({ key }) => {
+        try { wx.removeStorageSync(key); } catch {}
+      });
   } catch {}
-  return undefined;
 }
-
-function toHttpError(statusCode: number): Error {
-  return new Error(httpErrorMessage(statusCode));
-}
+let lastStaleNoticeAt = 0;
 
 function extractOpName(query: string): string {
-  const match = /(?:query|mutation)\s+(\w+)/i.exec(query);
+  const match = /(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/i.exec(query);
   return match ? match[1] : "GraphQL";
+}
+
+export function extractGraphQLOperationName(query: string): string {
+  return extractOpName(query);
+}
+
+export function buildGraphQLRequestPayload(
+  query: string,
+  variables: Record<string, unknown>
+): { query: string; variables: Record<string, unknown>; operationName: string } {
+  return {
+    query,
+    variables,
+    operationName: extractOpName(query)
+  };
 }
 
 function hashKey(str: string): string {
@@ -123,6 +186,21 @@ function hashKey(str: string): string {
   return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
 }
 
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = stableValue((value as Record<string, unknown>)[key]);
+        return result;
+      }, {});
+  }
+  return value;
+}
+
 export function buildGraphQLRequestCacheKey(
   query: string,
   variables: Record<string, unknown>,
@@ -130,104 +208,304 @@ export function buildGraphQLRequestCacheKey(
   cacheVariant = ""
 ): string {
   const audience = token ? `session:${hashKey(token)}` : "public";
-  return `${audience}::${query}::${JSON.stringify(variables)}${cacheVariant ? `#${cacheVariant}` : ""}`;
+  const variablesKey = JSON.stringify(stableValue(variables)) || "{}";
+  const variant = cacheVariant ? `:${hashKey(cacheVariant)}` : "";
+  return `${audience}:${hashKey(query)}:${hashKey(variablesKey)}${variant}`;
 }
 
-/**
- * Fetch time of the payload if the last serve for this request came from
- * cache, else undefined. Lets callers age-label cached data honestly
- * instead of stamping it as just-fetched.
- */
-export function getServedCacheStoredAt(query: string, variables: Record<string, unknown>): number | undefined {
-  const key = buildGraphQLRequestCacheKey(query, variables, getApiSessionToken());
-  // Concurrent callers share a single cache serve, so reads must NOT consume
-  // the entry: every consumer of the same payload sees the same timestamp.
-  // The map stays bounded by recordServedFromCache's cap, and a fresh network
-  // write for the key deletes it.
-  return servedFromCache.get(key);
+function currentSeason(): string {
+  try {
+    return String(getApp<IAppOption>().globalData.season || "unknown");
+  } catch {
+    return "unknown";
+  }
 }
 
-function getStorageCacheKey(requestKey: string, token: string | null): string {
-  const prefix = token
+function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequestPolicy {
+  const operationName = extractOpName(query);
+  const configured = getGraphQLOperationPolicy(operationName);
+  const cachePolicy = options?.cachePolicy ?? configured.cachePolicy;
+  const policy = getGraphQLCachePolicy(cachePolicy);
+  const mutation = /^\s*mutation\b/i.test(query);
+  const seasonVariant = SEASON_SCOPED_POLICIES.has(cachePolicy)
+    ? `season:${currentSeason()}`
+    : "";
+  const cacheVariant = [cachePolicy, seasonVariant, options?.cacheVariant || ""]
+    .filter(Boolean)
+    .join("|");
+  const freshTtl = mutation ? 0 : Math.max(0, options?.cacheTtl ?? policy.freshTtl);
+  const staleTtl = mutation ? 0 : Math.max(0, options?.staleTtl ?? policy.staleTtl);
+
+  return {
+    operationName,
+    authMode: options?.authMode ?? configured.authMode,
+    cachePolicy,
+    freshTtl,
+    emptyFreshTtl: mutation ? undefined : policy.emptyFreshTtl,
+    staleTtl,
+    persist: !mutation && policy.persist,
+    cacheVariant,
+    cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry))
+  };
+}
+
+function getStorageCacheKey(requestKey: string, authMode: GraphQLAuthMode): string {
+  const prefix = authMode === "session"
     ? storagePrefixes.graphqlSessionCache
     : storagePrefixes.graphqlPublicCache;
   return `${prefix}${hashKey(requestKey)}`;
+}
+
+function evictOldestMemoryEntry(): void {
+  const oldest = memoryCache.keys().next().value as string | undefined;
+  if (oldest) memoryCache.delete(oldest);
+}
+
+function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
+  if (!memoryCache.has(cacheKey) && memoryCache.size >= MEMORY_CACHE_LIMIT) {
+    evictOldestMemoryEntry();
+  }
+  memoryCache.delete(cacheKey);
+  memoryCache.set(cacheKey, entry);
+}
+
+function recordServedFromCache(requestKey: string, storedAt: number): void {
+  if (!servedFromCache.has(requestKey) && servedFromCache.size >= MEMORY_CACHE_LIMIT) {
+    const oldest = servedFromCache.keys().next().value as string | undefined;
+    if (oldest) servedFromCache.delete(oldest);
+  }
+  servedFromCache.set(requestKey, storedAt);
+}
+
+function isV2Entry(value: unknown, requestKey: string): value is CacheEntry {
+  const entry = value as Partial<CacheEntry> | undefined;
+  return Boolean(
+    entry
+    && entry.version === CACHE_VERSION
+    && entry.requestKey === requestKey
+    && typeof entry.freshUntil === "number"
+    && typeof entry.staleUntil === "number"
+    && typeof entry.storedAt === "number"
+  );
+}
+
+function readCacheEntry(cacheKey: string, requestKey: string): CachedRead | undefined {
+  const now = Date.now();
+  const fromMemory = memoryCache.get(cacheKey);
+  if (fromMemory) {
+    if (fromMemory.requestKey === requestKey && now < fromMemory.staleUntil) {
+      memoryCache.delete(cacheKey);
+      memoryCache.set(cacheKey, fromMemory);
+      return { entry: fromMemory, source: "memory" };
+    }
+    memoryCache.delete(cacheKey);
+  }
+
+  try {
+    const fromStorage = wx.getStorageSync(cacheKey);
+    if (isV2Entry(fromStorage, requestKey) && now < fromStorage.staleUntil) {
+      writeMemoryCache(cacheKey, fromStorage);
+      return { entry: fromStorage, source: "storage" };
+    }
+    if (fromStorage !== undefined && fromStorage !== null && fromStorage !== "") {
+      try { wx.removeStorageSync(cacheKey); } catch {}
+    }
+  } catch {}
+  return undefined;
+}
+
+function enforceStorageLimit(): void {
+  try {
+    const { keys } = wx.getStorageInfoSync();
+    const cacheKeys = keys.filter((key) =>
+      key.startsWith(storagePrefixes.graphqlPublicCache)
+      || key.startsWith(storagePrefixes.graphqlSessionCache)
+    );
+    if (cacheKeys.length <= STORAGE_CACHE_LIMIT) return;
+
+    const ordered = cacheKeys
+      .map((key) => {
+        try {
+          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
+          return { key, storedAt: Number(entry?.storedAt) || 0 };
+        } catch {
+          return { key, storedAt: 0 };
+        }
+      })
+      .sort((left, right) => left.storedAt - right.storedAt);
+
+    ordered
+      .slice(0, Math.max(0, ordered.length - STORAGE_CACHE_LIMIT))
+      .forEach(({ key }) => {
+        try { wx.removeStorageSync(key); } catch {}
+      });
+  } catch {}
+}
+
+function writeCacheEntry(cacheKey: string, entry: CacheEntry, persist: boolean): void {
+  writeMemoryCache(cacheKey, entry);
+  if (!persist || entry.freshUntil - Date.now() < MIN_PERSIST_TTL_MS) return;
+  try {
+    wx.setStorageSync(cacheKey, entry);
+    enforceStorageLimit();
+  } catch {}
+}
+
+function cacheAgeBucket(storedAt: number | undefined): string | undefined {
+  if (!storedAt) return undefined;
+  const age = Math.max(0, Date.now() - storedAt);
+  if (age < 60 * 1000) return "<1m";
+  if (age < 5 * 60 * 1000) return "1-5m";
+  if (age < 30 * 60 * 1000) return "5-30m";
+  if (age < 6 * 60 * 60 * 1000) return "30m-6h";
+  if (age < 24 * 60 * 60 * 1000) return "6-24h";
+  return ">24h";
+}
+
+function recordRequest(
+  operationName: string,
+  startedAt: number,
+  ok: boolean,
+  source: ApiRecordSource,
+  networkAttempted: boolean,
+  storedAt?: number
+): void {
+  recordApi(operationName, Date.now() - startedAt, ok, {
+    operationName,
+    source,
+    networkAttempted,
+    cacheAgeBucket: cacheAgeBucket(storedAt)
+  });
+}
+
+function notifyStaleFallback(): void {
+  const now = Date.now();
+  if (now - lastStaleNoticeAt < 30 * 1000) return;
+  lastStaleNoticeAt = now;
+  try {
+    const api = wx as unknown as {
+      showToast?: (options: { title: string; icon: "none"; duration: number }) => void;
+    };
+    api.showToast?.({
+      title: "当前为上次成功数据",
+      icon: "none",
+      duration: 2500
+    });
+  } catch {}
+}
+
+export function isTransientGraphQLStatus(statusCode: number): boolean {
+  return statusCode === 502 || statusCode === 503 || statusCode === 504;
+}
+
+function isTransientFailure(error: unknown): boolean {
+  if (error instanceof GraphQLTransportError) return error.transient;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return /network|timeout|timed out|网络|超时|502|503|504/.test(message);
+}
+
+function toHttpError(statusCode: number): GraphQLTransportError {
+  return new GraphQLTransportError(
+    httpErrorMessage(statusCode),
+    isTransientGraphQLStatus(statusCode),
+    statusCode
+  );
 }
 
 function isUnauthenticated(body: GraphQLResponse<unknown> | undefined): boolean {
   return Boolean(body?.errors?.some((error) => error.extensions?.code === "UNAUTHENTICATED"));
 }
 
+export function buildGraphQLRequestHeaders(
+  authMode: GraphQLAuthMode,
+  token: string | null
+): Record<string, string> {
+  const header: Record<string, string> = {
+    "content-type": "application/json"
+  };
+  if (authMode === "session" && token) {
+    header.Authorization = `Bearer ${token}`;
+  }
+  return header;
+}
+
 function makeRequest<T>(
   query: string,
   variables: Record<string, unknown>,
+  operationName: string,
+  authMode: GraphQLAuthMode,
   retryOnUnauthorized = true,
-  token = getApiSessionToken()
-): Promise<{ data: T; token: string | null }> {
+  token = authMode === "session" ? getApiSessionToken() : null
+): Promise<{ body: GraphQLResponse<T>; token: string | null }> {
   return new Promise((resolve, reject) => {
-    const endpoint = getGraphQLEndpoint();
-    const header: Record<string, string> = {
-      "content-type": "application/json"
-    };
-    if (token) {
-      header.Authorization = `Bearer ${token}`;
-    }
+    const header = buildGraphQLRequestHeaders(authMode, token);
 
     wx.request<GraphQLResponse<T>>({
-      url: endpoint,
+      url: getGraphQLEndpoint(),
       method: "POST",
-      data: {
-        query,
-        variables
-      },
+      data: buildGraphQLRequestPayload(query, variables),
       header,
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         const body = response.data;
-        if ((response.statusCode === 401 || isUnauthenticated(body)) && retryOnUnauthorized) {
+        const unauthorized = response.statusCode === 401 || isUnauthenticated(body);
+
+        if (authMode === "session" && unauthorized && retryOnUnauthorized) {
           if (isLogoutInFlight()) {
-            // A sign-out owns the credential right now: fail this request
-            // instead of erasing the token the logout may still need to retry
-            // revoking, and never start a recovery login alongside it.
             reject(new Error("正在退出登录，请稍后重试"));
             return;
           }
+
           const currentToken = getApiSessionToken();
           if (currentToken && currentToken !== token) {
-            // The session rotated while this request was in flight (e.g. the
-            // background profile revalidation stored a fresh token): retry
-            // with the current credential instead of clearing it.
-            makeRequest<T>(query, variables, false, currentToken).then(resolve).catch(reject);
+            makeRequest<T>(query, variables, operationName, authMode, false, currentToken)
+              .then(resolve)
+              .catch(reject);
             return;
           }
+
           const pending = getPendingSessionRefresh();
           if (pending) {
-            // A login round trip is already in flight and may be rotating
-            // this very token server-side without the response being stored
-            // yet. Await it: clearApiSession here would bump the session
-            // epoch and make that login discard its own fresh credential.
             pending
               .catch(() => undefined)
               .then(() => {
                 const freshToken = getApiSessionToken();
                 if (freshToken && freshToken !== token) {
-                  return makeRequest<T>(query, variables, false, freshToken);
+                  return makeRequest<T>(
+                    query,
+                    variables,
+                    operationName,
+                    authMode,
+                    false,
+                    freshToken
+                  );
                 }
-                // The in-flight refresh produced no usable new credential —
-                // fall back to the classic clear + re-login cycle. Only the
-                // credential is dropped: the followed entry is display-only
-                // and must survive a server-side revocation.
                 clearSessionCredentials();
                 return refreshWechatApiSession()
-                  .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()));
+                  .then(() => makeRequest<T>(
+                    query,
+                    variables,
+                    operationName,
+                    authMode,
+                    false,
+                    getApiSessionToken()
+                  ));
               })
               .then(resolve)
               .catch(reject);
             return;
           }
+
           clearSessionCredentials();
           refreshWechatApiSession()
-            .then(() => makeRequest<T>(query, variables, false, getApiSessionToken()))
+            .then(() => makeRequest<T>(
+              query,
+              variables,
+              operationName,
+              authMode,
+              false,
+              getApiSessionToken()
+            ))
             .then(resolve)
             .catch(reject);
           return;
@@ -238,114 +516,261 @@ function makeRequest<T>(
           return;
         }
 
-        if (body?.errors?.length) {
-          reject(new Error(graphQLErrorMessage(body.errors)));
+        if (!body || (body.data === undefined && !body.errors?.length)) {
+          reject(new GraphQLTransportError("数据加载失败，请稍后重试", false));
           return;
         }
 
-        if (!body || body.data === undefined || body.data === null) {
-          reject(new Error("数据加载失败，请稍后重试"));
-          return;
-        }
-
-        // Propagate the credential that produced this response: callers must
-        // never infer it from mutable session state (logout or relogin to
-        // another account mid-flight would leak this payload into the wrong
-        // cache namespace).
-        resolve({ data: body.data, token });
+        resolve({ body, token });
       },
       fail(error) {
-        reject(new Error(networkErrorMessage(error)));
+        reject(new GraphQLTransportError(networkErrorMessage(error), true));
       }
     });
   });
 }
 
-export function graphqlRequest<T>(
+function requestIdentity(
+  query: string,
+  variables: Record<string, unknown>,
+  policy: ResolvedRequestPolicy,
+  token: string | null
+): { requestKey: string; cacheKey: string } {
+  const cacheToken = policy.authMode === "session" ? token : null;
+  const requestKey = buildGraphQLRequestCacheKey(
+    query,
+    variables,
+    cacheToken,
+    policy.cacheVariant
+  );
+  return {
+    requestKey,
+    cacheKey: getStorageCacheKey(requestKey, policy.authMode)
+  };
+}
+
+export function getServedCacheStoredAt(
+  query: string,
+  variables: Record<string, unknown>
+): number | undefined {
+  const policy = resolvePolicy(query);
+  const token = policy.authMode === "session" ? getApiSessionToken() : null;
+  const { requestKey } = requestIdentity(query, variables, policy, token);
+  return servedFromCache.get(requestKey);
+}
+
+function resolveFreshUntil(
+  data: unknown,
+  policy: ResolvedRequestPolicy,
+  options?: GraphQLOptions
+): number {
+  if (options?.getCacheExpiry) {
+    try {
+      const dynamicExpiry = Number(options.getCacheExpiry(data));
+      if (Number.isFinite(dynamicExpiry)) return dynamicExpiry;
+    } catch {}
+  }
+  if (policy.emptyFreshTtl !== undefined && hasEmptyItemsPayload(data)) {
+    return Date.now() + policy.emptyFreshTtl;
+  }
+  return Date.now() + policy.freshTtl;
+}
+
+function hasEmptyItemsPayload(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  return Object.keys(record).some((key) => {
+    const payload = record[key];
+    if (!payload || typeof payload !== "object") return false;
+    const items = (payload as { items?: unknown }).items;
+    return Array.isArray(items) && items.length === 0;
+  });
+}
+
+export async function graphqlRead<T>(
+  query: string,
+  variables: Record<string, unknown> = {},
+  options?: GraphQLOptions
+): Promise<GraphQLReadResult<T>> {
+  const startedAt = Date.now();
+  const policy = resolvePolicy(query, options);
+  let token = policy.authMode === "session" ? getApiSessionToken() : null;
+
+  if (policy.authMode === "session" && !token) {
+    const pending = getPendingSessionRefresh();
+    if (pending) {
+      await pending.catch(() => undefined);
+      token = getApiSessionToken();
+    }
+  }
+
+  const identity = requestIdentity(query, variables, policy, token);
+  const cached = policy.cacheable
+    ? readCacheEntry(identity.cacheKey, identity.requestKey)
+    : undefined;
+  const now = Date.now();
+
+  if (cached && !options?.forceRefresh && now < cached.entry.freshUntil) {
+    recordServedFromCache(identity.requestKey, cached.entry.storedAt);
+    recordRequest(
+      policy.operationName,
+      startedAt,
+      true,
+      cached.source,
+      false,
+      cached.entry.storedAt
+    );
+    return {
+      data: cached.entry.data as T,
+      errors: [],
+      meta: {
+        operationName: policy.operationName,
+        authMode: policy.authMode,
+        source: cached.source,
+        stale: false,
+        storedAt: cached.entry.storedAt
+      }
+    };
+  }
+
+  const staleCandidate = cached && now < cached.entry.staleUntil
+    ? cached.entry
+    : undefined;
+  const inFlight = inFlightRequests.get(identity.requestKey) as
+    | Promise<GraphQLReadResult<T>>
+    | undefined;
+
+  if (inFlight) {
+    try {
+      const result = await inFlight;
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        result.errors.length === 0,
+        "in-flight",
+        false,
+        result.meta.storedAt
+      );
+      return {
+        ...result,
+        meta: {
+          ...result.meta,
+          source: "in-flight"
+        }
+      };
+    } catch (error) {
+      recordRequest(policy.operationName, startedAt, false, "in-flight", false);
+      throw error;
+    }
+  }
+
+  const networkRequest = (async (): Promise<GraphQLReadResult<T>> => {
+    try {
+      const response = await makeRequest<T>(
+        query,
+        variables,
+        policy.operationName,
+        policy.authMode,
+        true,
+        token
+      );
+      const errors = response.body.errors || [];
+      const hasData = response.body.data !== undefined && response.body.data !== null;
+
+      if (!hasData) {
+        throw new GraphQLApplicationError(errors);
+      }
+
+      const storedAt = Date.now();
+      const responseIdentity = requestIdentity(query, variables, policy, response.token);
+
+      if (errors.length === 0 && policy.cacheable) {
+        const producingSessionStillActive =
+          policy.authMode === "public"
+          || response.token === getApiSessionToken();
+
+        if (producingSessionStillActive) {
+          const freshUntil = resolveFreshUntil(response.body.data, policy, options);
+          const entry: CacheEntry = {
+            version: CACHE_VERSION,
+            requestKey: responseIdentity.requestKey,
+            data: response.body.data,
+            freshUntil,
+            staleUntil: Math.max(freshUntil, freshUntil + policy.staleTtl),
+            storedAt
+          };
+          writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
+          servedFromCache.delete(responseIdentity.requestKey);
+        }
+      }
+
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        errors.length === 0,
+        "network",
+        true
+      );
+      return {
+        data: response.body.data as T,
+        errors,
+        meta: {
+          operationName: policy.operationName,
+          authMode: policy.authMode,
+          source: "network",
+          stale: false,
+          storedAt
+        }
+      };
+    } catch (error) {
+      if (staleCandidate && isTransientFailure(error)) {
+        recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
+        notifyStaleFallback();
+        recordRequest(
+          policy.operationName,
+          startedAt,
+          false,
+          "stale",
+          true,
+          staleCandidate.storedAt
+        );
+        return {
+          data: staleCandidate.data as T,
+          errors: [],
+          meta: {
+            operationName: policy.operationName,
+            authMode: policy.authMode,
+            source: "stale",
+            stale: true,
+            storedAt: staleCandidate.storedAt
+          }
+        };
+      }
+
+      recordRequest(policy.operationName, startedAt, false, "network", true);
+      throw error;
+    }
+  })();
+
+  inFlightRequests.set(
+    identity.requestKey,
+    networkRequest as Promise<GraphQLReadResult<unknown>>
+  );
+  void networkRequest.then(
+    () => inFlightRequests.delete(identity.requestKey),
+    () => inFlightRequests.delete(identity.requestKey)
+  );
+  return networkRequest;
+}
+
+export async function graphqlRequest<T>(
   query: string,
   variables: Record<string, unknown> = {},
   options?: GraphQLOptions
 ): Promise<T> {
-  const token = getApiSessionToken();
-  if (!token) {
-    const pending = getPendingSessionRefresh();
-    if (pending) {
-      // A usable public-cache hit must not wait on the login round trip
-      // (e.g. CurrentEventInfo during app init on a slow cold start).
-      if (options?.forceRefresh !== true && (options?.cacheTtl != null || options?.getCacheExpiry)) {
-        const publicKey = buildGraphQLRequestCacheKey(query, variables, null, options?.cacheVariant ?? "");
-        const cached = readCacheEntry(getStorageCacheKey(publicKey, null), publicKey);
-        if (cached !== undefined) {
-          return Promise.resolve(cached as T);
-        }
-      }
-      // Otherwise wait for the in-flight login rather than firing a
-      // tokenless request that 401s and retries — and that would key any
-      // cached session data under the public namespace. A failed refresh
-      // falls through to the normal unauthenticated path on re-entry.
-      return pending.catch(() => undefined).then(() => graphqlRequest<T>(query, variables, options));
-    }
+  const result = await graphqlRead<T>(query, variables, options);
+  if (result.errors.length > 0) {
+    throw new GraphQLApplicationError(result.errors);
   }
-  const key = buildGraphQLRequestCacheKey(query, variables, token, options?.cacheVariant ?? "");
-
-  const inFlight = inFlightRequests.get(key) as Promise<T> | undefined;
-  if (inFlight) {
-    return inFlight;
-  }
-
-  const skipCacheRead = options?.forceRefresh === true;
-  if (!skipCacheRead && (options?.cacheTtl != null || options?.getCacheExpiry)) {
-    const cached = readCacheEntry(getStorageCacheKey(key, token), key);
-    if (cached !== undefined) {
-      return Promise.resolve(cached as T);
-    }
-  }
-
-  const t0 = Date.now();
-  const opName = extractOpName(query);
-
-  const request = makeRequest<T>(query, variables, true, token).then(({ data, token: responseToken }) => {
-    recordApi(opName, Date.now() - t0, true);
-    if (options?.cacheTtl != null || options?.getCacheExpiry) {
-      // An authenticated payload is cached only while its producing
-      // credential is still the live session: a logout or account switch
-      // mid-flight already wiped that account's cache namespace, and an
-      // unconditional write here would repopulate it after removal.
-      const producingTokenStillActive = !responseToken || responseToken === getApiSessionToken();
-      if (producingTokenStillActive) {
-        try {
-          // Cache under the credential that actually produced the response,
-          // propagated from the successful attempt — never inferred from
-          // mutable session state (logout or relogin mid-flight must not leak
-          // this payload into the public or another account's namespace).
-          const effectiveKey = responseToken !== token
-            ? buildGraphQLRequestCacheKey(query, variables, responseToken, options?.cacheVariant ?? "")
-            : key;
-          const cacheKey = getStorageCacheKey(effectiveKey, responseToken);
-          const expiresAt = options?.getCacheExpiry
-            ? options.getCacheExpiry(data)
-            : Date.now() + (options?.cacheTtl ?? 0);
-          const entry: CacheEntry = { requestKey: effectiveKey, data, expiresAt, storedAt: Date.now() };
-          writeMemoryCache(cacheKey, entry);
-          servedFromCache.delete(effectiveKey);
-          // Sub-minute caches stay process-local: they would be expired by the
-          // next launch anyway, and keeping large live payloads (full
-          // tournament pick lists) out of storage avoids accumulating one
-          // persisted key per tournament/gameweek combination.
-          if (expiresAt - Date.now() > 60 * 1000) {
-            wx.setStorageSync(cacheKey, entry);
-          }
-        } catch {}
-      }
-    }
-    return data;
-  }).catch((err: unknown) => {
-    recordApi(opName, Date.now() - t0, false);
-    throw err;
-  }).finally(() => {
-    inFlightRequests.delete(key);
-  });
-
-  inFlightRequests.set(key, request);
-  return request;
+  return result.data;
 }

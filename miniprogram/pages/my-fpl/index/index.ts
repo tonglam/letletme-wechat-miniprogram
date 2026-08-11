@@ -119,9 +119,9 @@ Page({
       this.syncPrincipalState();
     });
     await waitForAuthoritativeFollow();
-    // A resident event-context cache may still describe the previous season.
-    // First paint must establish the current season before reading overview.
-    void this.loadOverview(true);
+    // Named cache policies and season-aware variants keep first paint current
+    // without bypassing fresh entry/reporting data.
+    void this.loadOverview(false);
   },
 
   onShow() {
@@ -130,7 +130,7 @@ Page({
     if (resumed) {
       // Return from the website handoff or team search: re-read the follow
       // pointer before any personal content (§9 return refresh).
-      void this.loadOverview(true);
+      void this.loadOverview(false);
     }
   },
 

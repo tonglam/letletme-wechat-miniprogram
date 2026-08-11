@@ -56,7 +56,7 @@ export async function getFixtureWindow(
   const events = fixtureWindowEvents(startEvent, horizon);
   const request = buildFixtureWindowRequest(events);
   const data = await graphqlRequest<FixtureWindowResponse>(request.query, request.variables, {
-    cacheTtl: 30 * 60 * 1000,
+    cachePolicy: "fixtures",
     cacheVariant: season ? `season:${season}` : "season:unknown",
     forceRefresh
   });

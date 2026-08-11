@@ -209,7 +209,7 @@ Page({
     this.hasShown = true;
     if (resumed) {
       const app = getApp<IAppOption>();
-      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      try { await app.initAppData(false); } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
       if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason = app.globalData.season || undefined;

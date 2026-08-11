@@ -104,10 +104,6 @@
   border-left-color: var(--info, #82208a);
 }
 
-.match-card.status-next {
-  border-left-color: var(--warning, #924a07);
-}
-
 .match-card-head {
   display: flex;
   align-items: center;
@@ -139,11 +135,6 @@
 .status-waiting .status-pill {
   background: #f0e3f2;
   color: var(--info, #82208a);
-}
-
-.status-next .status-pill {
-  background: var(--warning-tint, #f6ead9);
-  color: var(--warning, #924a07);
 }
 
 .scoregrid {

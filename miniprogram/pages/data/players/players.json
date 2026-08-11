@@ -6,5 +6,7 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "filter-bar": "../../../components/filter-bar/filter-bar",
     "player-row": "../../../components/player-row/player-row"
-  }
+  },
+  "enablePullDownRefresh": true,
+  "onReachBottomDistance": 120
 }

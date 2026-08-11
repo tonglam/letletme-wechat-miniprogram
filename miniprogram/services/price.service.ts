@@ -199,14 +199,21 @@ function priceCacheTtl(changeDate: string): number {
 }
 
 export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, { cacheTtl: priceCacheTtl(changeDate), forceRefresh });
+  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
+    cachePolicy: "market",
+    getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
+    forceRefresh
+  });
   return (data.playerValues || [])
     .filter((value) => value.value !== value.lastValue)
     .map(mapPlayerValueChange);
 }
 
 export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, { cacheTtl: 6 * 60 * 60 * 1000, forceRefresh });
+  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, {
+    cachePolicy: "historical",
+    forceRefresh
+  });
   return (data.playerValueHistory || []).map((item) => enrichPriceChange({
     element: item.playerId,
     playerId: item.playerId,
@@ -222,7 +229,11 @@ export async function getPlayerValueByElement(element: number, forceRefresh = fa
 }
 
 export async function getPlayerValues(changeDate: string, forceRefresh = false): Promise<PlayerValue[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, { cacheTtl: priceCacheTtl(changeDate), forceRefresh });
+  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
+    cachePolicy: "market",
+    getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
+    forceRefresh
+  });
   return data.playerValues || [];
 }
 

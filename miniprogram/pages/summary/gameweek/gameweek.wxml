@@ -1,4 +1,5 @@
 <view class="page">
+  <view wx:if="{{staleNotice}}" class="last-good-notice">{{staleNotice}}</view>
   <view class="section summary-header">
     <view>
       <view class="title">GW{{event}} 总结</view>

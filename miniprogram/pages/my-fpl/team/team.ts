@@ -208,9 +208,9 @@ Page({
       event: currentGw,
       maxGw: currentGw
     });
-    // The season/event context above was force-refreshed. Bypass the
-    // seasonless entry/GW summary caches on this first matching payload too.
-    this.loadData(true);
+    // First paint honors the reporting policy; explicit refresh and context
+    // changes still bypass it below.
+    this.loadData(false);
   },
 
   async onShow() {
@@ -219,7 +219,7 @@ Page({
     if (!resumed) return;
 
     const app = getApp<IAppOption>();
-    try { await app.initAppData(true); } catch { /* retain the last known context */ }
+    try { await app.initAppData(false); } catch { /* retain the last known context */ }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) return;
 
@@ -323,9 +323,8 @@ Page({
 
   async ensureAppDataReady(): Promise<void> {
     const app = getApp<IAppOption>();
-    // A newly opened Team page can inherit a non-zero but stale resident GW.
-    // Always bypass shared caches before snapshotting its initial selection.
-    await app.initAppData(true);
+    // Deadline-derived freshness owns event context on first paint.
+    await app.initAppData(false);
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {

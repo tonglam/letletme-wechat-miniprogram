@@ -107,8 +107,8 @@
         <view class="selected-price">当前 {{selectedPlayer.priceText || '-'}}</view>
       </view>
 
-      <app-error-state wx:if="{{playersError}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
-      <app-loading wx:elif="{{playerLoading}}" text="加载球员列表" />
+      <app-error-state wx:if="{{playersError && players.length === 0}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
+      <app-loading wx:elif="{{playerLoading && players.length === 0}}" text="加载球员列表" />
       <app-empty-state
         wx:elif="{{playersLoaded && players.length === 0}}"
         title="球员名单还没有同步"
@@ -135,6 +135,9 @@
             </view>
             <view class="player-option-side">{{item.priceText}}</view>
           </view>
+          <view wx:if="{{playersError}}" class="load-more-error">{{playersError}}</view>
+          <app-loading wx:if="{{loadingMore}}" text="加载更多球员" />
+          <button wx:elif="{{hasMorePlayers}}" class="load-more-button" bindtap="loadMorePlayers">加载更多</button>
         </block>
       </view>
     </view>

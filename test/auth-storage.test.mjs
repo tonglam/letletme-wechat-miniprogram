@@ -3,7 +3,10 @@ import test from "node:test";
 
 import {
   clearApiSession,
-  logoutMiniProgramSession
+  clearSessionCredentials,
+  getApiSessionToken,
+  logoutMiniProgramSession,
+  restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
 
 test("sign-out clears account caches without deleting public GraphQL data", () => {
@@ -15,7 +18,7 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
   try {
     globalThis.wx = {
       getStorageInfoSync: () => ({
-        keys: ["gql:public:shared", "gql:session:private", "gql:legacy"]
+        keys: ["gql:v2:public:shared", "gql:v2:session:private", "gql:legacy"]
       }),
       removeStorageSync: (key) => removed.push(key)
     };
@@ -23,8 +26,8 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
 
     clearApiSession();
 
-    assert.equal(removed.includes("gql:public:shared"), false);
-    assert.equal(removed.includes("gql:session:private"), true);
+    assert.equal(removed.includes("gql:v2:public:shared"), false);
+    assert.equal(removed.includes("gql:v2:session:private"), true);
     assert.equal(removed.includes("gql:legacy"), true);
     assert.equal(removed.includes("api-session-token"), true);
     assert.equal(removed.includes("api-session-expires-at"), true);
@@ -46,17 +49,58 @@ test("remote sign-out failure retains the credential so revocation can be retrie
     globalThis.wx = {
       getAccountInfoSync: () => ({ miniProgram: { envVersion: "release" } }),
       getStorageSync: (key) => {
-        if (key === "api-session-token") return "token";
         if (key === "api-session-expires-at") return "2099-01-01T00:00:00.000Z";
         return undefined;
       },
+      canIUse: () => true,
+      getStorage: ({ success }) => success({ data: "token", errMsg: "getStorage:ok" }),
       removeStorageSync: (key) => removed.push(key),
       request: ({ fail }) => fail({ errMsg: "offline" })
     };
     globalThis.getApp = () => ({ globalData: { entryId: 123 } });
 
+    await restoreApiSessionCredentials();
     await assert.rejects(logoutMiniProgramSession(), /网络连接失败/);
     assert.deepEqual(removed, []);
+    clearSessionCredentials();
+  } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("legacy plaintext session tokens migrate to encrypted storage", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const removed = [];
+  let encryptedWrite;
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => {
+        if (key === "api-session-token") return "legacy-token";
+        if (key === "api-session-expires-at") return "2099-01-01T00:00:00.000Z";
+        return undefined;
+      },
+      canIUse: () => true,
+      getStorage: ({ fail }) => fail({ errMsg: "getStorage:fail data is not encrypted" }),
+      setStorage: (options) => {
+        encryptedWrite = options;
+        options.success();
+      },
+      removeStorageSync: (key) => removed.push(key)
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+
+    await restoreApiSessionCredentials();
+
+    assert.equal(getApiSessionToken(), "legacy-token");
+    assert.equal(encryptedWrite.key, "api-session-token");
+    assert.equal(encryptedWrite.encrypt, true);
+    assert.equal(encryptedWrite.data, "legacy-token");
+    assert.equal(removed.includes("api-session-token"), true);
+    clearSessionCredentials();
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
