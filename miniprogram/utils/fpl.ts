@@ -1,5 +1,9 @@
 export function getDifficultyClass(difficulty?: number): string {
-  if (!difficulty || difficulty <= 2) {
+  if (typeof difficulty !== "number" || !Number.isFinite(difficulty)) {
+    return "difficulty-unknown";
+  }
+
+  if (difficulty <= 2) {
     return "difficulty-easy";
   }
 

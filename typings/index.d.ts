@@ -4,6 +4,7 @@ interface IAppOption extends WechatMiniprogram.IAnyObject {
   globalData: {
     season: string
     gw: number
+    currentGw: number
     lastGw: number
     nextGw: number
     utcDeadline: string
@@ -12,9 +13,10 @@ interface IAppOption extends WechatMiniprogram.IAnyObject {
     openid?: string
   }
   _pendingInit: Promise<void> | null
+  _pendingInitForced: boolean
   _authReadyResolve: (() => void) | null
   authReady: Promise<void> | null
-  initAppData: () => Promise<void>
+  initAppData: (forceRefresh?: boolean) => Promise<void>
 }
 
 declare namespace WechatMiniprogram {

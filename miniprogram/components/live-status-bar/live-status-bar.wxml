@@ -1,0 +1,8 @@
+<view class="status-bar {{toneClass}} {{compact ? 'status-bar-compact' : ''}}">
+  <view class="status-main">
+    <view class="status-dot"></view>
+    <text class="status-label">{{stateLabel}}</text>
+    <text wx:if="{{metaText}}" class="status-meta">{{metaText}}</text>
+  </view>
+  <view class="status-refresh" hover-class="status-refresh-hover" bindtap="onRefresh">刷新</view>
+</view>

@@ -1,0 +1,60 @@
+<view class="page">
+  <view class="section">
+    <view class="title">我的联赛</view>
+    <view class="subtitle">官方 FPL 联赛 · 竞赛筹备与管理在网页版进行</view>
+  </view>
+
+  <view wx:if="{{entryId}}" class="section">
+    <filter-bar keyword="{{keyword}}" placeholder="搜索联赛" actionText="查询" bind:search="onKeyword" bind:submit="onKeyword" bind:reset="onResetSearch" />
+  </view>
+
+  <view wx:if="{{error}}" class="section">
+    <view class="inline-error">
+      <text>{{error}}</text>
+      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+    </view>
+  </view>
+
+  <app-loading wx:if="{{loading}}" text="加载联赛" />
+  <view wx:elif="{{!entryId}}" class="section">
+    <app-empty-state
+      eyebrow="需要球队"
+      title="先选择我的球队"
+      description="查找球队并设为我的球队后，即可查看你所在的官方联赛。"
+      actionText="去选择球队"
+      featured="{{true}}"
+      bind:action="onEmptyAction"
+    />
+  </view>
+  <view wx:elif="{{displayLeagues.length === 0 && !error}}" class="section">
+    <app-empty-state
+      title="{{keyword ? '没有匹配的联赛' : '暂无官方联赛'}}"
+      description="{{keyword ? '换个关键词试试。' : '加入官方 FPL 联赛后会显示在这里。'}}"
+      actionText="{{keyword ? '清除搜索' : ''}}"
+      bind:action="onResetSearch"
+    />
+  </view>
+  <block wx:else>
+    <view class="section league-list">
+      <view
+        wx:for="{{displayLeagues}}"
+        wx:key="id"
+        class="league-row"
+      >
+        <view class="league-main">
+          <view class="league-name">{{item.name}}</view>
+          <view class="league-meta">
+            <text wx:if="{{item.viewerRank !== undefined}}">我的排名 {{item.viewerRank}} · </text>
+            <text>{{item.associationCount !== undefined ? (item.associationCount + ' 个关联竞赛') : '竞赛关联信息未就绪'}}</text>
+          </view>
+        </view>
+        <view class="league-action" data-id="{{item.id}}" bindtap="onOpenWebsite">网页查看</view>
+      </view>
+    </view>
+    <view class="section">
+      <view class="footnote">创建、筹备和管理竞赛请访问 LetLetMe 网页版</view>
+    </view>
+  </block>
+
+  <bottomNavBar active="myFpl" />
+</view>

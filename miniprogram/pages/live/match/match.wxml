@@ -20,6 +20,8 @@
     >{{item.label}}</view>
   </view>
 
+  <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
+
   <app-error-state wx:if="{{error && !hasData}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasData}}" text="加载比赛" />
   <view wx:else class="match-content">

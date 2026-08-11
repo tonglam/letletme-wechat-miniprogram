@@ -12,44 +12,42 @@ interface NavMenu {
 const PERF_ENTRY_ID = 15702;
 
 const MENU_MAP: Record<string, NavMenu> = {
+  myFpl: {
+    pages: [
+      { name: "总览", subname: "现在与我的 FPL 最相关的内容" },
+      { name: "球队", subname: "阵容、转会、开卡和历史" },
+      { name: "联赛", subname: "我的官方 FPL 联赛" }
+    ],
+    url: {
+      总览: "/pages/my-fpl/index/index",
+      球队: "/pages/my-fpl/team/team",
+      联赛: "/pages/my-fpl/leagues/leagues"
+    },
+    show: true
+  },
+  competitions: {
+    // One permanent destination at section level — no action sheet (§9.1).
+    pages: [],
+    url: { 我的赛事: "/pages/competitions/index/index" },
+    show: false
+  },
+  explore: {
+    // Explore is one permanent destination: the overview routes onward to
+    // the physical pages, which stay put until the deferred rename (plan A2).
+    pages: [],
+    url: { 探索: "/pages/explore/index/index" },
+    show: false
+  },
   live: {
     pages: [
       { name: "球队", subname: "查看球队实时得分" },
-      { name: "联赛", subname: "查看联赛实时得分和排名" },
+      { name: "竞赛", subname: "查看竞赛实时得分和排名" },
       { name: "比赛", subname: "查看实时更新的比赛结果" }
     ],
     url: {
       球队: "/pages/live/entry/entry",
-      联赛: "/pages/live/tournament/tournament",
+      竞赛: "/pages/live/tournament/tournament",
       比赛: "/pages/live/match/match"
-    },
-    show: true
-  },
-  summary: {
-    pages: [
-      { name: "比赛周", subname: "查看比赛周总体数据" },
-      { name: "球队", subname: "查看球队统计数据" },
-      { name: "联赛", subname: "查看联赛统计数据" }
-    ],
-    url: {
-      比赛周: "/pages/summary/gameweek/gameweek",
-      球队: "/pages/summary/entry/entry",
-      联赛: "/pages/summary/tournament/tournament"
-    },
-    show: true
-  },
-  data: {
-    pages: [
-      { name: "身价变化", subname: "查看每日价格涨跌" },
-      { name: "阵容选择", subname: "查看联赛选择率和转会趋势" },
-      { name: "球员数据", subname: "查看球员数据" },
-      { name: "球队数据", subname: "查看球队数据" }
-    ],
-    url: {
-      身价变化: "/pages/data/price/price",
-      阵容选择: "/pages/data/selections/selections",
-      球员数据: "/pages/data/players/players",
-      球队数据: "/pages/data/teams/teams"
     },
     show: true
   },
@@ -60,10 +58,16 @@ const MENU_MAP: Record<string, NavMenu> = {
   }
 };
 
+// Order matters: the first matching prefix wins. /pages/summary/gameweek is
+// Explore's 本轮 destination; the remaining /pages/summary/ routes are
+// compat-only (plan A3) and intentionally highlight no tab.
 const ROUTE_GROUPS = [
+  { prefix: "/pages/my-fpl/", active: "myFpl" },
+  { prefix: "/pages/competitions/", active: "competitions" },
+  { prefix: "/pages/summary/gameweek", active: "explore" },
+  { prefix: "/pages/explore/", active: "explore" },
+  { prefix: "/pages/data/", active: "explore" },
   { prefix: "/pages/live/", active: "live" },
-  { prefix: "/pages/summary/", active: "summary" },
-  { prefix: "/pages/data/", active: "data" },
   { prefix: "/pages/performance/", active: "perf" }
 ];
 
@@ -135,7 +139,10 @@ Component({
         } else {
           const firstKey = Object.keys(menu.url)[0];
           const url = menu.url[firstKey];
-          if (url && name !== this.data.activeName) {
+          // Guard on the route, not the active name: destination pages share
+          // their group's active name (explore owns gameweek/data routes),
+          // and the tab must still return to the section page from them.
+          if (url && getCurrentRoute() !== url) {
             wx.redirectTo({ url });
           }
         }

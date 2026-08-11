@@ -10,6 +10,10 @@ Component({
       type: Number,
       value: 0
     },
+    difficultyKnown: {
+      type: Boolean,
+      value: false
+    },
     homeAway: {
       type: String,
       value: ""
@@ -17,12 +21,12 @@ Component({
   },
 
   data: {
-    difficultyClass: "difficulty-easy"
+    difficultyClass: "difficulty-unknown"
   },
 
   observers: {
-    difficulty(value: number) {
-      this.setData({ difficultyClass: getDifficultyClass(value) });
+    "difficulty, difficultyKnown"(value: number, known: boolean) {
+      this.setData({ difficultyClass: getDifficultyClass(known ? value : undefined) });
     }
   }
 });

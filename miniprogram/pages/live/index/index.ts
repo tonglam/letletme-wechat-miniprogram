@@ -1,5 +1,5 @@
 import { routes } from "../../../config/routes";
-import { forceEntryBinding, navigateTo } from "../../../utils/navigation";
+import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 
 Page({
   data: {
@@ -21,8 +21,8 @@ Page({
         url: routes.liveMatch
       },
       {
-        title: "实时联赛",
-        description: "联赛实时排名、搜索和排序",
+        title: "实时竞赛",
+        description: "竞赛实时排名、搜索和排序",
         meta: "Tournament table",
         status: "支持切换",
         url: routes.liveTournament
@@ -35,12 +35,18 @@ Page({
     this.setData({ entryId: app.globalData.entryId, event: app.globalData.gw });
   },
 
-  onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
-    if (!this.data.entryId) {
-      forceEntryBinding();
+  onOpenEntryStrip() {
+    if (this.data.entryId) {
+      navigateTo(routes.liveEntry);
       return;
     }
 
+    goToEntrySearch();
+  },
+
+  onOpenCard(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { url: string }>) {
+    // Cards always open — entry-scoped destinations render their own
+    // no-entry empty state instead of blocking navigation here.
     navigateTo(event.currentTarget.dataset.url);
   }
 });

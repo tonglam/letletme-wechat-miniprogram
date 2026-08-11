@@ -1,0 +1,23 @@
+.evidence-source {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+}
+
+.source-dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.tone-muted {
+  color: var(--muted-ink, #6e5a72);
+}
+
+.tone-warning {
+  color: #b25e09;
+}

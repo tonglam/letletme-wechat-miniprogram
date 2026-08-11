@@ -1,17 +1,12 @@
-.data-card {
+.page {
+  min-height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20rpx;
+  justify-content: center;
+  background: var(--bg, #f9f8f4);
 }
 
-.card-title {
-  font-size: 30rpx;
-  font-weight: 700;
-}
-
-.card-desc {
-  margin-top: 8rpx;
+.redirect-hint {
   color: var(--muted-ink, #6e5a72);
-  font-size: 24rpx;
+  font-size: 26rpx;
 }

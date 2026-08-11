@@ -5,6 +5,7 @@
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
-    "gw-picker": "../../../components/gw-picker/gw-picker"
+    "gw-picker": "../../../components/gw-picker/gw-picker",
+    "evidence-source": "../../../components/evidence-source/evidence-source"
   }
 }

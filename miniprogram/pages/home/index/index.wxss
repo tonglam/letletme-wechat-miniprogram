@@ -134,6 +134,11 @@
   font-weight: 700;
 }
 
+.account-link-hint {
+  margin-top: 12rpx;
+  text-align: center;
+}
+
 /* Price changes */
 .price-card {
   padding-bottom: 20rpx;

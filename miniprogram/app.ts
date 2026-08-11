@@ -2,7 +2,6 @@ import { getCurrentEventAndDeadline } from "./services/common.service";
 import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
 import { getApiSessionToken, isLogoutInFlight, refreshWechatApiSession } from "./services/auth.service";
-import { MiniProgramLinkRequiredError } from "./services/auth-session";
 import { routes } from "./config/routes";
 import { storageKeys, storagePrefixes } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
@@ -12,6 +11,7 @@ App<IAppOption>({
   globalData: {
     season: "",
     gw: 0,
+    currentGw: 0,
     lastGw: 0,
     nextGw: 0,
     utcDeadline: "",
@@ -21,6 +21,7 @@ App<IAppOption>({
   },
 
   _pendingInit: null as Promise<void> | null,
+  _pendingInitForced: false,
   _authReadyResolve: null as (() => void) | null,
   /** Resolves once the first cold-start login attempt has settled (either
    *  path). Pages that need the authoritative entry binding should await it
@@ -81,10 +82,10 @@ App<IAppOption>({
       if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
         this.globalData.entryId = session.profile.fplEntryId;
       }
-    }).catch((error) => {
-      if (error instanceof MiniProgramLinkRequiredError) {
-        wx.reLaunch({ url: routes.accountLink });
-      }
+    }).catch(() => {
+      // Account linking is optional and sync is best-effort: link-required
+      // and network failures alike leave the locally followed team alone.
+      // Pages render their own no-entry state instead of being redirected.
     }).finally(markAuthReady);
   },
 
@@ -101,21 +102,19 @@ App<IAppOption>({
       return;
     }
     const boundEntryAtStart = this.globalData.entryId;
-    refreshWechatApiSession().then((session) => {
+    refreshWechatApiSession().then(() => {
       // storeApiSession has applied the fresh binding to globalData and
       // cleared stale caches. If the binding actually changed, the open page
       // is still showing the previously bound team — rebuild it.
-      const nextEntry = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
-        ? session.profile.fplEntryId
-        : undefined;
+      // storeApiSession retains a local display-only follow when the profile
+      // has no verified entry, so compare the state it actually applied.
+      const nextEntry = this.globalData.entryId;
       if (nextEntry !== boundEntryAtStart) {
         this.reloadCurrentPageForEntryChange(nextEntry);
       }
-    }).catch((error) => {
-      if (error instanceof MiniProgramLinkRequiredError) {
-        wx.reLaunch({ url: routes.accountLink });
-      }
-      // Network failures keep the stored binding and retry on a later launch.
+    }).catch(() => {
+      // Link-required and network failures keep the stored follow and retry
+      // on a later launch — pages own how they render the no-entry state.
     });
   },
 
@@ -155,28 +154,40 @@ App<IAppOption>({
     } catch {}
   },
 
-  async initAppData() {
+  async initAppData(forceRefresh = false) {
     if (this._pendingInit) {
-      return this._pendingInit;
+      if (!forceRefresh || this._pendingInitForced) {
+        return this._pendingInit;
+      }
+      // A cache-bypassing caller must not be downgraded to an ordinary read.
+      // Wait for the existing single-flight request, then start (or join) the
+      // forced refresh that supersedes it.
+      await this._pendingInit;
+      return this.initAppData(true);
     }
 
-    const promise = this._initAppDataInner();
+    const promise = this._initAppDataInner(forceRefresh);
     this._pendingInit = promise;
+    this._pendingInitForced = forceRefresh;
     try {
       return await promise;
     } finally {
-      this._pendingInit = null;
+      if (this._pendingInit === promise) {
+        this._pendingInit = null;
+        this._pendingInitForced = false;
+      }
     }
   },
 
-  async _initAppDataInner() {
+  async _initAppDataInner(forceRefresh = false) {
     try {
-      const current = await getCurrentEventAndDeadline();
+      const current = await getCurrentEventAndDeadline(forceRefresh);
       const eventContext = resolveEventContext(current.currentEvent, current.nextEvent);
       const utcDeadline = String(current.utcDeadline || current.deadline || "");
 
       this.globalData.season = String(current.season || "");
       this.globalData.gw = eventContext.gw;
+      this.globalData.currentGw = Number(current.currentEvent) || 0;
       this.globalData.lastGw = eventContext.lastGw;
       this.globalData.nextGw = eventContext.nextGw;
       this.globalData.utcDeadline = utcDeadline;

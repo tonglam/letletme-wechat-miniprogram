@@ -115,7 +115,11 @@
       </view>
       </block>
     </view>
+
+    <view class="section">
+      <evidence-source evidenceClass="OFFICIAL_FPL" freshness="本轮统计" />
+    </view>
   </block>
 
-  <bottomNavBar active="summary" />
+  <bottomNavBar active="explore" />
 </view>

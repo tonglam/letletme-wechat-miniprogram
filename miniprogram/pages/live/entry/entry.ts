@@ -3,13 +3,22 @@ import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
-import { forceEntryBinding } from "../../../utils/navigation";
+import { goToEntrySearch } from "../../../utils/navigation";
 import {
-  LIVE_REFRESH_INTERVAL_MS,
-  liveSnapshotNeedsRefresh,
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../../../utils/live-refresh";
+import {
+  createLiveRefreshController,
+  type LiveRefreshController
+} from "../../../utils/live-refresh-controller";
+import { subscribeNetworkStatus } from "../../../utils/live-network";
+import {
+  normalizeLiveDisplayState,
+  type LiveDisplayState
+} from "../../../utils/live-status";
+import { durationBucket, recordLiveTransition } from "../../../utils/perf";
+import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 
@@ -26,6 +35,8 @@ interface LiveEntryData {
   error: string;
   transfersError: string;
   emptyState: boolean;
+  displayState: LiveDisplayState;
+  viewOnly: boolean;
   event: number;
   maxGw: number;
   entryId?: number;
@@ -77,6 +88,8 @@ Page({
     error: "",
     transfersError: "",
     emptyState: false,
+    displayState: "fresh",
+    viewOnly: false,
     event: 0,
     maxGw: 1,
     entryId: undefined,
@@ -95,17 +108,18 @@ Page({
     transfers: []
   } as LiveEntryData,
 
-  autoRefreshTimer: undefined as number | undefined,
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
   transfersRequestId: 0,
-  freshnessRequest: null as Promise<void> | null,
-  freshnessRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
+  liveRefresh: null as LiveRefreshController | null,
+  probing: false,
+  networkOnline: true,
   pageVisible: false,
   hasShown: false,
+  loadedSeason: undefined as string | undefined,
 
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
@@ -115,32 +129,142 @@ Page({
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
     await app.initAppData();
+    this.loadedSeason = app.globalData.season || undefined;
     if (!hasRouteEntry && !getApiSessionToken()) {
-      // With no valid session the stored binding is only offline/display
-      // fallback: the account may have been relinked to a different entry
+      // With no valid session the stored follow is only offline/display
+      // fallback: the account may have been linked to a different entry
       // since, so wait for the refreshed profile to re-assert it (the login
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
-    const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
+    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
+    const followedEntry = app.globalData.entryId;
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: hasRouteEntry ? routeEntry : app.globalData.entryId
+      entryId: hasRouteEntry ? routeEntry : followedEntry,
+      // An explicit route entry that is not the followed team is read-only
+      // view mode; it never changes the stored follow.
+      viewOnly: hasRouteEntry && routeEntry !== followedEntry
     });
+    this.initLiveRefresh();
     // onShow can run while initAppData is still pending. Re-arm here once the
     // entry/event context exists so an initial failure still recovers by poll.
-    this.syncAutoRefresh();
-    this.loadData({ includeTransfers: true });
+    this.liveRefresh?.sync();
+    if (!this.data.entryId || currentGw > 0) {
+      this.loadData({ includeTransfers: true });
+    } else {
+      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+    }
+    this.syncDisplayState();
   },
 
-  onShow() {
+  initLiveRefresh() {
+    if (this.liveRefresh) return;
+    this.liveRefresh = createLiveRefreshController({
+      isEligible: () => this.shouldAutoRefresh(),
+      getAcceptedSnapshot: () => this.liveSnapshot,
+      probe: () => getLiveSnapshot(this.data.event),
+      reload: () => this.loadData({ background: true, forceRefresh: true }),
+      acceptSnapshot: (snapshot) => {
+        this.liveSnapshot = snapshot;
+        this.setData({
+          error: "",
+          ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+        });
+        this.syncDisplayState();
+      },
+      onProbeError: (message) => {
+        this.setData({ error: message });
+        this.syncDisplayState();
+      },
+      onProbeChange: (probing) => {
+        this.probing = probing;
+        this.syncDisplayState();
+      },
+      onOnlineChange: (online) => {
+        this.networkOnline = online;
+        this.syncDisplayState();
+      },
+      onProbeSettled: (info) => {
+        recordLiveTransition({
+          surface: "entry",
+          season: this.liveSnapshot?.season,
+          eventId: this.data.event,
+          isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+          snapshotState: info.snapshotState,
+          revisionChanged: info.revisionChanged,
+          coverageFailed: this.liveSnapshot?.coverageFailed,
+          probeDurationBucket: durationBucket(info.probeDurationMs),
+          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+        });
+      },
+      subscribeNetwork: subscribeNetworkStatus
+    });
+  },
+
+  async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    this.syncAutoRefresh();
+    if (resumed) {
+      const app = getApp<IAppOption>();
+      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      if (!this.pageVisible) return;
+      if (this.restartForPrincipalChange(this.data.entryId)) return;
+      const nextSeason = app.globalData.season || undefined;
+      const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+      if (nextSeason) this.loadedSeason = nextSeason;
+      const nextEventId = Number(app.globalData.gw) || 0;
+      const wasCurrentEvent = this.data.event === this.data.maxGw;
+      const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
+        this.liveRefresh?.stop();
+        this.liveSnapshot = null;
+        this.cachedLiveStoredAt = undefined;
+        if (seasonChanged) {
+          // A new season can reuse the same numeric GW, so entry:event is
+          // not enough to distinguish pending score/transfer work. Detach
+          // the previous season before the forced replacement request.
+          this.liveRequestId += 1;
+          this.transfersRequestId += 1;
+          this.liveRequest = null;
+          this.liveRequestKey = "";
+        }
+        this.setData({
+          event: nextEventId,
+          maxGw: nextEventId,
+          hasData: false,
+          lastUpdated: "",
+          error: nextEventId > 0 ? "" : "当前赛季暂无实时比赛周",
+          transfersError: "",
+          total: 0,
+          livePoints: 0,
+          netPoints: 0,
+          transferCost: 0,
+          captainText: "-",
+          chipText: "-",
+          playedText: "-",
+          summaryTiles: [],
+          starters: [],
+          bench: [],
+          managers: [],
+          transfers: []
+        });
+        this.liveRefresh?.sync();
+        if (nextEventId > 0) {
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+        }
+        this.syncDisplayState();
+        return;
+      }
+      if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
+        this.setData({ maxGw: nextEventId });
+      }
+    }
+    this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
-      this.refreshIfChanged();
+      void this.liveRefresh?.probeNow();
     }
     const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
     if (
@@ -158,25 +282,94 @@ Page({
 
   onHide() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
   },
 
   onUnload() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.dispose();
   },
 
   onPullDownRefresh() {
-    this.loadData({ background: true, includeTransfers: true, forceRefresh: true })
+    this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true })
       .finally(() => wx.stopPullDownRefresh());
+  },
+
+  async retryWithContext(options: LiveEntryLoadOptions = {}) {
+    // An offseason page has event=0 by design. Refresh the shared event
+    // context before retrying so a newly opened GW can be discovered without
+    // requiring a hide/resume cycle.
+    if (this.data.event === 0) {
+      const app = getApp<IAppOption>();
+      try { await app.initAppData(true); } catch { /* retain the eventless state */ }
+      const nextEventId = Number(app.globalData.gw) || 0;
+      if (nextEventId > 0) {
+        this.loadedSeason = app.globalData.season || this.loadedSeason;
+        this.setData({ event: nextEventId, maxGw: nextEventId, error: "", hasData: false });
+        this.liveRefresh?.sync();
+      } else {
+        this.setData({ error: "当前赛季暂无实时比赛周" });
+        this.syncDisplayState();
+        return;
+      }
+    }
+    return this.loadData(options);
+  },
+
+  restartForPrincipalChange(entryId: number | undefined): boolean {
+    // An explicit non-followed route entry is a stable read-only view. The
+    // normal personal surface, however, must track the authoritative follow
+    // even when a request's 401 recovery changes it mid-flight.
+    if (this.data.viewOnly) return false;
+    const nextEntryId = currentFollowEntryId();
+    if (nextEntryId === entryId) return false;
+
+    this.liveRefresh?.stop();
+    this.liveSnapshot = null;
+    this.cachedLiveStoredAt = undefined;
+    this.liveRequestId += 1;
+    this.transfersRequestId += 1;
+    this.liveRequest = null;
+    this.liveRequestKey = "";
+    this.setData({
+      entryId: nextEntryId,
+      loading: false,
+      refreshing: false,
+      transfersLoading: false,
+      hasData: false,
+      error: "",
+      transfersError: "",
+      emptyState: !nextEntryId,
+      total: 0,
+      livePoints: 0,
+      netPoints: 0,
+      transferCost: 0,
+      captainText: "-",
+      chipText: "-",
+      playedText: "-",
+      lastUpdated: "",
+      summaryTiles: [],
+      starters: [],
+      bench: [],
+      managers: [],
+      transfers: []
+    });
+    if (nextEntryId) {
+      this.liveRefresh?.sync();
+      void this.loadData({ includeTransfers: true, forceRefresh: true });
+    }
+    this.syncDisplayState();
+    return true;
   },
 
   loadData(options: LiveEntryLoadOptions = {}): Promise<void> {
     const entryId = this.data.entryId;
+    if (this.restartForPrincipalChange(entryId)) {
+      return Promise.resolve();
+    }
     if (!entryId) {
       this.setData({ loading: false, error: "", emptyState: true });
+      this.syncDisplayState();
       return Promise.resolve();
     }
 
@@ -218,6 +411,7 @@ Page({
           options.forceRefresh === true
         );
         if (requestId !== this.liveRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
         const players = (result.players || result.pickList || []).map(normalizePlayer);
@@ -252,13 +446,17 @@ Page({
           managers,
           lastUpdated: formatTime(new Date(fetchedAt))
         });
-        this.syncAutoRefresh();
+        this.liveRefresh?.sync();
+        this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
+        if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+        this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          this.syncDisplayState();
         }
       }
     })();
@@ -283,18 +481,20 @@ Page({
     this.setData({ transfersLoading: true, transfersError: "" });
     try {
       const transfers: EntryTransfer[] = await getEntryEventTransfers(entryId, eventId, forceRefresh);
+      if (requestId !== this.transfersRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (
-        requestId !== this.transfersRequestId
-        || entryId !== this.data.entryId
+        entryId !== this.data.entryId
         || eventId !== this.data.event
       ) {
         return;
       }
       this.setData({ transfers: transfers.map(normalizeTransfer), transfersError: "" });
     } catch (error) {
+      if (requestId !== this.transfersRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (
-        requestId !== this.transfersRequestId
-        || entryId !== this.data.entryId
+        entryId !== this.data.entryId
         || eventId !== this.data.event
       ) {
         return;
@@ -338,81 +538,48 @@ Page({
     // Consume this signal before starting the metadata request so onShow and
     // request cleanup cannot launch duplicate stale-while-revalidate checks.
     this.cachedLiveStoredAt = undefined;
-    void this.refreshIfChanged();
+    void this.liveRefresh?.probeNow();
     return true;
   },
 
-  refreshIfChanged(): Promise<void> {
-    if (!this.shouldAutoRefresh()) return Promise.resolve();
-    if (this.freshnessRequest) return this.freshnessRequest;
-
-    const requestId = this.freshnessRequestId + 1;
-    this.freshnessRequestId = requestId;
-    const eventId = this.data.event;
-    const liveRequestId = this.liveRequestId;
-    const request = (async () => {
-      try {
-        const observed = await getLiveSnapshot(eventId);
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
-          this.liveSnapshot = observed;
-          this.setData({ error: "" });
-          this.syncAutoRefresh();
-          return;
-        }
-        await this.loadData({ background: true, forceRefresh: true });
-      } catch (error) {
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时球队刷新失败" });
-      }
-    })();
-
-    this.freshnessRequest = request;
-    void request.finally(() => {
-      if (this.freshnessRequest === request) {
-        this.freshnessRequest = null;
-      }
+  syncDisplayState() {
+    const next = normalizeLiveDisplayState({
+      snapshot: this.liveSnapshot,
+      hasData: this.data.hasData,
+      loading: this.data.loading || this.data.refreshing,
+      probing: this.probing,
+      lastError: this.data.error,
+      online: this.networkOnline
     });
-    return request;
-  },
-
-  syncAutoRefresh() {
-    this.stopAutoRefresh();
-    if (!this.shouldAutoRefresh()) return;
-    this.autoRefreshTimer = setInterval(() => {
-      this.refreshIfChanged();
-    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
-  },
-
-  stopAutoRefresh() {
-    if (this.autoRefreshTimer !== undefined) {
-      clearInterval(this.autoRefreshTimer);
-      this.autoRefreshTimer = undefined;
+    if (next !== this.data.displayState) {
+      recordLiveTransition({
+        surface: "entry",
+        season: this.liveSnapshot?.season,
+        eventId: this.data.event,
+        isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next
+      });
     }
-  },
-
-  cancelFreshnessCheck() {
-    this.freshnessRequestId += 1;
-    this.freshnessRequest = null;
+    this.setData({ displayState: next });
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
-    this.stopAutoRefresh();
     this.setData({ event: event.detail.value, hasData: false, lastUpdated: "" });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     this.loadData({ includeTransfers: true });
+    this.syncDisplayState();
   },
 
   onRetry() {
-    this.loadData({ includeTransfers: true, forceRefresh: true });
+    this.retryWithContext({ includeTransfers: true, forceRefresh: true });
   },
 
   onChooseEntry() {
-    forceEntryBinding();
+    goToEntrySearch();
   }
 });

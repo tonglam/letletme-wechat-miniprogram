@@ -40,4 +40,5 @@ export interface Fixture {
   difficulty?: number;
   homeDifficulty?: number;
   awayDifficulty?: number;
+  finished?: boolean;
 }

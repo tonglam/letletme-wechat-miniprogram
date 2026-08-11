@@ -1,10 +1,10 @@
 <view class="page">
   <view class="entry-hero section">
-    <view class="title">查看 FPL 球队</view>
-    <view class="subtitle">账户绑定只能在 LetLetMe 网页端通过球队名称验证完成。</view>
+    <view class="title">查找 FPL 球队</view>
+    <view class="subtitle">输入 Entry ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
   </view>
 
-  <view class="bind-card section">
+  <view class="lookup-card section">
     <view class="field-label">FPL Entry ID</view>
     <view class="input-shell">
       <input
@@ -28,7 +28,7 @@
         <view class="guide-step"><text class="step-num">4</text>例如 …/entry/<text class="step-hl">123456</text>/event/…</view>
       </view>
     </view>
-    <button class="primary-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onValidateAndSaveEntry">
+    <button class="primary-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onLookupEntry">
       {{buttonText}}
     </button>
   </view>
@@ -48,6 +48,10 @@
         <view class="stat-label">总排名</view>
       </view>
     </view>
+    <button wx:if="{{!isCurrentEntry}}" class="primary-button" bindtap="onSetMyEntry">设为我的球队</button>
+    <view wx:else class="current-entry-hint">这已经是我的球队</view>
   </view>
+
+  <view class="sync-hint section" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
 
 </view>

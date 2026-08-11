@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildGraphQLRequestCacheKey
 } from "../miniprogram/services/graphql.service.ts";
+import { buildFixtureWindowRequest } from "../miniprogram/services/fixture.service.ts";
 import {
   LIVE_MATCHES_QUERY,
   LIVE_SNAPSHOT_QUERY
@@ -26,6 +27,20 @@ test("separates public and authenticated GraphQL caches", () => {
   assert.notEqual(accountA, accountB);
   assert.equal(accountA, buildGraphQLRequestCacheKey(query, variables, "token-a"));
   assert.equal(accountA.includes("token-a"), false);
+});
+
+test("fixture windows use one production-compatible aliased request", () => {
+  const request = buildFixtureWindowRequest([12, 13, 14, 15, 16]);
+  assert.deepEqual(request.variables, {
+    event0: 12,
+    event1: 13,
+    event2: 14,
+    event3: 15,
+    event4: 16
+  });
+  assert.equal((request.query.match(/eventFixtures\(eventId:/g) || []).length, 5);
+  assert.match(request.query, /fragment FixtureWindowFields on Fixture/);
+  assert.doesNotMatch(request.query, /fixtures\(limit:/);
 });
 
 test("does not expose raw HTTP status codes to users", () => {

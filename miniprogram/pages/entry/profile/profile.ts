@@ -1,7 +1,7 @@
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { EntryInfo } from "../../../models/entry";
-import { forceEntryBinding } from "../../../utils/navigation";
+import { goToEntrySearch } from "../../../utils/navigation";
 
 interface EntryProfileData {
   loading: boolean;
@@ -61,10 +61,10 @@ Page({
   },
 
   onLinkAccount() {
-    forceEntryBinding();
+    goToEntrySearch();
   },
 
   onChangeEntry() {
-    forceEntryBinding();
+    goToEntrySearch();
   }
 });

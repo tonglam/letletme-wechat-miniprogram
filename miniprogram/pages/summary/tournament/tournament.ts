@@ -7,7 +7,7 @@ import {
 } from "../../../services/tournament.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import { storageKeys } from "../../../config/storage-keys";
-import { forceEntryBinding } from "../../../utils/navigation";
+import { goToEntrySearch } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
@@ -127,10 +127,10 @@ Page({
         loading: false,
         error: "",
         emptyState: "entry",
-        emptyEyebrow: "需要账户",
-        emptyTitle: "先关联你的 LetLetMe 账户",
-        emptyDescription: "关联后会自动读取你在网站端已验证的 FPL 球队，无需再次输入 Entry ID。",
-        emptyActionText: "去关联账户",
+        emptyEyebrow: "需要球队",
+        emptyTitle: "先选择我的球队",
+        emptyDescription: "查找球队并设为我的球队后即可查看；关联 LetLetMe 账户可自动同步网页已验证球队。",
+        emptyActionText: "去选择球队",
         tournaments: [],
         tournamentNames: [],
         selectedTournamentName: ""
@@ -251,7 +251,7 @@ Page({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      forceEntryBinding();
+      goToEntrySearch();
       return;
     }
 

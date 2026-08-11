@@ -1,11 +1,19 @@
 import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
 import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import {
-  LIVE_REFRESH_INTERVAL_MS,
-  liveSnapshotNeedsRefresh,
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
 } from "../../../utils/live-refresh";
+import {
+  createLiveRefreshController,
+  type LiveRefreshController
+} from "../../../utils/live-refresh-controller";
+import { subscribeNetworkStatus } from "../../../utils/live-network";
+import {
+  normalizeLiveDisplayState,
+  type LiveDisplayState
+} from "../../../utils/live-status";
+import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 
 interface StatusOption {
   key: string;
@@ -214,6 +222,7 @@ Page({
     refreshing: false,
     hasData: false,
     error: "",
+    displayState: "fresh" as LiveDisplayState,
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
@@ -223,15 +232,16 @@ Page({
     lastUpdated: ""
   },
 
-  autoRefreshTimer: undefined as number | undefined,
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
-  freshnessRequest: null as Promise<void> | null,
-  freshnessRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
+  liveRefresh: null as LiveRefreshController | null,
+  probing: false,
+  networkOnline: true,
   currentEventId: 0,
+  loadedSeason: undefined as string | undefined,
   pageVisible: false,
   hasShown: false,
 
@@ -252,36 +262,112 @@ Page({
     this.setData({ loading: true });
     await app.initAppData();
     this.currentEventId = Number(app.globalData.gw) || 0;
-    this.syncAutoRefresh();
+    this.loadedSeason = app.globalData.season || undefined;
+    if (!Number(app.globalData.currentGw) && this.currentEventId && !isValidStatus(storedStatus)) {
+      // Preseason/offseason with no explicit user choice: the next scheduled
+      // event is the meaningful surface, not an empty playing list.
+      this.setData({
+        status: "next_event",
+        activeStatusLabel: "下轮",
+        emptyDescription: emptyDescription("next_event")
+      });
+    }
+    this.initLiveRefresh();
+    this.liveRefresh?.sync();
     this.loadData();
+    this.syncDisplayState();
   },
 
-  onShow() {
+  initLiveRefresh() {
+    if (this.liveRefresh) return;
+    this.liveRefresh = createLiveRefreshController({
+      isEligible: () => this.shouldAutoRefresh(),
+      getAcceptedSnapshot: () => this.liveSnapshot,
+      probe: () => getLiveSnapshot(this.currentEventId),
+      reload: () => this.loadData({ background: true, forceRefresh: true }),
+      acceptSnapshot: (snapshot) => {
+        this.liveSnapshot = snapshot;
+        this.setData({
+          error: "",
+          ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+        });
+        this.syncDisplayState();
+      },
+      onProbeError: (message) => {
+        this.setData({ error: message });
+        this.syncDisplayState();
+      },
+      onProbeChange: (probing) => {
+        this.probing = probing;
+        this.syncDisplayState();
+      },
+      onOnlineChange: (online) => {
+        this.networkOnline = online;
+        this.syncDisplayState();
+      },
+      onProbeSettled: (info) => {
+        recordLiveTransition({
+          surface: "match",
+          season: this.liveSnapshot?.season,
+          eventId: this.currentEventId,
+          isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+          snapshotState: info.snapshotState,
+          revisionChanged: info.revisionChanged,
+          coverageFailed: this.liveSnapshot?.coverageFailed,
+          probeDurationBucket: durationBucket(info.probeDurationMs),
+          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+        });
+      },
+      subscribeNetwork: subscribeNetworkStatus
+    });
+  },
+
+  async onShow() {
     this.pageVisible = true;
-    const nextEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
-    if (nextEventId && nextEventId !== this.currentEventId) {
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    const app = getApp<IAppOption>();
+    if (resumed) {
+      try { await app.initAppData(true); } catch { /* keep the last known event */ }
+      if (!this.pageVisible) return;
+    }
+    const nextEventId = Number(app.globalData.gw) || 0;
+    const nextSeason = app.globalData.season || undefined;
+    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    if (nextSeason) this.loadedSeason = nextSeason;
+    if (seasonChanged || (nextEventId && nextEventId !== this.currentEventId)) {
+      this.liveRefresh?.stop();
+      // The request key is otherwise only the status, which can be unchanged
+      // across a GW rollover. Detach and invalidate the old event request
+      // before the replacement load so its result can never enter this view.
+      this.liveRequestId += 1;
+      this.liveRequest = null;
+      this.liveRequestKey = "";
       this.currentEventId = nextEventId;
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
+      if (resumed) {
+        this.setData({ matches: [], groups: [], hasData: false, lastUpdated: "" });
+        this.liveRefresh?.sync();
+        await this.loadData({ forceRefresh: true });
+        this.syncDisplayState();
+        return;
+      }
     }
-    const resumed = this.hasShown;
-    this.hasShown = true;
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
-      this.refreshIfChanged();
+      void this.liveRefresh?.probeNow();
     }
   },
 
   onHide() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
   },
 
   onUnload() {
     this.pageVisible = false;
-    this.stopAutoRefresh();
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.dispose();
   },
 
   onPullDownRefresh() {
@@ -321,13 +407,16 @@ Page({
           hasData: true,
           lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
         });
-        this.syncAutoRefresh();
+        this.liveRefresh?.sync();
+        this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+        this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          this.syncDisplayState();
         }
       }
     })();
@@ -364,61 +453,29 @@ Page({
       return false;
     }
     this.cachedLiveStoredAt = undefined;
-    void this.refreshIfChanged();
+    void this.liveRefresh?.probeNow();
     return true;
   },
 
-  refreshIfChanged(): Promise<void> {
-    if (!this.shouldAutoRefresh()) return Promise.resolve();
-    if (this.freshnessRequest) return this.freshnessRequest;
-
-    const requestId = this.freshnessRequestId + 1;
-    this.freshnessRequestId = requestId;
-    const liveRequestId = this.liveRequestId;
-    const request = (async () => {
-      try {
-        const observed = await getLiveSnapshot(this.currentEventId);
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        if (!liveSnapshotNeedsRefresh(this.liveSnapshot, observed)) {
-          this.liveSnapshot = observed;
-          this.setData({ error: "" });
-          this.syncAutoRefresh();
-          return;
-        }
-        await this.loadData({ background: true, forceRefresh: true });
-      } catch (error) {
-        if (requestId !== this.freshnessRequestId || liveRequestId !== this.liveRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时比赛刷新失败" });
-      }
-    })();
-
-    this.freshnessRequest = request;
-    void request.finally(() => {
-      if (this.freshnessRequest === request) {
-        this.freshnessRequest = null;
-      }
+  syncDisplayState() {
+    const next = normalizeLiveDisplayState({
+      snapshot: this.liveSnapshot,
+      hasData: this.data.hasData,
+      loading: this.data.loading || this.data.refreshing,
+      probing: this.probing,
+      lastError: this.data.error,
+      online: this.networkOnline
     });
-    return request;
-  },
-
-  syncAutoRefresh() {
-    this.stopAutoRefresh();
-    if (!this.shouldAutoRefresh()) return;
-    this.autoRefreshTimer = setInterval(() => {
-      this.refreshIfChanged();
-    }, LIVE_REFRESH_INTERVAL_MS) as unknown as number;
-  },
-
-  stopAutoRefresh() {
-    if (this.autoRefreshTimer !== undefined) {
-      clearInterval(this.autoRefreshTimer);
-      this.autoRefreshTimer = undefined;
+    if (next !== this.data.displayState) {
+      recordLiveTransition({
+        surface: "match",
+        season: this.liveSnapshot?.season,
+        eventId: this.currentEventId,
+        isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next
+      });
     }
-  },
-
-  cancelFreshnessCheck() {
-    this.freshnessRequestId += 1;
-    this.freshnessRequest = null;
+    this.setData({ displayState: next });
   },
 
   onStatusTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { status: string }>) {
@@ -428,7 +485,7 @@ Page({
     }
     const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
-    this.cancelFreshnessCheck();
+    this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
     this.setData({
@@ -442,8 +499,9 @@ Page({
     });
     // A previous SETTLED result may have stopped the timer. The new status is
     // a fresh request context and must own recovery before its first request.
-    this.syncAutoRefresh();
+    this.liveRefresh?.sync();
     this.loadData();
+    this.syncDisplayState();
   },
 
   onRetry() {

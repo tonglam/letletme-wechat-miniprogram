@@ -1,11 +1,22 @@
 export type LiveSnapshotState = "SCHEDULED" | "LIVE" | "SETTLED";
 
+export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
+
 export interface LiveSnapshotStatus {
   eventId: number;
   revision: string;
   state: LiveSnapshotState;
   publishedAt: string;
   checkedAt: string;
+  // Additive shared Live contract fields, present only after the GraphQL
+  // contract ships them. Presentation must degrade when they are absent —
+  // never invent authority or coverage client-side.
+  season?: string;
+  authority?: LiveAuthority;
+  coverageExpected?: number;
+  coverageSucceeded?: number;
+  coverageFailed?: number;
+  reasonCode?: string | null;
 }
 
 export interface LiveSnapshotResult<T> {

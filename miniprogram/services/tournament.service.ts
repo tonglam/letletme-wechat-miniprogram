@@ -1,5 +1,6 @@
 import { graphqlRequest } from "./graphql.service";
 import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from "../models/tournament";
+import type { EntryTournamentRow } from "../models/competition";
 
 const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -170,6 +171,19 @@ export async function getEntryPointsRaceTournament(entry: number, forceRefresh =
     forceRefresh
   });
   return (data.entryTournaments || []).map((t) => ({ id: t.id, name: t.name }));
+}
+
+/**
+ * Unfiltered compatibility read for the Competitions section (plan §5.1):
+ * every object the entry participates in, legacy fields intact for the
+ * adapter. Filtering for a specific surface stays with that surface.
+ */
+export async function getEntryAllTournaments(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
+  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
+    cacheTtl: 5 * 60 * 1000,
+    forceRefresh
+  });
+  return data.entryTournaments || [];
 }
 
 export async function getEntrySummaryTournaments(entry: number): Promise<EntryTournament[]> {

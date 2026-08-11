@@ -168,9 +168,11 @@ interface EntryLeaguesResponse {
   }>;
 }
 
-export async function getTeamList(_season: string): Promise<TeamOption[]> {
+export async function getTeamList(_season: string, forceRefresh = false): Promise<TeamOption[]> {
   const data = await graphqlRequest<TeamsResponse>(TEAMS, {}, {
-    cacheTtl: 24 * 3600 * 1000
+    cacheTtl: 24 * 3600 * 1000,
+    cacheVariant: _season ? `season:${_season}` : "season:unknown",
+    forceRefresh
   });
   return (data.teams || []).map((team) => ({
     id: team.id,

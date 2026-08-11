@@ -27,10 +27,10 @@
 
   <view wx:else class="entry-empty" bindtap="onChange">
     <view>
-      <view class="entry-title">还没有关联球队</view>
-      <view class="entry-subtitle">关联 LetLetMe 账户后自动读取</view>
+      <view class="entry-title">还没有我的球队</view>
+      <view class="entry-subtitle">查找球队并设为我的球队后开始</view>
     </view>
-    <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">关联</button>
+    <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">选择</button>
   </view>
   <button wx:if="{{!rich && !compact}}" class="entry-action" size="mini" bindtap="onChange">切换</button>
 </view>

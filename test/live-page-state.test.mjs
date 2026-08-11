@@ -18,33 +18,39 @@ capturedPage = undefined;
 await import("../miniprogram/pages/live/match/match.ts");
 const matchPage = capturedPage;
 
+capturedPage = undefined;
+const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
+const teamPage = capturedPage;
+
 test("re-arms current-gameweek polling before loading the switched context", () => {
   const calls = [];
   const context = {
     ...entryPage,
     data: { ...entryPage.data, entryId: 123, event: 32 },
-    cancelFreshnessCheck() {
-      calls.push("cancel");
-    },
-    stopAutoRefresh() {
-      calls.push("stop");
-    },
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
-      calls.push(`set:${this.data.event}`);
-    },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.data.event}`);
+      if (update.event !== undefined) {
+        calls.push(`set:${this.data.event}`);
+      }
     },
     loadData(options) {
       calls.push(`load:${this.data.event}:${options.includeTransfers === true}`);
       return Promise.resolve();
     }
   };
+  context.liveRefresh = {
+    stop() {
+      calls.push("stop");
+    },
+    sync() {
+      calls.push(`sync:${context.data.event}`);
+    }
+  };
 
   entryPage.onGwChange.call(context, { detail: { value: 33 } });
 
-  assert.deepEqual(calls, ["cancel", "stop", "set:33", "sync:33", "load:33:true"]);
+  assert.deepEqual(calls, ["stop", "set:33", "sync:33", "load:33:true"]);
 });
 
 test("an overlapping manual refresh awaits its independent transfer refresh", async () => {
@@ -61,6 +67,9 @@ test("an overlapping manual refresh awaits its independent transfer refresh", as
     data: { entryId: 123, event: 33 },
     liveRequest: scoreRequest,
     liveRequestKey: "123:33",
+    restartForPrincipalChange() {
+      return false;
+    },
     loadTransfers(entryId, eventId, forceRefresh) {
       transferCalls.push([entryId, eventId, forceRefresh]);
       return transfersRequest;
@@ -89,7 +98,7 @@ test("match cold start waits for the current event before arming recovery", asyn
   const calls = [];
   let resolveAppData;
   const app = {
-    globalData: { gw: 0 },
+    globalData: { gw: 0, currentGw: 0 },
     initAppData() {
       calls.push("init");
       return new Promise((resolve) => {
@@ -106,13 +115,19 @@ test("match cold start waits for the current event before arming recovery", asyn
   const context = {
     data: { ...matchPage.data },
     currentEventId: 0,
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
       if (update.loading) calls.push("loading");
     },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.currentEventId}`);
+    initLiveRefresh() {
+      this.liveRefresh = {
+        sync() {
+          calls.push(`sync:${context.currentEventId}`);
+        }
+      };
     },
+    syncDisplayState() {},
     loadData() {
       calls.push(`load:${this.currentEventId}`);
       return Promise.resolve();
@@ -122,11 +137,41 @@ test("match cold start waits for the current event before arming recovery", asyn
   const loading = matchPage.onLoad.call(context);
   assert.deepEqual(calls, ["loading", "init"]);
   app.globalData.gw = 33;
+  app.globalData.currentGw = 33;
   resolveAppData();
   await loading;
 
   assert.equal(context.currentEventId, 33);
   assert.deepEqual(calls, ["loading", "init", "sync:33", "load:33"]);
+});
+
+test("match cold start selects the scheduled next round during preseason", async () => {
+  const app = {
+    globalData: { gw: 1, currentGw: 0 },
+    initAppData: async () => {}
+  };
+  globalThis.getApp = () => app;
+  globalThis.wx = { getStorageSync: () => "" };
+  const context = {
+    ...matchPage,
+    data: { ...matchPage.data },
+    currentEventId: 0,
+    liveRefresh: null,
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    initLiveRefresh() {
+      this.liveRefresh = { sync() {} };
+    },
+    loadData: async () => {},
+    syncDisplayState() {}
+  };
+
+  await matchPage.onLoad.call(context);
+
+  assert.equal(context.currentEventId, 1);
+  assert.equal(context.data.status, "next_event");
+  assert.equal(context.data.activeStatusLabel, "下轮");
 });
 
 test("match status changes re-arm polling before the first request", () => {
@@ -140,21 +185,27 @@ test("match status changes re-arm polling before the first request", () => {
     data: { ...matchPage.data, status: "finished" },
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
-    cancelFreshnessCheck() {
-      calls.push("cancel");
-    },
+    liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
-      calls.push(`set:${this.data.status}`);
-    },
-    syncAutoRefresh() {
-      calls.push(`sync:${this.data.status}`);
+      if (update.status !== undefined) {
+        calls.push(`set:${this.data.status}`);
+      }
     },
     loadData() {
       calls.push(`load:${this.data.status}`);
       return Promise.resolve();
     }
   };
+  context.liveRefresh = {
+    stop() {
+      calls.push("stop");
+    },
+    sync() {
+      calls.push(`sync:${context.data.status}`);
+    }
+  };
+  context.syncDisplayState = () => {};
 
   matchPage.onStatusTap.call(context, {
     currentTarget: { dataset: { status: "playing" } }
@@ -163,27 +214,73 @@ test("match status changes re-arm polling before the first request", () => {
   assert.equal(context.liveSnapshot, null);
   assert.deepEqual(calls, [
     "store:playing",
-    "cancel",
+    "stop",
     "set:playing",
     "sync:playing",
     "load:playing"
   ]);
 });
 
-test("entry resume revalidates current-gameweek transfers independently", () => {
+test("match rollover invalidates an in-flight same-status request", async () => {
+  globalThis.getApp = () => ({
+    globalData: { gw: 34 },
+    initAppData: async () => {}
+  });
   const calls = [];
-  globalThis.getApp = () => ({ globalData: { gw: 33 } });
   const context = {
-    data: { ...entryPage.data, entryId: 123, event: 33 },
+    ...matchPage,
+    data: { ...matchPage.data, status: "playing", hasData: true },
     pageVisible: false,
     hasShown: true,
-    syncAutoRefresh() {
-      calls.push("sync");
+    currentEventId: 33,
+    liveRequestId: 7,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "playing",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push("sync"); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData() {
+      calls.push(`load:${this.currentEventId}:${this.liveRequestId}:${this.liveRequestKey}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() {}
+  };
+
+  await matchPage.onShow.call(context);
+
+  assert.equal(context.currentEventId, 34);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.liveRequest, null);
+  assert.deepEqual(calls, ["stop", "sync", "load:34:8:"]);
+});
+
+test("entry resume revalidates current-gameweek transfers independently", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { gw: 33 },
+    initAppData(forceRefresh) {
+      calls.push(`init:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  });
+  const context = {
+    data: { ...entryPage.data, entryId: 123, event: 33, maxGw: 33 },
+    pageVisible: false,
+    hasShown: true,
+    liveRefresh: {
+      sync() {
+        calls.push("sync");
+      }
     },
     revalidateCachedSnapshot() {
       return false;
     },
     shouldAutoRefresh() {
+      return false;
+    },
+    restartForPrincipalChange() {
       return false;
     },
     loadTransfers(entryId, eventId, forceRefresh) {
@@ -192,9 +289,215 @@ test("entry resume revalidates current-gameweek transfers independently", () => 
     }
   };
 
-  entryPage.onShow.call(context);
+  await entryPage.onShow.call(context);
 
-  assert.deepEqual(calls, ["sync", "transfers:123:33:false"]);
+  assert.deepEqual(calls, ["init:true", "sync", "transfers:123:33:false"]);
+});
+
+test("entry resume drops a historical selection after a season rollover", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 1 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: { ...entryPage.data, entryId: 123, event: 30, maxGw: 38, hasData: true },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:1",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    restartForPrincipalChange() {
+      return false;
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData(options) {
+      calls.push(`load:${this.data.event}:${options.forceRefresh}:${options.includeTransfers}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.equal(context.data.hasData, false);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
+  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
+});
+
+test("entry resume clears live data when a new season has no event yet", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 0 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: { ...entryPage.data, entryId: 123, event: 1, maxGw: 1, hasData: true, total: 77 },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:1",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    restartForPrincipalChange() { return false; },
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.event, 0);
+  assert.equal(context.data.maxGw, 0);
+  assert.equal(context.data.hasData, false);
+  assert.equal(context.data.total, 0);
+  assert.equal(context.data.error, "当前赛季暂无实时比赛周");
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
+  assert.deepEqual(calls, ["init:true", "stop", "sync:0", "display"]);
+});
+
+test("entry principal changes clear old live data and restart the followed team", () => {
+  globalThis.getApp = () => ({ globalData: { entryId: 456, gw: 33 } });
+  globalThis.wx = { getStorageSync: () => undefined };
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      viewOnly: false,
+      hasData: true,
+      total: 77,
+      starters: [{ element: 1 }],
+      transfers: [{ inText: "old" }]
+    },
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:33",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push("sync"); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); },
+    loadData(options) {
+      calls.push(`load:${this.data.entryId}:${options.includeTransfers}:${options.forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  assert.equal(entryPage.restartForPrincipalChange.call(context, 123), true);
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.hasData, false);
+  assert.equal(context.data.total, 0);
+  assert.deepEqual(context.data.starters, []);
+  assert.deepEqual(context.data.transfers, []);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
+  assert.deepEqual(calls, ["stop", "sync", "load:456:true:true", "display"]);
+
+  context.data.viewOnly = true;
+  context.data.entryId = 999;
+  assert.equal(entryPage.restartForPrincipalChange.call(context, 999), false);
+  assert.equal(context.data.entryId, 999);
+});
+
+test("tournament resume drops a historical selection after a season rollover", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { season: "2026/27", gw: 1 },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    data: {
+      ...tournamentPage.data,
+      event: 30,
+      maxGw: 38,
+      hasData: true,
+      rows: [{ entry: 1 }],
+      displayedRows: [{ entry: 1 }],
+      selectedOwnershipPlayers: [{ element: 999, name: "Old player" }],
+      ownershipPlayerNames: ["Old player"],
+      ownershipSummary: "Old player",
+      selectedOwnershipTeam: { id: 1, name: "Old team" },
+      ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
+      selectedTeamExposure: { id: 1, name: "Old team" }
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    failedEntryCount: 2,
+    retainedRowCount: 1,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) {
+      calls.push(`tournaments:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.data.selectedTournament, undefined);
+  assert.deepEqual(context.data.selectedOwnershipPlayers, []);
+  assert.deepEqual(context.data.ownershipAvailablePlayers, []);
+  assert.equal(context.data.ownershipSummary, "未筛选");
+  assert.equal(context.data.selectedOwnershipTeam, null);
+  assert.equal(context.data.selectedTeamExposure, null);
+  assert.equal(context.failedEntryCount, 0);
+  assert.deepEqual(calls, ["init:true", "stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
+test("tournament Website handoff reports clipboard failures", async () => {
+  const toasts = [];
+  globalThis.wx = {
+    setClipboardData: ({ fail }) => fail?.({ errMsg: "denied" }),
+    showToast: ({ title }) => toasts.push(title)
+  };
+
+  await tournamentPage.onCopyCompetitionLink.call({
+    ...tournamentPage,
+    data: { ...tournamentPage.data }
+  });
+
+  assert.deepEqual(toasts, ["复制失败，请重试"]);
 });
 
 test("tournament list errors are retried by their owning request", () => {
@@ -225,6 +528,41 @@ test("tournament list errors are retried by their owning request", () => {
   assert.equal(tournamentModule.shouldClearTournamentRowsError(0), true);
 });
 
+test("tournament principal changes clear old lists before restarting", () => {
+  const calls = [];
+  globalThis.getApp = () => ({ globalData: { entryId: 456 } });
+  const context = {
+    data: {
+      ...tournamentPage.data,
+      entryId: 123,
+      hasData: true,
+      tournaments: [{ id: "old", name: "Old" }],
+      selectedTournament: { id: "old", name: "Old" },
+      rows: [{ entry: 123 }],
+      displayedRows: [{ entry: 123 }]
+    },
+    liveSnapshot: { state: "SETTLED" },
+    cachedLiveStoredAt: 1,
+    failedEntryCount: 1,
+    retainedRowCount: 1,
+    rowsRequestId: 4,
+    rowsRequest: Promise.resolve(),
+    rowsRequestKey: "old:33:",
+    liveRefresh: { stop() { calls.push("stop"); } },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) { calls.push(`load:${forceRefresh}`); }
+  };
+
+  const restarted = tournamentPage.restartForPrincipalChange.call(context, 123);
+
+  assert.equal(restarted, true);
+  assert.equal(context.data.entryId, 456);
+  assert.deepEqual(context.data.tournaments, []);
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.rowsRequestId, 5);
+  assert.deepEqual(calls, ["stop", "load:true"]);
+});
+
 test("renders pending transfers and partial tournament rows honestly", () => {
   const entryTemplate = readFileSync(
     new URL("../miniprogram/pages/live/entry/entry.wxml", import.meta.url),
@@ -248,4 +586,166 @@ test("renders pending transfers and partial tournament rows honestly", () => {
   );
   assert.equal(tournamentPage.data.errorSuffix, "");
   assert.equal(tournamentPage.data.tournamentListError, "");
+});
+
+test("live loaders normalize display state after clearing loading flags", () => {
+  for (const loader of [entryPage.loadData, matchPage.loadData, tournamentPage.loadRows]) {
+    const body = String(loader).replace(/\s+/g, "");
+    const terminalUpdate = body.lastIndexOf("setData({loading:false,refreshing:false})");
+    const finalNormalization = body.indexOf("syncDisplayState()", terminalUpdate);
+    assert.ok(terminalUpdate >= 0, "the loader clears both loading flags");
+    assert.ok(
+      finalNormalization > terminalUpdate,
+      "each loader must recompute status after its terminal loading update"
+    );
+  }
+});
+
+test("team phase banner never invents settling after a failed snapshot probe", () => {
+  assert.equal(teamModule.phaseBannerFromSnapshot(undefined), "");
+  assert.equal(teamModule.phaseBannerFromSnapshot("SCHEDULED"), "");
+  assert.equal(teamModule.phaseBannerFromSnapshot("LIVE"), "live");
+  assert.equal(teamModule.phaseBannerFromSnapshot("SETTLED"), "");
+});
+
+test("team phase banner invalidates an in-flight probe when the GW changes", () => {
+  const context = {
+    ...teamPage,
+    data: { ...teamPage.data, event: 10, phaseBanner: "live" },
+    phaseBannerRequestId: 4,
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    loadData() {}
+  };
+
+  teamPage.onGwChange.call(context, { detail: { value: 9 } });
+
+  assert.equal(context.phaseBannerRequestId, 5);
+  assert.equal(context.data.event, 9);
+  assert.equal(context.data.phaseBanner, "");
+});
+
+test("team resume advances a current selection to the new gameweek", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123, gw: 34, season: "2025-26" },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    ...teamPage,
+    data: { ...teamPage.data, entryId: 123, event: 33, maxGw: 33, hasTeamData: true },
+    hasShown: true,
+    loadedSeason: "2025-26",
+    _loadedAt: Date.now(),
+    phaseBannerRequestId: 0,
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.equal(context.data.hasTeamData, false);
+  assert.deepEqual(calls, ["init:true", "load:true"]);
+});
+
+test("team first load force-refreshes resident event context", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { gw: 33 },
+    initAppData: async (forceRefresh) => { calls.push(forceRefresh); }
+  });
+
+  await teamPage.ensureAppDataReady.call({ ...teamPage });
+
+  assert.deepEqual(calls, [true]);
+});
+
+test("team season rollover clears retained transfers before reloading", async () => {
+  const calls = [];
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123, gw: 1, season: "2026-27" },
+    initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
+  });
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 38,
+      transferRows: [{ id: "old-season" }],
+      hasTransfers: true,
+      hasTeamData: true
+    },
+    hasShown: true,
+    loadedSeason: "2025-26",
+    loadedDataSeason: "2025-26",
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.maxGw, 1);
+  assert.deepEqual(context.data.transferRows, []);
+  assert.equal(context.data.hasTransfers, false);
+  assert.deepEqual(calls, ["init:true", "load:true"]);
+});
+
+test("team principal changes clear the old view before restarting", () => {
+  const calls = [];
+  globalThis.getApp = () => ({ globalData: { entryId: 456 } });
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      headerTitle: "Old team",
+      squadRows: [{ id: "old" }],
+      hasSquad: true,
+      hasTeamData: true
+    },
+    loadRequestId: 2,
+    phaseBannerRequestId: 3,
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) { calls.push(`load:${forceRefresh}`); }
+  };
+
+  const restarted = teamPage.restartForPrincipalChange.call(context, 123);
+
+  assert.equal(restarted, true);
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.hasTeamData, false);
+  assert.deepEqual(context.data.squadRows, []);
+  assert.equal(context.loadRequestId, 3);
+  assert.deepEqual(calls, ["load:true"]);
+});
+
+test("team transfer refresh failures retain last-good detail rows", () => {
+  const previous = [{ id: "gw-4", gameweek: "GW4" }];
+  const freshFallback = [{ id: "gw-4", gameweek: "GW4", emptyText: "暂无转会详情" }];
+
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true, true),
+    previous
+  );
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, false, true),
+    freshFallback
+  );
+  assert.equal(
+    teamModule.retainTransferRowsAfterFailure(freshFallback, previous, true, false),
+    freshFallback,
+    "last season's transfer rows are never retained"
+  );
 });
