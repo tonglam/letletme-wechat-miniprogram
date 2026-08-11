@@ -304,6 +304,21 @@ test("resident league and competition rows never cross a season", () => {
   assert.match(competitions, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*items: \[\], displayItems: \[\]/);
 });
 
+test("cold offline lists retain only their own persisted season cache", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+  for (const page of [leagues, competitions]) {
+    assert.match(page, /readStored\w+Cache\(\)/);
+    assert.match(page, /const offlineCached = season \? null : readStored\w+Cache\(\)/);
+    assert.match(page, /offlineCached\?\.entryId === entryId/);
+  }
+});
+
+test("player route keywords survive a failed first load for Retry", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  assert.match(players, /if \(this\.searchRevision === searchRevision\) \{[\s\S]*this\.pendingKeyword = pendingKeyword/);
+});
+
 test("tournament row requests are principal- and season-generation guarded", () => {
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(tournament, /seasonChanged \|\| wasCurrentEvent[\s\S]*this\.rowsRequestId \+= 1/);

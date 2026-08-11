@@ -14,6 +14,15 @@ interface LeaguesCache {
 
 const LEAGUES_CACHE_KEY = "my-fpl:leagues";
 
+function readStoredLeaguesCache(): LeaguesCache | null {
+  try {
+    const cached = wx.getStorageSync(LEAGUES_CACHE_KEY) as LeaguesCache | undefined;
+    return cached && cached.entryId && cached.season && Array.isArray(cached.leagues) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readLeaguesCache(
   entryId: number | undefined,
   season: string | undefined
@@ -21,18 +30,15 @@ export function readLeaguesCache(
   if (!entryId || !season) {
     return null;
   }
-  try {
-    const cached = wx.getStorageSync(LEAGUES_CACHE_KEY) as LeaguesCache | undefined;
-    // Same-context only: official league membership never crosses a season.
-    if (
-      cached
-      && cached.entryId === entryId
-      && cached.season === season
-      && Array.isArray(cached.leagues)
-    ) {
-      return cached;
-    }
-  } catch { /* no cache */ }
+  const cached = readStoredLeaguesCache();
+  // Same-context only: official league membership never crosses a known season.
+  if (
+    cached
+    && cached.entryId === entryId
+    && cached.season === season
+  ) {
+    return cached;
+  }
   return null;
 }
 
@@ -89,10 +95,16 @@ Page({
       this.loadedSeason = undefined;
       this.setData({ leagues: [], displayLeagues: [], fromCache: false });
     }
-    const cached = readLeaguesCache(entryId, season);
+    // On a cold offline launch the persisted cache season is the only known
+    // identity; keep that last-good view until authoritative context returns.
+    const offlineCached = season ? null : readStoredLeaguesCache();
+    const cacheSeason = season || offlineCached?.season;
+    const cached = readLeaguesCache(entryId, cacheSeason) || (
+      offlineCached?.entryId === entryId ? offlineCached : null
+    );
     if (cached && (principalChanged || seasonChanged || !this.data.leagues.length)) {
       this.setData({ leagues: cached.leagues, fromCache: true });
-      this.loadedSeason = season;
+      this.loadedSeason = cacheSeason;
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
@@ -112,7 +124,7 @@ Page({
         return;
       }
       this.setData({ loading: false, leagues, fromCache: false });
-      this.loadedSeason = season;
+      this.loadedSeason = currentSeason || cached?.season;
       this.syncDisplay();
       try {
         if (season) {

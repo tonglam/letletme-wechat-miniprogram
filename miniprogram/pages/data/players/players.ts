@@ -47,6 +47,12 @@ Page({
         this.searchRevision !== searchRevision
       ));
     } catch (error) {
+      // Keep an unedited route handoff available for the Retry action. If the
+      // user changed the search while loading, their current input remains the
+      // authoritative query and the stale route keyword stays consumed.
+      if (this.searchRevision === searchRevision) {
+        this.pendingKeyword = pendingKeyword;
+      }
       this.setData({ error: error instanceof Error ? error.message : "球员数据加载失败" });
     } finally {
       this.setData({ loading: false });

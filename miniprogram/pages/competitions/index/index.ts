@@ -18,6 +18,15 @@ const LIST_CACHE_KEY = "my-competitions:list";
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
 
+function readStoredListCache(): CompetitionsCache | null {
+  try {
+    const cached = wx.getStorageSync(LIST_CACHE_KEY) as CompetitionsCache | undefined;
+    return cached && cached.entryId && cached.season && Array.isArray(cached.items) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readListCache(
   entryId: number | undefined,
   season: string | undefined
@@ -25,17 +34,14 @@ export function readListCache(
   if (!entryId || !season) {
     return null;
   }
-  try {
-    const cached = wx.getStorageSync(LIST_CACHE_KEY) as CompetitionsCache | undefined;
-    if (
-      cached
-      && cached.entryId === entryId
-      && cached.season === season
-      && Array.isArray(cached.items)
-    ) {
-      return cached;
-    }
-  } catch { /* no cache */ }
+  const cached = readStoredListCache();
+  if (
+    cached
+    && cached.entryId === entryId
+    && cached.season === season
+  ) {
+    return cached;
+  }
   return null;
 }
 
@@ -99,10 +105,17 @@ Page({
       this.loadedSeason = undefined;
       this.setData({ items: [], displayItems: [], fromCache: false });
     }
-    const cached = readListCache(entryId, season);
+    // If the authoritative context is unavailable (typically a cold offline
+    // launch), the cache's own season is the only safe identity we have. Keep
+    // it as a last-good view until the next successful context refresh.
+    const offlineCached = season ? null : readStoredListCache();
+    const cacheSeason = season || offlineCached?.season;
+    const cached = readListCache(entryId, cacheSeason) || (
+      offlineCached?.entryId === entryId ? offlineCached : null
+    );
     if (cached && (principalChanged || seasonChanged || !this.data.items.length)) {
       this.setData({ items: cached.items, fromCache: true });
-      this.loadedSeason = season;
+      this.loadedSeason = cacheSeason;
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
@@ -124,7 +137,7 @@ Page({
         return;
       }
       this.setData({ loading: false, items, fromCache: false });
-      this.loadedSeason = season;
+      this.loadedSeason = currentSeason || cached?.season;
       this.syncDisplay();
       recordCompetitionVisit({
         surface: "list",
