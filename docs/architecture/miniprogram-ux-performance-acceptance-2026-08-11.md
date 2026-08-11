@@ -177,7 +177,7 @@
 - max：`1.306s`，`GetPlayerValues`。
 - 其他慢 operation：`PlayersForPicker 1.107s`、`EventFixtures 1.035s`、`FixtureWindow 1.006s`。
 
-Web 日志显示代理层通常只占 `2-24ms`，主要时间在 GraphQL `application-code`。因此继续压缩 proxy 不是当前刷新性能的首要方向。
+本段旧采样只记录了 proxy 局部处理，没有包含数据库 limiter，已被本报告末尾的 requestId 分段复测取代。当前 Web proxy p50 为 `777.87ms`，其中 PostgreSQL limiter p50 为 `200.48ms`，不能再表述为 `2-24ms`。
 
 ## 6. 空页面诊断
 
@@ -231,67 +231,97 @@ Web 日志显示代理层通常只占 `2-24ms`，主要时间在 GraphQL `applic
 
 ---
 
-## EventFixtures 修复后验收记录（2026-08-12）
+## EventFixtures 分段计时与修复后验收记录（2026-08-12）
 
-> **状态：代码已实施，尚未验收。** 本轮真实验收未达到全部硬门槛，因此不得合并、部署或上传微信开发版。
+> **状态：代码已实施，尚未验收。** Core Fixture 正向链路、请求级 snapshot pin 和分层计时已经实施；冷启动与暖页面已通过，但真实 full-selection 刷新、GraphQL 和 Web proxy 的 p95 仍未达到硬门槛。因此不得合并、部署或上传微信开发版。
 
 ### 代码与环境
 
 | 项目 | 本轮基线 |
 |---|---|
-| GraphQL | `codex/fix-event-fixture-source` / `7c5d719`（基于 `db5eaecc05e5c52924ea6f58360094963befd28c`） |
-| 小程序 | `codex/use-core-fixture-schedule` / `7b70de9`（基于 `90d822371273115af34043c5be72b83f35627e44`） |
-| Web proxy | `main` / `35c8b7734d585c664cc5fc1d3bd8a0875bcda7c5`，未修改 |
+| GraphQL | `codex/fix-event-fixture-source` / `86d979bf4257b5c607dd068df5ebc9a5aa5fd0a0` |
+| 小程序 | `codex/use-core-fixture-schedule` / `b9bc81bfd04b5bb1323aed683cd7045a1eccfc7b`，本节文档更新前代码 SHA |
+| Web proxy trace | `codex/trace-graphql-request-stages` / `96649752f8ff0d917cd50fe8404ef4e2efd68deb`，仅本地诊断，未合并 |
+| Web main 基线 | `35c8b7734d585c664cc5fc1d3bd8a0875bcda7c5` |
 | DevTools | Stable `2.01.2510290`，基础库 `3.15.2` |
 | 模拟设备 | iPhone 12/13 (Pro)，390 x 844，3x，微信 `8.0.5` |
 | Data publication | season `2627`，dataset revision `2` |
-| 冷启动口径 | 清理 `gql:v2:*` 后使用 `wx.restartMiniProgram` 重启 App runtime；不关闭或重开 DevTools IDE |
-| 样本 | 冷启动 3 次、暖页面 10 次、手动刷新 10 次 |
+| 冷启动口径 | 仅删除 `gql:v2:public:*`，点击 DevTools“编译”重启 App runtime；保留 session，不关闭 IDE，不计编译等待和 550ms 静默窗 |
+| 样本 | 冷启动 3 次；暖页面预热 1 次后 10 次；连续刷新 10 次；长空闲刷新 1 次 |
 
-自动检查结果：GraphQL 343 passed / 4 skipped / 0 failed，typecheck、lint、format 全部通过；小程序 135/135 tests、typecheck、lint 全部通过。
+自动检查结果：GraphQL `346 passed / 4 skipped / 0 failed`，typecheck、lint、format 全部通过；Web `331 passed / 5 skipped / 0 failed`，typecheck、lint 全部通过；小程序 `135/135` tests、typecheck、lint 全部通过。
 
-### 修复后的正向链路证据
+### 正向链路与 request pin 修复
 
 ```text
 Core Fixtures -> eventFixtures
 Core Fixtures + Live Data -> liveSnapshot
 ```
 
-- `CoreEventFixtureSchedule` 的 GraphQL 字段仍为兼容的 `eventFixtures(eventId)`。
-- 每次网络 Fixture 请求的后端 trace 均为一次 `Core fixture schedule loaded`，`fixtureSource=redis`、`fixtureRevision=2`、`fixtureCount=10`。
-- 3 次冷启动、10 次暖页面和 10 次刷新共记录 23 次 Fixture 逻辑调用，其中 13 次网络调用、10 次本地缓存调用。
-- 23 个样本的 Fixture 行数全部为 10；页面触发的 `LiveSnapshot` operation 总数为 0。
-- 未新增缓存，未延长现有 Fixture TTL，未修改 Data 或 Web 代码。
+- `CoreEventFixtureSchedule` 仍读取兼容字段 `eventFixtures(eventId)`；每次返回 10 条，`fixtureSource=redis`、`fixtureRevision=2`，页面触发的 `LiveSnapshot` 为 0。
+- 原 request pin 使用 `WeakMap<GraphQLContext, ...>`。Apollo 在执行 operation 前会浅拷贝 context，publication 写入原对象，resolver 使用克隆对象，必然出现 `coreSnapshotMemoStatus=miss`。
+- 修复后显式创建 `requestScope`，Apollo 浅拷贝仍共享同一 scope。运行时 trace 从 `miss` 变为 `hit`，resolver 的 Core acquisition 从约 `151ms` 降到 `0.01-0.07ms`，重复 publication `GET` 消失。
+- 这是修复已有的请求级一致性 pin，不是新增跨请求缓存，不改变 TTL、数据来源或 fallback 规则。
 
-### 分层性能结果
+### 用户体验性能结果
 
 | 分层指标 | 样本 | p50 | p95 | 门槛 | 结果 |
 |---|---:|---:|---:|---:|---|
-| GraphQL `4000` 暖进程直连 | 10 | 581.7ms | 1278.9ms | <=500ms | **FAIL** |
-| Web `3000` 完整代理请求 | 10 | 801.7ms | 2205.3ms | <=750ms | **FAIL** |
-| 冷启动：App launch -> FCP | 3 | 693ms | 768ms | 观察项 | PASS |
-| 冷启动：App launch -> 10 条 Fixture 可见 | 3 | 2334ms | 2961ms | <=2000ms | **FAIL** |
-| 暖页面：route -> FCP | 10 | 325ms | 334ms | 观察项 | PASS |
-| 暖页面：route -> 10 条 Fixture 可见 | 10 | 299ms | 308ms | <=800ms | PASS |
-| 手动刷新 -> 新 Fixture 可见 | 10 | 971ms | 1499ms | <=800ms | **FAIL** |
-| response -> `setData` callback | 10 | 19ms | 22ms | <=50ms | PASS |
-| `setData` callback 自身 | 10 | 16ms | 18ms | <=50ms | PASS |
-| 每次冷启动/刷新 Fixture 网络 operation | 13 | 1 次 | 1 次 | 恰好 1 次 | PASS |
-| 页面触发 Live snapshot | 23 | 0 次 | 0 次 | 0 次 | PASS |
+| GraphQL full-selection 暖进程 | 10 | 573.43ms | 1080.38ms | <=500ms | **FAIL** |
+| Web `3000` 完整代理 | 10 | 777.87ms | 1302.35ms | <=750ms | **FAIL** |
+| 冷启动：App launch -> 10 条 Fixture 可见 | 3 | 835ms | 850ms | <=2000ms | PASS |
+| 暖页面：route -> 10 条 Fixture 可见 | 10 | 324ms | 384ms | <=800ms | PASS |
+| 刷新：Fixture network response | 10 | 804ms | 1337ms | 观察项 | **FAIL** |
+| 刷新：操作开始 -> 新 Fixture 可见 | 10 | 825ms | 1353ms | <=800ms | **FAIL** |
+| 刷新：response -> `setData` callback | 10 | 10ms | 26ms | <=50ms | PASS |
+| 下拉刷新方法全部结束 | 10 | 3050ms | 3569ms | 观察项 | **FAIL** |
+| 每次冷启动/刷新 Fixture network operation | 13 | 1 次 | 1 次 | 恰好 1 次 | PASS |
+| 页面触发 Live snapshot | 全部样本 | 0 次 | 0 次 | 0 次 | PASS |
 
-补充基线：同一 GraphQL ingress 下，`MiniProgramNotice` p50 为 577.3ms、p95 为 1185.4ms；Redis active manifest 热 GET p50 为 0.1ms、p95 为 0.2ms。Fixture 本身不是 1 至 2 秒的前端渲染工作，主要延迟来自 GraphQL 公共请求固定路径、Web 上游等待，以及冷启动时 `CurrentEventInfo -> CoreEventFixtureSchedule` 的串行依赖。
+长空闲刷新单独记录：Fixture request `1604ms`，10 条可见 `1630ms`，callback `17ms`。它包含 Web PostgreSQL 连接恢复和 GraphQL current-season 回源，不与连续暖刷新混算。
 
-### 首屏与刷新诊断
+### Web proxy 分段
 
-- 冷启动原生 FCP p95 为 768ms，说明路由、模块执行和初始视图能够在 1 秒内出现。
-- 10 条 Fixture 从网络响应到原生 `setData` callback 的 p95 仅 22ms；渲染层不是秒级瓶颈。
-- 冷启动仍先取得 current event，再请求该 event 的 Fixture，因此 Fixture 可见 p95 为 2961ms。
-- 小程序已把 entry、价格、总结和公告请求的**发起时点**移到 Fixture commit 之后，避免这些辅助请求争抢首屏代理和 GraphQL 容量。
-- 调整前同口径刷新 Fixture 可见 p95 为 3002ms；调整后为 1499ms，改善约 50%，但仍高于 800ms 门槛。
-- 刷新剩余时间主要落在单次 `3000 -> 4000` 网络路径；renderer callback p95 只有 18ms。
-- 先前通过关闭并重开整个 DevTools IDE 得到的 7 至 9 秒数据包含 IDE 编译与 automation 建连，不属于用户冷启动，本表已排除。
-- 550ms 静默观察窗口未计入任何用户可感知指标。
+| Web 分段 | p50 | p95 | 判断 |
+|---|---:|---:|---|
+| PostgreSQL rate limit | 200.48ms | 214.82ms | 每个 operation 的固定成本 |
+| Better Auth session lookup | 0.28ms | 1.66ms | 当前无 cookie public 请求不是主因 |
+| GraphQL upstream | 575.76ms | 1084.59ms | 主要成本和尾延迟来源 |
+| body/header/response 合计 | <2ms | <3ms | 可忽略 |
+| Web total | 777.87ms | 1302.35ms | 未通过 750ms 门槛 |
+
+Web rate-limit CTE 会在每个请求中同时删除过期行并执行计数 upsert。事务内 `EXPLAIN ANALYZE` 为 planning `1.982ms`、execution `20.385ms`，命中 shared buffers 且无 block read；没有证据表明索引或表扫描是当前 200ms 的主因。同一 Supabase 连接中，literal `SELECT 1` p50 为 `99.87ms`，带参数且 `prepare:false` 的 `SELECT` p50 为 `199.26ms`，说明主要成本是远程 PostgreSQL 参数化协议往返，不应按猜测增加索引。
+
+### GraphQL 分段
+
+| GraphQL 分段 | p50 | p95 | 判断 |
+|---|---:|---:|---|
+| global admission Redis `EVAL` | 142.66ms | 148.80ms | 第 1 个串行远程 RTT |
+| ingress admission Redis `EVAL` | 142.95ms | 147.17ms | 第 2 个串行远程 RTT |
+| current season | 0ms | 501.73ms | 30 秒 provider TTL 到期时回源 PostgreSQL |
+| Core publication pointer | 142.87ms | 146.08ms | 第 3 个串行远程 RTT |
+| weighted admission Redis `EVAL` | 142.35ms | 145.50ms | 完整小程序 selection 才触发的第 4 个 RTT |
+| Apollo parse/validate/execute | 0.98ms | 7.37ms | 不是主要瓶颈 |
+| GraphQL total | 573.43ms | 1080.38ms | 未通过 500ms 门槛 |
+
+当前 Redis `PING` 和真实 limiter `EVAL` 均稳定在约 `142-144ms`。因此 full-selection 常态约等于 4 个串行 Redis RTT，Fixture transform 仅 `0.02-0.11ms`。此前用 `eventFixtures { id }` 最小查询得到的 437ms 会绕过 weighted admission，不能代表小程序真实 operation，现已从验收口径删除。
+
+GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、约 `254262` bytes；实测随链路状态为 `240-675ms`。这是服务进程冷 snapshot，不等同于小程序 App 冷启动；暖 GraphQL 进程不会重复传输这些数据块。
+
+### Home 刷新时间线
+
+一条正常结构的刷新按客户端 `perf:v1` 时间戳分为：
+
+1. `0ms -> Fixture response`：约 `0.80-1.36s`。
+2. `Fixture response -> 10-row setData callback`：`8-26ms`。
+3. Fixture commit 后并行执行 `EventOverallResult`、`GetEntry`、`GetPlayerValues`：约 `1.38-2.91s`。
+4. `CurrentEventInfo` 又在约 `2.91-3.58s` 单独执行。
+5. 下拉刷新方法全部结束约 `3.05s` p50、`3.57s` p95。
+
+这证明“10 条 Fixture 渲染 1 至 2 秒”是错误结论。实际 renderer callback p95 为 26ms；慢的是前置 Web/GraphQL 固定路径，以及 Fixture 可见后的辅助刷新尾段。新冷启动记录中 Fixture 从 launch 后立即发起，不再存在旧报告所称的 `CurrentEventInfo -> CoreEventFixtureSchedule` 前置串行阻塞；旧结论属于过期样本，已撤销。
 
 ### 验收结论与流程闸门
 
-本轮完成了 EventFixtures 依赖方向修复、单一 operation 收敛、辅助请求解除首屏竞争，并证明普通 Fixture 页面不再进入 Live snapshot。以下三项硬门槛仍失败：GraphQL 直连、Web 代理、冷启动/刷新 Fixture 可见时间。因此报告不能标记为“已修复并验收”，GraphQL 和小程序分支均不得合并到 `main`，不得触发 GraphQL 部署，也不得上传微信开发版 `1.0.2`。
+本轮已完成 Core/Live 依赖方向、Apollo clone 下的 request pin、后端 requestId 分段和真实 DevTools 复测。冷启动、暖页面、单次 Fixture operation、零 Live 调用和 renderer callback 已通过；GraphQL full-selection、Web proxy、刷新可见时间和完整下拉刷新仍失败。
+
+报告状态保持“代码已实施，尚未验收”。GraphQL、小程序和 Web tracing 分支均不得合并到 `main`，不得触发 GraphQL 部署，也不得上传微信开发版 `1.0.2`。后续优化必须优先处理串行远程 admission、Web PostgreSQL limiter 和 current-season 请求路径，不能通过增加 Fixture TTL 掩盖问题。
