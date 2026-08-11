@@ -41,12 +41,16 @@ App<IAppOption>({
     this.purgeExpiredGraphQLCache();
   },
 
+  reportError(message: string) {
+    (wx as unknown as { reportError?: (message: string) => void }).reportError?.(message);
+  },
+
   onError(error: string) {
-    wx.reportError?.(`[app] uncaught error: ${error}`);
+    this.reportError(`[app] uncaught error: ${error}`);
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
-    wx.reportError?.(
+    this.reportError(
       `[app] unhandled rejection: ${event?.reason ? JSON.stringify(event.reason) : String(event?.reason)}`
     );
   },
