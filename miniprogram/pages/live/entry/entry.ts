@@ -218,6 +218,15 @@ Page({
           this.liveRefresh?.stop();
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = undefined;
+          if (seasonChanged) {
+            // A new season can reuse the same numeric GW, so entry:event is
+            // not enough to distinguish pending score/transfer work. Detach
+            // the previous season before the forced replacement request.
+            this.liveRequestId += 1;
+            this.transfersRequestId += 1;
+            this.liveRequest = null;
+            this.liveRequestKey = "";
+          }
           this.setData({
             event: nextEventId,
             maxGw: nextEventId,

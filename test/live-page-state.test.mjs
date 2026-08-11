@@ -307,6 +307,10 @@ test("entry resume drops a historical selection after a season rollover", async 
     loadedSeason: "2025/26",
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
+    liveRequestId: 7,
+    transfersRequestId: 4,
+    liveRequest: Promise.resolve(),
+    liveRequestKey: "123:1",
     liveRefresh: {
       stop() { calls.push("stop"); },
       sync() { calls.push(`sync:${context.data.event}`); }
@@ -327,6 +331,10 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.equal(context.data.event, 1);
   assert.equal(context.data.maxGw, 1);
   assert.equal(context.data.hasData, false);
+  assert.equal(context.liveRequestId, 8);
+  assert.equal(context.transfersRequestId, 5);
+  assert.equal(context.liveRequest, null);
+  assert.equal(context.liveRequestKey, "");
   assert.deepEqual(calls, ["init:true", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 

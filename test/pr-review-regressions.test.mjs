@@ -336,6 +336,16 @@ test("historical Live selections reset when the season changes", () => {
     assert.match(page, /seasonChanged \|\| wasCurrentEvent/, path);
     assert.match(page, /event: nextEventId,[\s\S]*maxGw: nextEventId/, path);
   }
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(entry, /if \(seasonChanged\) \{[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null/);
+});
+
+test("first personal paints bypass previous-season event and summary caches", () => {
+  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(true\)/);
+  assert.match(team, /async onLoad\(\)[\s\S]*this\.loadData\(true\)/);
+  assert.match(overview, /event === undefined/);
 });
 
 test("season rollover clears row filters derived from player ids", () => {

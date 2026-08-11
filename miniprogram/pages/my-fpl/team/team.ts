@@ -208,7 +208,9 @@ Page({
       event: currentGw,
       maxGw: currentGw
     });
-    this.loadData();
+    // The season/event context above was force-refreshed. Bypass the
+    // seasonless entry/GW summary caches on this first matching payload too.
+    this.loadData(true);
   },
 
   async onShow() {

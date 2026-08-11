@@ -44,6 +44,25 @@ test("overview cache never crosses season boundaries", () => {
   );
 });
 
+test("overview cache accepts the stable offseason event identity", () => {
+  globalThis.wx = {
+    getStorageSync() {
+      return {
+        entryId: 123,
+        season: "2026-27",
+        event: 0,
+        teamBrief: { overallPoints: 2400 },
+        leagueCount: 5,
+        storedAt: 1
+      };
+    }
+  };
+
+  const cached = overviewModule.readOverviewCache(123, 0, "2026-27");
+  assert.equal(cached?.teamBrief?.overallPoints, 2400);
+  assert.equal(cached?.leagueCount, 5);
+});
+
 test("NO_FOLLOW primary goes to team search, never to a personal page", () => {
   const urls = [];
   globalThis.wx = {

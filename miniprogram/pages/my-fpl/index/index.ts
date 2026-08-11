@@ -70,7 +70,9 @@ export function readOverviewCache(
   event: number | undefined,
   season: string | undefined
 ): OverviewCache | null {
-  if (!entryId || !event || !season) {
+  // Event 0 is the stable OFFSEASON identity (valid context with no current
+  // or next event), not a missing context.
+  if (!entryId || event === undefined || !season) {
     return null;
   }
   try {
@@ -114,7 +116,9 @@ Page({
       this.syncPrincipalState();
     });
     await waitForAuthoritativeFollow();
-    void this.loadOverview();
+    // A resident event-context cache may still describe the previous season.
+    // First paint must establish the current season before reading overview.
+    void this.loadOverview(true);
   },
 
   onShow() {
