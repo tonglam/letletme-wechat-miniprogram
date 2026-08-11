@@ -91,11 +91,12 @@ Page({
   _lastLoadAt: 0,
 
   async onLoad() {
-    this._initialLoadDone = true;
+    this._initialLoadDone = false;
     await this.ensureAppDataReady();
     this.syncAppState();
-    this.loadPage();
     this.startCountdown();
+    await this.loadPage();
+    this._initialLoadDone = true;
   },
 
   async onShow() {

@@ -342,6 +342,28 @@ test("forced My FPL refresh reaches the cached team identity read", () => {
   assert.match(service, /getMyFplTeamBrief\([\s\S]*forceRefresh = false[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
 });
 
+test("Home first show cannot race the initial page load", () => {
+  const home = source("miniprogram/pages/home/index/index.ts");
+  assert.match(
+    home,
+    /async onLoad\(\)[\s\S]*_initialLoadDone = false[\s\S]*await this\.loadPage\(\)[\s\S]*_initialLoadDone = true/
+  );
+  assert.match(home, /async onShow\(\)[\s\S]*if \(!this\._initialLoadDone\) return/);
+});
+
+test("profile and tournament pull-to-refresh bypass reporting caches", () => {
+  const profile = source("miniprogram/pages/entry/profile/profile.ts");
+  const tournament = source("miniprogram/pages/summary/tournament/tournament.ts");
+  const service = source("miniprogram/services/tournament.service.ts");
+  assert.match(profile, /onPullDownRefresh\(\)[\s\S]*loadEntry\(Number\(this\.data\.entryId\), true\)/);
+  assert.match(profile, /loadEntry\(entryId: number, forceRefresh = false\)[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
+  assert.match(tournament, /async refreshData\(\)[\s\S]*loadTournaments\(true\)/);
+  assert.match(tournament, /loadTournaments\(forceRefresh = false\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh\)[\s\S]*loadSummary\(forceRefresh\)/);
+  assert.match(tournament, /loadSummary\(forceRefresh = false\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh\)/);
+  assert.match(service, /getEntrySummaryTournaments\(entry: number, forceRefresh = false\)[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
+  assert.match(service, /getTournamentSummary\([\s\S]*forceRefresh = false[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
+});
+
 test("historical Live selections reset when the season changes", () => {
   for (const path of [
     "miniprogram/pages/live/entry/entry.ts",

@@ -186,8 +186,11 @@ export async function getEntryAllTournaments(entry: number, forceRefresh = false
   return data.entryTournaments || [];
 }
 
-export async function getEntrySummaryTournaments(entry: number): Promise<EntryTournament[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry });
+export async function getEntrySummaryTournaments(entry: number, forceRefresh = false): Promise<EntryTournament[]> {
+  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
+    cachePolicy: "reporting",
+    forceRefresh
+  });
   return (data.entryTournaments || [])
     .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
     .map((t) => ({
@@ -216,9 +219,13 @@ export async function getEntryKnockoutTournament(entry: number): Promise<Knockou
 export async function getTournamentSummary(
   tournamentId: number,
   eventId: number,
-  entryId: number
+  entryId: number,
+  forceRefresh = false
 ): Promise<TournamentSummaryPayload> {
-  return graphqlRequest<TournamentSummaryResponse>(GET_TOURNAMENT_SUMMARY, { tournamentId, eventId, entryId });
+  return graphqlRequest<TournamentSummaryResponse>(GET_TOURNAMENT_SUMMARY, { tournamentId, eventId, entryId }, {
+    cachePolicy: "reporting",
+    forceRefresh
+  });
 }
 
 export async function getTournamentSelectionStats(
