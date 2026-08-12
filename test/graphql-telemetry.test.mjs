@@ -23,7 +23,7 @@ globalThis.wx = {
   })
 };
 
-const { graphqlRead } = await import("../miniprogram/services/graphql.service.ts");
+const { capturePageRequestTrace, graphqlRead } = await import("../miniprogram/services/graphql.service.ts");
 const { clearPerf, getPerf, recordPagePerformance } = await import("../miniprogram/utils/perf.ts");
 const { PagePerformanceTracker } = await import("../miniprogram/utils/page-performance.ts");
 
@@ -78,4 +78,28 @@ test("active page supplies attribution when a service does not pass an explicit 
   assert.equal(perf.apiRecords[0].trigger, "refresh");
   assert.equal(perf.apiRecords[0].contextRevision, 12);
   tracker.disconnect();
+});
+
+test("captured trace remains bound when a chained request starts after navigation", async () => {
+  clearPerf();
+  const origin = new PagePerformanceTracker({}, "pages/test/origin", "cold-launch");
+  const trace = capturePageRequestTrace({ callerSurface: "origin-chain", trigger: "tab" });
+  origin.disconnect();
+  const replacement = new PagePerformanceTracker({}, "pages/test/replacement", "warm-enter");
+
+  await graphqlRead("query DelayedTraceProbe { delayedValue }", {}, {
+    authMode: "public",
+    cachePolicy: "reporting",
+    trace
+  });
+
+  const perf = getPerf();
+  const originRecord = perf.pagePerformance.find((item) => item.navigationId === origin.navigationId);
+  const replacementRecord = perf.pagePerformance.find((item) => item.navigationId === replacement.navigationId);
+  assert.equal(originRecord.operationCount, 1);
+  assert.equal(originRecord.networkOperationCount, 1);
+  assert.equal(replacementRecord.operationCount, 0);
+  assert.equal(replacementRecord.networkOperationCount, 0);
+  assert.equal(perf.apiRecords[0].callerSurface, "origin-chain");
+  replacement.disconnect();
 });

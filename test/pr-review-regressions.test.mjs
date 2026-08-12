@@ -423,8 +423,8 @@ test("first personal paints honor season-aware event and reporting policies", ()
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false\)/);
   assert.match(overview, /if \(resumed\)[\s\S]*this\.loadOverview\(false\)/);
-  assert.match(team, /async onLoad\(\)[\s\S]*this\.initializeFromContext\(false\)/);
-  assert.match(team, /async initializeFromContext\(forceRefresh: boolean\)[\s\S]*this\.loadData\(forceRefresh\)/);
+  assert.match(team, /async onLoad\(\)[\s\S]*capturePageRequestTrace[\s\S]*this\.initializeFromContext\(false, trace\)/);
+  assert.match(team, /async initializeFromContext\(forceRefresh: boolean, trace\?: PageRequestTrace\)[\s\S]*this\.loadData\(forceRefresh, trace\)/);
   assert.match(overview, /event === undefined/);
 });
 

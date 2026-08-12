@@ -14,7 +14,7 @@ import {
   httpErrorMessage,
   networkErrorMessage
 } from "../utils/request-error";
-import { isKnownOffline } from "../utils/network-status";
+import { initializeNetworkStatus, isKnownOffline } from "../utils/network-status";
 import { getActivePagePerformanceTrace } from "../utils/page-performance";
 import {
   getGraphQLCachePolicy,
@@ -107,6 +107,13 @@ function resolvePageRequestTrace(
         : "load",
     contextRevision
   };
+}
+
+export function capturePageRequestTrace(
+  overrides: Partial<Pick<PageRequestTrace, "callerSurface" | "trigger" | "forceReason">> = {}
+): PageRequestTrace | undefined {
+  const trace = resolvePageRequestTrace();
+  return trace ? { ...trace, ...overrides } : undefined;
 }
 
 interface ResolvedRequestPolicy {
@@ -699,6 +706,7 @@ export async function graphqlRead<T>(
     ? cached.entry
     : undefined;
 
+  await initializeNetworkStatus();
   if (isKnownOffline()) {
     if (staleCandidate) {
       recordServedFromCache(identity.requestKey, staleCandidate.storedAt);

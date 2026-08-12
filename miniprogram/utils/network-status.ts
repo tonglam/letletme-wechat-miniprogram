@@ -1,21 +1,53 @@
 let knownOnline: boolean | null = null;
 let initialized = false;
+let initializationPromise: Promise<void> | null = null;
 
-function initialize(): void {
-  if (initialized) return;
+export function initializeNetworkStatus(): Promise<void> {
+  if (initialized) return initializationPromise || Promise.resolve();
   initialized = true;
   try {
-    wx.getNetworkType({
-      success: (result) => {
-        knownOnline = result.networkType !== "none";
-      }
-    });
-    wx.onNetworkStatusChange((result) => {
-      knownOnline = result.isConnected;
-    });
+    if (typeof wx.onNetworkStatusChange === "function") {
+      wx.onNetworkStatusChange((result) => {
+        knownOnline = result.isConnected;
+      });
+    }
   } catch {
-    knownOnline = null;
+    // A missing listener does not make connectivity known.
   }
+
+  initializationPromise = new Promise<void>((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(() => finish(), 250);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    try {
+      wx.getNetworkType({
+        success: (result) => {
+          knownOnline = result.networkType !== "none";
+          finish();
+        },
+        fail: () => {
+          knownOnline = null;
+          finish();
+        },
+        complete: finish
+      });
+    } catch {
+      knownOnline = null;
+      finish();
+    }
+  }).finally(() => {
+    initializationPromise = null;
+  });
+  return initializationPromise;
+}
+
+function initialize(): void {
+  void initializeNetworkStatus();
 }
 
 export function isKnownOffline(): boolean {
@@ -25,5 +57,6 @@ export function isKnownOffline(): boolean {
 
 export function setKnownNetworkStatusForTest(online: boolean | null): void {
   initialized = true;
+  initializationPromise = null;
   knownOnline = online;
 }

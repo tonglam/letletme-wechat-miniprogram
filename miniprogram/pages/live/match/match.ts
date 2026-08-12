@@ -214,6 +214,11 @@ function emptyDescription(status: string): string {
   return "暂时没有比赛数据，稍后回来重新加载";
 }
 
+export function fixtureScheduleStaleMessage(storedAt?: number): string {
+  if (!storedAt) return "赛程刷新失败，当前显示上次成功数据";
+  return `赛程刷新失败，当前显示 ${formatTime(new Date(storedAt))} 的上次成功数据`;
+}
+
 function coreMatch(fixture: Fixture): LiveMatch {
   const started = fixture.started === true;
   const status = fixture.finished ? "finished" : started ? "playing" : "not_start";
@@ -263,6 +268,7 @@ Page({
     refreshing: false,
     hasData: false,
     error: "",
+    fixtureStaleMessage: "",
     displayState: "fresh" as LiveDisplayState,
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
@@ -496,7 +502,7 @@ Page({
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
-        this.setData({ matches: [], groups: [], hasData: false, lastUpdated: "" });
+        this.setData({ matches: [], groups: [], hasData: false, fixtureStaleMessage: "", lastUpdated: "" });
         this.liveRefresh?.sync();
         await this.loadData({ forceRefresh: true });
         this.syncDisplayState();
@@ -594,6 +600,9 @@ Page({
           matches,
           groups: groupMatches(matches, activeStatus),
           hasData: true,
+          fixtureStaleMessage: coreRead.meta.stale
+            ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
+            : "",
           lastUpdated: formatTime(new Date(coreRead.meta.storedAt || Date.now()))
         }, () => {
           this.perfTracker?.mark("primarySetDataAt");
@@ -686,7 +695,7 @@ Page({
       hasData: this.data.hasData,
       loading: this.data.loading || this.data.refreshing,
       probing: this.probing,
-      lastError: this.data.error,
+      lastError: this.data.error || this.data.fixtureStaleMessage,
       online: this.networkOnline
     });
     if (next !== this.data.displayState) {

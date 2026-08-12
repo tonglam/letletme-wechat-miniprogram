@@ -45,6 +45,16 @@ test("My FPL cold context failure commits a retryable terminal state", () => {
   assert.match(page, /async onLoad\(\)[\s\S]*catch \(error\)[\s\S]*this\.showContextError\(error\)[\s\S]*return/);
   assert.match(page, /showContextError\(error: unknown\)[\s\S]*this\.contextUnavailable = true[\s\S]*loading: false[\s\S]*observePrimary/);
   assert.match(page, /onRetry\(\)[\s\S]*if \(this\.contextUnavailable\)[\s\S]*recoverContext\("pull-refresh"\)/);
-  assert.match(page, /recoverContext[\s\S]*this\.ensureContext\(reason, true\)[\s\S]*initializeFromContext\(true\)/);
+  assert.match(page, /recoverContext[\s\S]*this\.ensureContext\(reason, true\)[\s\S]*initializeFromContext\(true, trace\)/);
   assert.match(page, /async onShow\(\)[\s\S]*if \(this\.contextUnavailable\)[\s\S]*recoverContext\("page-show"\)[\s\S]*return[\s\S]*this\.ensureContext\("page-show"\)/);
+});
+
+test("My FPL carries one originating trace through delayed support reads", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const service = source("miniprogram/services/summary.service.ts");
+  assert.match(page, /const trace = originatingTrace \|\| capturePageRequestTrace/);
+  assert.match(page, /getEntryTeamStatsEventResult\(entryId, selectedEvent, forceRefresh, trace\)/);
+  assert.match(page, /loadTab\(this\.data\.activeTab, forceRefresh, trace\)/);
+  assert.match(page, /getEntryTeamStatsHistory\(entryId, forceRefresh, trace\)[\s\S]*getEntryTeamStatsTransfers\(entryId, forceRefresh, trace\)/);
+  assert.match(service, /getEntryTeamStatsHistory\([\s\S]*trace\?: PageRequestTrace[\s\S]*forceRefresh, trace/);
 });

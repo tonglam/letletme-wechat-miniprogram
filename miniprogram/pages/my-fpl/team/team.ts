@@ -18,6 +18,10 @@ import type { LiveSnapshotState } from "../../../models/live";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { ensureAppContext } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 
 export function phaseBannerFromSnapshot(
   snapshotState: LiveSnapshotState | undefined
@@ -200,6 +204,7 @@ Page({
 
   async onLoad() {
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "cold-launch");
+    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "load" });
     try {
       await this.ensureContext("page-load");
     } catch (error) {
@@ -207,10 +212,10 @@ Page({
       return;
     }
     this.perfTracker.mark("contextReadyAt");
-    await this.initializeFromContext(false);
+    await this.initializeFromContext(false, trace);
   },
 
-  async initializeFromContext(forceRefresh: boolean) {
+  async initializeFromContext(forceRefresh: boolean, trace?: PageRequestTrace) {
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -229,7 +234,7 @@ Page({
     });
     // First paint honors the reporting policy; explicit refresh and context
     // changes still bypass it below.
-    await this.loadData(forceRefresh);
+    await this.loadData(forceRefresh, trace);
   },
 
   showContextError(error: unknown) {
@@ -248,12 +253,17 @@ Page({
   },
 
   async recoverContext(reason: "page-show" | "pull-refresh") {
+    const trace = capturePageRequestTrace({
+      callerSurface: "my-fpl-team-primary",
+      trigger: reason === "page-show" ? "show" : "refresh",
+      forceReason: "context-missing"
+    });
     this.setData({ loading: true, error: "" });
     try {
       await this.ensureContext(reason, true);
       this.contextUnavailable = false;
       this.perfTracker?.mark("contextReadyAt");
-      await this.initializeFromContext(true);
+      await this.initializeFromContext(true, trace);
     } catch (error) {
       this.showContextError(error);
     }
@@ -267,6 +277,7 @@ Page({
     const app = getApp<IAppOption>();
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "warm-enter");
+    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "show" });
     if (this.contextUnavailable) {
       await this.recoverContext("page-show");
       return;
@@ -322,7 +333,7 @@ Page({
     }
     // Summary data moves slowly, but an advancing current GW reloads now.
     if (contextChanged || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
-      await this.loadData(contextChanged);
+      await this.loadData(contextChanged, trace);
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
@@ -355,6 +366,7 @@ Page({
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
+    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh" });
     if (this.contextUnavailable) {
       await this.recoverContext("pull-refresh");
       wx.stopPullDownRefresh();
@@ -410,10 +422,7 @@ Page({
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
-    await this.loadData(true);
-    if (this.data.activeTab !== "squad") {
-      await this.loadTab(this.data.activeTab, true);
-    }
+    await this.loadData(true, trace);
     wx.stopPullDownRefresh();
   },
 
@@ -470,8 +479,12 @@ Page({
     return true;
   },
 
-  async loadData(forceRefresh = false) {
+  async loadData(forceRefresh = false, originatingTrace?: PageRequestTrace) {
     const requestId = ++this.loadRequestId;
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "my-fpl-team-primary",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
     if (!this.data.entryId) {
       this.setData({
         loading: false,
@@ -509,7 +522,7 @@ Page({
       }
       this.perfTracker?.mark("primaryRequestStartAt");
       const eventResult = selectedEvent > 0
-        ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh)
+        ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh, trace)
         : undefined;
       if (requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
@@ -538,7 +551,7 @@ Page({
           emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
           emptyActionText: "重新加载"
         });
-        if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh);
+        if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh, trace);
         return;
       }
 
@@ -566,7 +579,7 @@ Page({
       });
       this.loadedDataSeason = requestSeason;
       this._loadedAt = Date.now();
-      if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh);
+      if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh, trace);
     } catch (error) {
       if (requestId === this.loadRequestId) {
         if (this.restartForPrincipalChange(entryId)) return;
@@ -626,21 +639,31 @@ Page({
     void this.loadTab(tab, false);
   },
 
-  async loadTab(tab: EntrySummaryTab, forceRefresh: boolean): Promise<void> {
+  async loadTab(tab: EntrySummaryTab, forceRefresh: boolean, originatingTrace?: PageRequestTrace): Promise<void> {
     if (tab === "squad" || !this.data.entryId) return;
     const requestId = ++this.tabRequestId;
     const entryId = this.data.entryId;
+    const trace = originatingTrace
+      ? {
+          ...originatingTrace,
+          callerSurface: "my-fpl-team-tab",
+          trigger: forceRefresh ? "refresh" as const : "tab" as const
+        }
+      : capturePageRequestTrace({
+          callerSurface: "my-fpl-team-tab",
+          trigger: forceRefresh ? "refresh" : "tab"
+        });
     this.setData({ tabLoading: true, tabError: "" });
     try {
       let historyPayload = this.historyPayload;
       let transferPayload = this.transferPayload;
       if (forceRefresh || !historyPayload) {
-        historyPayload = await getEntryTeamStatsHistory(entryId, forceRefresh);
+        historyPayload = await getEntryTeamStatsHistory(entryId, forceRefresh, trace);
         if (this.restartForPrincipalChange(entryId)) return;
         if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
       }
       if (tab === "transfer" && (forceRefresh || !transferPayload)) {
-        transferPayload = await getEntryTeamStatsTransfers(entryId, forceRefresh);
+        transferPayload = await getEntryTeamStatsTransfers(entryId, forceRefresh, trace);
         if (this.restartForPrincipalChange(entryId)) return;
         if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
       }

@@ -27,7 +27,8 @@
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载比赛" />
   <view wx:else id="perf-primary-content" class="match-content">
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
     <app-empty-state
       wx:if="{{matches.length === 0}}"
       title="当前没有{{activeStatusLabel}}的比赛"

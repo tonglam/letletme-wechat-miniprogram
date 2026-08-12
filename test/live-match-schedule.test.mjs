@@ -47,3 +47,11 @@ test("fixture service rejects partial errors before mapping an empty schedule", 
   const mapping = service.indexOf("data: (result.data.eventFixtures || [])", read);
   assert.ok(read >= 0 && guard > read && mapping > guard);
 });
+
+test("Live Match surfaces a stale Core fixture fallback", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  assert.match(page, /fixtureStaleMessage: coreRead\.meta\.stale[\s\S]*fixtureScheduleStaleMessage\(coreRead\.meta\.storedAt\)/);
+  assert.match(page, /lastError: this\.data\.error \|\| this\.data\.fixtureStaleMessage/);
+  assert.match(template, /fixtureStaleMessage[\s\S]*status="stale"/);
+});
