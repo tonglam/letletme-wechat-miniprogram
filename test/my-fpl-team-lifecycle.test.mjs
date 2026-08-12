@@ -26,3 +26,9 @@ test("My FPL no-entry state observes primary after its terminal commit", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
 });
+
+test("My FPL warm resume observes retained terminal state without refetching", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("_loadedAt: 0"));
+  assert.match(onShow, /hasTeamData \|\| Boolean\(this\.data\.emptyState\) \|\| Boolean\(this\.data\.error\)[\s\S]*observePrimary/);
+});

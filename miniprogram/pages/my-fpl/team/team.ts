@@ -276,6 +276,8 @@ Page({
     // Summary data moves slowly, but an advancing current GW reloads now.
     if (contextChanged || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
       await this.loadData(contextChanged);
+    } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
+      wx.nextTick(() => this.perfTracker?.observePrimary());
     }
   },
 
