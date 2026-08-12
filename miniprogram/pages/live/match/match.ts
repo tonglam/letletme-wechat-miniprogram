@@ -542,6 +542,8 @@ Page({
       this.targetEventId = context.displayEvent || 0;
       this.perfTracker.mark("contextReadyAt");
       await this.loadData({ background: true, forceRefresh: true });
+    } catch (error) {
+      this.showContextError(error);
     } finally {
       wx.stopPullDownRefresh();
     }

@@ -710,6 +710,7 @@ export async function graphqlRead<T>(
   if (isKnownOffline()) {
     if (staleCandidate) {
       recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
+      notifyStaleFallback();
       recordRequest(
         policy.operationName,
         startedAt,

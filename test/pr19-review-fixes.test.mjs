@@ -55,6 +55,29 @@ test("player detail consumes an explicit route season when shared context is una
   assert.doesNotMatch(playerService, /getPlayerInfoByCode\([^)]*_season/);
 });
 
+test("tournament directory recovery resyncs the fallback GW without overriding a user selection", () => {
+  const selections = source("miniprogram/pages/data/selections/selections.ts");
+  const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
+  for (const page of [selections, summary]) {
+    assert.match(
+      page,
+      /const eventBeforeDirectoryRead = this\.data\.event;[\s\S]*const contextMissingBeforeDirectoryRead = !getAppContextSnapshot\(\)\?\.season;[\s\S]*this\.syncRecoveredEvent\(eventBeforeDirectoryRead\)/
+    );
+    assert.match(
+      page,
+      /syncRecoveredEvent\(eventBeforeDirectoryRead: number\)[\s\S]*event: this\.data\.event === eventBeforeDirectoryRead \? recoveredEvent : this\.data\.event[\s\S]*maxGw: recoveredEvent/
+    );
+  }
+});
+
+test("Live Match pull refresh surfaces context failures and always stops the spinner", () => {
+  const match = source("miniprogram/pages/live/match/match.ts");
+  assert.match(
+    match,
+    /async onPullDownRefresh\(\)[\s\S]*await this\.ensureContext\("pull-refresh"\)[\s\S]*catch \(error\) \{\s*this\.showContextError\(error\);\s*\} finally \{\s*wx\.stopPullDownRefresh\(\)/
+  );
+});
+
 test("cold context failures settle Home and all Live page loading states", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   const entry = source("miniprogram/pages/live/entry/entry.ts");

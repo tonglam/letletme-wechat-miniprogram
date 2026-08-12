@@ -7,6 +7,7 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
+import { getAppContextSnapshot } from "../../../services/app-context.service";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
 type SelectionsEmptyState = "" | "entry" | "tournaments";
@@ -130,6 +131,16 @@ PerformancePage({
     }
   },
 
+  syncRecoveredEvent(eventBeforeDirectoryRead: number): void {
+    const context = getAppContextSnapshot();
+    const recoveredEvent = Number(context?.displayEvent || context?.currentEvent || 0);
+    if (!Number.isSafeInteger(recoveredEvent) || recoveredEvent <= 0) return;
+    this.setData({
+      event: this.data.event === eventBeforeDirectoryRead ? recoveredEvent : this.data.event,
+      maxGw: recoveredEvent
+    });
+  },
+
   async loadTournaments(forceRefresh = false): Promise<void> {
     if (!this.data.entryId) {
       this.setData({
@@ -156,8 +167,13 @@ PerformancePage({
       emptyDescription: "",
       emptyActionText: ""
     });
+    const eventBeforeDirectoryRead = this.data.event;
+    const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
       const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh);
+      if (contextMissingBeforeDirectoryRead) {
+        this.syncRecoveredEvent(eventBeforeDirectoryRead);
+      }
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],

@@ -10,6 +10,7 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
+import { getAppContextSnapshot } from "../../../services/app-context.service";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
 type TournamentEmptyState = "" | "entry" | "tournaments";
@@ -122,6 +123,16 @@ PerformancePage({
     }
   },
 
+  syncRecoveredEvent(eventBeforeDirectoryRead: number): void {
+    const context = getAppContextSnapshot();
+    const recoveredEvent = Number(context?.displayEvent || context?.currentEvent || 0);
+    if (!Number.isSafeInteger(recoveredEvent) || recoveredEvent <= 0) return;
+    this.setData({
+      event: this.data.event === eventBeforeDirectoryRead ? recoveredEvent : this.data.event,
+      maxGw: recoveredEvent
+    });
+  },
+
   async loadTournaments(forceRefresh = false) {
     if (!this.data.entryId) {
       this.setData({
@@ -148,8 +159,13 @@ PerformancePage({
       emptyDescription: "",
       emptyActionText: ""
     });
+    const eventBeforeDirectoryRead = this.data.event;
+    const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
       const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh);
+      if (contextMissingBeforeDirectoryRead) {
+        this.syncRecoveredEvent(eventBeforeDirectoryRead);
+      }
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
