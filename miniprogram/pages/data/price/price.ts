@@ -197,7 +197,7 @@ Page({
     const task = this.data.activeMode === "player"
       ? this.refreshPlayerMode()
       : this.loadDailyChanges(true);
-    task.finally(() => wx.stopPullDownRefresh());
+    return task.finally(() => wx.stopPullDownRefresh());
   },
 
   onRetry() {

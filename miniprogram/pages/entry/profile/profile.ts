@@ -37,7 +37,7 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    this.loadEntry(Number(this.data.entryId), true).finally(() => wx.stopPullDownRefresh());
+    return this.loadEntry(Number(this.data.entryId), true).finally(() => wx.stopPullDownRefresh());
   },
 
   async loadEntry(entryId: number, forceRefresh = false) {

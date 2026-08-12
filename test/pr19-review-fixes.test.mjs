@@ -78,6 +78,28 @@ test("Live Match pull refresh surfaces context failures and always stops the spi
   );
 });
 
+test("wrapped asynchronous pull refresh handlers return their actual work", () => {
+  const pages = [
+    "miniprogram/pages/explore/fixtures/fixtures.ts",
+    "miniprogram/pages/entry/profile/profile.ts",
+    "miniprogram/pages/summary/gameweek/gameweek.ts",
+    "miniprogram/pages/summary/tournament/tournament.ts",
+    "miniprogram/pages/my-fpl/index/index.ts",
+    "miniprogram/pages/live/tournament/tournament.ts",
+    "miniprogram/pages/data/players/players.ts",
+    "miniprogram/pages/data/selections/selections.ts",
+    "miniprogram/pages/data/price/price.ts"
+  ];
+  for (const path of pages) {
+    const page = source(path);
+    const handler = page.slice(
+      page.indexOf("onPullDownRefresh()"),
+      page.indexOf("\n  },", page.indexOf("onPullDownRefresh()"))
+    );
+    assert.match(handler, /return (?:this\.|task\.)/, path);
+  }
+});
+
 test("cold context failures settle Home and all Live page loading states", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   const entry = source("miniprogram/pages/live/entry/entry.ts");

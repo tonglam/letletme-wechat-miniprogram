@@ -57,7 +57,7 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    this.startSearch(this.data.keyword, true)
+    return this.startSearch(this.data.keyword, true)
       .finally(() => wx.stopPullDownRefresh());
   },
 

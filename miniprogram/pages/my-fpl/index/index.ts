@@ -140,7 +140,7 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    this.loadOverview(true).finally(() => wx.stopPullDownRefresh());
+    return this.loadOverview(true).finally(() => wx.stopPullDownRefresh());
   },
 
   isStale(requestId: number): boolean {

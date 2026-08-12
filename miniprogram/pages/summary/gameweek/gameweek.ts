@@ -81,7 +81,7 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    this.refreshData().finally(() => wx.stopPullDownRefresh());
+    return this.refreshData().finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {

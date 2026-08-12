@@ -121,7 +121,7 @@ PerformancePage({
     // Always re-pull the tournament list (it chains into loadStats when
     // populated): a cached list must not hide a league the user just joined.
     const task = this.loadTournaments(true);
-    task.finally(() => wx.stopPullDownRefresh());
+    return task.finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {

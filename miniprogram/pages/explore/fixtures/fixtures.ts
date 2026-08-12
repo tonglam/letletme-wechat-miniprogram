@@ -50,7 +50,7 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    this.syncEventContext(true)
+    return this.syncEventContext(true)
       .then(() => this.load(true))
       .finally(() => wx.stopPullDownRefresh());
   },

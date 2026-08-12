@@ -362,6 +362,7 @@ PerformancePage({
         return;
       }
     }
+    if (!context) return;
     this.loadedSeason = context.season || undefined;
     if (!getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
@@ -551,7 +552,7 @@ PerformancePage({
     // Always re-pull the tournament list (it chains into loadRows): a cached
     // list must not hide a league the user just joined until the TTL expires.
     const task = this.retryWithContext();
-    task.finally(() => wx.stopPullDownRefresh());
+    return task.finally(() => wx.stopPullDownRefresh());
   },
 
   async retryWithContext() {
