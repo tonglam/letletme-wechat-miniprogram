@@ -13,6 +13,10 @@ test("price page keeps date identity and stale state while team directory remain
   assert.match(page, /readPlayerValueByDate\(changeDate/);
   assert.match(page, /staleMessage/);
   assert.match(page, /loadTeamOptions/);
+  assert.match(page, /observeSoftTimeout\(readTask, 3000/);
+  assert.match(page, /mark\("softFailureAt"\)/);
+  assert.match(page, /!this\.pageActive \|\| !isCurrentRevision/);
+  assert.match(page, /\.\.\.splitChanges\(read\.data\),\s*error: ""/);
   assert.doesNotMatch(page, /Promise\.all\([^)]*readPlayerValueByDate[^)]*getTeamList/);
 });
 
@@ -29,4 +33,11 @@ test("price warm resume records viewport visibility without refetching", () => {
   assert.match(onShow, /warm-enter/);
   assert.match(onShow, /observePrimary/);
   assert.doesNotMatch(onShow, /loadDailyChanges|readPlayerValueByDate/);
+});
+
+test("price date changes and retries create an isolated refresh trace", () => {
+  const page = source("miniprogram/pages/data/price/price.ts");
+  assert.match(page, /onDateChange[\s\S]*?this\.startDailyRefreshTrace\(\)/);
+  assert.match(page, /onRetry[\s\S]*?this\.startDailyRefreshTrace\(\)/);
+  assert.match(page, /startDailyRefreshTrace[\s\S]*?new PagePerformanceTracker\(this, "pages\/data\/price\/price", "refresh"\)/);
 });

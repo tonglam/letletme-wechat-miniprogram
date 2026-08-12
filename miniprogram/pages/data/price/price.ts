@@ -7,7 +7,12 @@ import { getPlayerValueByElement, readPlayerValueByDate } from "../../../service
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
-import { nextRequestRevision, isCurrentRevision, setDataAsync } from "../../../utils/page-request";
+import {
+  nextRequestRevision,
+  isCurrentRevision,
+  observeSoftTimeout,
+  setDataAsync
+} from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
 
@@ -183,9 +188,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "refresh");
-    this.perfTracker.mark("contextReadyAt");
+    this.startDailyRefreshTrace();
     const task = this.data.activeMode === "player"
       ? this.refreshPlayerMode()
       : this.loadDailyChanges(true);
@@ -197,6 +200,7 @@ Page({
       this.refreshPlayerMode();
       return;
     }
+    this.startDailyRefreshTrace();
     this.loadDailyChanges();
   },
 
@@ -211,6 +215,7 @@ Page({
   },
 
   onDateChange(event: WechatMiniprogram.PickerChange) {
+    this.startDailyRefreshTrace();
     this.setData({
       changeDate: String(event.detail.value),
       riseChanges: [],
@@ -219,6 +224,12 @@ Page({
       error: ""
     });
     this.loadDailyChanges();
+  },
+
+  startDailyRefreshTrace() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "refresh");
+    this.perfTracker.mark("contextReadyAt");
   },
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {
@@ -232,24 +243,37 @@ Page({
       staleMessage: ""
     });
     this.perfTracker?.mark("primaryRequestStartAt");
+    const context = getAppContextSnapshot();
+    const readTask = readPlayerValueByDate(changeDate, {
+      forceRefresh,
+      trace: this.perfTracker && context
+        ? {
+            navigationId: this.perfTracker.navigationId,
+            callerSurface: "price-daily",
+            trigger: forceRefresh ? "refresh" : "load",
+            forceReason: forceRefresh ? "user-refresh" : undefined,
+            contextRevision: context.contextRevision
+          }
+        : undefined
+    });
+    observeSoftTimeout(readTask, 3000, () => {
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      this.perfTracker?.mark("softFailureAt");
+      this.setData({
+        loading: false,
+        refreshing: false,
+        error: hasRows
+          ? "刷新时间较长，请稍后重试；当前继续显示已有数据"
+          : "加载时间较长，请稍后重试；当前请求仍在后台继续"
+      }, () => wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content")));
+    });
     try {
-      const context = getAppContextSnapshot();
-      const read = await readPlayerValueByDate(changeDate, {
-        forceRefresh,
-        trace: this.perfTracker && context
-          ? {
-              navigationId: this.perfTracker.navigationId,
-              callerSurface: "price-daily",
-              trigger: forceRefresh ? "refresh" : "load",
-              forceReason: forceRefresh ? "user-refresh" : undefined,
-              contextRevision: context.contextRevision
-            }
-          : undefined
-      });
+      const read = await readTask;
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.perfTracker?.mark("primaryResponseAt");
       await setDataAsync(this, {
         ...splitChanges(read.data),
+        error: "",
         staleMessage: read.meta.stale && read.meta.storedAt
           ? `当前为上次成功数据 · ${new Date(read.meta.storedAt).toLocaleString()}`
           : ""
@@ -257,7 +281,7 @@ Page({
       this.perfTracker?.mark("primarySetDataAt");
       wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } catch (error) {
-      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });
       wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } finally {
