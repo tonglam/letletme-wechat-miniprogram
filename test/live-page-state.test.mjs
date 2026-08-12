@@ -53,22 +53,30 @@ test("re-arms current-gameweek polling before loading the switched context", () 
   assert.deepEqual(calls, ["stop", "set:33", "sync:33", "load:33:true"]);
 });
 
-test("an overlapping manual refresh joins CalcLive before any transfer refresh", async () => {
+test("an overlapping manual refresh queues one forced CalcLive and forced transfer refresh", async () => {
   let resolveScore;
   const scoreRequest = new Promise((resolve) => {
     resolveScore = resolve;
   });
   const transferCalls = [];
+  const scoreCalls = [];
   const context = {
     data: { entryId: 123, event: 33 },
     liveRequest: scoreRequest,
     liveRequestKey: "123:33",
+    liveRequestForced: false,
+    liveForcedFollowup: null,
+    loadTransfersAfterLive: false,
     restartForPrincipalChange() {
       return false;
     },
     loadTransfers(entryId, eventId, forceRefresh) {
       transferCalls.push([entryId, eventId, forceRefresh]);
       return Promise.resolve();
+    },
+    loadData(options) {
+      scoreCalls.push(options);
+      return this.loadTransfers(this.data.entryId, this.data.event, options.forceRefresh === true);
     }
   };
 
@@ -82,10 +90,14 @@ test("an overlapping manual refresh joins CalcLive before any transfer refresh",
   });
 
   assert.deepEqual(transferCalls, []);
-  assert.equal(context.loadTransfersAfterLive, true);
+  assert.equal(context.loadTransfersAfterLive, false);
   resolveScore();
   await result;
   assert.equal(settled, true);
+  assert.equal(scoreCalls.length, 1);
+  assert.equal(scoreCalls[0].forceRefresh, true);
+  assert.equal(scoreCalls[0].includeTransfers, true);
+  assert.deepEqual(transferCalls, [[123, 33, true]]);
 });
 
 test("match cold start waits for the current event before arming recovery", async () => {

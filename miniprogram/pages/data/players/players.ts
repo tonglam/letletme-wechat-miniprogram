@@ -5,6 +5,7 @@ import {
 } from "../../../services/player.service";
 import type { PlayerOption } from "../../../models/player";
 import { goToPlayerDetail } from "../../../utils/navigation";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 export function resolveKeywordAfterPlayerLoad(
   pendingKeyword: string,
@@ -49,10 +50,10 @@ PerformancePage({
 
   requestRevision: 0,
 
-  onLoad(options: Record<string, string | undefined>) {
+  async onLoad(options: Record<string, string | undefined>) {
     const keyword = String(options?.keyword || "").trim();
     this.setData({ keyword });
-    this.startSearch(keyword);
+    await this.startSearch(keyword);
   },
 
   onPullDownRefresh() {
@@ -64,7 +65,7 @@ PerformancePage({
     this.loadMore();
   },
 
-  startSearch(keyword: string, forceRefresh = false): Promise<void> {
+  async startSearch(keyword: string, forceRefresh = false): Promise<void> {
     this.requestRevision += 1;
     const revision = this.requestRevision;
     this.setData({
@@ -79,7 +80,18 @@ PerformancePage({
       totalCount: 0,
       hasMore: false
     });
-    return this.fetchPage(revision, null, false, forceRefresh);
+    try {
+      await ensureAppContext({ reason: "page-load" });
+      if (!shouldApplyPlayerResponse(revision, this.requestRevision)) return;
+      await this.fetchPage(revision, null, false, forceRefresh);
+    } catch (error) {
+      if (!shouldApplyPlayerResponse(revision, this.requestRevision)) return;
+      this.setData({
+        loading: false,
+        loadingMore: false,
+        error: error instanceof Error ? error.message : "赛季信息暂时不可用，请稍后重试"
+      });
+    }
   },
 
   async fetchPage(

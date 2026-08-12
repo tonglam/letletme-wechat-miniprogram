@@ -4,6 +4,7 @@ import type { EntryInfo } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { clearEntryScopedStorage, setEntryId } from "../../../utils/storage";
+import { commitEntryBinding } from "../../../services/app-context.service";
 
 interface EntrySearchData {
   manualEntryId: string;
@@ -111,7 +112,7 @@ PerformancePage({
       clearEntryScopedStorage();
     }
     setEntryId(entryId);
-    app.globalData.entryId = entryId;
+    commitEntryBinding(entryId, "rebind");
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.

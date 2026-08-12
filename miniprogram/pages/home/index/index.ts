@@ -28,6 +28,8 @@ interface HomeData {
   fixtureLoading: boolean;
   fixtureError: string;
   fixtureStaleMessage: string;
+  fixtureStoredAt: number | null;
+  fixtureStaleStoredAt: number | null;
   error: string;
   entryError: string;
   priceError: string;
@@ -77,12 +79,36 @@ interface HomeStatRow {
   value: string;
 }
 
+const HOME_REVALIDATE_MS = 60 * 1000;
+
+export function shouldReloadHome(
+  lastLoadAt: number,
+  loadedContextRevision: number,
+  currentContextRevision: number,
+  now = Date.now()
+): boolean {
+  return loadedContextRevision !== currentContextRevision
+    || !lastLoadAt
+    || now - lastLoadAt >= HOME_REVALIDATE_MS;
+}
+
+export function fixtureStaleMessage(storedAt?: number | null): string {
+  if (!storedAt) return "当前为上次成功赛程";
+  const date = new Date(storedAt);
+  if (Number.isNaN(date.getTime())) return "当前为上次成功赛程";
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `当前为上次成功赛程 · ${hours}:${minutes}`;
+}
+
 Page({
   data: {
     loading: false,
     fixtureLoading: false,
     fixtureError: "",
     fixtureStaleMessage: "",
+    fixtureStoredAt: null,
+    fixtureStaleStoredAt: null,
     error: "",
     entryError: "",
     priceError: "",
@@ -128,7 +154,11 @@ Page({
     const context = await ensureAppContext({ reason: "page-show" });
     this._perfTracker.mark("contextReadyAt");
     this.syncAppState();
-    if (context.contextRevision !== this._loadedContextRevision) {
+    if (shouldReloadHome(
+      this._lastLoadAt,
+      this._loadedContextRevision,
+      context.contextRevision
+    )) {
       this._loadedContextRevision = context.contextRevision;
       void this.loadPage();
     } else {
@@ -199,9 +229,19 @@ Page({
         fixtureGw,
         String(app.globalData.season || ""),
         { forceRefresh, trace }
-      ).then((read) => ({ fixtures: read.data, failed: false })).catch((error) => {
+      ).then((read) => ({
+        fixtures: read.data,
+        failed: false,
+        stale: read.meta.stale,
+        storedAt: read.meta.storedAt || Date.now()
+      })).catch((error) => {
         fixtureError = error instanceof Error ? error.message : "赛程加载失败";
-        return { fixtures: hadFixtureRows ? null : [] as Fixture[], failed: true };
+        return {
+          fixtures: hadFixtureRows ? null : [] as Fixture[],
+          failed: true,
+          stale: hadFixtureRows,
+          storedAt: this.data.fixtureStoredAt || undefined
+        };
       });
       observeSoftTimeout(fixtureTask, 3000, () => {
         if (requestId !== this._loadRequestId) return;
@@ -220,6 +260,12 @@ Page({
       if (fixtureResult.failed && hadFixtureRows) {
         fixtureError = "";
       }
+      const staleStoredAt = fixtureResult.stale ? fixtureResult.storedAt || null : null;
+      const staleMessage = fixtureResult.failed && hadFixtureRows
+        ? fixtureStaleMessage(this.data.fixtureStoredAt)
+        : fixtureResult.stale
+          ? fixtureStaleMessage(staleStoredAt)
+          : "";
       const fixtureCommitStartedAt = Date.now();
       await new Promise<void>((resolve) => {
         this.setData({
@@ -227,9 +273,11 @@ Page({
             ? {}
             : { fixtureRows: fixtureResult.fixtures.map(mapFixtureRow) }),
           fixtureError,
-          fixtureStaleMessage: fixtureResult.failed && hadFixtureRows
-            ? "刷新失败，当前显示上次成功赛程"
-            : "",
+          fixtureStaleMessage: staleMessage,
+          fixtureStoredAt: fixtureResult.fixtures === null
+            ? this.data.fixtureStoredAt
+            : fixtureResult.storedAt || Date.now(),
+          fixtureStaleStoredAt: staleStoredAt,
           fixtureLoading: false,
           loading: false
         }, () => {

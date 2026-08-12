@@ -11,8 +11,9 @@ test("My FPL Team loads the selected event before lazy support tabs", () => {
   const lazy = page.indexOf("async loadTab");
   assert.ok(primary >= 0 && primaryCommit > primary && lazy > primaryCommit);
   assert.match(page, /if \(tab === "squad" \|\| !this\.data\.entryId\) return/);
-  assert.match(page, /this\.historyPayload = await getEntryTeamStatsHistory/);
-  assert.match(page, /tab === "transfer"[\s\S]*getEntryTeamStatsTransfers/);
+  assert.match(page, /let historyPayload = this\.historyPayload[\s\S]*historyPayload = await getEntryTeamStatsHistory/);
+  assert.match(page, /tab === "transfer"[\s\S]*transferPayload = await getEntryTeamStatsTransfers/);
+  assert.match(page, /restartForPrincipalChange\(entryId\)[\s\S]*this\.historyPayload = historyPayload/);
 });
 
 test("My FPL Team owns independent primary and tab status surfaces", () => {

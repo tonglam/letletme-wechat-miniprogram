@@ -158,7 +158,12 @@ Page({
   async onLoad() {
     this.pageActive = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "cold-launch");
-    await ensureAppContext({ reason: "page-load" });
+    // Today's public price read is not season-scoped. Context improves trace
+    // attribution but must not prevent an L1/L2 PlayerValues hit from
+    // rendering when CurrentEventInfo is temporarily unavailable.
+    try {
+      await ensureAppContext({ reason: "page-load" });
+    } catch {}
     this.perfTracker.mark("contextReadyAt");
     void this.loadDailyChanges();
   },

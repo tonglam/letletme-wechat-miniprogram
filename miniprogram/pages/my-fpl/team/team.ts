@@ -153,6 +153,7 @@ interface EntrySummaryData {
   hasChips: boolean;
   hasHistory: boolean;
   hasTeamData: boolean;
+  supportAvailable: boolean;
   /** LIVE/SETTLING banner for the current gameweek; "" otherwise. */
   phaseBanner: "" | "live" | "settling";
 }
@@ -193,6 +194,7 @@ Page({
     hasChips: false,
     hasHistory: false,
     hasTeamData: false,
+    supportAvailable: false,
     phaseBanner: ""
   } as EntrySummaryData,
 
@@ -399,6 +401,7 @@ Page({
       hasChips: false,
       hasHistory: false,
       hasTeamData: false,
+      supportAvailable: false,
       phaseBanner: ""
     });
     void this.loadData(true);
@@ -465,6 +468,7 @@ Page({
           squadRows: [],
           hasSquad: false,
           hasTeamData: false,
+          supportAvailable: true,
           phaseBanner: "",
           emptyState: "event",
           emptyEyebrow: "本轮待就绪",
@@ -472,6 +476,7 @@ Page({
           emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
           emptyActionText: "重新加载"
         });
+        if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh);
         return;
       }
 
@@ -491,7 +496,8 @@ Page({
         maxGw: authoritativeEvent,
         emptyState: "",
         hasSquad: primary.squadRows.length > 0,
-        hasTeamData: true
+        hasTeamData: true,
+        supportAvailable: true
       }, () => {
         this.perfTracker?.mark("primarySetDataAt");
         wx.nextTick(() => this.perfTracker?.observePrimary());
@@ -564,21 +570,32 @@ Page({
     this.setData({ tabLoading: true, tabError: "" });
     try {
       const entryId = this.data.entryId;
-      if (forceRefresh || !this.historyPayload) {
-        this.historyPayload = await getEntryTeamStatsHistory(entryId, forceRefresh);
+      let historyPayload = this.historyPayload;
+      let transferPayload = this.transferPayload;
+      if (forceRefresh || !historyPayload) {
+        historyPayload = await getEntryTeamStatsHistory(entryId, forceRefresh);
+        if (this.restartForPrincipalChange(entryId)) return;
+        if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
       }
-      if (tab === "transfer" && (forceRefresh || !this.transferPayload)) {
-        this.transferPayload = await getEntryTeamStatsTransfers(entryId, forceRefresh);
+      if (tab === "transfer" && (forceRefresh || !transferPayload)) {
+        transferPayload = await getEntryTeamStatsTransfers(entryId, forceRefresh);
+        if (this.restartForPrincipalChange(entryId)) return;
+        if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
       }
+      if (this.restartForPrincipalChange(entryId)) return;
       if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
+      this.historyPayload = historyPayload;
+      this.transferPayload = transferPayload;
       const support = mapHistorySupportRows(
-        this.historyPayload,
-        this.transferPayload || []
+        historyPayload,
+        transferPayload || []
       );
+      const currentEventChip = this.data.chipSummaryStats.find((item) => item.label === "本轮开卡")?.value || "无";
       this.setData({
         transferRows: support.transferRows,
         chipCountRows: support.chipCountRows,
         chipUsageRows: support.chipUsageRows,
+        chipSummaryStats: buildChipSummaryStats(currentEventChip, support.chipUsageRows.length),
         historyRows: support.historyRows,
         seasonHistoryRows: support.seasonHistoryRows,
         hasTransfers: support.transferRows.length > 0,
@@ -587,6 +604,7 @@ Page({
         transferError: ""
       });
     } catch (error) {
+      if (this.restartForPrincipalChange(this.data.entryId)) return;
       if (requestId !== this.tabRequestId) return;
       const message = error instanceof Error ? error.message : "分页数据加载失败";
       this.setData({
@@ -652,15 +670,22 @@ function mapApiDataToTeamStats(
     ],
     squadRows: mapSquadRows(eventResult.eventPicks || []),
     transferRows: historySupport.transferRows,
-    chipSummaryStats: [
-      { label: "本轮开卡", value: formatChip(eventResult.eventChip) },
-      { label: "开卡次数", value: String(historySupport.chipUsageRows.length) }
-    ],
+    chipSummaryStats: buildChipSummaryStats(
+      formatChip(eventResult.eventChip),
+      historySupport.chipUsageRows.length
+    ),
     chipCountRows: historySupport.chipCountRows,
     chipUsageRows: historySupport.chipUsageRows,
     historyRows: historySupport.historyRows,
     seasonHistoryRows: historySupport.seasonHistoryRows
   };
+}
+
+export function buildChipSummaryStats(currentEventChip: string, usageCount: number): MetricCard[] {
+  return [
+    { label: "本轮开卡", value: currentEventChip || "无" },
+    { label: "开卡次数", value: String(Math.max(0, usageCount)) }
+  ];
 }
 
 interface HistorySupportViewModel {

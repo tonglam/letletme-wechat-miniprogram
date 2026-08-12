@@ -739,6 +739,19 @@ PerformancePage({
     }
 
     const eventId = this.data.event;
+    if (!Number.isSafeInteger(eventId) || eventId <= 0) {
+      this.setData({
+        rows: [],
+        displayedRows: [],
+        hasMore: false,
+        loading: false,
+        refreshing: false,
+        error: "",
+        errorSuffix: ""
+      });
+      this.syncDisplayState();
+      return Promise.resolve();
+    }
     const keyword = this._submittedKeyword;
     const requestKey = `${entryId}:${selected.id}:${eventId}:${keyword}`;
     if (this.rowsRequest && this.rowsRequestKey === requestKey) {
@@ -812,13 +825,14 @@ PerformancePage({
 
     this.rowsRequest = request;
     this.rowsRequestKey = requestKey;
-    void request.finally(() => {
+    const clearRequest = () => {
       if (this.rowsRequest === request) {
         this.rowsRequest = null;
         this.rowsRequestKey = "";
         this.revalidateCachedSnapshot();
       }
-    });
+    };
+    void request.then(clearRequest, clearRequest);
     return request;
   },
 

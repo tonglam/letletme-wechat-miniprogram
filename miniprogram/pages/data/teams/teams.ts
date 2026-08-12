@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamList } from "../../../services/common.service";
 import type { TeamOption } from "../../../models/common";
 import { goToTeamDetail } from "../../../utils/navigation";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 PerformancePage({
   data: {
@@ -10,14 +11,15 @@ PerformancePage({
     teams: [] as TeamOption[]
   },
 
-  onLoad() {
-    this.loadData();
+  async onLoad() {
+    await this.loadData();
   },
 
   async loadData() {
     this.setData({ loading: true, error: "" });
     try {
-      const teams = await getTeamList(getApp<IAppOption>().globalData.season);
+      const context = await ensureAppContext({ reason: "page-load" });
+      const teams = await getTeamList(context.season);
       this.setData({ teams });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球队列表加载失败" });

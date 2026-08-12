@@ -246,11 +246,14 @@ function filterMatches(matches: LiveMatch[] | undefined, status: string): LiveMa
   return (matches || []).filter((match) => matchStatus(match) === status);
 }
 
-function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveMatch[] {
+export function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveMatch[] {
   const liveById = new Map(overlay.map((match) => [String(match.matchId || match.id), match]));
   return core.map((match) => {
     const live = liveById.get(String(match.matchId || match.id));
-    return live ? normalizeMatch({ ...match, ...live }, matchStatus(match)) : match;
+    if (!live) return match;
+    const overlayHasStatus = Boolean(live.status || live.playStatus);
+    const status = overlayHasStatus ? matchStatus(live) : matchStatus(match);
+    return normalizeMatch({ ...match, ...live, status, playStatus: status }, status);
   });
 }
 
@@ -540,13 +543,14 @@ Page({
       this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
       this.syncDisplayState();
     });
-    void request.finally(() => {
+    const clearRequest = () => {
       if (this.liveRequest === request) {
         this.liveRequest = null;
         this.liveRequestKey = "";
         this.revalidateCachedSnapshot();
       }
-    });
+    };
+    void request.then(clearRequest, clearRequest);
     return request;
   },
 

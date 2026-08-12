@@ -115,6 +115,8 @@ Page({
 
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
+  liveRequestForced: false,
+  liveForcedFollowup: null as Promise<void> | null,
   liveRequestId: 0,
   transfersRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
@@ -363,6 +365,8 @@ Page({
     this.transfersRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";
+    this.liveRequestForced = false;
+    this.liveForcedFollowup = null;
     this.setData({
       entryId: nextEntryId,
       loading: false,
@@ -411,6 +415,20 @@ Page({
     const eventId = this.data.event;
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
+      if (options.forceRefresh && !this.liveRequestForced) {
+        if (this.liveForcedFollowup) return this.liveForcedFollowup;
+        const activeRequest = this.liveRequest;
+        const followup = activeRequest.then(() => {
+          if (entryId !== this.data.entryId || eventId !== this.data.event) return;
+          return this.loadData({ ...options, forceRefresh: true });
+        });
+        this.liveForcedFollowup = followup;
+        const clearFollowup = () => {
+          if (this.liveForcedFollowup === followup) this.liveForcedFollowup = null;
+        };
+        void followup.then(clearFollowup, clearFollowup);
+        return followup;
+      }
       if (options.includeTransfers) this.loadTransfersAfterLive = true;
       return this.liveRequest;
     }
@@ -539,19 +557,22 @@ Page({
 
     this.liveRequest = request;
     this.liveRequestKey = requestKey;
+    this.liveRequestForced = options.forceRefresh === true;
     observeSoftTimeout(request, 3000, () => {
       if (requestId !== this.liveRequestId || !this.pageVisible) return;
       this.perfTracker?.mark("softFailureAt");
       this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
       this.syncDisplayState();
     });
-    void request.finally(() => {
+    const clearRequest = () => {
       if (this.liveRequest === request) {
         this.liveRequest = null;
         this.liveRequestKey = "";
+        this.liveRequestForced = false;
         this.revalidateCachedSnapshot();
       }
-    });
+    };
+    void request.then(clearRequest, clearRequest);
     return request;
   },
 

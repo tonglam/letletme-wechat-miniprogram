@@ -40,8 +40,12 @@ export function observeSoftTimeout(
   const timer = setTimeout(() => {
     if (!settled) callback();
   }, timeoutMs);
-  void task.finally(() => {
+  const settle = () => {
     settled = true;
     clearTimeout(timer);
-  });
+  };
+  // `finally()` creates a second promise which rejects with the original
+  // task. If that derived promise is discarded, WeChat reports an unhandled
+  // rejection even though the request owner handles the original task.
+  void task.then(settle, settle);
 }
