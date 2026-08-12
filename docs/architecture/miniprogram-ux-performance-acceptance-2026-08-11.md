@@ -403,3 +403,46 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 - GraphQL admission Redis 与 publication pointer Redis 的 RTT/连接池/串行等待。
 - empty miss 的 databaseChanges 查询路径，尤其是约 832ms 的数据库阶段。
 - 完整冷启动和刷新阶段的 app context、网络响应、setData callback、Native visible 分段计时。
+
+## 2026-08-12 执行结果：代码已实施，尚未验收
+
+本轮按分支 `codex/optimize-miniprogram-read-path`、`codex/optimize-graphql-proxy-read-path`、`codex/optimize-home-read-path` 执行。GraphQL 优化提交为 `e90bee1`；Web 验证基线为 `d732276`；小程序功能实现为 `481f68f`，此前报告文档提交为 `5aef00f`。没有创建 PR、没有合并、没有部署、没有上传开发版。
+
+### 环境与链路
+
+- 测试日期：2026-08-12，WeChat DevTools Stable `2.01.2510290`，基础库 `3.15.2`，模拟器 iPhone 12/13 Pro 100%，在线网络，无网络限速。
+- GraphQL：`127.0.0.1:4000/graphql`，启动日志接受 season `2627`、dataset revision `2`。
+- Web：`127.0.0.1:3000/api/graphql`，upstream 为 `127.0.0.1:4000/graphql`；4000 `/health` 返回 `200`，Redis、PostgreSQL、season 均为 `ok`。
+- 小程序 Network 目标仍为 Web `3000`，没有直连 `4000`。
+
+### 分段证据
+
+| 阶段 | 实测证据 | 结论 |
+|---|---:|---|
+| CoreEventFixtureSchedule 直连 GraphQL | n=20，p50 `291.8ms`，p95 `297.2ms`，max `299.9ms`，20/20 为 200 | 通过 `<=350ms` |
+| CoreEventFixtureSchedule 经 Web | n=20，p50 `297.4ms`，p95 `302.1ms`，max `303.4ms`，20/20 为 200 | 通过 `<=450ms` |
+| GraphQL admission | 每个请求只有一个 `admission` stage；单个串行样本约 `142-146ms` | 单 EVAL 语义已生效 |
+| CurrentEventInfo | 冷链路样本约 `290.8ms`；没有请求期 season stage | 启动期 season 方案生效，仍需正式计数验证 |
+| MiniHomeSupplement | `441.2ms`，包含 notice、eventOverallResult、playerValues 三个 root | 作为 secondary，不阻塞 Fixture |
+| GetEntry | `933.5ms`，发生在 Fixture 之后 | 后置个人数据，不应计入 Fixture 首屏 |
+| GetPlayerValues 暖命中 | 隔离 n=10，p50 `443.2ms`，p95 `450.1ms`，max `450.1ms` | 通过 `<=500ms` |
+| GetPlayerValues 空结果 miss | 新日期单次 `694.9ms`；trace 的 databaseChanges 约 `111ms` | 本样本通过 `<=1.0s` |
+| GetPlayerValues 混合批次 miss | 一次重新 miss `1.337s`；trace databaseChanges `740.5ms` | 剩余波动，不能忽略 |
+| response 到 setData callback | 现有埋点保留 render commit，但本轮尚未取得正式 n>=10 独立样本 | 未验收 |
+
+### DevTools 冷启动事实
+
+清除模拟器数据缓存后普通编译，页面实际显示十条 Fixture；GraphQL trace 顺序为 `CurrentEventInfo 290.8ms -> CoreEventFixtureSchedule 292.8ms -> MiniHomeSupplement 441.2ms`，`GetEntry 933.5ms` 在其后。DevTools 控制台报告 `[system] Launch Time: 1192 ms`。CUA 从点击编译到观察页面的约 `4.96s` 包含编译、工具等待和后置请求，不能作为产品首屏时间。
+
+因此当前仍不能证明“冷启动到首批 Fixture 可见最大值 `<=1.2s`”：只有单次 DevTools Launch Time，缺少从 app context start 到 Fixture visible 的独立时间戳。页面刷新按钮还命中了 Fixture cache，没有产生 force-refresh operation；下拉刷新 n=20 尚未取得。
+
+### 自动检查
+
+- GraphQL：`352 pass / 4 skip / 0 fail`；`tsc --noEmit`、lint、format check 通过。
+- Web：`335 pass / 5 skip / 0 fail`；`npx tsc --noEmit`、lint、production build 通过。仓库没有 `npm run typecheck` script，不能把不存在的脚本记为通过。
+- 小程序：`139 pass / 0 fail`；typecheck、lint 通过。
+- 正价格变更 miss：当前 publication 在可查询日期返回空结果，尚未有真实正结果样本；只能由现有集成测试覆盖，不能冒充线上性能样本。
+
+### 门槛结论
+
+代码链路已实施，核心 Fixture 和 Web/GraphQL 接口门槛已通过；冷启动 Fixture visible、下拉刷新 n=20、response-to-setData 正式样本、正价格变更 miss 仍未闭环。因此报告状态保持 **代码已实施，尚未验收**，不得进入 GraphQL/Web/小程序合并、线上部署或微信开发版 `1.0.2` 上传。

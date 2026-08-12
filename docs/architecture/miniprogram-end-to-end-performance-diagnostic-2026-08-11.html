@@ -788,5 +788,43 @@
   <p>后续应在当前分段 trace 下处理 Redis admission/publication RTT 和 empty miss 的约 832ms databaseChanges 阶段；不能通过增加 TTL、隐藏请求或调整报告口径绕过门槛。</p>
 </section>
 
+<section>
+  <h2>2026-08-12 执行结果：代码已实施，尚未验收</h2>
+  <p>本轮没有创建 PR、没有合并、没有部署、没有上传微信开发版。GraphQL 优化提交为 <code>e90bee1</code>，Web 验证基线为 <code>d732276</code>，小程序功能实现为 <code>481f68f</code>。</p>
+  <h3>环境</h3>
+  <ul>
+    <li>WeChat DevTools Stable <code>2.01.2510290</code>，基础库 <code>3.15.2</code>，iPhone 12/13 Pro 100%，在线网络。</li>
+    <li>GraphQL <code>127.0.0.1:4000/graphql</code>；Web <code>127.0.0.1:3000/api/graphql</code>，upstream 为 <code>127.0.0.1:4000/graphql</code>。</li>
+    <li>4000 <code>/health</code> 返回 200，Redis、PostgreSQL、season 均为 ok；小程序 Network 没有直连 4000。</li>
+  </ul>
+  <h3>分段结果</h3>
+  <table>
+    <thead><tr><th>阶段</th><th>样本</th><th>结果</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td><code>CoreEventFixtureSchedule</code> 直连 GraphQL</td><td>n=20</td><td>p50 291.8ms，p95 297.2ms，max 299.9ms，20/20 200</td><td class="pass">通过</td></tr>
+      <tr><td><code>CoreEventFixtureSchedule</code> 经 Web</td><td>n=20</td><td>p50 297.4ms，p95 302.1ms，max 303.4ms，20/20 200</td><td class="pass">通过</td></tr>
+      <tr><td>GraphQL admission</td><td>串行 trace</td><td>每个请求一个 admission stage，约 142-146ms</td><td class="pass">单 EVAL 语义已生效</td></tr>
+      <tr><td><code>CurrentEventInfo</code></td><td>冷链路</td><td>约 290.8ms；无请求期 season stage</td><td>启动期 season 生效</td></tr>
+      <tr><td><code>MiniHomeSupplement</code></td><td>冷链路</td><td>441.2ms；三个 root 合并</td><td>secondary，不阻塞 Fixture</td></tr>
+      <tr><td><code>GetEntry</code></td><td>冷链路</td><td>933.5ms，发生在 Fixture 之后</td><td>后置个人数据</td></tr>
+      <tr><td><code>GetPlayerValues</code> 暖命中</td><td>n=10</td><td>p50 443.2ms，p95 450.1ms，max 450.1ms</td><td class="pass">通过</td></tr>
+      <tr><td><code>GetPlayerValues</code> 空 miss</td><td>n=1</td><td>694.9ms；databaseChanges 约 111ms</td><td class="pass">本样本通过</td></tr>
+      <tr><td><code>GetPlayerValues</code> 混合批次</td><td>含一次 miss</td><td>一次 1.337s；databaseChanges 740.5ms</td><td class="fail">有剩余波动</td></tr>
+      <tr><td>response -> setData callback</td><td>正式 n>=10</td><td>尚未取得独立样本</td><td class="fail">未验收</td></tr>
+    </tbody>
+  </table>
+  <h3>DevTools 冷启动</h3>
+  <p>清除模拟器数据缓存后普通编译，页面显示十条 Fixture；trace 顺序为 <code>CurrentEventInfo 290.8ms -> CoreEventFixtureSchedule 292.8ms -> MiniHomeSupplement 441.2ms</code>，<code>GetEntry 933.5ms</code> 在其后。DevTools 控制台报告 <code>[system] Launch Time: 1192 ms</code>。从点击编译到 CUA 观察页面的约 4.96s 包含编译、工具等待和后置请求，不能作为产品首屏时间。</p>
+  <p>当前仍不能证明冷启动到首批 Fixture 可见最大值 <code>&lt;=1.2s</code>：只有单次 Launch Time，缺少 app context start 到 Fixture visible 的独立时间戳。页面刷新按钮命中 Fixture cache，没有产生 force-refresh operation；下拉刷新 n=20 尚未取得。</p>
+  <h3>自动检查</h3>
+  <ul>
+    <li>GraphQL：352 pass / 4 skip / 0 fail；tsc、lint、format check 通过。</li>
+    <li>Web：335 pass / 5 skip / 0 fail；npx tsc、lint、production build 通过。仓库没有 npm run typecheck script。</li>
+    <li>小程序：139 pass / 0 fail；typecheck、lint 通过。</li>
+    <li>正价格变更 miss：当前 publication 可查询日期均为空，只有集成测试正结果覆盖，不能冒充真实性能样本。</li>
+  </ul>
+  <p><strong>门槛结论：</strong>核心 Fixture 和接口门槛已通过；冷启动 Fixture visible、下拉刷新 n=20、response-to-setData 正式样本、正价格变更 miss 仍未闭环。报告状态保持 <strong>代码已实施，尚未验收</strong>，不得进入合并、部署或微信开发版 1.0.2 上传。</p>
+</section>
+
 </body>
 </html>
