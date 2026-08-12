@@ -54,3 +54,14 @@ test("AppContext source enforces deadline freshness, unresolved backoff and forc
   assert.match(source, /nextRetryAt = Date\.now\(\) \+ 60 \* 1000/);
   assert.match(source, /if \(pending\)[\s\S]*if \(!options\.forceRefresh \|\| pendingForced\) return pending;[\s\S]*try \{\s*await pending;\s*\} catch \{[\s\S]*return ensureAppContext\(options\)/);
 });
+
+test("CurrentEventInfo rejects partial GraphQL errors before mapping context", () => {
+  const source = readFileSync(
+    new URL("../miniprogram/services/common.service.ts", import.meta.url),
+    "utf8"
+  );
+  const errorGuard = source.indexOf("if (result.errors.length > 0)");
+  const contextMapping = source.indexOf("const info = result.data.currentEventInfo");
+  assert.ok(errorGuard >= 0 && errorGuard < contextMapping);
+  assert.match(source.slice(errorGuard, contextMapping), /throw new Error\("比赛周信息暂时不可用，请稍后重试"\)/);
+});

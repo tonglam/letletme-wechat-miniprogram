@@ -489,7 +489,6 @@ Page({
   },
 
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
-    const status = this.data.status;
     const requestKey = `${this.targetEventId}:${options.forceRefresh === true}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       return this.liveRequest;
@@ -532,13 +531,14 @@ Page({
           !fixture.finished
           && (fixture.started === true || Boolean(fixture.kickoffTime && new Date(fixture.kickoffTime).getTime() <= now))
         );
-        const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
-        const matches = filterMatches(core, status);
+        const activeStatus = this.data.status;
+        const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label || "比赛";
+        const matches = filterMatches(core, activeStatus);
         this.setData({
           activeStatusLabel,
-          emptyDescription: emptyDescription(status),
+          emptyDescription: emptyDescription(activeStatus),
           matches,
-          groups: groupMatches(matches, status),
+          groups: groupMatches(matches, activeStatus),
           hasData: true,
           lastUpdated: formatTime(new Date(coreRead.meta.storedAt || Date.now()))
         }, () => {
@@ -551,10 +551,13 @@ Page({
           this.liveSnapshot = liveResult.snapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.coreMatches = mergeLiveOverlay(core, liveResult.data);
-          const overlaid = filterMatches(this.coreMatches, status);
+          const overlayStatus = this.data.status;
+          const overlaid = filterMatches(this.coreMatches, overlayStatus);
           this.setData({
+            activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === overlayStatus)?.label || "比赛",
+            emptyDescription: emptyDescription(overlayStatus),
             matches: overlaid,
-            groups: groupMatches(overlaid, status),
+            groups: groupMatches(overlaid, overlayStatus),
             lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
           });
           this.liveRefresh?.sync();

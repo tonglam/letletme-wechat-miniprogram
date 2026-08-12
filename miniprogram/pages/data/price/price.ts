@@ -262,7 +262,7 @@ Page({
         : undefined
     });
     observeSoftTimeout(readTask, 2900, () => {
-      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.perfTracker?.mark("softFailureAt");
       this.setData({
         loading: false,
@@ -274,7 +274,7 @@ Page({
     });
     try {
       const read = await readTask;
-      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.perfTracker?.mark("primaryResponseAt");
       await setDataAsync(this, {
         ...splitChanges(read.data),

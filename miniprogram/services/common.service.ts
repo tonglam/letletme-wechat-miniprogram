@@ -46,6 +46,9 @@ export async function readCurrentEventAndDeadline(
       return Date.now();
     }
   });
+  if (result.errors.length > 0) {
+    throw new Error("比赛周信息暂时不可用，请稍后重试");
+  }
   const info = result.data.currentEventInfo;
   const gw = info?.currentEvent ?? info?.nextEvent ?? undefined;
   return {

@@ -13,6 +13,8 @@ test("Live Matches paints Core schedule before an optional overlay", () => {
   assert.match(page, /targetEvent === context\.currentEvent/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
+  assert.match(page, /await readCoreEventFixtureSchedule[\s\S]*const activeStatus = this\.data\.status[\s\S]*filterMatches\(core, activeStatus\)/);
+  assert.match(page, /await getLiveMatchByStatusSnapshot[\s\S]*const overlayStatus = this\.data\.status[\s\S]*filterMatches\(this\.coreMatches, overlayStatus\)/);
 });
 
 test("preseason uses displayEvent schedule without a Live overlay", () => {
