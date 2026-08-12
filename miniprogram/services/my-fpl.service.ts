@@ -5,6 +5,7 @@ import { getApiSessionToken } from "./auth.service";
 import { storageKeys } from "../config/storage-keys";
 import type { MyFplContext, MyFplLeagueBrief, MyFplTeamBrief } from "../models/my-fpl";
 import type { LiveSnapshotState } from "../models/live";
+import type { PageRequestTrace } from "./graphql.service";
 
 /**
  * My FPL read composition (high-level design §4.3, plan §5). Everything here
@@ -149,8 +150,12 @@ export async function getMyFplTeamBrief(
  * fields (viewerRank, associationCount) arrive with plan §10 and stay absent
  * until then.
  */
-export async function getMyFplLeagues(entryId: number, forceRefresh = false): Promise<MyFplLeagueBrief[]> {
-  const leagues = await getEntryLeagueInfo(entryId, forceRefresh);
+export async function getMyFplLeagues(
+  entryId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<MyFplLeagueBrief[]> {
+  const leagues = await getEntryLeagueInfo(entryId, forceRefresh, trace ?? undefined);
   return leagues
     .map((league) => ({
       id: Number(league.id),

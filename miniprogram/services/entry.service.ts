@@ -152,10 +152,15 @@ export async function getEntryInfo(
   return result;
 }
 
-export async function getEntryLeagueInfo(entry: number, forceRefresh = false): Promise<EntryLeague[]> {
+export async function getEntryLeagueInfo(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryLeague[]> {
   const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
     cachePolicy: "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   return (data.entryLeagues || []).map((league) => ({
     id: league.id,

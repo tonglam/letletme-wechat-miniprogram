@@ -5,6 +5,10 @@ import { goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { recordMyFplVisit } from "../../../utils/perf";
 import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 
 interface LeaguesCache {
   entryId: number;
@@ -59,27 +63,36 @@ PerformancePage({
   loadedSeason: undefined as string | undefined,
 
   async onLoad() {
+    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "load" });
     await waitForAuthoritativeFollow();
     try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    void this.loadLeagues(false);
+    void this.loadLeagues(false, trace);
   },
 
   async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
+      const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "show" });
       // Re-read the follow pointer after a handoff or team switch (§9).
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      void this.loadLeagues(false);
+      void this.loadLeagues(false, trace);
     }
   },
 
   async onPullDownRefresh() {
+    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "refresh" });
     try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-    await this.loadLeagues(true).finally(() => wx.stopPullDownRefresh());
+    await this.loadLeagues(true, trace).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadLeagues(forceRefresh = false) {
+  async loadLeagues(
+    forceRefresh = false,
+    trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
+      callerSurface: "my-fpl-leagues",
+      trigger: forceRefresh ? "refresh" : "load"
+    })
+  ) {
     const requestId = ++this.requestId;
     const entryId = currentFollowEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
@@ -111,17 +124,17 @@ PerformancePage({
     this.setData({ loading: !cached, error: "", entryId });
 
     try {
-      const leagues = await getMyFplLeagues(entryId, forceRefresh);
+      const leagues = await getMyFplLeagues(entryId, forceRefresh, trace);
       if (requestId !== this.requestId) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
-        void this.loadLeagues(true);
+        void this.loadLeagues(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
-        void this.loadLeagues(true);
+        void this.loadLeagues(true, trace);
         return;
       }
       this.setData({ loading: false, leagues, fromCache: false });
@@ -142,12 +155,12 @@ PerformancePage({
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
-        void this.loadLeagues(true);
+        void this.loadLeagues(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
-        void this.loadLeagues(true);
+        void this.loadLeagues(true, trace);
         return;
       }
       this.setData({

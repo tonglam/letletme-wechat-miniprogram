@@ -683,6 +683,7 @@ Page({
           matches,
           groups: groupMatches(matches, activeStatus),
           hasData: true,
+          error: "",
           fixtureStaleMessage: coreRead.meta.stale
             ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
             : "",
@@ -711,6 +712,7 @@ Page({
             emptyDescription: emptyDescription(overlayStatus),
             matches: overlaid,
             groups: groupMatches(overlaid, overlayStatus),
+            error: "",
             lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
           });
           this.liveRefresh?.sync();
@@ -736,7 +738,7 @@ Page({
     this.liveRequestKey = requestKey;
     observeSoftTimeout(request, 3000, () => {
       if (requestId !== this.liveRequestId || !this.pageVisible) return;
-      this.perfTracker?.mark("softFailureAt");
+      navigationTracker?.mark("softFailureAt");
       this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
       this.syncDisplayState();
     });

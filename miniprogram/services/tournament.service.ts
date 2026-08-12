@@ -242,8 +242,12 @@ export async function getEntryPointsRaceTournament(
  * every object the entry participates in, legacy fields intact for the
  * adapter. Filtering for a specific surface stays with that surface.
  */
-export async function getEntryAllTournaments(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
-  return readDirectory(entry, forceRefresh);
+export async function getEntryAllTournaments(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<EntryTournamentRow[]> {
+  return readDirectory(entry, forceRefresh, trace ?? undefined);
 }
 
 export async function getEntrySummaryTournaments(

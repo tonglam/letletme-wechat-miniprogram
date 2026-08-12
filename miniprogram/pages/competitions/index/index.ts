@@ -7,6 +7,10 @@ import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils
 import { listCountBucket } from "../../../utils/competition-state";
 import { durationBucket, recordCompetitionVisit } from "../../../utils/perf";
 import { routes } from "../../../config/routes";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 
 interface CompetitionsCache {
   entryId: number;
@@ -62,27 +66,36 @@ PerformancePage({
   loadedSeason: undefined as string | undefined,
 
   async onLoad() {
+    const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "load" });
     await waitForAuthoritativeFollow();
     try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    void this.loadList(false);
+    void this.loadList(false, trace);
   },
 
   async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
+      const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "show" });
       // Website return / team switch: principal and list revalidate (§10.1).
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      void this.loadList(false);
+      void this.loadList(false, trace);
     }
   },
 
   async onPullDownRefresh() {
+    const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "refresh" });
     try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-    await this.loadList(true).finally(() => wx.stopPullDownRefresh());
+    await this.loadList(true, trace).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadList(forceRefresh = false) {
+  async loadList(
+    forceRefresh = false,
+    trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
+      callerSurface: "competitions",
+      trigger: forceRefresh ? "refresh" : "load"
+    })
+  ) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
     const entryId = currentFollowEntryId();
@@ -122,19 +135,19 @@ PerformancePage({
     this.setData({ loading: !cached, error: "", entryId });
 
     try {
-      const items = await getMyCompetitionsCompat(entryId, forceRefresh);
+      const items = await getMyCompetitionsCompat(entryId, forceRefresh, trace);
       if (requestId !== this.requestId) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         // A 401 recovery can authoritatively change the followed entry while
         // this request is in flight. Never paint/cache the old principal.
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       this.setData({ loading: false, items, fromCache: false });
@@ -163,12 +176,12 @@ PerformancePage({
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       // No previous data plus failure renders unavailable/retry, not an

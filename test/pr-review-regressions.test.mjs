@@ -283,7 +283,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false\)/);
+  assert.match(leagues, /if \(resumed\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false, trace\)/);
   assert.match(leagues, /cached\.season === season/);
 });
 
@@ -321,8 +321,8 @@ test("initial league and competition payloads use named session cache policies",
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const common = source("miniprogram/services/common.service.ts");
-  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false\)/);
-  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false\)/);
+  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace\)/);
+  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false, trace\)/);
   assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
   assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
   assert.doesNotMatch(common, /season:unknown/);
