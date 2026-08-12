@@ -13,10 +13,18 @@ type InstrumentedPage = {
   __performanceTracker?: PagePerformanceTracker;
   __performanceShown?: boolean;
   __performanceSetDataWrapped?: boolean;
+  __performanceVisible?: boolean;
+  __performanceGeneration?: number;
 };
 
-function schedulePrimaryObservation(page: InstrumentedPage): void {
-  const observe = () => page.__performanceTracker?.observePrimary();
+function schedulePrimaryObservation(
+  page: InstrumentedPage,
+  generation = page.__performanceGeneration
+): void {
+  const observe = () => {
+    if (!page.__performanceVisible || page.__performanceGeneration !== generation) return;
+    page.__performanceTracker?.observePrimary();
+  };
   if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
     wx.nextTick(observe);
     return;
@@ -24,21 +32,34 @@ function schedulePrimaryObservation(page: InstrumentedPage): void {
   observe();
 }
 
-function observeLifecycleSettlement(result: unknown, page: InstrumentedPage): void {
-  const settled = () => schedulePrimaryObservation(page);
+function observeLifecycleSettlement(
+  result: unknown,
+  page: InstrumentedPage,
+  generation: number
+): void {
+  const settled = () => schedulePrimaryObservation(page, generation);
   void Promise.resolve(result).then(settled, settled);
 }
 
 function startTracker(
   page: InstrumentedPage,
   trigger: "cold-launch" | "warm-enter" | "refresh"
-): void {
+): number {
   page.__performanceTracker?.disconnect();
+  const generation = (page.__performanceGeneration ?? 0) + 1;
+  page.__performanceGeneration = generation;
   page.__performanceTracker = new PagePerformanceTracker(
     page,
     page.route || "unknown",
     trigger
   );
+  return generation;
+}
+
+function stopTracker(page: InstrumentedPage): void {
+  page.__performanceVisible = false;
+  page.__performanceGeneration = (page.__performanceGeneration ?? 0) + 1;
+  page.__performanceTracker?.disconnect();
 }
 
 function wrapSetData(page: InstrumentedPage): void {
@@ -46,9 +67,10 @@ function wrapSetData(page: InstrumentedPage): void {
   page.__performanceSetDataWrapped = true;
   const original = page.setData.bind(page);
   page.setData = (data: object, callback?: () => void) => {
+    const generation = page.__performanceGeneration;
     original(data, () => {
       callback?.();
-      schedulePrimaryObservation(page);
+      schedulePrimaryObservation(page, generation);
     });
   };
 }
@@ -70,32 +92,35 @@ export const PerformancePage = ((options: unknown): void => {
     ...definition,
     onLoad(this: InstrumentedPage, ...args: unknown[]) {
       wrapSetData(this);
-      startTracker(this, "cold-launch");
+      this.__performanceVisible = true;
+      const generation = startTracker(this, "cold-launch");
       const result = originalOnLoad?.apply(this, args);
-      observeLifecycleSettlement(result, this);
+      observeLifecycleSettlement(result, this, generation);
       return result;
     },
     onShow(this: InstrumentedPage, ...args: unknown[]) {
+      this.__performanceVisible = true;
+      let generation = this.__performanceGeneration ?? 0;
       if (this.__performanceShown) {
-        startTracker(this, "warm-enter");
+        generation = startTracker(this, "warm-enter");
       }
       this.__performanceShown = true;
       const result = originalOnShow?.apply(this, args);
-      observeLifecycleSettlement(result, this);
+      observeLifecycleSettlement(result, this, generation);
       return result;
     },
     onPullDownRefresh(this: InstrumentedPage, ...args: unknown[]) {
-      startTracker(this, "refresh");
+      const generation = startTracker(this, "refresh");
       const result = originalOnPullDownRefresh?.apply(this, args);
-      observeLifecycleSettlement(result, this);
+      observeLifecycleSettlement(result, this, generation);
       return result;
     },
     onHide(this: InstrumentedPage, ...args: unknown[]) {
-      this.__performanceTracker?.disconnect();
+      stopTracker(this);
       return originalOnHide?.apply(this, args);
     },
     onUnload(this: InstrumentedPage, ...args: unknown[]) {
-      this.__performanceTracker?.disconnect();
+      stopTracker(this);
       return originalOnUnload?.apply(this, args);
     }
   } as Parameters<typeof Page>[0]);

@@ -119,6 +119,7 @@ Page({
   liveRequestForced: false,
   liveForcedFollowup: null as Promise<void> | null,
   liveForcedFollowupIncludeTransfers: false,
+  liveForcedFollowupTrackNavigation: false,
   liveRequestId: 0,
   transfersRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
@@ -401,6 +402,7 @@ Page({
     this.liveRequestForced = false;
     this.liveForcedFollowup = null;
     this.liveForcedFollowupIncludeTransfers = false;
+    this.liveForcedFollowupTrackNavigation = false;
     this.setData({
       entryId: nextEntryId,
       loading: false,
@@ -452,15 +454,24 @@ Page({
       if (options.forceRefresh && !this.liveRequestForced) {
         if (this.liveForcedFollowup) {
           if (options.includeTransfers) this.liveForcedFollowupIncludeTransfers = true;
+          if (options.trackNavigation) this.liveForcedFollowupTrackNavigation = true;
           return this.liveForcedFollowup;
         }
         const activeRequest = this.liveRequest;
         this.liveForcedFollowupIncludeTransfers = options.includeTransfers === true;
+        this.liveForcedFollowupTrackNavigation = options.trackNavigation === true;
         const startForcedFollowup = () => {
           if (entryId !== this.data.entryId || eventId !== this.data.event) return;
           const includeTransfers = this.liveForcedFollowupIncludeTransfers;
+          const trackNavigation = this.liveForcedFollowupTrackNavigation;
           this.liveForcedFollowupIncludeTransfers = false;
-          return this.loadData({ ...options, includeTransfers, forceRefresh: true });
+          this.liveForcedFollowupTrackNavigation = false;
+          return this.loadData({
+            ...options,
+            includeTransfers,
+            trackNavigation,
+            forceRefresh: true
+          });
         };
         const followup = activeRequest.then(startForcedFollowup, startForcedFollowup);
         this.liveForcedFollowup = followup;
@@ -468,6 +479,7 @@ Page({
           if (this.liveForcedFollowup === followup) {
             this.liveForcedFollowup = null;
             this.liveForcedFollowupIncludeTransfers = false;
+            this.liveForcedFollowupTrackNavigation = false;
           }
         };
         void followup.then(clearFollowup, clearFollowup);

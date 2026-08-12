@@ -161,6 +161,7 @@ Page({
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "warm-enter");
     try {
       const context = await ensureAppContext({ reason: "page-show" });
+      if (!this._pageVisible) return;
       this._perfTracker.mark("contextReadyAt");
       this.syncAppState();
       if (shouldReloadHome(
@@ -183,7 +184,7 @@ Page({
         });
       }
     } catch (error) {
-      this.showContextError(error);
+      if (this._pageVisible) this.showContextError(error);
     }
     this.startCountdown();
   },
