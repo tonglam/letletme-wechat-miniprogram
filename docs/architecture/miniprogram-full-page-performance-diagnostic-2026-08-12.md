@@ -18,7 +18,7 @@
 | GraphQL under test | 75de0566fb4f7cdfa4e94ede58dbcfbf79556415 |
 | Web under test | 72d2d740f0862c33776085a41070515ecb5db7df |
 | Mini performance baseline | be6d2ae76d0fc56b50e91e46f20395c1dcb022f2 |
-| Mini final behavior head | 0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f |
+| Mini final behavior head | 6dbb96602fd3f860337dbd97bf3c363db9484cd5 |
 | WeChat DevTools | 2.01.2510290 |
 | 基础库 | 3.15.2 |
 | 设备 | iPhone 12/13 (Pro), iOS 10.0.1 |
@@ -177,11 +177,11 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 | Live Match tab race | 在途 Core 响应后保持 `finished / 已完赛` | 通过 |
 | CurrentEventInfo partial | 抛错并保持 season/event/contextRevision last-good | 通过 |
 
-最终 SHA `0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f` 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。
+最终 SHA `6dbb96602fd3f860337dbd97bf3c363db9484cd5` 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。
 
 ## 10. 自动检查与后端守卫
 
-- Mini：182/182 tests；typecheck 通过；lint 通过。
+- Mini：187/187 tests；typecheck 通过；lint 通过。
 - GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。
 - Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。
 - Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。
@@ -193,7 +193,7 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。
 3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。
 4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。
-5. 5/20/20 性能分布采自功能代码 SHA `be6d2ae`；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 `0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f`。
+5. 5/20/20 性能分布采自功能代码 SHA `be6d2ae`；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 `6dbb96602fd3f860337dbd97bf3c363db9484cd5`。
 6. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。
 
 ## 12. 下一步监控
@@ -201,3 +201,18 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 1. 首个真实调价日复测 positive PlayerValues 端到端分段。
 2. 有测试账号时补 Entry、My FPL 和 Live READY 登录 rich-state UI 样本。
 3. 对价格 669ms 最大值和首页 secondary complete 建趋势观察；禁止通过延长 TTL、隐藏请求或提前关闭 loading 改写口径。
+
+## 当前 Head Review 闭环（2026-08-13）
+
+当前小程序行为验收 head：6dbb96602fd3f860337dbd97bf3c363db9484cd5。既有固定设备性能样本及其原始采样 SHA 保持不变，本节只记录最终 review 修复后的精确 head 回归，禁止用 DevTools 固定等待时间替换产品 p50/p95。
+
+| 检查项 | 结果 |
+|---|---|
+| Codex review 发现 | 7 项：Fixture/Price/Tournament partial error、Tournament context retry、Live Entry GW transfer 隔离、My FPL season lazy cache、Live Match kickoff transition |
+| 自动检查 | 187/187 tests、typecheck、lint 全部通过 |
+| 定向 DevTools | 5/5：两个 partial last-good、GW 隔离、season 隔离、kickoff transition；失败 0 |
+| 25 页语义遍历 | 25/25；23 个物理路由 + 2 个预期 redirect |
+| 网络拓扑 | GraphQL 实际 URL 仅 http://localhost:3000/api/graphql；直连 4000 为 0；override 为空 |
+| 运行时异常 | console error 0；exception 0 |
+
+说明：初版全页重跑脚本额外要求所有页面必须拥有统一的 hasData/emptyState 字段，误报 17/25。原始逐页样本保留；按既定语义口径（预期路由、primary 节点存在、loading/refreshing 均结束）重算为 25/25。该修正只纠正临时验收器，不删除页面、不删除样本，也不改变性能门槛。
