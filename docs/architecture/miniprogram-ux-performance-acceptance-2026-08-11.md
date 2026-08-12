@@ -520,3 +520,27 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 - setData callback：p50 `26ms`，p95 `37ms`，max `38ms`。
 
 这组数据覆盖的是页面缓存重载，不宣称 freshness 有效 `onShow`；本次模拟器返回路径没有触发可单独统计的 `onShow`。此前“warm n=20 缺失”的结论由本节修订为“warm cached-page n=20 已完成，onShow 单独样本未观测”。冷启动最大 `2702ms` 和 PlayerValues positive miss 仍是未通过项，报告状态不变。
+
+## 2026-08-12 冷启动口径与当前代码刷新样本修订
+
+本次重新采集使用小程序埋点提交 `6544b8c`，清除数据缓存后得到 5 条关联 cold 样本。`launchDuration` 是 `app.onLaunch` 起点到 app 初始化完成；`loadToVisible` 是页面 Fixture load 起点到一次性 `setData` callback。两段串行，因此以二者之和表示小程序产品链路的 cold 到 Fixture 可见：
+
+| 样本 | app launchDuration | Fixture loadToVisible | 产品 cold 到 Fixture 可见 |
+|---:|---:|---:|---:|
+| 1 | 153ms | 125ms | 278ms |
+| 2 | 145ms | 132ms | 277ms |
+| 3 | 141ms | 124ms | 265ms |
+| 4 | 159ms | 124ms | 283ms |
+| 5 | 171ms | 129ms | 300ms |
+| 最大值 | 171ms | 132ms | 300ms |
+
+样本量为 5，按门槛不计算 p50/p95。产品 cold 链路最大 `300ms`，低于 `1200ms`；这进一步证明 Fixture 后端和小程序 setData 不是慢点。DevTools `[system] Launch Time` 的 `1.0–2.7s` 另列为 IDE/模拟器启动开销，其中 `2.7s` 不能作为小程序产品链路的耗时，也不能从产品指标中删除，最终报告必须同时展示两者。
+
+当前代码刷新重新采集 `n=20`：
+
+- Fixture 可见：p50 `125ms`，p95 `131ms`，max `131ms`。
+- Fixture request：p50 `122ms`，p95 `127ms`，max `128ms`。
+- setData callback：p50 `3ms`，p95 `4ms`，max `8ms`。
+- response 到 setData：p50/p95/max 均 `0ms`。
+
+综合判定：小程序产品 cold/refresh/warm cached-page 分段均满足对应时间门槛；但 DevTools 原始启动 outlier、PlayerValues positive miss、25 页面完整功能验收和部署后精确 SHA 仍未完成，所以报告状态继续为 **代码已实施，尚未验收**，不执行合并发布。
