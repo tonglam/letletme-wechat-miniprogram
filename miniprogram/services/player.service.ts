@@ -180,8 +180,8 @@ function currentEventId(): number {
   return Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
 }
 
-function currentSeason(): string {
-  const season = String(getApp<IAppOption>().globalData.season || "");
+function currentSeason(explicitSeason?: string): string {
+  const season = String(explicitSeason || getApp<IAppOption>().globalData.season || "").trim();
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   return season;
 }
@@ -256,7 +256,7 @@ export async function getPlayerInfoByElement(element: number): Promise<PlayerDet
   return getPlayerDetailByElement(element);
 }
 
-export async function getPlayerInfoByCode(code: number | string, _season?: string): Promise<PlayerDetail> {
+export async function getPlayerInfoByCode(code: number | string, season?: string): Promise<PlayerDetail> {
   const playerId = Number(code);
   const data = await graphqlRequest<PlayerResponse>(
     PLAYER,
@@ -264,7 +264,7 @@ export async function getPlayerInfoByCode(code: number | string, _season?: strin
     {
       authMode: "public",
       cachePolicy: "reporting",
-      cacheVariant: `season:${currentSeason()}`
+      cacheVariant: `season:${currentSeason(season)}`
     }
   );
   if (!data.player) {

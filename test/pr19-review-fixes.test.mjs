@@ -46,6 +46,15 @@ test("price context is optional while season-scoped deep links await it", () => 
   assert.match(teamDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getTeamSummary/);
 });
 
+test("player detail consumes an explicit route season when shared context is unavailable", () => {
+  const playerService = source("miniprogram/services/player.service.ts");
+  assert.match(
+    playerService,
+    /getPlayerInfoByCode\(code: number \| string, season\?: string\)[\s\S]*cacheVariant: `season:\$\{currentSeason\(season\)\}`/
+  );
+  assert.doesNotMatch(playerService, /getPlayerInfoByCode\([^)]*_season/);
+});
+
 test("cold context failures settle Home and all Live page loading states", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   const entry = source("miniprogram/pages/live/entry/entry.ts");
