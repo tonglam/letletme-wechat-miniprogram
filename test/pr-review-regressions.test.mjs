@@ -100,7 +100,7 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
-    /if \(contextMissing \|\| deadlineExpired\) \{[\s\S]*await app\.initAppData\(true\)[\s\S]*await this\.loadPage\(true\)/
+    /if \(contextMissing \|\| deadlineExpired\) \{[\s\S]*await ensureAppContext\(\{ forceRefresh: true, reason: "pull-refresh" \}\)[\s\S]*await this\.loadPage\(true\)/
   );
 });
 
@@ -109,11 +109,11 @@ test("empty fixture directories clear previously composed cards", () => {
   assert.match(fixtures, /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/);
 });
 
-test("Explore waits for shared launch context before syncing its context row", () => {
+test("Explore paints its route registry without a context network request", () => {
   const explore = source("miniprogram/pages/explore/index/index.ts");
-  assert.match(explore, /async onLoad\(\)/);
-  assert.match(explore, /await app\.initAppData\(false\)[\s\S]*this\.syncContext\(\)/);
-  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.refreshContext\(\)/);
+  assert.match(explore, /onLoad\(\)[\s\S]*this\.buildGroups\(\)[\s\S]*this\.syncContext\(\)/);
+  assert.doesNotMatch(explore, /initAppData\(/);
+  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.syncContext\(\)/);
 });
 
 test("player directory completion preserves edits made during the request", () => {
@@ -139,19 +139,19 @@ test("My FPL last-good views survive context and refresh failures", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(overview, /fallbackEvent[\s\S]*if \(cached\)[\s\S]*eventContextAvailable: true/);
-  assert.match(team, /await app\.initAppData\(false\)[\s\S]*wasCurrentEvent/);
+  assert.match(team, /await this\.ensureContext\("page-show"\)[\s\S]*wasCurrentEvent/);
   assert.match(team, /restartForPrincipalChange\(entryId\)/);
   assert.match(template, /error && !hasTeamData/);
   assert.match(template, /当前显示上次成功结果/);
   assert.match(overview, /cached\.season === season/);
-  assert.match(team, /retainTransferRowsAfterFailure/);
+  assert.match(team, /async loadTab[\s\S]*catch \(error\)[\s\S]*tabError: message/);
 });
 
 test("match rollover detaches same-status in-flight work", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /nextEventId !== this\.currentEventId[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null[\s\S]*this\.liveRequestKey = ""/
+    /nextCurrentEventId !== this\.currentEventId \|\| nextTargetEventId !== this\.targetEventId[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null[\s\S]*this\.liveRequestKey = ""/
   );
 });
 
@@ -190,8 +190,9 @@ test("team summary requests discard older GW responses", () => {
   assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
   assert.match(
     team,
-    /if \(!eventResult\) \{[\s\S]*const historySupport = mapHistorySupportRows[\s\S]*hasTeamData: hasHistory[\s\S]*emptyState: hasHistory \? "" : "event"/
+    /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/
   );
+  assert.match(team, /async loadTab[\s\S]*getEntryTeamStatsHistory[\s\S]*getEntryTeamStatsTransfers/);
   assert.match(team, /function mapHistorySupportRows[\s\S]*seasonHistoryRows: \[\.\.\.history\.history\]/);
   assert.match(team, /catch \(error\) \{[\s\S]*restartForPrincipalChange\(entryId\)/);
 });
@@ -214,7 +215,7 @@ test("unchanged live probes refresh the displayed check time", () => {
 test("fixture windows honor event and season cache identity on open and resume", () => {
   const app = source("miniprogram/app.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
-  assert.match(app, /getCurrentEventAndDeadline\(forceRefresh\)/);
+  assert.match(app, /await ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*reason:/);
   assert.match(app, /await this\._pendingInit;[\s\S]*return this\.initAppData\(true\)/);
   assert.match(fixtures, /await this\.syncEventContext\(false\)/);
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false\)/);
@@ -306,7 +307,9 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
     "the fixture response releases the first screen before auxiliary Home data settles"
   );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
-  assert.match(service, /cacheVariant: season \? `season:\$\{season\}` : "season:unknown"/);
+  assert.match(service, /if \(!season\) throw new Error/);
+  assert.match(service, /cacheVariant: `season:\$\{season\}`/);
+  assert.doesNotMatch(service, /season:unknown/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
@@ -319,7 +322,9 @@ test("initial league and competition payloads use named session cache policies",
   const common = source("miniprogram/services/common.service.ts");
   assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false\)/);
   assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false\)/);
-  assert.match(common, /getTeamList[\s\S]*cacheVariant: _season \? `season:\$\{_season\}` : "season:unknown"/);
+  assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
+  assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
+  assert.doesNotMatch(common, /season:unknown/);
 });
 
 test("resident league and competition rows never cross a season", () => {
@@ -426,10 +431,10 @@ test("Match and Team retries bypass repeating-season caches", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
-  assert.match(team, /onRetry\(\)[\s\S]*this\.loadData\(true\)/);
+  assert.match(team, /onRetry\(\)[\s\S]*activeTab === "squad"[\s\S]*this\.loadData\(true\)[\s\S]*this\.loadTab/);
   assert.match(team, /onEmptyAction\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(team, /const contextChanged = seasonChanged \|\| \(eventChanged && wasCurrentEvent\)/);
-  assert.match(team, /if \(!eventResult\) \{[\s\S]*transferError,[\s\S]*hasTeamData: hasHistory/);
+  assert.match(team, /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/);
   assert.match(fixtures, /selectedWindowByUser[\s\S]*const startEvent = this\.selectedWindowByUser/);
 });
 
@@ -478,16 +483,17 @@ test("personal responses never cross an authoritative follow change", () => {
 });
 
 test("all Live surfaces refresh event context before resume polling", () => {
-  for (const path of [
-    "miniprogram/pages/live/entry/entry.ts",
-    "miniprogram/pages/live/match/match.ts",
-    "miniprogram/pages/live/tournament/tournament.ts"
-  ]) {
-    const page = source(path);
-    assert.match(page, /async onShow\(\)/, path);
-    assert.match(page, /if \(resumed\)[\s\S]*await app\.initAppData\(false\)/, path);
-    assert.match(page, /nextEventId[\s\S]*forceRefresh: true/, path);
-  }
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(entry, /async onShow\(\)/);
+  assert.match(entry, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(entry, /nextEventId[\s\S]*forceRefresh: true/);
+  const match = source("miniprogram/pages/live/match/match.ts");
+  assert.match(match, /async onShow\(\)/);
+  assert.match(match, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(match, /nextCurrentEventId[\s\S]*nextTargetEventId[\s\S]*forceRefresh: true/);
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(tournament, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(tournament, /nextEventId[\s\S]*forceRefresh: true/);
 });
 
 test("unknown fixture difficulty uses a neutral style", () => {
