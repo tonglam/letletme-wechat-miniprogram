@@ -90,6 +90,33 @@ test("manual Live Entry force refresh runs once after an ordinary in-flight read
   assert.equal(followups[0].includeTransfers, true);
 });
 
+test("manual Live Entry force refresh survives failure of the ordinary in-flight read", async () => {
+  let rejectCurrent;
+  const current = new Promise((_resolve, reject) => {
+    rejectCurrent = reject;
+  });
+  const followups = [];
+  const context = {
+    data: { entryId: 123, event: 33 },
+    liveRequest: current,
+    liveRequestKey: "123:33",
+    liveRequestForced: false,
+    liveForcedFollowup: null,
+    loadTransfersAfterLive: false,
+    restartForPrincipalChange: () => false,
+    loadData(options) {
+      followups.push(options);
+      return Promise.resolve();
+    }
+  };
+
+  const refresh = entryPage.loadData.call(context, { forceRefresh: true });
+  rejectCurrent(new Error("ordinary request failed"));
+  await refresh;
+  assert.equal(followups.length, 1);
+  assert.equal(followups[0].forceRefresh, true);
+});
+
 test("Live overlay is authoritative for match play status", () => {
   const merged = matchModule.mergeLiveOverlay(
     [{ id: 1, matchId: 1, status: "not_start", playStatus: "not_start" }],
@@ -145,6 +172,8 @@ test("My FPL keeps support tabs available without an event summary", () => {
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(page, /if \(!eventResult\)[\s\S]*supportAvailable: true[\s\S]*loadTab/);
   assert.match(template, /emptyState && !supportAvailable/);
+  assert.match(template, /emptyState === 'event' && !hasTeamData/);
+  assert.doesNotMatch(template, /emptyState === 'event' && !hasTeamData && showSquad/);
   assert.match(template, /showSquad && hasTeamData/);
   assert.match(template, /data-tab="history"/);
 });

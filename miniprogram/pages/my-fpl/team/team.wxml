@@ -46,7 +46,7 @@
 
   <block wx:else>
     <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
-    <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData && showSquad}}" class="section">
+    <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData}}" class="section">
       <app-empty-state
         eyebrow="{{emptyEyebrow}}"
         title="{{emptyTitle}}"

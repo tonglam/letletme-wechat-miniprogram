@@ -418,10 +418,11 @@ Page({
       if (options.forceRefresh && !this.liveRequestForced) {
         if (this.liveForcedFollowup) return this.liveForcedFollowup;
         const activeRequest = this.liveRequest;
-        const followup = activeRequest.then(() => {
+        const startForcedFollowup = () => {
           if (entryId !== this.data.entryId || eventId !== this.data.event) return;
           return this.loadData({ ...options, forceRefresh: true });
-        });
+        };
+        const followup = activeRequest.then(startForcedFollowup, startForcedFollowup);
         this.liveForcedFollowup = followup;
         const clearFollowup = () => {
           if (this.liveForcedFollowup === followup) this.liveForcedFollowup = null;
