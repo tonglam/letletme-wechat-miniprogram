@@ -49,9 +49,20 @@ export interface RenderCommitRecord {
   ts: number;
 }
 
+export interface HomeFixtureTimingRecord {
+  surface: "home-fixtures";
+  mode: "cold" | "warm" | "refresh";
+  requestDuration: number;
+  responseToSetData: number;
+  setDataCallback: number;
+  loadToVisible: number;
+  ts: number;
+}
+
 export interface StoredPerf {
   apiRecords: ApiRecord[];
   renderCommits?: RenderCommitRecord[];
+  homeFixtureTimings?: HomeFixtureTimingRecord[];
   liveTransitions?: LiveTransitionRecord[];
   myFplVisits?: MyFplVisitRecord[];
   competitionVisits?: CompetitionVisitRecord[];
@@ -162,6 +173,18 @@ export function recordRenderCommit(record: Omit<RenderCommitRecord, "ts">): void
   flush();
 }
 
+export function recordHomeFixtureTiming(
+  record: Omit<HomeFixtureTimingRecord, "ts">
+): void {
+  const data = load();
+  if (!Array.isArray(data.homeFixtureTimings)) data.homeFixtureTimings = [];
+  if (data.homeFixtureTimings.length >= MAX_RECORDS) {
+    data.homeFixtureTimings.splice(0, data.homeFixtureTimings.length - MAX_RECORDS + 1);
+  }
+  data.homeFixtureTimings.push({ ...record, ts: Date.now() });
+  flush();
+}
+
 export function recordLiveTransition(record: Omit<LiveTransitionRecord, "ts">): void {
   const data = load();
   if (!Array.isArray(data.liveTransitions)) data.liveTransitions = [];
@@ -208,6 +231,7 @@ export function getPerf(): StoredPerf {
     ...data,
     apiRecords: data.apiRecords.slice(),
     renderCommits: (data.renderCommits ?? []).slice(),
+    homeFixtureTimings: (data.homeFixtureTimings ?? []).slice(),
     liveTransitions: (data.liveTransitions ?? []).slice(),
     myFplVisits: (data.myFplVisits ?? []).slice(),
     competitionVisits: (data.competitionVisits ?? []).slice(),
@@ -219,6 +243,7 @@ export function clearPerf(): void {
   _cache = {
     apiRecords: [],
     renderCommits: [],
+    homeFixtureTimings: [],
     liveTransitions: [],
     myFplVisits: [],
     competitionVisits: [],

@@ -11,7 +11,7 @@ import { goToEntryProfile, goToEntrySearch, navigateTo } from "../../../utils/na
 import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
-import { recordRenderCommit } from "../../../utils/perf";
+import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 
 interface HomeData {
   loading: boolean;
@@ -142,6 +142,8 @@ Page({
     }
 
     try {
+      const fixtureLoadStartedAt = Date.now();
+      const fixtureRequestStartedAt = Date.now();
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
       const hadFixtureRows = this.data.fixtureRows.length > 0 && this.data.selectedFixtureGw === fixtureGw;
@@ -165,6 +167,7 @@ Page({
         return { fixtures: hadFixtureRows ? null : [] as Fixture[], failed: true };
       });
       const fixtureResult = await fixtureTask;
+      const fixtureResponseAt = Date.now();
       if (requestId !== this._loadRequestId) return;
       if (fixtureResult.failed && hadFixtureRows) {
         fixtureError = "";
@@ -180,10 +183,19 @@ Page({
           fixtureLoading: false,
           loading: false
         }, () => {
+          const fixtureSetDataCallbackAt = Date.now();
           recordRenderCommit({
             surface: "home-fixtures",
             itemCount: this.data.fixtureRows.length,
-            duration: Date.now() - fixtureCommitStartedAt
+            duration: fixtureSetDataCallbackAt - fixtureCommitStartedAt
+          });
+          recordHomeFixtureTiming({
+            surface: "home-fixtures",
+            mode: forceRefresh ? "refresh" : hadFixtureRows ? "warm" : "cold",
+            requestDuration: fixtureResponseAt - fixtureRequestStartedAt,
+            responseToSetData: fixtureCommitStartedAt - fixtureResponseAt,
+            setDataCallback: fixtureSetDataCallbackAt - fixtureCommitStartedAt,
+            loadToVisible: fixtureSetDataCallbackAt - fixtureLoadStartedAt
           });
           resolve();
         });
