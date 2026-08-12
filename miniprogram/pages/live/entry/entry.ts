@@ -117,6 +117,7 @@ Page({
   liveRequestKey: "",
   liveRequestForced: false,
   liveForcedFollowup: null as Promise<void> | null,
+  liveForcedFollowupIncludeTransfers: false,
   liveRequestId: 0,
   transfersRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
@@ -393,6 +394,7 @@ Page({
     this.liveRequestKey = "";
     this.liveRequestForced = false;
     this.liveForcedFollowup = null;
+    this.liveForcedFollowupIncludeTransfers = false;
     this.setData({
       entryId: nextEntryId,
       loading: false,
@@ -442,16 +444,25 @@ Page({
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       if (options.forceRefresh && !this.liveRequestForced) {
-        if (this.liveForcedFollowup) return this.liveForcedFollowup;
+        if (this.liveForcedFollowup) {
+          if (options.includeTransfers) this.liveForcedFollowupIncludeTransfers = true;
+          return this.liveForcedFollowup;
+        }
         const activeRequest = this.liveRequest;
+        this.liveForcedFollowupIncludeTransfers = options.includeTransfers === true;
         const startForcedFollowup = () => {
           if (entryId !== this.data.entryId || eventId !== this.data.event) return;
-          return this.loadData({ ...options, forceRefresh: true });
+          const includeTransfers = this.liveForcedFollowupIncludeTransfers;
+          this.liveForcedFollowupIncludeTransfers = false;
+          return this.loadData({ ...options, includeTransfers, forceRefresh: true });
         };
         const followup = activeRequest.then(startForcedFollowup, startForcedFollowup);
         this.liveForcedFollowup = followup;
         const clearFollowup = () => {
-          if (this.liveForcedFollowup === followup) this.liveForcedFollowup = null;
+          if (this.liveForcedFollowup === followup) {
+            this.liveForcedFollowup = null;
+            this.liveForcedFollowupIncludeTransfers = false;
+          }
         };
         void followup.then(clearFollowup, clearFollowup);
         return followup;
@@ -564,7 +575,7 @@ Page({
         this.liveRefresh?.sync();
         if (this.loadTransfersAfterLive) {
           this.loadTransfersAfterLive = false;
-          void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
+          await this.loadTransfers(entryId, eventId, options.forceRefresh === true);
         }
         this.syncDisplayState();
       } catch (error) {
@@ -700,6 +711,7 @@ Page({
     // previous GW before the new score response can make the page visible.
     this.transfersRequestId += 1;
     this.loadTransfersAfterLive = false;
+    this.liveForcedFollowupIncludeTransfers = false;
     this.setData({
       event: event.detail.value,
       hasData: false,

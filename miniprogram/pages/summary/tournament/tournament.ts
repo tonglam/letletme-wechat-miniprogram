@@ -11,6 +11,8 @@ import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
 type TournamentEmptyState = "" | "entry" | "tournaments";
@@ -133,7 +135,11 @@ PerformancePage({
     });
   },
 
-  async loadTournaments(forceRefresh = false) {
+  async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
     if (!this.data.entryId) {
       this.setData({
         loading: false,
@@ -162,7 +168,7 @@ PerformancePage({
     const eventBeforeDirectoryRead = this.data.event;
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
-      const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh);
+      const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh, trace);
       if (contextMissingBeforeDirectoryRead) {
         this.syncRecoveredEvent(eventBeforeDirectoryRead);
       }
@@ -190,7 +196,7 @@ PerformancePage({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadSummary(forceRefresh);
+      await this.loadSummary(forceRefresh, trace);
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
@@ -198,7 +204,11 @@ PerformancePage({
     }
   },
 
-  async loadSummary(forceRefresh = false) {
+  async loadSummary(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "summary-tournament-results",
+      trigger: forceRefresh ? "refresh" : "tab"
+    });
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
     if (!tournament || !this.data.entryId) {
       return;
@@ -206,7 +216,13 @@ PerformancePage({
 
     this.setData({ loading: true, error: "" });
     try {
-      const payload = await getTournamentSummary(tournament.id, this.data.event, this.data.entryId, forceRefresh);
+      const payload = await getTournamentSummary(
+        tournament.id,
+        this.data.event,
+        this.data.entryId,
+        forceRefresh,
+        trace
+      );
       wx.setStorageSync(storageKeys.selectedSummaryTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentName, tournament.name);
       this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, this.data.entryId, this.data.event));

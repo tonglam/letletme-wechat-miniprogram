@@ -262,6 +262,17 @@ export function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveM
   });
 }
 
+export function contextDeadlineTargetAt(
+  nextDeadlineAt: number | null | undefined,
+  now: number,
+  retry = false
+): number | null {
+  if (retry) return now + 30_000;
+  const deadline = Number(nextDeadlineAt);
+  if (!Number.isFinite(deadline) || deadline <= 0) return null;
+  return deadline <= now ? now + 30_000 : deadline;
+}
+
 Page({
   data: {
     loading: false,
@@ -295,6 +306,7 @@ Page({
   coreMatches: [] as LiveMatch[],
   liveWindow: false,
   kickoffTransitionTimer: undefined as number | undefined,
+  contextDeadlineTimer: undefined as number | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
@@ -332,6 +344,7 @@ Page({
     this.currentEventId = context.currentEvent || 0;
     this.targetEventId = context.displayEvent || 0;
     this.loadedSeason = context.season || undefined;
+    this.armContextDeadline(context.nextDeadlineAt);
     if (!context.currentEvent && this.targetEventId && !isValidStatus(storedStatus)) {
       // Preseason/offseason uses the schema-backed not-started bucket.
       this.setData({
@@ -393,6 +406,62 @@ Page({
     if (this.kickoffTransitionTimer !== undefined) {
       clearTimeout(this.kickoffTransitionTimer);
       this.kickoffTransitionTimer = undefined;
+    }
+  },
+
+  clearContextDeadline() {
+    if (this.contextDeadlineTimer !== undefined) {
+      clearTimeout(this.contextDeadlineTimer);
+      this.contextDeadlineTimer = undefined;
+    }
+  },
+
+  armContextDeadline(nextDeadlineAt?: number | null, retry = false) {
+    this.clearContextDeadline();
+    if (!this.pageVisible) return;
+    const now = Date.now();
+    const targetAt = contextDeadlineTargetAt(nextDeadlineAt, now, retry);
+    if (targetAt === null) return;
+    const delay = Math.min(Math.max(0, targetAt - now + 250), 2_147_000_000);
+    this.contextDeadlineTimer = setTimeout(() => {
+      this.contextDeadlineTimer = undefined;
+      if (!this.pageVisible) return;
+      if (targetAt > Date.now()) {
+        this.armContextDeadline(targetAt);
+        return;
+      }
+      void this.refreshContextAtDeadline();
+    }, delay);
+  },
+
+  async refreshContextAtDeadline() {
+    try {
+      const context = await this.ensureContext("page-show", true);
+      if (!this.pageVisible) return;
+      const nextCurrentEventId = context.currentEvent || 0;
+      const nextTargetEventId = context.displayEvent || 0;
+      const nextSeason = context.season || undefined;
+      const changed = nextCurrentEventId !== this.currentEventId
+        || nextTargetEventId !== this.targetEventId
+        || Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+      this.currentEventId = nextCurrentEventId;
+      this.targetEventId = nextTargetEventId;
+      if (nextSeason) this.loadedSeason = nextSeason;
+      this.armContextDeadline(context.nextDeadlineAt);
+      if (!changed) return;
+      this.liveRefresh?.stop();
+      this.clearKickoffTransition();
+      this.liveRequestId += 1;
+      this.liveRequest = null;
+      this.liveRequestKey = "";
+      this.liveSnapshot = null;
+      this.cachedLiveStoredAt = undefined;
+      this.setData({ matches: [], groups: [], hasData: false, fixtureStaleMessage: "", lastUpdated: "" });
+      this.liveRefresh?.sync();
+      await this.loadData({ forceRefresh: true });
+      this.syncDisplayState();
+    } catch {
+      this.armContextDeadline(undefined, true);
     }
   },
 
@@ -486,6 +555,7 @@ Page({
     const nextCurrentEventId = context?.currentEvent || 0;
     const nextTargetEventId = context?.displayEvent || 0;
     const nextSeason = context?.season || undefined;
+    this.armContextDeadline(context?.nextDeadlineAt);
     const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
     if (nextSeason) this.loadedSeason = nextSeason;
     if (seasonChanged || nextCurrentEventId !== this.currentEventId || nextTargetEventId !== this.targetEventId) {
@@ -523,6 +593,7 @@ Page({
     this.pageVisible = false;
     this.liveRefresh?.stop();
     this.clearKickoffTransition();
+    this.clearContextDeadline();
     this.perfTracker?.disconnect();
   },
 
@@ -530,6 +601,7 @@ Page({
     this.pageVisible = false;
     this.liveRefresh?.dispose();
     this.clearKickoffTransition();
+    this.clearContextDeadline();
     this.perfTracker?.disconnect();
   },
 
@@ -540,6 +612,7 @@ Page({
       const context = await this.ensureContext("pull-refresh");
       this.currentEventId = context.currentEvent || 0;
       this.targetEventId = context.displayEvent || 0;
+      this.armContextDeadline(context.nextDeadlineAt);
       this.perfTracker.mark("contextReadyAt");
       await this.loadData({ background: true, forceRefresh: true });
     } catch (error) {
@@ -570,6 +643,7 @@ Page({
         if (!targetEvent) throw new Error("当前没有可展示的比赛周");
         this.currentEventId = context.currentEvent || 0;
         this.targetEventId = targetEvent;
+        this.armContextDeadline(context.nextDeadlineAt);
         this.perfTracker?.mark("primaryRequestStartAt");
         const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
           forceRefresh: options.forceRefresh,

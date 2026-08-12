@@ -1,4 +1,5 @@
 import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { PageRequestTrace } from "./graphql.service";
 import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from "../models/tournament";
 import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
@@ -157,7 +158,11 @@ function currentSeason(): string {
     || String(getApp<IAppOption>().globalData.season || "");
 }
 
-async function readDirectory(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
+async function readDirectory(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryTournamentRow[]> {
   let season = currentSeason();
   if (!season) {
     const context = await ensureAppContext({
@@ -169,7 +174,7 @@ async function readDirectory(entry: number, forceRefresh = false): Promise<Entry
     });
     season = context.season;
   }
-  return (await readEntryTournamentDirectory(entry, season, { forceRefresh })).data;
+  return (await readEntryTournamentDirectory(entry, season, { forceRefresh, trace })).data;
 }
 
 export interface TournamentEventResult {
@@ -217,8 +222,12 @@ interface TournamentSelectionStatsResponse {
   tournamentSelectionStats: TournamentSelectionStats | null;
 }
 
-export async function getEntryPointsRaceTournament(entry: number, forceRefresh = false): Promise<TournamentOption[]> {
-  const rows = await readDirectory(entry, forceRefresh);
+export async function getEntryPointsRaceTournament(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<TournamentOption[]> {
+  const rows = await readDirectory(entry, forceRefresh, trace);
   return rows
     .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
     .map((t) => ({
@@ -237,8 +246,12 @@ export async function getEntryAllTournaments(entry: number, forceRefresh = false
   return readDirectory(entry, forceRefresh);
 }
 
-export async function getEntrySummaryTournaments(entry: number, forceRefresh = false): Promise<EntryTournament[]> {
-  const rows = await readDirectory(entry, forceRefresh);
+export async function getEntrySummaryTournaments(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryTournament[]> {
+  const rows = await readDirectory(entry, forceRefresh, trace);
   return rows
     .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
     .map((t) => ({
@@ -269,23 +282,26 @@ export async function getTournamentSummary(
   tournamentId: number,
   eventId: number,
   entryId: number,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<TournamentSummaryPayload> {
   return graphqlRequest<TournamentSummaryResponse>(GET_TOURNAMENT_SUMMARY, { tournamentId, eventId, entryId }, {
     cachePolicy: "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
 }
 
 export async function getTournamentSelectionStats(
   tournamentId: number,
   eventId: number,
-  limit = 10
+  limit = 10,
+  trace?: PageRequestTrace
 ): Promise<TournamentSelectionStats | null> {
   const data = await graphqlRequest<TournamentSelectionStatsResponse>(GET_TOURNAMENT_SELECTION_STATS, {
     tournamentId,
     eventId,
     limit
-  });
+  }, { trace });
   return data.tournamentSelectionStats;
 }

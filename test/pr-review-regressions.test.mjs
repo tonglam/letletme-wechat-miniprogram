@@ -301,7 +301,7 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(service, /eventFixtures\(eventId:/);
   assert.match(service, /query CoreEventFixtureSchedule/);
   assert.doesNotMatch(common, /query EventFixtures/);
-  assert.match(home, /getCoreEventFixtureSchedule/);
+  assert.match(home, /readCoreEventFixtureSchedule/);
   assert.ok(
     home.indexOf("const fixtureResult = await fixtureTask") <
       home.indexOf("void this.loadSecondaryData"),
@@ -389,9 +389,9 @@ test("profile and tournament pull-to-refresh bypass reporting caches", () => {
   assert.match(profile, /onPullDownRefresh\(\)[\s\S]*loadEntry\(Number\(this\.data\.entryId\), true\)/);
   assert.match(profile, /loadEntry\(entryId: number, forceRefresh = false\)[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
   assert.match(tournament, /async refreshData\(\)[\s\S]*loadTournaments\(true\)/);
-  assert.match(tournament, /loadTournaments\(forceRefresh = false\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh\)[\s\S]*loadSummary\(forceRefresh\)/);
-  assert.match(tournament, /loadSummary\(forceRefresh = false\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh\)/);
-  assert.match(service, /getEntrySummaryTournaments\(entry: number, forceRefresh = false\)[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
+  assert.match(tournament, /loadTournaments\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh, trace\)[\s\S]*loadSummary\(forceRefresh, trace\)/);
+  assert.match(tournament, /loadSummary\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh,[\s\S]*trace/);
+  assert.match(service, /getEntrySummaryTournaments\([\s\S]*forceRefresh = false,[\s\S]*trace\?: PageRequestTrace[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
   assert.match(service, /getTournamentSummary\([\s\S]*forceRefresh = false[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
 });
 

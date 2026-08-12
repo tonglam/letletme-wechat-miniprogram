@@ -241,19 +241,20 @@ Page({
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
     const changeDate = this.data.changeDate;
     const hasRows = this.data.riseChanges.length > 0 || this.data.fallChanges.length > 0;
+    const tracker = this.perfTracker;
     this.setData({
       loading: !hasRows,
       refreshing: hasRows,
       error: "",
       staleMessage: ""
     });
-    this.perfTracker?.mark("primaryRequestStartAt");
+    tracker?.mark("primaryRequestStartAt");
     const context = getAppContextSnapshot();
     const readTask = readPlayerValueByDate(changeDate, {
       forceRefresh,
-      trace: this.perfTracker && context
+      trace: tracker && context
         ? {
-            navigationId: this.perfTracker.navigationId,
+            navigationId: tracker.navigationId,
             callerSurface: "price-daily",
             trigger: forceRefresh ? "refresh" : "load",
             forceReason: forceRefresh ? "user-refresh" : undefined,
@@ -262,20 +263,20 @@ Page({
         : undefined
     });
     observeSoftTimeout(readTask, 2900, () => {
-      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
-      this.perfTracker?.mark("softFailureAt");
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      tracker?.mark("softFailureAt");
       this.setData({
         loading: false,
         refreshing: false,
         error: hasRows
           ? "刷新时间较长，请稍后重试；当前继续显示已有数据"
           : "加载时间较长，请稍后重试；当前请求仍在后台继续"
-      }, () => wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content")));
+      }, () => wx.nextTick(() => tracker?.observePrimary("#perf-primary-content")));
     });
     try {
       const read = await readTask;
       if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
-      this.perfTracker?.mark("primaryResponseAt");
+      tracker?.mark("primaryResponseAt");
       await setDataAsync(this, {
         ...splitChanges(read.data),
         error: "",
@@ -283,8 +284,8 @@ Page({
           ? `当前为上次成功数据 · ${new Date(read.meta.storedAt).toLocaleString()}`
           : ""
       });
-      this.perfTracker?.mark("primarySetDataAt");
-      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
+      tracker?.mark("primarySetDataAt");
+      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
     } catch (error) {
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });

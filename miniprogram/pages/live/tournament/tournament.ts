@@ -35,6 +35,8 @@ import {
   type TournamentTeamOption
 } from "../../../services/live-tournament";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments";
@@ -140,6 +142,7 @@ interface LiveTournamentData {
 interface LiveTournamentLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
+  trace?: PageRequestTrace;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -614,7 +617,11 @@ PerformancePage({
     return true;
   },
 
-  async loadTournaments(forceRefresh = false) {
+  async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "live-tournament-directory",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
     const entryId = this.data.entryId;
     if (!entryId) {
       this.liveRefresh?.stop();
@@ -658,7 +665,7 @@ PerformancePage({
       emptyActionText: ""
     });
     try {
-      const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh);
+      const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh, trace);
       if (requestId !== this.tournamentListRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       if (tournaments.length === 0) {
@@ -732,7 +739,8 @@ PerformancePage({
       }
       await this.loadRows({
         background: !selectionChanged && this.data.hasData,
-        forceRefresh
+        forceRefresh,
+        trace
       });
     } catch (error) {
       if (requestId !== this.tournamentListRequestId) return;
@@ -755,6 +763,10 @@ PerformancePage({
   _submittedKeyword: "",
 
   loadRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
+    const trace = options.trace || capturePageRequestTrace({
+      callerSurface: "live-tournament-rows",
+      trigger: options.forceRefresh ? "refresh" : "load"
+    });
     const entryId = this.data.entryId;
     if (!entryId) {
       this.setData({ rows: [], displayedRows: [], hasMore: false });
@@ -806,8 +818,19 @@ PerformancePage({
     const request = (async () => {
       try {
         const liveResult = keyword
-          ? await searchLivePointsByTournamentSnapshot(selected.id, eventId, keyword, options.forceRefresh === true)
-          : await getLivePointsByTournamentSnapshot(selected.id, eventId, options.forceRefresh === true);
+          ? await searchLivePointsByTournamentSnapshot(
+              selected.id,
+              eventId,
+              keyword,
+              options.forceRefresh === true,
+              trace
+            )
+          : await getLivePointsByTournamentSnapshot(
+              selected.id,
+              eventId,
+              options.forceRefresh === true,
+              trace
+            );
         if (requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);

@@ -1,6 +1,7 @@
 import { graphqlRead, graphqlRequest } from "./graphql.service";
 import type { GraphQLReadMeta, GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
 import type { GameweekOverallSummary } from "../models/summary";
+import { getAppContextSnapshot } from "./app-context.service";
 
 export const MINI_GAMEWEEK_SUMMARY_QUERY = `
   query MiniGameweekSummary($eventId: Int!, $limit: Int!) {
@@ -324,13 +325,20 @@ function mapEventPlayer(row: GraphQLEventPlayer): Record<string, unknown> {
   };
 }
 
+function currentSeasonCacheVariant(): string {
+  const season = getAppContextSnapshot()?.season
+    || String(getApp<IAppOption>().globalData.season || "");
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
+  return `season:${season}`;
+}
+
 export async function getEntryTeamStatsEventResult(entry: number, event: number, forceRefresh = false, trace?: PageRequestTrace): Promise<EntryEventResult | undefined> {
-  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event }, { cachePolicy: "reporting", forceRefresh, trace });
+  const data = await graphqlRequest<EntryEventResultResponse>(ENTRY_EVENT_RESULT, { entryId: entry, eventId: event }, { cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
   return data.entryEventResult || undefined;
 }
 
 export async function getEntryTeamStatsHistory(entry: number, forceRefresh = false, trace?: PageRequestTrace): Promise<EntryHistoryPayload> {
-  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry }, { cachePolicy: "reporting", forceRefresh, trace });
+  const data = await graphqlRequest<EntryHistoryResponse>(ENTRY_HISTORY, { entryId: entry }, { cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
   const payload = data.entryHistory;
   return {
     results: payload?.results || [],
@@ -339,7 +347,7 @@ export async function getEntryTeamStatsHistory(entry: number, forceRefresh = fal
 }
 
 export async function getEntryTeamStatsTransfers(entry: number, forceRefresh = false, trace?: PageRequestTrace): Promise<EntryGameweekTransfers[]> {
-  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cachePolicy: "reporting", forceRefresh, trace });
+  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
   return data.entryTransferHistory || [];
 }
 

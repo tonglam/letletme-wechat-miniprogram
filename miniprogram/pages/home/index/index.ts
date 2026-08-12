@@ -1,5 +1,4 @@
 import {
-  getCoreEventFixtureSchedule,
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
 import { getEntryInfo } from "../../../services/entry.service";
@@ -134,6 +133,7 @@ Page({
   _initialLoadDone: false,
   _lastLoadAt: 0,
   _loadRequestId: 0,
+  _fixtureGwRequestId: 0,
   _loadedContextRevision: 0,
   _perfTracker: undefined as PagePerformanceTracker | undefined,
 
@@ -536,21 +536,42 @@ Page({
   },
 
   async loadFixtureGw(event: number, forceRefresh = false) {
-    this.setData({ fixtureLoading: true, fixtureError: "", selectedFixtureGw: event });
+    const requestId = ++this._fixtureGwRequestId;
+    this.setData({
+      fixtureLoading: true,
+      fixtureError: "",
+      fixtureStaleMessage: "",
+      fixtureStoredAt: null,
+      fixtureStaleStoredAt: null,
+      selectedFixtureGw: event,
+      fixtureRows: []
+    });
     try {
-      const fixtures = await getCoreEventFixtureSchedule(
+      const read = await readCoreEventFixtureSchedule(
         event,
         getApp<IAppOption>().globalData.season,
-        forceRefresh
+        { forceRefresh }
       );
-      this.setData({ fixtureRows: fixtures.map(mapFixtureRow) });
+      if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      const staleStoredAt = read.meta.stale ? read.meta.storedAt || null : null;
+      this.setData({
+        fixtureRows: read.data.map(mapFixtureRow),
+        fixtureStoredAt: read.meta.storedAt || Date.now(),
+        fixtureStaleStoredAt: staleStoredAt,
+        fixtureStaleMessage: read.meta.stale ? fixtureStaleMessage(staleStoredAt) : ""
+      });
     } catch (error) {
+      if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
       this.setData({
         fixtureRows: [],
+        fixtureStaleMessage: "",
+        fixtureStaleStoredAt: null,
         fixtureError: error instanceof Error ? error.message : "赛程加载失败"
       });
     } finally {
-      this.setData({ fixtureLoading: false });
+      if (requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
+        this.setData({ fixtureLoading: false });
+      }
     }
   },
 

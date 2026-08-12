@@ -46,6 +46,12 @@ test("price context is optional while season-scoped deep links await it", () => 
   assert.match(teamDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getTeamSummary/);
 });
 
+test("price soft timeout belongs to its originating visible page tracker", () => {
+  const price = source("miniprogram/pages/data/price/price.ts");
+  assert.match(price, /const tracker = this\.perfTracker;[\s\S]*observeSoftTimeout\(readTask, 2900[\s\S]*if \(!this\.pageActive \|\| !isCurrentRevision/);
+  assert.match(price, /tracker\?\.mark\("softFailureAt"\)/);
+});
+
 test("player detail consumes an explicit route season when shared context is unavailable", () => {
   const playerService = source("miniprogram/services/player.service.ts");
   assert.match(
@@ -53,6 +59,34 @@ test("player detail consumes an explicit route season when shared context is una
     /getPlayerInfoByCode\(code: number \| string, season\?: string\)[\s\S]*cacheVariant: `season:\$\{currentSeason\(season\)\}`/
   );
   assert.doesNotMatch(playerService, /getPlayerInfoByCode\([^)]*_season/);
+});
+
+test("team detail consumes its route season and team cache identity includes it", () => {
+  const page = source("miniprogram/pages/data/team-detail/team-detail.ts");
+  const service = source("miniprogram/services/team.service.ts");
+  assert.match(page, /this\.routeSeason = options\.season \|\| ""/);
+  assert.match(page, /season = this\.routeSeason \|\| context\.season \|\| season/);
+  assert.match(service, /getTeamSummary\(teamId: number \| string, season: string\)[\s\S]*cacheVariant: `season:\$\{season\}`/);
+  assert.doesNotMatch(service, /_season/);
+});
+
+test("tournament chains carry their originating trace through later reads", () => {
+  const service = source("miniprogram/services/tournament.service.ts");
+  const selections = source("miniprogram/pages/data/selections/selections.ts");
+  const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
+  const live = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(service, /readDirectory\([\s\S]*trace\?: PageRequestTrace[\s\S]*readEntryTournamentDirectory\(entry, season, \{ forceRefresh, trace \}\)/);
+  assert.match(selections, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadStats\(trace\)/);
+  assert.match(summary, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntrySummaryTournaments\([^;]*trace\)[\s\S]*this\.loadSummary\(forceRefresh, trace\)/);
+  assert.match(live, /getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadRows\(\{[\s\S]*trace[\s\S]*\}\)/);
+});
+
+test("entry support cache identities are isolated by the canonical season", () => {
+  const service = source("miniprogram/services/summary.service.ts");
+  assert.match(service, /currentSeasonCacheVariant\(\)[\s\S]*getAppContextSnapshot\(\)\?\.season[\s\S]*return `season:\$\{season\}`/);
+  for (const operation of ["ENTRY_EVENT_RESULT", "ENTRY_HISTORY", "ENTRY_TRANSFER_HISTORY"]) {
+    assert.match(service, new RegExp(`${operation}[\\s\\S]*?cacheVariant: currentSeasonCacheVariant\\(\\)`));
+  }
 });
 
 test("tournament directory recovery resyncs the fallback GW without overriding a user selection", () => {
@@ -191,6 +225,55 @@ test("manual Live Entry force refresh survives failure of the ordinary in-flight
   await refresh;
   assert.equal(followups.length, 1);
   assert.equal(followups[0].forceRefresh, true);
+});
+
+test("a later transfer caller upgrades an already queued Live Entry forced follow-up", async () => {
+  let resolveCurrent;
+  const current = new Promise((resolve) => { resolveCurrent = resolve; });
+  const followups = [];
+  const context = {
+    data: { entryId: 123, event: 33 },
+    liveRequest: current,
+    liveRequestKey: "123:33",
+    liveRequestForced: false,
+    liveForcedFollowup: null,
+    liveForcedFollowupIncludeTransfers: false,
+    loadTransfersAfterLive: false,
+    restartForPrincipalChange: () => false,
+    loadData(options) {
+      followups.push(options);
+      return Promise.resolve();
+    }
+  };
+  const first = entryPage.loadData.call(context, { forceRefresh: true });
+  const second = entryPage.loadData.call(context, { forceRefresh: true, includeTransfers: true });
+  assert.equal(first, second);
+  resolveCurrent();
+  await first;
+  assert.equal(followups.length, 1);
+  assert.equal(followups[0].forceRefresh, true);
+  assert.equal(followups[0].includeTransfers, true);
+});
+
+test("Match arms an independent context timer at the gameweek deadline", () => {
+  assert.equal(matchModule.contextDeadlineTargetAt(20_000, 10_000), 20_000);
+  assert.equal(matchModule.contextDeadlineTargetAt(9_000, 10_000), 40_000);
+  assert.equal(matchModule.contextDeadlineTargetAt(null, 10_000), null);
+  assert.equal(matchModule.contextDeadlineTargetAt(null, 10_000, true), 40_000);
+  const match = source("miniprogram/pages/live/match/match.ts");
+  assert.match(match, /contextDeadlineTimer[\s\S]*armContextDeadline\([\s\S]*refreshContextAtDeadline/);
+  assert.match(match, /onHide\(\)[\s\S]*clearContextDeadline\(\)/);
+  assert.match(match, /onUnload\(\)[\s\S]*clearContextDeadline\(\)/);
+});
+
+test("Home selected-GW reads preserve stale metadata and discard superseded responses", () => {
+  const home = source("miniprogram/pages/home/index/index.ts");
+  const start = home.indexOf("async loadFixtureGw");
+  const load = home.slice(start, home.indexOf("onRetryFixtures", start));
+  assert.match(load, /readCoreEventFixtureSchedule/);
+  assert.match(load, /requestId !== this\._fixtureGwRequestId \|\| event !== this\.data\.selectedFixtureGw/);
+  assert.match(load, /fixtureStaleMessage: read\.meta\.stale \? fixtureStaleMessage\(staleStoredAt\) : ""/);
+  assert.match(load, /fixtureStaleStoredAt: staleStoredAt/);
 });
 
 test("Live overlay is authoritative for match play status", () => {

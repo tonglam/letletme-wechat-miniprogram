@@ -426,7 +426,8 @@ function numericId(value: number | string): number {
 export async function getLivePointsByTournamentSnapshot(
   tournamentId: number | string,
   event: number,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
   const variables = {
     tournamentId: numericId(tournamentId),
@@ -434,7 +435,8 @@ export async function getLivePointsByTournamentSnapshot(
   };
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
     cachePolicy: "live",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);
   return {
@@ -451,9 +453,10 @@ export async function getLivePointsByTournamentSnapshot(
 export async function getLivePointsByTournament(
   tournamentId: number | string,
   event: number,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveTournamentRowsResult> {
-  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh);
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace);
   return { rows: result.data, servedStoredAt: result.servedStoredAt };
 }
 
@@ -461,9 +464,10 @@ export async function searchLivePointsByTournament(
   tournamentId: number | string,
   event: number,
   keyword: string,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveTournamentRowsResult> {
-  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh);
+  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh, trace);
   return { rows: filterTournamentLiveRows(rows, keyword), servedStoredAt };
 }
 
@@ -471,9 +475,10 @@ export async function searchLivePointsByTournamentSnapshot(
   tournamentId: number | string,
   event: number,
   keyword: string,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
-  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh);
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace);
   return {
     data: filterTournamentLiveRows(result.data, keyword),
     snapshot: result.snapshot,

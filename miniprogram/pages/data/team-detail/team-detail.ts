@@ -14,10 +14,13 @@ PerformancePage({
     team: undefined as TeamSummary | undefined
   },
 
+  routeSeason: "",
+
   onLoad(options: Record<string, string | undefined>) {
+    this.routeSeason = options.season || "";
     this.setData({
       teamId: options.teamId || "",
-      season: getApp<IAppOption>().globalData.season || ""
+      season: this.routeSeason || getApp<IAppOption>().globalData.season || ""
     });
     return this.loadData();
   },
@@ -33,7 +36,7 @@ PerformancePage({
       let season = this.data.season;
       try {
         const context = await ensureAppContext({ reason: "page-load" });
-        season = context.season || season;
+        season = this.routeSeason || context.season || season;
       } catch (error) {
         if (!season) throw error;
       }

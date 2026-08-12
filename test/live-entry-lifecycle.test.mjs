@@ -15,7 +15,7 @@ test("Live Entry uses one CalcLive root and no independent LiveSnapshot root", (
 test("NO_PICKS completes before transfers and disables polling", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   const noPicks = page.indexOf('result.availability === "NO_PICKS"');
-  const transferLoad = page.indexOf("void this.loadTransfers", noPicks);
+  const transferLoad = page.indexOf("await this.loadTransfers", noPicks);
   assert.ok(noPicks >= 0 && transferLoad > noPicks);
   const branch = page.slice(noPicks, page.indexOf("const players", noPicks));
   assert.match(branch, /transfers: \[\]/);

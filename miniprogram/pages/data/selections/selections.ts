@@ -8,6 +8,8 @@ import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionSt
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
 type SelectionsEmptyState = "" | "entry" | "tournaments";
@@ -141,7 +143,11 @@ PerformancePage({
     });
   },
 
-  async loadTournaments(forceRefresh = false): Promise<void> {
+  async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
     if (!this.data.entryId) {
       this.setData({
         loadingTournaments: false,
@@ -170,7 +176,7 @@ PerformancePage({
     const eventBeforeDirectoryRead = this.data.event;
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
-      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh);
+      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh, trace);
       if (contextMissingBeforeDirectoryRead) {
         this.syncRecoveredEvent(eventBeforeDirectoryRead);
       }
@@ -201,7 +207,7 @@ PerformancePage({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadStats();
+      await this.loadStats(trace);
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "阵容选择数据加载失败" });
     } finally {
@@ -209,7 +215,11 @@ PerformancePage({
     }
   },
 
-  async loadStats(): Promise<void> {
+  async loadStats(originatingTrace?: PageRequestTrace): Promise<void> {
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "data-selections-stats",
+      trigger: "tab"
+    });
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
     if (!tournament) {
       return;
@@ -228,7 +238,7 @@ PerformancePage({
     );
     this.setData({ loadingStats: true, error: "" });
     try {
-      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT);
+      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, trace);
       if (!isActiveContext()) {
         // Superseded by a tournament/GW change or a list refresh while in
         // flight: the newer load owns rows, header, and loading state.

@@ -133,6 +133,7 @@ test("match cold start waits for the current event before arming recovery", asyn
         }
       };
     },
+    armContextDeadline() {},
     syncDisplayState() {},
     loadData() {
       calls.push(`load:${this.currentEventId}`);
