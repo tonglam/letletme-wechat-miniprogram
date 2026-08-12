@@ -148,6 +148,7 @@ Page({
   dailyRequestOwner: {} as object,
   perfTracker: undefined as PagePerformanceTracker | undefined,
   pageActive: false,
+  hasShown: false,
 
   async onLoad() {
     this.pageActive = true;
@@ -155,6 +156,22 @@ Page({
     await ensureAppContext({ reason: "page-load" });
     this.perfTracker.mark("contextReadyAt");
     void this.loadDailyChanges();
+  },
+
+  onShow() {
+    this.pageActive = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return;
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "warm-enter");
+    this.perfTracker.mark("contextReadyAt");
+    wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
+  },
+
+  onHide() {
+    this.pageActive = false;
+    this.perfTracker?.disconnect();
   },
 
   onUnload() {

@@ -22,3 +22,8 @@ test("NO_PICKS completes before transfers and disables polling", () => {
   assert.match(branch, /this\.liveRefresh\?\.stop\(\)/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
 });
+
+test("no-entry state observes primary only after setData commits", () => {
+  const page = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(page, /if \(!entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
+});

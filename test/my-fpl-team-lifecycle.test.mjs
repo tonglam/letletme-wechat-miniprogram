@@ -21,3 +21,8 @@ test("My FPL Team owns independent primary and tab status surfaces", () => {
   assert.match(template, /tabLoading/);
   assert.match(template, /data-status[\s\S]*tabError/);
 });
+
+test("My FPL no-entry state observes primary after its terminal commit", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
+});

@@ -414,6 +414,8 @@ Page({
         emptyTitle: "先选择我的球队",
         emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
         emptyActionText: "去选择球队"
+      }, () => {
+        wx.nextTick(() => this.perfTracker?.observePrimary());
       });
       return;
     }

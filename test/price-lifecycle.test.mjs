@@ -22,3 +22,11 @@ test("price primary content includes success, empty and error states", () => {
   assert.match(template, /data-status[\s\S]*status="stale"/);
   assert.match(template, /app-error-state[\s\S]*app-empty-state/);
 });
+
+test("price warm resume records viewport visibility without refetching", () => {
+  const page = source("miniprogram/pages/data/price/price.ts");
+  const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
+  assert.match(onShow, /warm-enter/);
+  assert.match(onShow, /observePrimary/);
+  assert.doesNotMatch(onShow, /loadDailyChanges|readPlayerValueByDate/);
+});

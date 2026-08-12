@@ -401,8 +401,9 @@ Page({
       return Promise.resolve();
     }
     if (!entryId) {
-      this.setData({ loading: false, error: "", emptyState: true, noPicks: false });
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      this.setData({ loading: false, error: "", emptyState: true, noPicks: false }, () => {
+        wx.nextTick(() => this.perfTracker?.observePrimary());
+      });
       this.syncDisplayState();
       return Promise.resolve();
     }
