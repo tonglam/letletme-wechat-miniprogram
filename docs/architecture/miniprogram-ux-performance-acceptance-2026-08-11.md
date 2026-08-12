@@ -325,3 +325,81 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 本轮已完成 Core/Live 依赖方向、Apollo clone 下的 request pin、后端 requestId 分段和真实 DevTools 复测。冷启动、暖页面、单次 Fixture operation、零 Live 调用和 renderer callback 已通过；GraphQL full-selection、Web proxy、刷新可见时间和完整下拉刷新仍失败。
 
 报告状态保持“代码已实施，尚未验收”。GraphQL、小程序和 Web tracing 分支均不得合并到 `main`，不得触发 GraphQL 部署，也不得上传微信开发版 `1.0.2`。后续优化必须优先处理串行远程 admission、Web PostgreSQL limiter 和 current-season 请求路径，不能通过增加 Fixture TTL 掩盖问题。
+
+---
+
+## 2026-08-12 当前分支最终验收记录
+
+### 当前状态
+
+**代码已实施，尚未验收。**
+
+本节是本轮 optimize-* 三分支的最新验收结论，覆盖此前“正确口径后修改样本”。代码检查通过不等于性能门槛通过；以下任一硬门槛失败，都不得合并、部署或上传开发版。
+
+### 版本与环境
+
+| 项目 | 实际值 |
+|---|---|
+| GraphQL worktree/branch | /Users/tong/AgentProjects/.worktrees/letletme-graphql-read-path / codex/optimize-miniprogram-read-path |
+| GraphQL SHA | 2337d1b23b2a819812a1ee30dd7c8278ac3cd883 |
+| Web worktree/branch | /Users/tong/AgentProjects/.worktrees/letletme-web-proxy-read-path / codex/optimize-graphql-proxy-read-path |
+| Web SHA | d73227689eeffe946e63083a9281d4234a15c310 |
+| Mini worktree/branch | /Users/tong/AgentProjects/.worktrees/letletme-wechat-home-read-path / codex/optimize-home-read-path |
+| Mini SHA | 481f68fea529bb1cd13800223c0eaaae859f4965 |
+| DevTools | WeChat DevTools Stable 2.01.2510290，基础库 3.15.2 |
+| 本地链路 | Mini -> 127.0.0.1:3000/api/graphql -> 127.0.0.1:4000/graphql |
+| 数据结果 | 当前目标 worktree 页面显示 10 条 Fixture；HTTP 样本均为 200、Fixture 数量 10、GraphQL errors 为 0 |
+
+本轮未使用未合并 GraphQL SHA、临时 trusted proxy 或一次性绕过。GraphQL/Web 仍为本地分支，未部署。
+
+### 自动检查
+
+| 仓库 | test | typecheck | lint | 其他 |
+|---|---|---|---|---|
+| GraphQL | 348 pass，4 skip，0 fail | pass | pass | format check pass |
+| Web | 335 pass，5 skip，0 fail | pass | pass | production build pass |
+| Mini | 139/139 pass | pass | pass | DevTools build-npm pass |
+
+### 当前链路证据
+
+- GraphQL 动态 admission 已合并为每个 operation 一次原子 Redis admission EVAL；旧报告中“三次串行动态限流”/“四次远程 EVAL”的表述不适用于当前代码。
+- 请求仍有独立的 publication pointer Redis read；实测串行样本中 admission 与 publication 的远程 Redis 阶段约为 142--408ms，且 RTT 有明显抖动。这是当前 Fixture p95 未达标的主要外部开销，不是 10 条 Fixture 的 JSON 或小程序逐条渲染。
+- Current season 已改为启动期加载的不可变值；请求路径没有 season DB query，health 只做数据库连通性检查。
+- eventFixtures 保持 Core Fixtures 来源，不进入 Live snapshot；测试和当前 CoreEventFixtureSchedule 日志没有发现页面触发的 LiveSnapshot operation。
+- GetPlayerValues 空结果 miss 的当前 trace 显示 databaseChanges 约 832ms，另有 cache read、cache write 远程阶段；negative hit 则不进入数据库和 enrichment。当前瓶颈仍在空结果 miss 的数据库路径以及远程 Redis RTT，不在 29B 返回体或渲染。
+
+### 严格性能门槛
+
+样本按 endpoint 串行采集；p95 仅对 n >= 10 的样本计算。冷启动、暖页面、刷新及 response-to-setData 的正式多样本计时在当前最终 SHA 上尚未完整取得，因此不能用单次 DevTools 观察替代。
+
+| 指标 | 门槛 | 当前样本 | 结论 |
+|---|---:|---|---|
+| GraphQL Fixture 暖进程直连 | p95 <= 350ms | n=20，p50 775.18ms，p95 925.79ms，max 944.48ms | **失败** |
+| 经 Web Fixture | p95 <= 450ms | n=20，p50 755.35ms，p95 929.77ms，max 953.69ms | **失败** |
+| 暖页面到 Fixture 可见 | p95 <= 550ms | 当前仅有 DevTools spot sample 583ms，n=1 | 未完成正式验收 |
+| 冷启动到 Fixture 可见 | max <= 1.2s | DevTools launch spot 3014ms，n=1，非正式完整样本 | 未达标/需重测 |
+| 刷新到 Fixture 可见 | p95 <= 600ms | 当前仅有 DevTools spot sample 583ms，n=1 | 未完成正式验收 |
+| MiniHomeSupplement warm | p95 <= 650ms | n=20，p50 445.44ms，p95 452.25ms，max 1427.11ms | p95 通过，存在 outlier |
+| GetPlayerValues negative hit 经 Web | p95 <= 500ms | n=10，p50 441.64ms，p95 445.88ms，max 445.88ms | 通过 |
+| GetPlayerValues empty miss 经 Web | <= 1.0s | 首次 miss 1110.48ms；随后 negative hit 441.09ms | **失败**（首个 miss） |
+| response -> setData callback | p95 <= 50ms | 当前最终 SHA 未取得正式 n>=10 样本 | 未完成正式验收 |
+| GraphQL limiter admission | 每 operation 1 次 EVAL | 代码、单测、运行链路一致 | 通过 |
+| 请求期 season DB query | 0 | 启动加载；连续请求与 health 无 season 查询 | 通过 |
+| Web GraphQL limiter DB query | 0 | route 源码/测试确认未调用 DB limiter | 通过 |
+| Fixture Live snapshot | 0 | Core fixture 单测、trace 和当前 operation 日志 | 通过 |
+
+### 结论与后续阻断
+
+当前不能标记为“已修复并验收”，原因是：
+
+1. GraphQL 直连 Fixture p95 为 925.79ms，超过 350ms。
+2. Web Fixture p95 为 929.77ms，超过 450ms。
+3. GetPlayerValues empty miss 为 1110.48ms，超过 1.0s。
+4. 冷启动、暖页面、刷新和 response-to-setData 的正式多样本尚未完成，不能将单次 DevTools 583ms 或 3014ms 当成 p95/最大值验收。
+5. 因此不执行 GraphQL fast-forward、Web fast-forward、小程序 fast-forward、线上部署或微信开发版 1.0.2 上传。
+
+需要继续处理的不是加 TTL 或隐藏请求，而是先在当前分段 trace 下确认并修复：
+
+- GraphQL admission Redis 与 publication pointer Redis 的 RTT/连接池/串行等待。
+- empty miss 的 databaseChanges 查询路径，尤其是约 832ms 的数据库阶段。
+- 完整冷启动和刷新阶段的 app context、网络响应、setData callback、Native visible 分段计时。
