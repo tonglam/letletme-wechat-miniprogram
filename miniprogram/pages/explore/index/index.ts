@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
@@ -20,7 +21,7 @@ interface CardGroup {
  * payloads of its own — cards link out to the physical routes, which stay
  * where they are until the deferred rename (plan A2).
  */
-Page({
+PerformancePage({
   data: {
     contextText: "",
     keyword: "",
@@ -29,7 +30,7 @@ Page({
 
   hasShown: false,
 
-  async onLoad() {
+  onLoad() {
     const loadStart = Date.now();
     this.buildGroups();
     // First paint of the router page (plan §9): no payload fetch, so no
@@ -39,20 +40,18 @@ Page({
       contractSource: "compat",
       durationBucket: durationBucket(Date.now() - loadStart)
     });
-    await this.refreshContext();
+    this.syncContext();
   },
 
   onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
-      void this.refreshContext();
+      this.syncContext();
     }
   },
 
-  async refreshContext() {
-    const app = getApp<IAppOption>();
-    try { await app.initAppData(false); } catch { /* retain the last known context, if any */ }
+  refreshContext() {
     this.syncContext();
   },
 

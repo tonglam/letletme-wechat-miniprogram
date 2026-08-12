@@ -1,0 +1,8 @@
+<view class="data-status data-status-{{status}}" role="status">
+  <view class="data-status-dot"></view>
+  <view class="data-status-copy">
+    <text class="data-status-message">{{message}}</text>
+    <text wx:if="{{storedAtText}}" class="data-status-time">上次成功 {{storedAtText}}</text>
+  </view>
+  <view wx:if="{{showRetry}}" class="data-status-action" role="button" bindtap="onRetry">{{retryText}}</view>
+</view>

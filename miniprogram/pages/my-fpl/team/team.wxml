@@ -45,11 +45,8 @@
   </view>
 
   <block wx:else>
-    <view wx:if="{{error}}" class="section inline-error">
-      <text>{{error}} · 当前显示上次成功结果</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
-    </view>
-    <view class="section card summary-card">
+    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
+    <view id="perf-primary-content" class="section card summary-card">
       <view class="metric-grid metric-grid-three">
         <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
           <text class="metric-label">{{item.label}}</text>
@@ -73,6 +70,8 @@
       <view class="tab-item {{showChips ? 'tab-active' : ''}}" data-tab="chips" catchtap="onTabTap">开卡</view>
       <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap">历史</view>
     </view>
+    <app-loading wx:if="{{tabLoading}}" text="加载当前栏目" />
+    <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" showRetry="{{true}}" bind:retry="onRetry" />
 
     <view wx:if="{{showSquad}}" class="section card">
       <app-empty-state

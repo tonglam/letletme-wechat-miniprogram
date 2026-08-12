@@ -6,6 +6,7 @@ import {
   authApiErrorMessage,
   networkErrorMessage
 } from "../utils/request-error";
+import { commitEntryBindingState as commitEntryBinding } from "./app-context-state";
 import { isStoredSessionUsable, MiniProgramLinkRequiredError } from "./auth-session";
 
 export interface MiniProgramProfile {
@@ -189,6 +190,13 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   const nextEntryId = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
     ? session.profile.fplEntryId
     : undefined;
+  const bindingReason = previousToken === undefined
+    ? "login"
+    : previousToken !== session.token
+      ? "token-rotation"
+      : previousEntryId !== nextEntryId
+        ? "rebind"
+        : "restore";
 
   if (previousToken !== session.token) {
     clearStoredGraphQLSessionCache();
@@ -210,6 +218,7 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
       getApp<IAppOption>().globalData.entryId = nextEntryId;
     } catch {}
   }
+  commitEntryBinding(nextEntryId || previousEntryId || null, bindingReason);
   // A profile without a verified entry clears nothing: the locally followed
   // team is a display-only preference (public FPL data), and the sync is
   // best-effort — gaps between web and local are allowed.
@@ -234,6 +243,7 @@ export function clearApiSession(): void {
   try {
     getApp<IAppOption>().globalData.entryId = undefined;
   } catch {}
+  commitEntryBinding(null, "logout");
 }
 
 export function getApiSessionToken(): string | null {

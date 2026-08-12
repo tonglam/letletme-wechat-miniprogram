@@ -1,6 +1,8 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
 import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from "../models/tournament";
 import type { EntryTournamentRow } from "../models/competition";
+import type { DomainRead, ServiceReadOptions } from "./service-read";
+import { getAppContextSnapshot } from "./app-context.service";
 
 const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -120,6 +122,39 @@ export interface EntryTournament extends Omit<TournamentOption, "id"> {
   state?: string | null;
 }
 
+export async function readEntryTournamentDirectory(
+  entryId: number,
+  season: string,
+  options: ServiceReadOptions = {}
+): Promise<DomainRead<EntryTournamentRow[]>> {
+  if (!Number.isSafeInteger(entryId) || entryId <= 0) {
+    throw new Error("Entry ID 无效");
+  }
+  if (!season) {
+    throw new Error("赛季信息暂时不可用，请稍后重试");
+  }
+  const result = await graphqlRead<EntryTournamentsResponse>(
+    GET_ENTRY_TOURNAMENTS,
+    { entryId },
+    {
+      cachePolicy: "reporting",
+      cacheVariant: `season:${season}`,
+      forceRefresh: options.forceRefresh,
+      trace: options.trace
+    }
+  );
+  return { data: result.data.entryTournaments || [], meta: result.meta };
+}
+
+function currentSeason(): string {
+  return getAppContextSnapshot()?.season
+    || String(getApp<IAppOption>().globalData.season || "");
+}
+
+async function readDirectory(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
+  return (await readEntryTournamentDirectory(entry, currentSeason(), { forceRefresh })).data;
+}
+
 export interface TournamentEventResult {
   entryId: number;
   entryName?: string | null;
@@ -166,11 +201,14 @@ interface TournamentSelectionStatsResponse {
 }
 
 export async function getEntryPointsRaceTournament(entry: number, forceRefresh = false): Promise<TournamentOption[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
-    cachePolicy: "reporting",
-    forceRefresh
-  });
-  return (data.entryTournaments || []).map((t) => ({ id: t.id, name: t.name }));
+  const rows = await readDirectory(entry, forceRefresh);
+  return rows
+    .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
+    .map((t) => ({
+      id: Number(t.id),
+      name: t.name,
+      participantCount: t.totalTeamNum ?? undefined
+    }));
 }
 
 /**
@@ -179,34 +217,28 @@ export async function getEntryPointsRaceTournament(entry: number, forceRefresh =
  * adapter. Filtering for a specific surface stays with that surface.
  */
 export async function getEntryAllTournaments(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
-    cachePolicy: "reporting",
-    forceRefresh
-  });
-  return data.entryTournaments || [];
+  return readDirectory(entry, forceRefresh);
 }
 
 export async function getEntrySummaryTournaments(entry: number, forceRefresh = false): Promise<EntryTournament[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry }, {
-    cachePolicy: "reporting",
-    forceRefresh
-  });
-  return (data.entryTournaments || [])
+  const rows = await readDirectory(entry, forceRefresh);
+  return rows
     .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
     .map((t) => ({
-      id: t.id,
+      id: Number(t.id),
       name: t.name,
       groupMode: t.groupMode,
       totalTeamNum: t.totalTeamNum,
       groupStartedEventId: t.groupStartedEventId,
       groupEndedEventId: t.groupEndedEventId,
-      state: t.state
+      state: t.state,
+      participantCount: t.totalTeamNum ?? undefined
     }));
 }
 
 export async function getEntryKnockoutTournament(entry: number): Promise<KnockoutOption[]> {
-  const data = await graphqlRequest<EntryTournamentsResponse>(GET_ENTRY_TOURNAMENTS, { entryId: entry });
-  return (data.entryTournaments || [])
+  const rows = await readDirectory(entry);
+  return rows
     .filter((t) => t.knockoutMode && t.knockoutMode !== "NO_KNOCKOUT")
     .map((t) => ({
       id: t.id,

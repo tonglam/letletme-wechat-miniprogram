@@ -1,4 +1,5 @@
 import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
+import type { PageRequestTrace } from "./graphql.service";
 import type {
   LiveEntryResult,
   LiveMatch,
@@ -38,14 +39,15 @@ export async function getLiveSnapshot(eventId: number): Promise<LiveSnapshotStat
 
 const CALC_LIVE_POINTS_BY_ENTRY = `
   query CalcLivePointsByEntry($eventId: Int!, $entryId: Int!) {
-    liveSnapshot(eventId: $eventId) {
-      eventId
-      revision
-      state
-      publishedAt
-      checkedAt
-    }
     calcLivePointsByEntry(eventId: $eventId, entryId: $entryId) {
+      availability
+      snapshot {
+        eventId
+        revision
+        state
+        publishedAt
+        checkedAt
+      }
       entry
       event
       livePoints
@@ -112,8 +114,9 @@ interface GraphQLPickListItem {
 }
 
 interface CalcLivePointsByEntryResponse {
-  liveSnapshot: LiveSnapshotStatus | null;
   calcLivePointsByEntry: {
+    availability: "READY" | "NO_PICKS";
+    snapshot: LiveSnapshotStatus | null;
     entry: number;
     event: number;
     livePoints: number;
@@ -160,12 +163,14 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
 export async function getLivePointsByEntrySnapshot(
   entry: number,
   event: number,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveSnapshotResult<LiveEntryResult>> {
   const variables = { eventId: event, entryId: entry };
   const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
     cachePolicy: "live",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const result = data.calcLivePointsByEntry;
   if (!result) {
@@ -174,6 +179,7 @@ export async function getLivePointsByEntrySnapshot(
   const servedStoredAt = getServedCacheStoredAt(CALC_LIVE_POINTS_BY_ENTRY, variables);
   return {
     data: {
+      availability: result.availability,
       entry: result.entry,
       event: result.event,
       livePoints: result.livePoints,
@@ -187,7 +193,7 @@ export async function getLivePointsByEntrySnapshot(
       pickList: mapGraphQLPickList(result.pickList),
       servedStoredAt
     },
-    snapshot: data.liveSnapshot,
+    snapshot: result.snapshot,
     servedStoredAt
   };
 }
@@ -313,12 +319,14 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
 
 export async function getLiveMatchByStatusSnapshot(
   status: string,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<LiveSnapshotResult<LiveMatch[]>> {
   const variables = {};
   const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
     cachePolicy: "live",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const result = data.liveMatches;
   let matches: LiveMatch[];

@@ -1,4 +1,5 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { DomainRead, ServiceReadOptions } from "./service-read";
 import type { PlayerValue, PlayerValueChange } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 import { formatDateKey } from "../utils/date";
@@ -199,14 +200,25 @@ function priceCacheTtl(changeDate: string): number {
 }
 
 export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
+  return (await readPlayerValueByDate(changeDate, { forceRefresh })).data;
+}
+
+export async function readPlayerValueByDate(
+  changeDate: string,
+  options: ServiceReadOptions = {}
+): Promise<DomainRead<PlayerValueChange[]>> {
+  const result = await graphqlRead<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
     cachePolicy: "market",
     getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
-    forceRefresh
+    forceRefresh: options.forceRefresh,
+    trace: options.trace
   });
-  return (data.playerValues || [])
-    .filter((value) => value.value !== value.lastValue)
-    .map(mapPlayerValueChange);
+  return {
+    data: (result.data.playerValues || [])
+      .filter((value) => value.value !== value.lastValue)
+      .map(mapPlayerValueChange),
+    meta: result.meta
+  };
 }
 
 export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {

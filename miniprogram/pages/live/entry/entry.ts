@@ -21,6 +21,9 @@ import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { PagePerformanceTracker } from "../../../utils/page-performance";
+import { observeSoftTimeout } from "../../../utils/page-request";
 
 interface SummaryTile {
   label: string;
@@ -32,6 +35,7 @@ interface LiveEntryData {
   refreshing: boolean;
   transfersLoading: boolean;
   hasData: boolean;
+  noPicks: boolean;
   error: string;
   transfersError: string;
   emptyState: boolean;
@@ -85,6 +89,7 @@ Page({
     refreshing: false,
     transfersLoading: false,
     hasData: false,
+    noPicks: false,
     error: "",
     transfersError: "",
     emptyState: false,
@@ -120,16 +125,24 @@ Page({
   pageVisible: false,
   hasShown: false,
   loadedSeason: undefined as string | undefined,
+  perfTracker: undefined as PagePerformanceTracker | undefined,
+  loadTransfersAfterLive: false,
+
+  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+    return ensureAppContext({ reason, forceRefresh });
+  },
 
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "cold-launch");
     const routeEntry = Number(options?.entry);
     const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
-    await app.initAppData();
-    this.loadedSeason = app.globalData.season || undefined;
+    const context = await this.ensureContext("page-load");
+    this.perfTracker.mark("contextReadyAt");
+    this.loadedSeason = context.season || undefined;
     if (!hasRouteEntry && !getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
       // fallback: the account may have been linked to a different entry
@@ -152,9 +165,10 @@ Page({
     // entry/event context exists so an initial failure still recovers by poll.
     this.liveRefresh?.sync();
     if (!this.data.entryId || currentGw > 0) {
-      this.loadData({ includeTransfers: true });
+      void this.loadData({ includeTransfers: true });
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+      wx.nextTick(() => this.perfTracker?.observePrimary());
     }
     this.syncDisplayState();
   },
@@ -208,8 +222,13 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
+      this.perfTracker?.disconnect();
+      this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "warm-enter");
       const app = getApp<IAppOption>();
-      try { await app.initAppData(false); } catch { /* keep the last known event */ }
+      try {
+        await this.ensureContext("page-show");
+        this.perfTracker.mark("contextReadyAt");
+      } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
       if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason = app.globalData.season || undefined;
@@ -235,6 +254,7 @@ Page({
           event: nextEventId,
           maxGw: nextEventId,
           hasData: false,
+          noPicks: false,
           lastUpdated: "",
           error: nextEventId > 0 ? "" : "当前赛季暂无实时比赛周",
           transfersError: "",
@@ -262,6 +282,9 @@ Page({
         this.setData({ maxGw: nextEventId });
       }
     }
+    if (resumed && (this.data.hasData || this.data.noPicks || this.data.emptyState)) {
+      wx.nextTick(() => this.perfTracker?.observePrimary());
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
@@ -283,16 +306,25 @@ Page({
   onHide() {
     this.pageVisible = false;
     this.liveRefresh?.stop();
+    this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
     this.liveRefresh?.dispose();
+    this.perfTracker?.disconnect();
   },
 
-  onPullDownRefresh() {
-    this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true })
-      .finally(() => wx.stopPullDownRefresh());
+  async onPullDownRefresh() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
+    try {
+      await this.ensureContext("pull-refresh");
+      this.perfTracker.mark("contextReadyAt");
+      await this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true });
+    } finally {
+      wx.stopPullDownRefresh();
+    }
   },
 
   async retryWithContext(options: LiveEntryLoadOptions = {}) {
@@ -301,7 +333,7 @@ Page({
     // requiring a hide/resume cycle.
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
-      try { await app.initAppData(true); } catch { /* retain the eventless state */ }
+      try { await this.ensureContext("pull-refresh", true); } catch { /* retain the eventless state */ }
       const nextEventId = Number(app.globalData.gw) || 0;
       if (nextEventId > 0) {
         this.loadedSeason = app.globalData.season || this.loadedSeason;
@@ -337,6 +369,7 @@ Page({
       refreshing: false,
       transfersLoading: false,
       hasData: false,
+      noPicks: false,
       error: "",
       transfersError: "",
       emptyState: !nextEntryId,
@@ -368,7 +401,8 @@ Page({
       return Promise.resolve();
     }
     if (!entryId) {
-      this.setData({ loading: false, error: "", emptyState: true });
+      this.setData({ loading: false, error: "", emptyState: true, noPicks: false });
+      wx.nextTick(() => this.perfTracker?.observePrimary());
       this.syncDisplayState();
       return Promise.resolve();
     }
@@ -376,15 +410,8 @@ Page({
     const eventId = this.data.event;
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
-      // A pull-to-refresh can overlap an automatic score request. Reuse that
-      // score request, but still refresh and await the independent transfer
-      // panel for callers (such as pull-to-refresh) that requested it.
-      const transfersRequest = options.includeTransfers
-        ? this.loadTransfers(entryId, eventId, options.forceRefresh === true)
-        : null;
-      return transfersRequest
-        ? Promise.all([this.liveRequest, transfersRequest]).then(() => undefined)
-        : this.liveRequest;
+      if (options.includeTransfers) this.loadTransfersAfterLive = true;
+      return this.liveRequest;
     }
 
     const requestId = this.liveRequestId + 1;
@@ -395,25 +422,62 @@ Page({
       : {
           loading: true,
           error: "",
-          ...(options.includeTransfers ? { transfers: [], transfersError: "" } : {}),
-          emptyState: false
+          emptyState: false,
+          noPicks: false
         });
-
-    const transfersRequest = options.includeTransfers
-      ? this.loadTransfers(entryId, eventId, options.forceRefresh === true)
-      : null;
+    this.loadTransfersAfterLive = options.includeTransfers === true;
 
     const request = (async () => {
       try {
+        this.perfTracker?.mark("primaryRequestStartAt");
+        const context = getAppContextSnapshot();
         const liveResult = await getLivePointsByEntrySnapshot(
           entryId,
           eventId,
-          options.forceRefresh === true
+          options.forceRefresh === true,
+          this.perfTracker && context
+            ? {
+                navigationId: this.perfTracker.navigationId,
+                callerSurface: "live-entry",
+                trigger: options.forceRefresh ? "refresh" : "load",
+                forceReason: options.forceRefresh ? "user-refresh" : undefined,
+                contextRevision: context.contextRevision
+              }
+            : undefined
         );
         if (requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
+        this.perfTracker?.mark("primaryResponseAt");
+        if (result.availability === "NO_PICKS") {
+          this.liveSnapshot = null;
+          this.cachedLiveStoredAt = liveResult.servedStoredAt;
+          this.setData({
+            hasData: false,
+            noPicks: true,
+            error: "",
+            total: 0,
+            livePoints: 0,
+            netPoints: 0,
+            transferCost: 0,
+            summaryTiles: [],
+            starters: [],
+            bench: [],
+            managers: [],
+            transfers: [],
+            transfersLoading: false,
+            transfersError: "",
+            lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
+          }, () => {
+            this.perfTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => this.perfTracker?.observePrimary());
+          });
+          this.liveRefresh?.stop();
+          this.loadTransfersAfterLive = false;
+          this.syncDisplayState();
+          return;
+        }
         const players = (result.players || result.pickList || []).map(normalizePlayer);
         const managers = players.filter((player) => numberValue(player.elementType) === 5);
         const fieldPlayers = players.filter((player) => numberValue(player.elementType) !== 5);
@@ -428,6 +492,8 @@ Page({
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         this.setData({
           hasData: true,
+          noPicks: false,
+          error: "",
           total,
           livePoints,
           netPoints,
@@ -445,13 +511,22 @@ Page({
           bench,
           managers,
           lastUpdated: formatTime(new Date(fetchedAt))
+        }, () => {
+          this.perfTracker?.mark("primarySetDataAt");
+          wx.nextTick(() => this.perfTracker?.observePrimary());
         });
         this.liveRefresh?.sync();
+        if (this.loadTransfersAfterLive) {
+          this.loadTransfersAfterLive = false;
+          void this.loadTransfers(entryId, eventId, options.forceRefresh === true);
+        }
         this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+        this.loadTransfersAfterLive = false;
+        wx.nextTick(() => this.perfTracker?.observePrimary());
         this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
@@ -463,6 +538,12 @@ Page({
 
     this.liveRequest = request;
     this.liveRequestKey = requestKey;
+    observeSoftTimeout(request, 3000, () => {
+      if (requestId !== this.liveRequestId || !this.pageVisible) return;
+      this.perfTracker?.mark("softFailureAt");
+      this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
+      this.syncDisplayState();
+    });
     void request.finally(() => {
       if (this.liveRequest === request) {
         this.liveRequest = null;
@@ -470,9 +551,7 @@ Page({
         this.revalidateCachedSnapshot();
       }
     });
-    return transfersRequest
-      ? Promise.all([request, transfersRequest]).then(() => undefined)
-      : request;
+    return request;
   },
 
   async loadTransfers(entryId: number, eventId: number, forceRefresh: boolean): Promise<void> {
@@ -514,7 +593,7 @@ Page({
   },
 
   shouldAutoRefresh(): boolean {
-    if (!this.data.entryId) return false;
+    if (!this.data.entryId || this.data.noPicks) return false;
     const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
@@ -525,6 +604,7 @@ Page({
   },
 
   revalidateCachedSnapshot(): boolean {
+    if (this.data.noPicks) return false;
     const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
     if (!shouldRevalidateCachedLiveSnapshot({
       servedStoredAt: this.cachedLiveStoredAt,
@@ -567,7 +647,7 @@ Page({
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
-    this.setData({ event: event.detail.value, hasData: false, lastUpdated: "" });
+    this.setData({ event: event.detail.value, hasData: false, noPicks: false, lastUpdated: "" });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
     this.liveRefresh?.sync();

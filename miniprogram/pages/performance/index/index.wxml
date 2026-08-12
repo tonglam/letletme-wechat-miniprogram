@@ -14,7 +14,7 @@
     </view>
   </view>
 
-  <view wx:if="{{!hasData}}" class="section">
+  <view id="perf-primary-content" wx:if="{{!hasData}}" class="section">
     <app-empty-state
       eyebrow="等待样本"
       title="还没有可分析的性能数据"
@@ -24,7 +24,7 @@
   </view>
 
   <!-- Score Card -->
-  <view wx:if="{{hasData}}" class="section scoreboard score-card">
+  <view id="perf-primary-content" wx:if="{{hasData}}" class="section scoreboard score-card">
     <view class="score-body">
       <view class="score-ring score-ring-{{scoreGrade}}">
         <text class="score-number">{{hasData ? score : '--'}}</text>
@@ -77,7 +77,7 @@
     <view class="muted api-summary">
       逻辑 {{totalApiCalls}} 次 · 网络 {{networkApiCalls}} 次 · 命中率 {{cacheHitRate}}%
     </view>
-    <view class="muted api-summary">网络 p50 {{networkP50}}ms · p95 {{networkP95}}ms</view>
+    <view class="muted api-summary">网络 p50 {{networkP50}} · p95 {{networkP95}}</view>
     <view wx:if="{{failedOperations}}" class="muted api-summary">失败 operation：{{failedOperations}}</view>
     <app-empty-state wx:if="{{apiGroups.length === 0}}" title="还没有 API 请求样本" description="打开一个需要加载数据的页面后再回来查看" />
     <view wx:for="{{apiGroups}}" wx:key="name" class="api-row">

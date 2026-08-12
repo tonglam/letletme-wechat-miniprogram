@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import {
   getLivePointsByTournamentSnapshot,
@@ -33,6 +34,7 @@ import {
   type TournamentOwnershipScope,
   type TournamentTeamOption
 } from "../../../services/live-tournament";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments";
@@ -250,7 +252,7 @@ function filterOwnershipPlayers(
   ));
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     refreshing: false,
@@ -342,13 +344,17 @@ Page({
   failedEntryCount: 0,
   retainedRowCount: 0,
 
+  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+    return ensureAppContext({ reason, forceRefresh });
+  },
+
   async onLoad() {
     const app = getApp<IAppOption>();
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
-    await app.initAppData();
-    this.loadedSeason = app.globalData.season || undefined;
+    const context = await this.ensureContext("page-load");
+    this.loadedSeason = context.season || undefined;
     if (!getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
       // fallback: the account may have been linked to a different entry
@@ -356,7 +362,7 @@ Page({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
-    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
+    const currentGw = context.currentEvent || 0;
     this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
     if (!this.data.entryId || currentGw > 0) {
@@ -428,12 +434,13 @@ Page({
     this.hasShown = true;
     if (resumed) {
       const app = getApp<IAppOption>();
-      try { await app.initAppData(false); } catch { /* keep the last known event */ }
+      let context;
+      try { context = await this.ensureContext("page-show"); } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
-      const nextSeason = app.globalData.season || undefined;
+      const nextSeason = context?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
       if (nextSeason) this.loadedSeason = nextSeason;
-      const nextEventId = Number(app.globalData.gw) || 0;
+      const nextEventId = context?.currentEvent || 0;
       const wasCurrentEvent = this.data.event === this.data.maxGw;
       const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
@@ -670,6 +677,26 @@ Page({
         ...(selectionChanged ? { hasData: false, rows: [], displayedRows: [], lastUpdated: "" } : {})
       });
       this.persistSelectedTournament(selectedTournament);
+      if (selectedTournament.participantCount === 0 || this.data.event <= 0) {
+        this.liveRefresh?.stop();
+        this.liveSnapshot = null;
+        this.failedEntryCount = 0;
+        this.cachedLiveStoredAt = undefined;
+        this.setData({
+          rows: [],
+          displayedRows: [],
+          hasData: true,
+          loading: false,
+          refreshing: false,
+          resultsEmptyTitle: selectedTournament.participantCount === 0
+            ? "当前竞赛还没有参赛球队"
+            : "当前暂无进行中的比赛周",
+          resultsEmptyDescription: selectedTournament.participantCount === 0
+            ? "有球队加入后再显示实时排名"
+            : "比赛周开始后再显示实时排名"
+        });
+        return;
+      }
       if (selectionChanged) {
         // Re-arm recovery before the rows request: if that request fails, a
         // visible current-event page must still retry on the next revision tick.

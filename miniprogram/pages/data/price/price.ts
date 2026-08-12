@@ -3,8 +3,11 @@ import {
   type PlayerPickerFilter
 } from "../../../services/player.service";
 import { getTeamList } from "../../../services/common.service";
-import { getPlayerValueByDate, getPlayerValueByElement } from "../../../services/price.service";
+import { getPlayerValueByElement, readPlayerValueByDate } from "../../../services/price.service";
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { PagePerformanceTracker } from "../../../utils/page-performance";
+import { nextRequestRevision, isCurrentRevision, setDataAsync } from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
 
@@ -22,10 +25,12 @@ interface TeamDirectoryItem {
 interface PricePageData {
   activeMode: PriceMode;
   loading: boolean;
+  refreshing: boolean;
   playerLoading: boolean;
   loadingMore: boolean;
   historyLoading: boolean;
   error: string;
+  staleMessage: string;
   playersError: string;
   historyError: string;
   changeDate: string;
@@ -106,10 +111,12 @@ Page({
   data: {
     activeMode: "daily",
     loading: false,
+    refreshing: false,
     playerLoading: false,
     loadingMore: false,
     historyLoading: false,
     error: "",
+    staleMessage: "",
     playersError: "",
     historyError: "",
     changeDate: formatPickerDate(),
@@ -138,18 +145,30 @@ Page({
 
   playerRequestRevision: 0,
   playerSearchTimer: undefined as number | undefined,
+  dailyRequestOwner: {} as object,
+  perfTracker: undefined as PagePerformanceTracker | undefined,
+  pageActive: false,
 
-  onLoad() {
-    this.loadDailyChanges();
+  async onLoad() {
+    this.pageActive = true;
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "cold-launch");
+    await ensureAppContext({ reason: "page-load" });
+    this.perfTracker.mark("contextReadyAt");
+    void this.loadDailyChanges();
   },
 
   onUnload() {
+    this.pageActive = false;
+    this.perfTracker?.disconnect();
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
     }
   },
 
   onPullDownRefresh() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "refresh");
+    this.perfTracker.mark("contextReadyAt");
     const task = this.data.activeMode === "player"
       ? this.refreshPlayerMode()
       : this.loadDailyChanges(true);
@@ -175,19 +194,59 @@ Page({
   },
 
   onDateChange(event: WechatMiniprogram.PickerChange) {
-    this.setData({ changeDate: String(event.detail.value) });
+    this.setData({
+      changeDate: String(event.detail.value),
+      riseChanges: [],
+      fallChanges: [],
+      staleMessage: "",
+      error: ""
+    });
     this.loadDailyChanges();
   },
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {
-    this.setData({ loading: true, error: "" });
+    const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
+    const changeDate = this.data.changeDate;
+    const hasRows = this.data.riseChanges.length > 0 || this.data.fallChanges.length > 0;
+    this.setData({
+      loading: !hasRows,
+      refreshing: hasRows,
+      error: "",
+      staleMessage: ""
+    });
+    this.perfTracker?.mark("primaryRequestStartAt");
     try {
-      const changes = await getPlayerValueByDate(this.data.changeDate, forceRefresh);
-      this.setData(splitChanges(changes));
+      const context = getAppContextSnapshot();
+      const read = await readPlayerValueByDate(changeDate, {
+        forceRefresh,
+        trace: this.perfTracker && context
+          ? {
+              navigationId: this.perfTracker.navigationId,
+              callerSurface: "price-daily",
+              trigger: forceRefresh ? "refresh" : "load",
+              forceReason: forceRefresh ? "user-refresh" : undefined,
+              contextRevision: context.contextRevision
+            }
+          : undefined
+      });
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      this.perfTracker?.mark("primaryResponseAt");
+      await setDataAsync(this, {
+        ...splitChanges(read.data),
+        staleMessage: read.meta.stale && read.meta.storedAt
+          ? `当前为上次成功数据 · ${new Date(read.meta.storedAt).toLocaleString()}`
+          : ""
+      });
+      this.perfTracker?.mark("primarySetDataAt");
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } catch (error) {
+      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } finally {
-      this.setData({ loading: false });
+      if (isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
+        this.setData({ loading: false, refreshing: false });
+      }
     }
   },
 
@@ -203,7 +262,8 @@ Page({
   async loadTeamOptions(): Promise<void> {
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const season = String(getApp<IAppOption>().globalData.season || "unknown");
+      const context = await ensureAppContext({ reason: "page-load" });
+      const season = context.season;
       const teams = await getTeamList(season) as TeamDirectoryItem[];
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },

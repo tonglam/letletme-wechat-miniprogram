@@ -181,7 +181,9 @@ function currentEventId(): number {
 }
 
 function currentSeason(): string {
-  return String(getApp<IAppOption>().globalData.season || "unknown");
+  const season = String(getApp<IAppOption>().globalData.season || "");
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
+  return season;
 }
 
 function mapPlayer(player: GraphQLPlayer): PlayerOption {

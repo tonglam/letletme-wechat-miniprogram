@@ -6,7 +6,7 @@ import {
   isLogoutInFlight,
   refreshWechatApiSession
 } from "./auth.service";
-import { recordApi } from "../utils/perf";
+import { recordApi, recordPageOperation } from "../utils/perf";
 import type { ApiRecordSource } from "../utils/perf";
 import { storagePrefixes } from "../config/storage-keys";
 import {
@@ -14,6 +14,8 @@ import {
   httpErrorMessage,
   networkErrorMessage
 } from "../utils/request-error";
+import { isKnownOffline } from "../utils/network-status";
+import { getActivePagePerformanceTrace } from "../utils/page-performance";
 import {
   getGraphQLCachePolicy,
   getGraphQLOperationPolicy
@@ -53,6 +55,16 @@ export interface GraphQLOptions {
   getCacheExpiry?: (data: unknown) => number;
   forceRefresh?: boolean;
   cacheVariant?: string;
+  trace?: PageRequestTrace;
+}
+
+export interface PageRequestTrace {
+  navigationId: string;
+  callerSurface: string;
+  trigger: "load" | "show" | "refresh" | "tab" | "search" | "pagination";
+  forceReason?: "user-refresh" | "deadline-crossed" | "context-missing";
+  contextRevision: number;
+  cacheVariantHash?: string;
 }
 
 export interface GraphQLReadMeta {
@@ -61,12 +73,40 @@ export interface GraphQLReadMeta {
   source: ApiRecordSource;
   stale: boolean;
   storedAt?: number;
+  cacheAgeMs?: number;
+  requestId?: string;
+  durationMs: number;
 }
 
 export interface GraphQLReadResult<T> {
   data: T;
   errors: GraphQLErrorInfo[];
   meta: GraphQLReadMeta;
+}
+
+function resolvePageRequestTrace(
+  explicitTrace?: PageRequestTrace
+): PageRequestTrace | undefined {
+  if (explicitTrace) return explicitTrace;
+  const activeTrace = getActivePagePerformanceTrace();
+  if (!activeTrace) return undefined;
+
+  let contextRevision = 0;
+  try {
+    const app = getApp() as { globalData?: { contextRevision?: number } };
+    contextRevision = Number(app.globalData?.contextRevision) || 0;
+  } catch {}
+
+  return {
+    navigationId: activeTrace.navigationId,
+    callerSurface: activeTrace.route,
+    trigger: activeTrace.trigger === "refresh"
+      ? "refresh"
+      : activeTrace.trigger === "warm-enter"
+        ? "show"
+        : "load",
+    contextRevision
+  };
 }
 
 interface ResolvedRequestPolicy {
@@ -215,9 +255,9 @@ export function buildGraphQLRequestCacheKey(
 
 function currentSeason(): string {
   try {
-    return String(getApp<IAppOption>().globalData.season || "unknown");
+    return String(getApp<IAppOption>().globalData.season || "");
   } catch {
-    return "unknown";
+    return "";
   }
 }
 
@@ -227,9 +267,11 @@ function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequest
   const cachePolicy = options?.cachePolicy ?? configured.cachePolicy;
   const policy = getGraphQLCachePolicy(cachePolicy);
   const mutation = /^\s*mutation\b/i.test(query);
-  const seasonVariant = SEASON_SCOPED_POLICIES.has(cachePolicy)
-    ? `season:${currentSeason()}`
-    : "";
+  const season = SEASON_SCOPED_POLICIES.has(cachePolicy) ? currentSeason() : "";
+  if (SEASON_SCOPED_POLICIES.has(cachePolicy) && !season) {
+    throw new Error("赛季信息暂时不可用，请稍后重试");
+  }
+  const seasonVariant = season ? `season:${season}` : "";
   const cacheVariant = [cachePolicy, seasonVariant, options?.cacheVariant || ""]
     .filter(Boolean)
     .join("|");
@@ -354,12 +396,12 @@ function writeCacheEntry(cacheKey: string, entry: CacheEntry, persist: boolean):
 function cacheAgeBucket(storedAt: number | undefined): string | undefined {
   if (!storedAt) return undefined;
   const age = Math.max(0, Date.now() - storedAt);
-  if (age < 60 * 1000) return "<1m";
+  if (age < 10 * 1000) return "<10s";
+  if (age < 60 * 1000) return "10s-1m";
   if (age < 5 * 60 * 1000) return "1-5m";
   if (age < 30 * 60 * 1000) return "5-30m";
   if (age < 6 * 60 * 60 * 1000) return "30m-6h";
-  if (age < 24 * 60 * 60 * 1000) return "6-24h";
-  return ">24h";
+  return ">6h";
 }
 
 function recordRequest(
@@ -368,13 +410,22 @@ function recordRequest(
   ok: boolean,
   source: ApiRecordSource,
   networkAttempted: boolean,
-  storedAt?: number
+  storedAt?: number,
+  trace?: PageRequestTrace,
+  cacheVariantHash?: string,
+  requestId?: string
 ): void {
   recordApi(operationName, Date.now() - startedAt, ok, {
     operationName,
     source,
     networkAttempted,
-    cacheAgeBucket: cacheAgeBucket(storedAt)
+    cacheAgeBucket: cacheAgeBucket(storedAt),
+    callerSurface: trace?.callerSurface,
+    trigger: trace?.trigger,
+    forceReason: trace?.forceReason,
+    contextRevision: trace?.contextRevision,
+    cacheVariantHash: trace?.cacheVariantHash || cacheVariantHash,
+    requestId
   });
 }
 
@@ -436,7 +487,7 @@ function makeRequest<T>(
   authMode: GraphQLAuthMode,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null
-): Promise<{ body: GraphQLResponse<T>; token: string | null }> {
+): Promise<{ body: GraphQLResponse<T>; token: string | null; requestId?: string }> {
   return new Promise((resolve, reject) => {
     const header = buildGraphQLRequestHeaders(authMode, token);
 
@@ -521,7 +572,11 @@ function makeRequest<T>(
           return;
         }
 
-        resolve({ body, token });
+        const requestIdKey = Object.keys(response.header || {}).find(
+          (key) => key.toLowerCase() === "x-request-id"
+        );
+        const requestId = requestIdKey ? String(response.header[requestIdKey]) : undefined;
+        resolve({ body, token, requestId });
       },
       fail(error) {
         reject(new GraphQLTransportError(networkErrorMessage(error), true));
@@ -594,6 +649,9 @@ export async function graphqlRead<T>(
 ): Promise<GraphQLReadResult<T>> {
   const startedAt = Date.now();
   const policy = resolvePolicy(query, options);
+  const cacheVariantHash = hashKey(policy.cacheVariant);
+  const trace = resolvePageRequestTrace(options?.trace);
+  if (trace) recordPageOperation(trace.navigationId, "logical");
   let token = policy.authMode === "session" ? getApiSessionToken() : null;
 
   if (policy.authMode === "session" && !token) {
@@ -618,7 +676,9 @@ export async function graphqlRead<T>(
       true,
       cached.source,
       false,
-      cached.entry.storedAt
+      cached.entry.storedAt,
+      trace,
+      cacheVariantHash
     );
     return {
       data: cached.entry.data as T,
@@ -628,7 +688,9 @@ export async function graphqlRead<T>(
         authMode: policy.authMode,
         source: cached.source,
         stale: false,
-        storedAt: cached.entry.storedAt
+        storedAt: cached.entry.storedAt,
+        cacheAgeMs: Math.max(0, Date.now() - cached.entry.storedAt),
+        durationMs: Date.now() - startedAt
       }
     };
   }
@@ -636,6 +698,47 @@ export async function graphqlRead<T>(
   const staleCandidate = cached && now < cached.entry.staleUntil
     ? cached.entry
     : undefined;
+
+  if (isKnownOffline()) {
+    if (staleCandidate) {
+      recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "stale",
+        false,
+        staleCandidate.storedAt,
+        trace,
+        cacheVariantHash
+      );
+      return {
+        data: staleCandidate.data as T,
+        errors: [],
+        meta: {
+          operationName: policy.operationName,
+          authMode: policy.authMode,
+          source: "stale",
+          stale: true,
+          storedAt: staleCandidate.storedAt,
+          cacheAgeMs: Math.max(0, Date.now() - staleCandidate.storedAt),
+          durationMs: Date.now() - startedAt
+        }
+      };
+    }
+    recordRequest(
+      policy.operationName,
+      startedAt,
+      false,
+      "network",
+      false,
+      undefined,
+      trace,
+      cacheVariantHash
+    );
+    throw new GraphQLTransportError("当前处于离线状态，请检查网络后重试", true);
+  }
+
   const inFlight = inFlightRequests.get(identity.requestKey) as
     | Promise<GraphQLReadResult<T>>
     | undefined;
@@ -649,23 +752,37 @@ export async function graphqlRead<T>(
         result.errors.length === 0,
         "in-flight",
         false,
-        result.meta.storedAt
+        result.meta.storedAt,
+        trace,
+        cacheVariantHash,
+        result.meta.requestId
       );
       return {
         ...result,
         meta: {
           ...result.meta,
-          source: "in-flight"
+          source: "in-flight",
+          durationMs: Date.now() - startedAt
         }
       };
     } catch (error) {
-      recordRequest(policy.operationName, startedAt, false, "in-flight", false);
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "in-flight",
+        false,
+        undefined,
+        trace,
+        cacheVariantHash
+      );
       throw error;
     }
   }
 
   const networkRequest = (async (): Promise<GraphQLReadResult<T>> => {
     try {
+      if (trace) recordPageOperation(trace.navigationId, "network");
       const response = await makeRequest<T>(
         query,
         variables,
@@ -709,7 +826,11 @@ export async function graphqlRead<T>(
         startedAt,
         errors.length === 0,
         "network",
-        true
+        true,
+        undefined,
+        trace,
+        cacheVariantHash,
+        response.requestId
       );
       return {
         data: response.body.data as T,
@@ -719,7 +840,10 @@ export async function graphqlRead<T>(
           authMode: policy.authMode,
           source: "network",
           stale: false,
-          storedAt
+          storedAt,
+          cacheAgeMs: 0,
+          requestId: response.requestId,
+          durationMs: Date.now() - startedAt
         }
       };
     } catch (error) {
@@ -732,7 +856,9 @@ export async function graphqlRead<T>(
           false,
           "stale",
           true,
-          staleCandidate.storedAt
+          staleCandidate.storedAt,
+          trace,
+          cacheVariantHash
         );
         return {
           data: staleCandidate.data as T,
@@ -742,12 +868,23 @@ export async function graphqlRead<T>(
             authMode: policy.authMode,
             source: "stale",
             stale: true,
-            storedAt: staleCandidate.storedAt
+            storedAt: staleCandidate.storedAt,
+            cacheAgeMs: Math.max(0, Date.now() - staleCandidate.storedAt),
+            durationMs: Date.now() - startedAt
           }
         };
       }
 
-      recordRequest(policy.operationName, startedAt, false, "network", true);
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "network",
+        true,
+        undefined,
+        trace,
+        cacheVariantHash
+      );
       throw error;
     }
   })();

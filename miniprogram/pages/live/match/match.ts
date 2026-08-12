@@ -1,5 +1,10 @@
 import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
 import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
+import type { Fixture } from "../../../models/common";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { PagePerformanceTracker } from "../../../utils/page-performance";
+import { observeSoftTimeout } from "../../../utils/page-request";
 import {
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
@@ -209,6 +214,46 @@ function emptyDescription(status: string): string {
   return "暂时没有比赛数据，稍后回来重新加载";
 }
 
+function coreMatch(fixture: Fixture): LiveMatch {
+  const started = fixture.started === true;
+  const status = fixture.finished ? "finished" : started ? "playing" : "not_start";
+  return normalizeMatch({
+    id: fixture.id,
+    matchId: fixture.id,
+    homeTeamName: fixture.homeTeam,
+    awayTeamName: fixture.awayTeam,
+    homeTeamShortName: fixture.teamShortName,
+    awayTeamShortName: fixture.againstTeamShortName,
+    homeScore: fixture.homeScore,
+    awayScore: fixture.awayScore,
+    kickoffTime: fixture.kickoffTime,
+    minutes: fixture.minutes,
+    status,
+    playStatus: status,
+    homeTeamDataList: [],
+    awayTeamDataList: []
+  }, status);
+}
+
+function matchStatus(match: LiveMatch): string {
+  const status = String(match.status || match.playStatus || "not_start").toLowerCase();
+  if (status === "playing" || status === "live") return "playing";
+  if (status === "finished") return "finished";
+  return "not_start";
+}
+
+function filterMatches(matches: LiveMatch[] | undefined, status: string): LiveMatch[] {
+  return (matches || []).filter((match) => matchStatus(match) === status);
+}
+
+function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveMatch[] {
+  const liveById = new Map(overlay.map((match) => [String(match.matchId || match.id), match]));
+  return core.map((match) => {
+    const live = liveById.get(String(match.matchId || match.id));
+    return live ? normalizeMatch({ ...match, ...live }, matchStatus(match)) : match;
+  });
+}
+
 Page({
   data: {
     loading: false,
@@ -237,10 +282,17 @@ Page({
   loadedSeason: undefined as string | undefined,
   pageVisible: false,
   hasShown: false,
+  targetEventId: 0,
+  coreMatches: [] as LiveMatch[],
+  liveWindow: false,
+  perfTracker: undefined as PagePerformanceTracker | undefined,
+
+  ensureContext(reason: "page-load" | "page-show" | "pull-refresh") {
+    return ensureAppContext({ reason });
+  },
 
   async onLoad() {
-    const app = getApp<IAppOption>();
-    this.currentEventId = Number(app.globalData.gw) || 0;
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "cold-launch");
     const rawStoredStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
     const storedStatus = rawStoredStatus === "next_event" ? "not_start" : rawStoredStatus;
     if (rawStoredStatus === "next_event") {
@@ -257,10 +309,12 @@ Page({
     // current event, then arm recovery before the first match request so a
     // failed cold-start request still has a revision poll to recover it.
     this.setData({ loading: true });
-    await app.initAppData();
-    this.currentEventId = Number(app.globalData.gw) || 0;
-    this.loadedSeason = app.globalData.season || undefined;
-    if (!Number(app.globalData.currentGw) && this.currentEventId && !isValidStatus(storedStatus)) {
+    const context = await this.ensureContext("page-load");
+    this.perfTracker.mark("contextReadyAt");
+    this.currentEventId = context.currentEvent || 0;
+    this.targetEventId = context.displayEvent || 0;
+    this.loadedSeason = context.season || undefined;
+    if (!context.currentEvent && this.targetEventId && !isValidStatus(storedStatus)) {
       // Preseason/offseason uses the schema-backed not-started bucket.
       this.setData({
         status: "not_start",
@@ -269,8 +323,7 @@ Page({
       });
     }
     this.initLiveRefresh();
-    this.liveRefresh?.sync();
-    this.loadData();
+    void this.loadData();
     this.syncDisplayState();
   },
 
@@ -322,16 +375,22 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    const app = getApp<IAppOption>();
+    let context = getAppContextSnapshot();
     if (resumed) {
-      try { await app.initAppData(false); } catch { /* keep the last known event */ }
+      this.perfTracker?.disconnect();
+      this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "warm-enter");
+      try {
+        context = await this.ensureContext("page-show");
+        this.perfTracker.mark("contextReadyAt");
+      } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
     }
-    const nextEventId = Number(app.globalData.gw) || 0;
-    const nextSeason = app.globalData.season || undefined;
+    const nextCurrentEventId = context?.currentEvent || 0;
+    const nextTargetEventId = context?.displayEvent || 0;
+    const nextSeason = context?.season || undefined;
     const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
     if (nextSeason) this.loadedSeason = nextSeason;
-    if (seasonChanged || (nextEventId && nextEventId !== this.currentEventId)) {
+    if (seasonChanged || nextCurrentEventId !== this.currentEventId || nextTargetEventId !== this.targetEventId) {
       this.liveRefresh?.stop();
       // The request key is otherwise only the status, which can be unchanged
       // across a GW rollover. Detach and invalidate the old event request
@@ -339,7 +398,8 @@ Page({
       this.liveRequestId += 1;
       this.liveRequest = null;
       this.liveRequestKey = "";
-      this.currentEventId = nextEventId;
+      this.currentEventId = nextCurrentEventId;
+      this.targetEventId = nextTargetEventId;
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
@@ -359,21 +419,33 @@ Page({
   onHide() {
     this.pageVisible = false;
     this.liveRefresh?.stop();
+    this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
     this.liveRefresh?.dispose();
+    this.perfTracker?.disconnect();
   },
 
-  onPullDownRefresh() {
-    this.loadData({ background: true, forceRefresh: true })
-      .finally(() => wx.stopPullDownRefresh());
+  async onPullDownRefresh() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
+    try {
+      const context = await this.ensureContext("pull-refresh");
+      this.currentEventId = context.currentEvent || 0;
+      this.targetEventId = context.displayEvent || 0;
+      this.perfTracker.mark("contextReadyAt");
+      await this.loadData({ background: true, forceRefresh: true });
+    } finally {
+      wx.stopPullDownRefresh();
+    }
   },
 
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
     const status = this.data.status;
-    if (this.liveRequest && this.liveRequestKey === status) {
+    const requestKey = `${this.targetEventId}:${options.forceRefresh === true}`;
+    if (this.liveRequest && this.liveRequestKey === requestKey) {
       return this.liveRequest;
     }
 
@@ -386,24 +458,64 @@ Page({
 
     const request = (async () => {
       try {
-        const liveResult = await getLiveMatchByStatusSnapshot(status, options.forceRefresh === true);
+        const context = getAppContextSnapshot()
+          || await this.ensureContext("page-load");
+        const targetEvent = context.displayEvent || 0;
+        if (!targetEvent) throw new Error("当前没有可展示的比赛周");
+        this.currentEventId = context.currentEvent || 0;
+        this.targetEventId = targetEvent;
+        this.perfTracker?.mark("primaryRequestStartAt");
+        const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
+          forceRefresh: options.forceRefresh,
+          trace: this.perfTracker
+            ? {
+                navigationId: this.perfTracker.navigationId,
+                callerSurface: "live-match-schedule",
+                trigger: options.forceRefresh ? "refresh" : "load",
+                forceReason: options.forceRefresh ? "user-refresh" : undefined,
+                contextRevision: context.contextRevision
+              }
+            : undefined
+        });
         if (requestId !== this.liveRequestId) return;
-        const matches = liveResult.data.map((match) => normalizeMatch(match, status));
+        this.perfTracker?.mark("primaryResponseAt");
+        const core = coreRead.data.map(coreMatch);
+        this.coreMatches = core;
+        const now = Date.now();
+        this.liveWindow = targetEvent === context.currentEvent && coreRead.data.some((fixture) =>
+          !fixture.finished
+          && (fixture.started === true || Boolean(fixture.kickoffTime && new Date(fixture.kickoffTime).getTime() <= now))
+        );
         const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
-        this.liveSnapshot = liveResult.snapshot;
-        this.cachedLiveStoredAt = liveResult.servedStoredAt;
-        if (!this.currentEventId && liveResult.snapshot) {
-          this.currentEventId = liveResult.snapshot.eventId;
-        }
+        const matches = filterMatches(core, status);
         this.setData({
           activeStatusLabel,
           emptyDescription: emptyDescription(status),
           matches,
           groups: groupMatches(matches, status),
           hasData: true,
-          lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
+          lastUpdated: formatTime(new Date(coreRead.meta.storedAt || Date.now()))
+        }, () => {
+          this.perfTracker?.mark("primarySetDataAt");
+          wx.nextTick(() => this.perfTracker?.observePrimary());
         });
-        this.liveRefresh?.sync();
+        if (this.liveWindow) {
+          const liveResult = await getLiveMatchByStatusSnapshot("all", options.forceRefresh === true);
+          if (requestId !== this.liveRequestId) return;
+          this.liveSnapshot = liveResult.snapshot;
+          this.cachedLiveStoredAt = liveResult.servedStoredAt;
+          this.coreMatches = mergeLiveOverlay(core, liveResult.data);
+          const overlaid = filterMatches(this.coreMatches, status);
+          this.setData({
+            matches: overlaid,
+            groups: groupMatches(overlaid, status),
+            lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
+          });
+          this.liveRefresh?.sync();
+        } else {
+          this.liveSnapshot = null;
+          this.liveRefresh?.stop();
+        }
         this.syncDisplayState();
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
@@ -418,7 +530,13 @@ Page({
     })();
 
     this.liveRequest = request;
-    this.liveRequestKey = status;
+    this.liveRequestKey = requestKey;
+    observeSoftTimeout(request, 3000, () => {
+      if (requestId !== this.liveRequestId || !this.pageVisible) return;
+      this.perfTracker?.mark("softFailureAt");
+      this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
+      this.syncDisplayState();
+    });
     void request.finally(() => {
       if (this.liveRequest === request) {
         this.liveRequest = null;
@@ -430,6 +548,7 @@ Page({
   },
 
   shouldAutoRefresh(): boolean {
+    if (!this.liveWindow) return false;
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
       currentEventId: this.currentEventId,
@@ -481,22 +600,15 @@ Page({
     }
     const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
-    this.liveRefresh?.stop();
-    this.liveSnapshot = null;
-    this.cachedLiveStoredAt = undefined;
+    const matches = filterMatches(this.coreMatches, status);
     this.setData({
       status,
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
-      matches: [],
-      groups: [],
-      hasData: false,
-      lastUpdated: ""
+      matches,
+      groups: groupMatches(matches, status),
+      hasData: true
     });
-    // A previous SETTLED result may have stopped the timer. The new status is
-    // a fresh request context and must own recovery before its first request.
-    this.liveRefresh?.sync();
-    this.loadData();
     this.syncDisplayState();
   },
 

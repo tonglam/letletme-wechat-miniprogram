@@ -1,4 +1,5 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { DomainRead, ServiceReadOptions } from "./service-read";
 import type { Fixture } from "../models/common";
 import { fixtureWindowEvents } from "../utils/fixture-run";
 
@@ -93,6 +94,10 @@ function mapFixturePayload(fixture: FixturePayload, event: number): Fixture {
     teamShortName: fixture.homeTeam.shortName,
     againstTeamShortName: fixture.awayTeam.shortName,
     kickoffTime: fixture.kickoffTime || undefined,
+    started: fixture.started === true,
+    minutes: fixture.minutes,
+    homeScore: fixture.homeScore ?? undefined,
+    awayScore: fixture.awayScore ?? undefined,
     difficulty: fixture.homeTeamDifficulty ?? undefined,
     homeDifficulty: fixture.homeTeamDifficulty ?? undefined,
     awayDifficulty: fixture.awayTeamDifficulty ?? undefined,
@@ -108,16 +113,31 @@ export async function getCoreEventFixtureSchedule(
   if (!event) {
     return [];
   }
-  const data = await graphqlRequest<CoreEventFixtureScheduleResponse>(
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
+  return (await readCoreEventFixtureSchedule(event, season, { forceRefresh })).data;
+}
+
+export async function readCoreEventFixtureSchedule(
+  event: number,
+  season: string,
+  options: ServiceReadOptions = {}
+): Promise<DomainRead<Fixture[]>> {
+  if (!event) throw new Error("比赛周信息暂时不可用，请稍后重试");
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
+  const result = await graphqlRead<CoreEventFixtureScheduleResponse>(
     CORE_EVENT_FIXTURE_SCHEDULE_QUERY,
     { eventId: event },
     {
       cachePolicy: "fixtures",
-      cacheVariant: season ? `season:${season}` : "season:unknown",
-      forceRefresh
+      cacheVariant: `season:${season}`,
+      forceRefresh: options.forceRefresh,
+      trace: options.trace
     }
   );
-  return (data.eventFixtures || []).map((fixture) => mapFixturePayload(fixture, event));
+  return {
+    data: (result.data.eventFixtures || []).map((fixture) => mapFixturePayload(fixture, event)),
+    meta: result.meta
+  };
 }
 
 export async function getFixtureWindow(
@@ -126,11 +146,12 @@ export async function getFixtureWindow(
   season: string | undefined,
   forceRefresh = false
 ): Promise<Fixture[]> {
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const events = fixtureWindowEvents(startEvent, horizon);
   const request = buildFixtureWindowRequest(events);
   const data = await graphqlRequest<FixtureWindowResponse>(request.query, request.variables, {
     cachePolicy: "fixtures",
-    cacheVariant: season ? `season:${season}` : "season:unknown",
+    cacheVariant: `season:${season}`,
     forceRefresh
   });
 

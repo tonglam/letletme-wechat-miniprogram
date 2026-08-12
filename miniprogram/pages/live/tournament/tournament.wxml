@@ -108,10 +108,10 @@
     </view>
   </view>
 
-  <app-error-state wx:if="{{tournamentListError && !hasData && !emptyState}}" message="{{tournamentListError}}" bind:retry="onRetry" />
-  <app-error-state wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{tournamentListError && !hasData && !emptyState}}" message="{{tournamentListError}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时联赛" />
-  <view wx:elif="{{emptyState}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
       title="{{emptyTitle}}"
@@ -122,7 +122,7 @@
     />
     <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink">创建和管理竞赛请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
-  <view wx:else class="section">
+  <view id="perf-primary-content" wx:else class="section">
     <view wx:if="{{tournamentListError}}" class="live-refresh-error">{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}</view>
     <view wx:elif="{{error}}" class="live-refresh-error">{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}</view>
     <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>

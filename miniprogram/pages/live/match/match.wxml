@@ -22,10 +22,12 @@
 
   <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
 
-  <app-error-state wx:if="{{error && !hasData}}" message="{{error}}" bind:retry="onRetry" />
+  <view wx:if="{{error && !hasData}}" id="perf-primary-content">
+    <app-error-state message="{{error}}" bind:retry="onRetry" />
+  </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载比赛" />
-  <view wx:else class="match-content">
-    <view wx:if="{{error}}" class="section live-refresh-error">{{error}}，当前显示上次成功结果</view>
+  <view wx:else id="perf-primary-content" class="match-content">
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
     <app-empty-state
       wx:if="{{matches.length === 0}}"
       title="当前没有{{activeStatusLabel}}的比赛"

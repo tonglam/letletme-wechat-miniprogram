@@ -1,5 +1,3 @@
-import { getCurrentEventAndDeadline } from "./services/common.service";
-import { formatDeadline } from "./utils/date";
 import { getEntryId } from "./utils/storage";
 import {
   getApiSessionToken,
@@ -11,7 +9,10 @@ import { purgeGraphQLStorageCache } from "./services/graphql.service";
 import { routes } from "./config/routes";
 import { storageKeys } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
-import { resolveEventContext } from "./utils/event-context";
+import {
+  commitEntryBinding,
+  ensureAppContext
+} from "./services/app-context.service";
 
 App<IAppOption>({
   globalData: {
@@ -23,7 +24,9 @@ App<IAppOption>({
     utcDeadline: "",
     deadline: "",
     entryId: undefined,
-    openid: undefined
+    openid: undefined,
+    authRevision: 0,
+    contextRevision: 0
   },
 
   _pendingInit: null as Promise<void> | null,
@@ -41,13 +44,18 @@ App<IAppOption>({
     // does not consume it. Remove the legacy identifier during migration.
     wx.removeStorageSync("openid");
     this.globalData.entryId = getEntryId();
+    commitEntryBinding(this.globalData.entryId || null, "restore");
     this.authReady = new Promise<void>((resolve) => {
       this._authReadyResolve = resolve;
     });
     this.requirePrivacyAndLogin();
-    await this.initAppData();
+    void this.initAppData();
     recordLaunch(Date.now() - launchStart);
     this.purgeExpiredGraphQLCache();
+  },
+
+  onShow() {
+    void ensureAppContext({ reason: "app-show" }).catch(() => undefined);
   },
 
   reportError(message: string) {
@@ -86,6 +94,7 @@ App<IAppOption>({
     // A still-valid 30-day session needs no login round trip: the local entry
     // binding is restored, and a later 401 triggers the central refresh path.
     this.globalData.entryId = getEntryId();
+    commitEntryBinding(this.globalData.entryId || null, "restore");
     const markAuthReady = () => {
       this._authReadyResolve?.();
       this._authReadyResolve = null;
@@ -98,6 +107,7 @@ App<IAppOption>({
     refreshWechatApiSession().then((session) => {
       if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
         this.globalData.entryId = session.profile.fplEntryId;
+        commitEntryBinding(session.profile.fplEntryId, "login");
       }
     }).catch(() => {
       // Account linking is optional and sync is best-effort: link-required
@@ -198,17 +208,10 @@ App<IAppOption>({
 
   async _initAppDataInner(forceRefresh = false) {
     try {
-      const current = await getCurrentEventAndDeadline(forceRefresh);
-      const eventContext = resolveEventContext(current.currentEvent, current.nextEvent);
-      const utcDeadline = String(current.utcDeadline || current.deadline || "");
-
-      this.globalData.season = String(current.season || "");
-      this.globalData.gw = eventContext.gw;
-      this.globalData.currentGw = Number(current.currentEvent) || 0;
-      this.globalData.lastGw = eventContext.lastGw;
-      this.globalData.nextGw = eventContext.nextGw;
-      this.globalData.utcDeadline = utcDeadline;
-      this.globalData.deadline = formatDeadline(utcDeadline);
+      await ensureAppContext({
+        forceRefresh,
+        reason: forceRefresh ? "pull-refresh" : "app-launch"
+      });
     } catch {
       // Keep launch resilient when shared app data is temporarily unavailable.
     }
