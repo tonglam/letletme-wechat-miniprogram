@@ -25,7 +25,7 @@ export async function getTeamSummary(teamId: number | string, season: string): P
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) }, {
     cachePolicy: "team-directory",
-    cacheVariant: `season:${season}`
+    season
   });
   if (!data.team) {
     throw new Error("没有找到这支球队，请返回后重试");

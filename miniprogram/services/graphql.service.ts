@@ -54,6 +54,7 @@ export interface GraphQLOptions {
   staleTtl?: number;
   getCacheExpiry?: (data: unknown) => number;
   forceRefresh?: boolean;
+  season?: string;
   cacheVariant?: string;
   trace?: PageRequestTrace;
 }
@@ -274,7 +275,9 @@ function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequest
   const cachePolicy = options?.cachePolicy ?? configured.cachePolicy;
   const policy = getGraphQLCachePolicy(cachePolicy);
   const mutation = /^\s*mutation\b/i.test(query);
-  const season = SEASON_SCOPED_POLICIES.has(cachePolicy) ? currentSeason() : "";
+  const season = SEASON_SCOPED_POLICIES.has(cachePolicy)
+    ? String(options?.season || currentSeason()).trim()
+    : "";
   if (SEASON_SCOPED_POLICIES.has(cachePolicy) && !season) {
     throw new Error("赛季信息暂时不可用，请稍后重试");
   }

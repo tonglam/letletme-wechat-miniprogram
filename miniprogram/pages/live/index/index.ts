@@ -1,6 +1,7 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 PerformancePage({
   data: {
@@ -31,7 +32,12 @@ PerformancePage({
     ]
   },
 
-  onShow() {
+  async onShow() {
+    try {
+      await ensureAppContext({ reason: "page-show" });
+    } catch {
+      // Keep the landing page usable with the last normalized app state.
+    }
     const app = getApp<IAppOption>();
     this.setData({ entryId: app.globalData.entryId ?? 0, event: app.globalData.gw });
   },

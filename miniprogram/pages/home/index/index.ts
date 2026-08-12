@@ -79,6 +79,7 @@ interface HomeStatRow {
 }
 
 const HOME_REVALIDATE_MS = 60 * 1000;
+const HOME_DEADLINE_RETRY_MS = 60 * 1000;
 
 export function shouldReloadHome(
   lastLoadAt: number,
@@ -326,7 +327,7 @@ Page({
     }
   },
 
-  async refreshHome() {
+  async refreshHome(deadlineTriggered = false) {
     this.setData({ error: "" });
     try {
       const app = getApp<IAppOption>();
@@ -346,6 +347,9 @@ Page({
       wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
     } catch (error) {
       this.showContextError(error);
+      if (deadlineTriggered) {
+        this.scheduleDeadlineRetry();
+      }
     } finally {
       this.setData({ loading: false });
     }
@@ -467,12 +471,20 @@ Page({
     }
   },
 
+  scheduleDeadlineRetry() {
+    this.stopCountdown();
+    this.countdownTimer = setTimeout(() => {
+      this.countdownTimer = undefined;
+      void this.refreshHome(true);
+    }, HOME_DEADLINE_RETRY_MS) as unknown as number;
+  },
+
   updateCountdown() {
     const ms = getDeadlineDiffMs(this.data.utcDeadline);
     this.setData({ countdown: formatCountdown(ms) });
     if (this.data.utcDeadline && ms <= 0) {
       this.stopCountdown();
-      this.refreshHome();
+      void this.refreshHome(true);
     }
   },
 
