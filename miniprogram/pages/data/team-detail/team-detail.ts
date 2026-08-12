@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
 import { routes } from "../../../config/routes";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 PerformancePage({
   data: {
@@ -9,12 +10,16 @@ PerformancePage({
     error: "",
     emptyState: false,
     teamId: "",
+    season: "",
     team: undefined as TeamSummary | undefined
   },
 
   onLoad(options: Record<string, string | undefined>) {
-    this.setData({ teamId: options.teamId || "" });
-    this.loadData();
+    this.setData({
+      teamId: options.teamId || "",
+      season: getApp<IAppOption>().globalData.season || ""
+    });
+    return this.loadData();
   },
 
   async loadData() {
@@ -25,7 +30,15 @@ PerformancePage({
 
     this.setData({ loading: true, error: "", emptyState: false });
     try {
-      const team = await getTeamSummary(this.data.teamId, getApp<IAppOption>().globalData.season);
+      let season = this.data.season;
+      try {
+        const context = await ensureAppContext({ reason: "page-load" });
+        season = context.season || season;
+      } catch (error) {
+        if (!season) throw error;
+      }
+      this.setData({ season });
+      const team = await getTeamSummary(this.data.teamId, season);
       this.setData({ team });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球队详情加载失败" });

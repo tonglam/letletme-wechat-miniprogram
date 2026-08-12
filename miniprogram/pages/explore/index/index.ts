@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 const PERF_ENTRY_ID = 15702;
 
@@ -29,6 +30,7 @@ PerformancePage({
   },
 
   hasShown: false,
+  contextRequestId: 0,
 
   onLoad() {
     const loadStart = Date.now();
@@ -41,22 +43,34 @@ PerformancePage({
       durationBucket: durationBucket(Date.now() - loadStart)
     });
     this.syncContext();
+    void this.refreshContext("page-load");
   },
 
   onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
-      this.syncContext();
+      void this.refreshContext("page-show");
     }
   },
 
-  refreshContext() {
-    this.syncContext();
+  async refreshContext(reason: "page-load" | "page-show" = "page-show") {
+    const requestId = ++this.contextRequestId;
+    try {
+      await ensureAppContext({ reason });
+    } catch {
+      // The route registry is local-first; a context failure only hides the
+      // optional season/GW subtitle and must not replace the primary menu.
+    }
+    if (requestId === this.contextRequestId) this.syncContext();
   },
 
-  /** Season/event context from the launch-populated globalData; when the
-   * context read fails the row simply hides — never a fabricated GW. */
+  onUnload() {
+    this.contextRequestId += 1;
+  },
+
+  /** Season/event context from the shared AppContext mirror; when the read
+   * fails the row simply hides — never a fabricated GW. */
   syncContext() {
     const app = getApp<IAppOption>();
     const season = app.globalData.season;

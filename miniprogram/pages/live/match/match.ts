@@ -290,8 +290,8 @@ Page({
   liveWindow: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
-  ensureContext(reason: "page-load" | "page-show" | "pull-refresh") {
-    return ensureAppContext({ reason });
+  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+    return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad() {
@@ -312,7 +312,15 @@ Page({
     // current event, then arm recovery before the first match request so a
     // failed cold-start request still has a revision poll to recover it.
     this.setData({ loading: true });
-    const context = await this.ensureContext("page-load");
+    let context = getAppContextSnapshot();
+    try {
+      context = await this.ensureContext("page-load");
+    } catch (error) {
+      if (!context) {
+        this.showContextError(error);
+        return;
+      }
+    }
     this.perfTracker.mark("contextReadyAt");
     this.currentEventId = context.currentEvent || 0;
     this.targetEventId = context.displayEvent || 0;
@@ -372,6 +380,38 @@ Page({
       },
       subscribeNetwork: subscribeNetworkStatus
     });
+  },
+
+  showContextError(error: unknown) {
+    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData({ loading: false, refreshing: false, error: message }, () => {
+      this.perfTracker?.mark("primarySetDataAt");
+      wx.nextTick(() => this.perfTracker?.observePrimary());
+    });
+    this.syncDisplayState();
+  },
+
+  async retryWithContext() {
+    if (!this.targetEventId) {
+      let context;
+      try {
+        context = await this.ensureContext("pull-refresh", true);
+      } catch (error) {
+        this.showContextError(error);
+        return;
+      }
+      this.currentEventId = context.currentEvent || 0;
+      this.targetEventId = context.displayEvent || 0;
+      this.loadedSeason = context.season || this.loadedSeason;
+      if (!this.targetEventId) {
+        this.setData({ loading: false, error: "当前赛季暂无赛程" }, () => {
+          wx.nextTick(() => this.perfTracker?.observePrimary());
+        });
+        return;
+      }
+      this.initLiveRefresh();
+    }
+    return this.loadData({ forceRefresh: true });
   },
 
   async onShow() {
@@ -620,6 +660,6 @@ Page({
   },
 
   onRetry() {
-    this.loadData({ forceRefresh: true });
+    void this.retryWithContext();
   }
 });

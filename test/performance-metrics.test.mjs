@@ -11,7 +11,10 @@ globalThis.wx = {
 };
 
 const { clearPerf, getPerf, recordApi } = await import("../miniprogram/utils/perf.ts");
-const { PagePerformanceTracker } = await import("../miniprogram/utils/page-performance.ts");
+const {
+  PagePerformanceTracker,
+  getActivePagePerformanceTrace
+} = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
 
 test("performance buffers remain bounded and page operation counts are separate", () => {
@@ -36,6 +39,7 @@ test("performance buffers remain bounded and page operation counts are separate"
   tracker.countOperation(false);
   tracker.countOperation(true);
   tracker.observePrimary();
+  assert.equal(getActivePagePerformanceTrace().navigationId, tracker.navigationId);
   callback({ intersectionRatio: 1 });
   callback({ intersectionRatio: 1 });
   const page = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
@@ -43,6 +47,11 @@ test("performance buffers remain bounded and page operation counts are separate"
   assert.equal(page.networkOperationCount, 1);
   assert.ok(page.primaryViewportVisibleAt);
   assert.ok(disconnectCount >= 1);
+  assert.equal(getActivePagePerformanceTrace(), null);
+
+  const terminalTracker = new PagePerformanceTracker({}, "pages/test/secondary", "warm-enter");
+  terminalTracker.mark("secondaryCompleteAt");
+  assert.equal(getActivePagePerformanceTrace(), null);
 });
 
 test("soft timeout is UI-only and late completion remains possible", async () => {

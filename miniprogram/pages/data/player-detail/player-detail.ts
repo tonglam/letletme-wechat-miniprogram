@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
 import { routes } from "../../../config/routes";
+import { ensureAppContext } from "../../../services/app-context.service";
 
 PerformancePage({
   data: {
@@ -15,7 +16,7 @@ PerformancePage({
 
   onLoad(options: Record<string, string | undefined>) {
     this.setData({ code: options.code || "", season: options.season || getApp<IAppOption>().globalData.season });
-    this.loadData();
+    return this.loadData();
   },
 
   async loadData() {
@@ -26,7 +27,15 @@ PerformancePage({
 
     this.setData({ loading: true, error: "", emptyState: false });
     try {
-      const player = await getPlayerInfoByCode(this.data.code, this.data.season);
+      let season = this.data.season;
+      try {
+        const context = await ensureAppContext({ reason: "page-load" });
+        season = season || context.season;
+      } catch (error) {
+        if (!season) throw error;
+      }
+      this.setData({ season });
+      const player = await getPlayerInfoByCode(this.data.code, season);
       this.setData({ player });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球员详情加载失败" });

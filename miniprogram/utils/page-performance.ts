@@ -70,6 +70,9 @@ export class PagePerformanceTracker {
   mark(field: "contextReadyAt" | "primaryRequestStartAt" | "primaryResponseAt" | "primarySetDataAt" | "secondaryCompleteAt" | "softFailureAt"): void {
     this.record[field] = monotonicNow();
     this.flush();
+    if (field === "secondaryCompleteAt" || field === "softFailureAt") {
+      this.finishRequestAttribution();
+    }
   }
 
   countOperation(network: boolean): void {
@@ -96,6 +99,8 @@ export class PagePerformanceTracker {
         this.record.primaryViewportVisibleAt = monotonicNow();
         this.flush();
         observer.disconnect();
+        if (this.observer === observer) this.observer = undefined;
+        this.finishRequestAttribution();
       }
     );
   }
@@ -103,6 +108,10 @@ export class PagePerformanceTracker {
   disconnect(): void {
     this.observer?.disconnect();
     this.observer = undefined;
+    this.finishRequestAttribution();
+  }
+
+  private finishRequestAttribution(): void {
     if (activeTracker === this) setActiveTracker(undefined);
   }
 

@@ -93,7 +93,13 @@ export async function ensureAppContext(
   }
   if (pending) {
     if (!options.forceRefresh || pendingForced) return pending;
-    await pending;
+    try {
+      await pending;
+    } catch {
+      // A user-forced read must still run after the ordinary flight settles,
+      // even when that flight failed. The recursive call below starts or
+      // joins the single forced follow-up.
+    }
     return ensureAppContext(options);
   }
   pendingForced = Boolean(options.forceRefresh);

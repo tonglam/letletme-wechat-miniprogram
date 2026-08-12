@@ -18,7 +18,9 @@
     <view class="subtitle">{{entry.playerName || '选择球队后开始'}}</view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <view wx:if="{{error}}" id="perf-primary-home-error">
+    <app-error-state message="{{error}}" bind:retry="onRetry" />
+  </view>
   <app-loading wx:elif="{{loading}}" text="加载首页数据" />
 
   <block wx:else>

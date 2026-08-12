@@ -37,9 +37,31 @@ test("price context is optional while season-scoped deep links await it", () => 
   const price = source("miniprogram/pages/data/price/price.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
   const players = source("miniprogram/pages/data/players/players.ts");
+  const playerDetail = source("miniprogram/pages/data/player-detail/player-detail.ts");
+  const teamDetail = source("miniprogram/pages/data/team-detail/team-detail.ts");
   assert.match(price, /try \{[\s\S]*await ensureAppContext\(\{ reason: "page-load" \}\);[\s\S]*\} catch \{\}[\s\S]*loadDailyChanges/);
   assert.match(teams, /const context = await ensureAppContext[\s\S]*getTeamList\(context\.season\)/);
   assert.match(players, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*await this\.fetchPage/);
+  assert.match(playerDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getPlayerInfoByCode/);
+  assert.match(teamDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getTeamSummary/);
+});
+
+test("cold context failures settle Home and all Live page loading states", () => {
+  const home = source("miniprogram/pages/home/index/index.ts");
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  const match = source("miniprogram/pages/live/match/match.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(home, /async onLoad\(\)[\s\S]*catch \(error\)[\s\S]*this\.showContextError\(error\)/);
+  for (const page of [entry, match, tournament]) {
+    assert.match(page, /let context = getAppContextSnapshot\(\)[\s\S]*catch \(error\)[\s\S]*if \(!context\)[\s\S]*this\.showContextError\(error\)/);
+    assert.match(page, /showContextError\(error: unknown\)[\s\S]*loading: false/);
+  }
+});
+
+test("Explore paints locally then resynchronizes the shared cold context", () => {
+  const explore = source("miniprogram/pages/explore/index/index.ts");
+  assert.match(explore, /this\.buildGroups\(\)[\s\S]*this\.syncContext\(\)[\s\S]*void this\.refreshContext\("page-load"\)/);
+  assert.match(explore, /await ensureAppContext\(\{ reason \}\)[\s\S]*this\.syncContext\(\)/);
 });
 
 test("local entry selection commits the canonical binding revision", () => {

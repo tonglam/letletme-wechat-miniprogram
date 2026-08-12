@@ -140,38 +140,47 @@ Page({
   async onLoad() {
     this._initialLoadDone = false;
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "cold-launch");
-    const context = await ensureAppContext({ reason: "page-load" });
-    this._perfTracker.mark("contextReadyAt");
-    this._loadedContextRevision = context.contextRevision;
-    await this.loadPage();
-    this._initialLoadDone = true;
-    this.startCountdown();
+    try {
+      const context = await ensureAppContext({ reason: "page-load" });
+      this._perfTracker.mark("contextReadyAt");
+      this._loadedContextRevision = context.contextRevision;
+      await this.loadPage();
+    } catch (error) {
+      this.showContextError(error);
+    } finally {
+      this._initialLoadDone = true;
+      this.startCountdown();
+    }
   },
 
   async onShow() {
     if (!this._initialLoadDone) return;
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "warm-enter");
-    const context = await ensureAppContext({ reason: "page-show" });
-    this._perfTracker.mark("contextReadyAt");
-    this.syncAppState();
-    if (shouldReloadHome(
-      this._lastLoadAt,
-      this._loadedContextRevision,
-      context.contextRevision
-    )) {
-      this._loadedContextRevision = context.contextRevision;
-      void this.loadPage();
-    } else {
-      wx.nextTick(() => this._perfTracker?.observePrimary("#perf-primary-fixtures"));
-      recordHomeFixtureTiming({
-        surface: "home-fixtures",
-        trigger: "onShow",
-        mode: "warm",
-        requestDuration: 0,
-        responseToSetData: 0,
-        setDataCallback: 0,
-        loadToVisible: 0
-      });
+    try {
+      const context = await ensureAppContext({ reason: "page-show" });
+      this._perfTracker.mark("contextReadyAt");
+      this.syncAppState();
+      if (shouldReloadHome(
+        this._lastLoadAt,
+        this._loadedContextRevision,
+        context.contextRevision
+      )) {
+        this._loadedContextRevision = context.contextRevision;
+        void this.loadPage();
+      } else {
+        wx.nextTick(() => this._perfTracker?.observePrimary("#perf-primary-fixtures"));
+        recordHomeFixtureTiming({
+          surface: "home-fixtures",
+          trigger: "onShow",
+          mode: "warm",
+          requestDuration: 0,
+          responseToSetData: 0,
+          setDataCallback: 0,
+          loadToVisible: 0
+        });
+      }
+    } catch (error) {
+      this.showContextError(error);
     }
     this.startCountdown();
   },
@@ -335,10 +344,30 @@ Page({
       this.startCountdown();
       wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "刷新失败" });
+      this.showContextError(error);
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  showContextError(error: unknown) {
+    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    const hasFixtureRows = this.data.fixtureRows.length > 0;
+    const primarySelector = hasFixtureRows
+      ? "#perf-primary-fixtures"
+      : "#perf-primary-home-error";
+    this.setData({
+      loading: false,
+      fixtureLoading: false,
+      error: hasFixtureRows ? "" : message,
+      fixtureError: "",
+      fixtureStaleMessage: hasFixtureRows
+        ? `${message}，当前继续显示上次成功赛程`
+        : ""
+    }, () => {
+      this._perfTracker?.mark("primarySetDataAt");
+      wx.nextTick(() => this._perfTracker?.observePrimary(primarySelector));
+    });
   },
 
   async loadSecondaryData(
@@ -445,8 +474,18 @@ Page({
     }
   },
 
-  onRetry() {
-    this.loadPage().finally(() => this.startCountdown());
+  async onRetry() {
+    this.setData({ error: "" });
+    try {
+      const context = await ensureAppContext({ forceRefresh: true, reason: "page-load" });
+      this._loadedContextRevision = context.contextRevision;
+      this._perfTracker?.mark("contextReadyAt");
+      await this.loadPage(true);
+    } catch (error) {
+      this.showContextError(error);
+    } finally {
+      this.startCountdown();
+    }
   },
 
   onCloseNotice() {

@@ -34,7 +34,7 @@ import {
   type TournamentOwnershipScope,
   type TournamentTeamOption
 } from "../../../services/live-tournament";
-import { ensureAppContext } from "../../../services/app-context.service";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 
 type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments";
@@ -353,7 +353,15 @@ PerformancePage({
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
-    const context = await this.ensureContext("page-load");
+    let context = getAppContextSnapshot();
+    try {
+      context = await this.ensureContext("page-load");
+    } catch (error) {
+      if (!context) {
+        this.showContextError(error);
+        return;
+      }
+    }
     this.loadedSeason = context.season || undefined;
     if (!getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
@@ -426,6 +434,17 @@ PerformancePage({
       },
       subscribeNetwork: subscribeNetworkStatus
     });
+  },
+
+  showContextError(error: unknown) {
+    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData({
+      loading: false,
+      refreshing: false,
+      error: message,
+      errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+    });
+    this.syncDisplayState();
   },
 
   async onShow() {
@@ -538,13 +557,21 @@ PerformancePage({
   async retryWithContext() {
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
-      try { await app.initAppData(true); } catch { /* retain the eventless state */ }
-      const nextEventId = Number(app.globalData.gw) || 0;
+      let context;
+      try {
+        context = await this.ensureContext("pull-refresh", true);
+      } catch (error) {
+        this.showContextError(error);
+        return;
+      }
+      const nextEventId = context.currentEvent || 0;
       if (nextEventId > 0) {
-        this.loadedSeason = app.globalData.season || this.loadedSeason;
+        this.loadedSeason = context.season || app.globalData.season || this.loadedSeason;
         this.setData({ event: nextEventId, maxGw: nextEventId, error: "" });
+        this.initLiveRefresh();
         return this.loadTournaments(true);
       }
+      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
       return;
     }
     return this.loadTournaments(true);

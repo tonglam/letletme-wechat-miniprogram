@@ -142,7 +142,15 @@ Page({
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
-    const context = await this.ensureContext("page-load");
+    let context = getAppContextSnapshot();
+    try {
+      context = await this.ensureContext("page-load");
+    } catch (error) {
+      if (!context) {
+        this.showContextError(error);
+        return;
+      }
+    }
     this.perfTracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
     if (!hasRouteEntry && !getApiSessionToken()) {
@@ -324,9 +332,20 @@ Page({
       await this.ensureContext("pull-refresh");
       this.perfTracker.mark("contextReadyAt");
       await this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true });
+    } catch (error) {
+      this.showContextError(error);
     } finally {
       wx.stopPullDownRefresh();
     }
+  },
+
+  showContextError(error: unknown) {
+    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData({ loading: false, refreshing: false, error: message }, () => {
+      this.perfTracker?.mark("primarySetDataAt");
+      wx.nextTick(() => this.perfTracker?.observePrimary());
+    });
+    this.syncDisplayState();
   },
 
   async retryWithContext(options: LiveEntryLoadOptions = {}) {
@@ -335,11 +354,18 @@ Page({
     // requiring a hide/resume cycle.
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
-      try { await this.ensureContext("pull-refresh", true); } catch { /* retain the eventless state */ }
-      const nextEventId = Number(app.globalData.gw) || 0;
+      let context;
+      try {
+        context = await this.ensureContext("pull-refresh", true);
+      } catch (error) {
+        this.showContextError(error);
+        return;
+      }
+      const nextEventId = context.currentEvent || 0;
       if (nextEventId > 0) {
-        this.loadedSeason = app.globalData.season || this.loadedSeason;
+        this.loadedSeason = context.season || app.globalData.season || this.loadedSeason;
         this.setData({ event: nextEventId, maxGw: nextEventId, error: "", hasData: false });
+        this.initLiveRefresh();
         this.liveRefresh?.sync();
       } else {
         this.setData({ error: "当前赛季暂无实时比赛周" });

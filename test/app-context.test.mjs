@@ -52,5 +52,5 @@ test("AppContext source enforces deadline freshness, unresolved backoff and forc
   assert.match(source, /nextDeadlineAt && nextDeadlineAt > Date\.now\(\)[\s\S]*\? nextDeadlineAt/);
   assert.match(source, /currentEvent === 38 && !nextEvent[\s\S]*24 \* 60 \* 60 \* 1000/);
   assert.match(source, /nextRetryAt = Date\.now\(\) \+ 60 \* 1000/);
-  assert.match(source, /if \(pending\)[\s\S]*if \(!options\.forceRefresh \|\| pendingForced\) return pending;[\s\S]*await pending;[\s\S]*return ensureAppContext\(options\)/);
+  assert.match(source, /if \(pending\)[\s\S]*if \(!options\.forceRefresh \|\| pendingForced\) return pending;[\s\S]*try \{\s*await pending;\s*\} catch \{[\s\S]*return ensureAppContext\(options\)/);
 });
