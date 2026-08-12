@@ -155,17 +155,17 @@
       {
         "id": "checks-auto",
         "type": "markdown",
-        "body": "## 自动检查与后端守卫\n\n- Mini：187/187 tests；typecheck 通过；lint 通过。\n- GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。\n- Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。\n- Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。\n- Storage：`season:unknown`、legacy GraphQL key、原始 token、Bearer、email、openid、entryId/variables telemetry 均为 0。\n\n最终 SHA 6dbb96602fd3f860337dbd97bf3c363db9484cd5 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。"
+        "body": "## 自动检查与后端守卫\n\n- Mini：189/189 tests；typecheck 通过；lint 通过。\n- GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。\n- Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。\n- Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。\n- Storage：`season:unknown`、legacy GraphQL key、原始 token、Bearer、email、openid、entryId/variables telemetry 均为 0。\n\n最终 SHA 10aba470b67df6d52c07967fd43af2697077d1a3 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。"
       },
       {
         "id": "exact-head-review",
         "type": "markdown",
-        "body": "## 当前 Head Review 闭环（2026-08-13）\n\n当前小程序行为验收 head：`6dbb96602fd3f860337dbd97bf3c363db9484cd5`。既有固定设备性能样本及其原始采样 SHA 保持不变；本节只记录最终 review 修复后的精确 head 回归。\n\n| 检查项 | 结果 |\n|---|---|\n| Codex review 发现 | 7 项，已逐项修复并关闭旧线程 |\n| 自动检查 | 187/187 tests、typecheck、lint 全部通过 |\n| 定向 DevTools | 5/5；两个 partial last-good、GW 隔离、season 隔离、kickoff transition |\n| 25 页语义遍历 | 25/25；23 个物理路由 + 2 个预期 redirect |\n| 网络拓扑 | 仅 `http://localhost:3000/api/graphql`；直连 `4000` 为 0；override 为空 |\n| 运行时异常 | console error 0；exception 0 |\n\n初版全页重跑脚本误将统一 `hasData/emptyState` 字段作为所有页面的必备终态，原始判定为 17/25。原始逐页样本保留；按既定语义口径（预期路由、primary 节点存在、loading/refreshing 均结束）重算为 25/25。该修正只纠正临时验收器，不删除页面或样本，也不改变性能门槛。"
+        "body": "## 当前 Head Review 闭环（2026-08-13）\n\n当前小程序行为验收 head：`10aba470b67df6d52c07967fd43af2697077d1a3`。既有固定设备性能样本及其原始采样 SHA 保持不变；本节只记录最终 review 修复后的精确代码 head 回归。\n\n| 检查项 | 结果 |\n|---|---|\n| Codex review 发现 | 共 10 项，分两轮逐项修复并关闭线程 |\n| 自动检查 | 189/189 tests、typecheck、lint 全部通过 |\n| 定向 DevTools | 9/9；partial last-good、GW/season 隔离、kickoff transition、context recovery、tracker ownership |\n| 25 页语义遍历 | 25/25；23 个物理路由 + 2 个预期 redirect |\n| 网络拓扑 | Home 强刷仅产生 CoreEventFixtureSchedule + MiniHomeSupplement；URL 仅 `http://localhost:3000/api/graphql`；直连 `4000` 为 0；override 为空 |\n| 运行时异常 | console error 0；exception 0 |\n\n初版全页重跑脚本误将统一 `hasData/emptyState` 字段作为所有页面的必备终态，原始判定为 17/25。原始逐页样本保留；按既定语义口径（预期路由、primary 节点存在、loading/refreshing 均结束）重算为 25/25。最终代码 head 的再次遍历从一开始使用页面域终态，结果同样为 25/25。该修正只纠正临时验收器，不删除页面或样本，也不改变性能门槛。"
       },
       {
         "id": "limitations",
         "type": "markdown",
-        "body": "## 限制、稳健性与残余风险\n\n1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。\n2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。\n3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。\n4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。\n5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。\n\n- 5/20/20 性能分布采自功能代码 SHA be6d2ae；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 SHA 6dbb96602fd3f860337dbd97bf3c363db9484cd5，并另行 25/25 验证。"
+        "body": "## 限制、稳健性与残余风险\n\n1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。\n2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。\n3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。\n4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。\n5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。\n\n- 5/20/20 性能分布采自功能代码 SHA be6d2ae；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 SHA 10aba470b67df6d52c07967fd43af2697077d1a3，并另行 25/25 验证。"
       },
       {
         "id": "next",
@@ -4795,18 +4795,24 @@
       ]
     },
     "exactHeadAcceptance": {
-      "capturedAt": "2026-08-13T03:45:39+08:00",
-      "miniProgramSha": "6dbb96602fd3f860337dbd97bf3c363db9484cd5",
+      "capturedAt": "2026-08-13T04:09:00+08:00",
+      "miniProgramSha": "10aba470b67df6d52c07967fd43af2697077d1a3",
       "automated": {
-        "testsPassed": 187,
+        "testsPassed": 189,
         "testsFailed": 0,
         "typecheck": "passed",
         "lint": "passed"
       },
       "reviewClosure": {
-        "findingsFixed": 7,
-        "targetedDevToolsPassed": 5,
-        "targetedDevToolsFailed": 0
+        "findingsFixed": 10,
+        "targetedDevToolsPassed": 9,
+        "targetedDevToolsFailed": 0,
+        "latestFindings": [
+          "My FPL cold context terminal and recovery",
+          "Fixture Explorer context-first retry",
+          "Home secondary tracker ownership",
+          "My FPL unavailable resume bypasses unresolved-context backoff"
+        ]
       },
       "fullPageSmoke": {
         "semanticPassed": 25,
@@ -4814,9 +4820,15 @@
         "strictRouteMatches": 23,
         "expectedRedirects": 2,
         "originalTemporaryPredicatePassed": 17,
-        "predicateCorrection": "Removed an invalid universal hasData/emptyState requirement; retained all raw page samples."
+        "predicateCorrection": "Removed an invalid universal hasData/emptyState requirement; retained all raw page samples.",
+        "finalHeadUsesDomainTerminalPredicate": true
       },
       "topology": {
+        "graphqlOperationCount": 2,
+        "operationNames": [
+          "CoreEventFixtureSchedule",
+          "MiniHomeSupplement"
+        ],
         "graphqlUrls": [
           "http://localhost:3000/api/graphql"
         ],
@@ -4827,7 +4839,10 @@
         "consoleErrors": 0,
         "exceptions": 0
       },
-      "evidencePath": "/tmp/letletme-exact-head-acceptance-6dbb966.json"
+      "evidencePaths": [
+        "/tmp/letletme-targeted-acceptance-10aba47.json",
+        "/tmp/letletme-final-acceptance-10aba47.json"
+      ]
     }
   },
   "sources": [
