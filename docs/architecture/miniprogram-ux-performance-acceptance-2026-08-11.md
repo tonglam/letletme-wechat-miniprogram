@@ -452,3 +452,59 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 ### 门槛结论
 
 代码链路已实施，核心 Fixture 和 Web/GraphQL 接口门槛已通过；冷启动 Fixture visible、下拉刷新 n=20、response-to-setData 正式样本、正价格变更 miss 仍未闭环。因此报告状态保持 **代码已实施，尚未验收**，不得进入 GraphQL/Web/小程序合并、线上部署或微信开发版 `1.0.2` 上传。
+
+## 2026-08-12 DevTools 权威分段样本补充
+
+### 当前状态
+
+**代码已实施，尚未验收。** 本节只记录真实 DevTools storage、控制台和 API record 证据；未达到计划要求的样本量或门槛，不将报告状态升级为“已修复并验收”。
+
+### 测试环境与版本
+
+- WeChat DevTools Stable `2.01.2510290`，基础库 `3.15.2`，模拟器 `iPhone 12/13 Pro 100%`。
+- GraphQL `e90bee1`，Web `d732276`，小程序代码 `252c5b1`。
+- 小程序 endpoint 经过 `127.0.0.1:3001/api/graphql` 的 develop override 进行 DevTools 验证；4000/3000 的独立性能样本仍按报告既有直连和 Web 代理记录保存。
+
+### 冷启动分段
+
+以下 5 条来自清除数据缓存后重新编译的独立冷链。`Launch Time` 是 DevTools 系统日志；Fixture 分段来自小程序 `perf:v1` 的 `homeFixtureTimings`。样本量只有 5，按门槛不计算 p50/p95，仅列全部样本和最大值。
+
+| 样本 | DevTools Launch Time | Fixture request | response 到 setData | setData callback | Fixture 可见 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1146ms | 122ms | 0ms | 8ms | 130ms |
+| 2 | 1053ms | 119ms | 0ms | 8ms | 127ms |
+| 3 | 1065ms | 117ms | 0ms | 7ms | 124ms |
+| 4 | 2702ms | 121ms | 0ms | 8ms | 129ms |
+| 5 | 1063ms | 134ms | 0ms | 9ms | 143ms |
+| 最大值 | 2702ms | 134ms | 0ms | 9ms | 143ms |
+
+结论：10 条 Fixture 的后端请求和 setData/render 分段均在约 `0.12–0.14s`，不是冷启动慢点；但 DevTools `Launch Time` 最大 `2702ms`，在 Fixture 开始可见之前已经超过计划的冷启动最大 `1200ms`，冷启动门槛失败。该异常应继续拆分为 IDE/模拟器启动、逻辑层初始化和页面加载，而不能归因于 Fixture 数据量。
+
+### 刷新分段
+
+真实下拉刷新 `n=20`：
+
+- `loadToVisible`: p50 `128ms`，p95 `134ms`，max `135ms`。
+- Fixture request: p50 `125ms`，p95 `131ms`，max `133ms`。
+- `setDataCallback`: p50 `3ms`，p95 `4ms`，max `5ms`。
+- `responseToSetData`: 观察样本均为 `0ms`。
+
+刷新到 Fixture 可见已满足 `p95 <= 600ms`；下拉 spinner 不等待 `MiniHomeSupplement` 或 `GetEntry`。
+
+### 暖页面样本完整性
+
+已执行 20 次 Explore -> 首页返回尝试，但当前埋点只留下 2 条 storage 命中记录，并将其错误标记为 `mode=cold`（request `1ms`，Fixture 可见 `39ms/41ms`）。API record 证明这些不是网络冷链：`CoreEventFixtureSchedule` 为 `1` 次 `network`、`2` 次 `storage`；`CurrentEventInfo` 为 `1` 次 `network`、`1` 次 `memory`、`2` 次 `storage`；没有 `LiveSnapshot` operation。
+
+因此本次不能生成合规的 warm `n=20` p50/p95。根因是埋点按页面原始 `hadFixtureRows` 判定 mode，无法区分“缓存重载”和 freshness 有效的 `onShow`；20 次尝试也没有形成 20 次新的页面 load。这个 measurement gap 必须在下一轮修正或通过 DevTools 可重复的页面生命周期采集补齐，当前不得把缓存重载冒充为 warm page。
+
+### 请求链路证据
+
+- 首页首屏 Fixture operation 仍为 `CoreEventFixtureSchedule`，没有页面触发的 `LiveSnapshot`。
+- `MiniHomeSupplement`、`GetEntry` 在 Fixture setData callback 之后运行；辅助请求失败不会清空已显示 Fixture。
+- GraphQL 标准 operation 已观察为每 operation 1 次 admission Redis EVAL；Web GraphQL route 不执行 PostgreSQL limiter。
+- Current season request path 不再执行 season DB refresh；健康检查只保留数据库连通性检查。
+- `GetPlayerValues` 既有 API 样本中 warm/negative hit p95 `450.1ms`，empty miss `694.9ms`；本地当前 publication 未找到可用的正结果日期，因此“positive miss”要求尚未完成，不能标记全部 PlayerValues 门槛通过。
+
+### 验收决定
+
+当前已确认：Fixture 正向依赖、Fixture 首屏分段、刷新性能、一次 admission、Web limiter DB 查询为零、Fixture 不进入 Live。当前未确认：冷启动最大值门槛、warm page `n=20`、PlayerValues positive miss、部署后线上精确 SHA。报告状态保持 **代码已实施，尚未验收**；不进入下一仓库合并、部署或小程序上传。
