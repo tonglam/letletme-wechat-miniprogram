@@ -544,3 +544,10 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 - response 到 setData：p50/p95/max 均 `0ms`。
 
 综合判定：小程序产品 cold/refresh/warm cached-page 分段均满足对应时间门槛；但 DevTools 原始启动 outlier、PlayerValues positive miss、25 页面完整功能验收和部署后精确 SHA 仍未完成，所以报告状态继续为 **代码已实施，尚未验收**，不执行合并发布。
+
+## 2026-08-12 endpoint 与 schema 运行时核对
+
+- 当前 `env.ts` 的 develop 默认 endpoint 是 `http://localhost:3000/api/graphql`；清除 DevTools 数据缓存后，当前 storage 未发现 `letletme_graphql_endpoint_override`、`3001/api/graphql` 或 `4000/graphql` override 值。
+- 4000 未签名直连返回 `401 UNTRUSTED_INGRESS`；3000 `/api/graphql` 的 `CoreEventFixtureSchedule` 返回 `200`、10 条 Fixture，单次约 `120ms`。
+- 运行时 `MiniHomeSupplement` 的实际 schema 为 `miniProgramNotice`、无参 `eventOverallResult`、`playerValues(changeDate)`；提交带 `eventId` 的查询会得到 `GRAPHQL_VALIDATION_FAILED: Unknown argument eventId`，去掉该参数后返回 `200`、约 `501ms`。这与计划示例中的 `eventOverallResult(eventId: Int!)` 不一致，但没有修改 schema。
+- DevTools Network 面板当前只显示资源计数，没有暴露可读的请求 URL；因此“全部小程序 Network 请求只能到 3000”仍是未完全证明项，不能用 env 默认值替代 Network 证据。
