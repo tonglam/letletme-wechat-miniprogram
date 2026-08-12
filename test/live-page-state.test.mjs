@@ -494,7 +494,7 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.event, 1);
   assert.equal(context.data.maxGw, 1);
   assert.deepEqual(context.data.rows, []);
-  assert.equal(context.data.selectedTournament, undefined);
+  assert.equal(context.data.selectedTournament, null);
   assert.deepEqual(context.data.selectedOwnershipPlayers, []);
   assert.deepEqual(context.data.ownershipAvailablePlayers, []);
   assert.equal(context.data.ownershipSummary, "未筛选");

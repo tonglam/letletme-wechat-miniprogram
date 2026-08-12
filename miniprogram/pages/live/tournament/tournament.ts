@@ -100,7 +100,7 @@ interface LiveTournamentData {
   tournaments: TournamentOption[];
   tournamentNames: string[];
   selectedTournamentIndex: number;
-  selectedTournament?: TournamentOption;
+  selectedTournament: TournamentOption | null;
   rows: DisplayTournamentRow[];
   displayedRows: DisplayTournamentRow[];
   sortOptions: SortOption[];
@@ -274,12 +274,12 @@ PerformancePage({
     resultsFiltered: false,
     event: 0,
     maxGw: 1,
-    entryId: undefined,
+    entryId: 0,
     keyword: "",
     tournaments: [],
     tournamentNames: [],
     selectedTournamentIndex: 0,
-    selectedTournament: undefined,
+    selectedTournament: null,
     rows: [],
     displayedRows: [],
     sortOptions: [
@@ -363,7 +363,7 @@ PerformancePage({
       try { await app.authReady; } catch {}
     }
     const currentGw = context.currentEvent || 0;
-    this.setData({ entryId: app.globalData.entryId, event: currentGw, maxGw: currentGw });
+    this.setData({ entryId: app.globalData.entryId ?? 0, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
     if (!this.data.entryId || currentGw > 0) {
       this.loadTournaments(false);
@@ -459,7 +459,7 @@ PerformancePage({
           ...(seasonChanged ? {
               tournaments: [],
               tournamentNames: [],
-              selectedTournament: undefined,
+              selectedTournament: null,
               ownershipPlayers: [],
               ownershipTeamOptions: [],
               ownershipTeamNames: [],
@@ -567,7 +567,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.setData({
-      entryId: nextEntryId,
+      entryId: nextEntryId ?? 0,
       loading: false,
       refreshing: false,
       hasData: false,
@@ -577,7 +577,7 @@ PerformancePage({
       tournamentListErrorSuffix: "",
       tournaments: [],
       tournamentNames: [],
-      selectedTournament: undefined,
+      selectedTournament: null,
       rows: [],
       displayedRows: [],
       lastUpdated: ""
@@ -607,7 +607,7 @@ PerformancePage({
         emptyActionText: "去选择球队",
         tournaments: [],
         tournamentNames: [],
-        selectedTournament: undefined,
+        selectedTournament: null,
         rows: [],
         displayedRows: []
       });
@@ -641,7 +641,7 @@ PerformancePage({
         this.setData({
           tournaments: [],
           tournamentNames: [],
-          selectedTournament: undefined,
+          selectedTournament: null,
           rows: [],
           displayedRows: [],
           hasData: false,
@@ -1011,6 +1011,7 @@ PerformancePage({
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const selectedTournamentIndex = Number(event.detail.value);
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
+    if (!selectedTournament) return;
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.failedEntryCount = 0;

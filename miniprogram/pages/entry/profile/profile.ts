@@ -17,7 +17,7 @@ PerformancePage({
     loading: false,
     error: "",
     emptyState: false,
-    entryId: undefined,
+    entryId: 0,
     entry: {}
   } as EntryProfileData,
 
@@ -32,7 +32,7 @@ PerformancePage({
       try { await app.authReady; } catch {}
     }
     const entryId = Number(options.entry || app.globalData.entryId);
-    this.setData({ entryId });
+    this.setData({ entryId: Number.isFinite(entryId) ? entryId : 0 });
     this.loadEntry(entryId);
   },
 

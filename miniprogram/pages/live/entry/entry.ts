@@ -97,7 +97,7 @@ Page({
     viewOnly: false,
     event: 0,
     maxGw: 1,
-    entryId: undefined,
+    entryId: 0,
     total: 0,
     livePoints: 0,
     netPoints: 0,
@@ -155,7 +155,7 @@ Page({
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: hasRouteEntry ? routeEntry : followedEntry,
+      entryId: hasRouteEntry ? routeEntry : (followedEntry ?? 0),
       // An explicit route entry that is not the followed team is read-only
       // view mode; it never changes the stored follow.
       viewOnly: hasRouteEntry && routeEntry !== followedEntry
@@ -364,7 +364,7 @@ Page({
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.setData({
-      entryId: nextEntryId,
+      entryId: nextEntryId ?? 0,
       loading: false,
       refreshing: false,
       transfersLoading: false,

@@ -70,7 +70,7 @@ PerformancePage({
     emptyTitle: "",
     emptyDescription: "",
     emptyActionText: "",
-    entryId: undefined,
+    entryId: 0,
     event: 1,
     maxGw: 1,
     tournaments: [],
@@ -104,7 +104,7 @@ PerformancePage({
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
-      entryId: app.globalData.entryId,
+      entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });

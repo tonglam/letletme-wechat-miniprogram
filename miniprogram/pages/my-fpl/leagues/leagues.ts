@@ -47,7 +47,7 @@ PerformancePage({
   data: {
     loading: true,
     error: "",
-    entryId: undefined as number | undefined,
+    entryId: 0,
     leagues: [] as MyFplLeagueBrief[],
     displayLeagues: [] as MyFplLeagueBrief[],
     keyword: "",
@@ -86,11 +86,11 @@ PerformancePage({
 
     if (!entryId) {
       this.loadedSeason = undefined;
-      this.setData({ loading: false, error: "", entryId: undefined, leagues: [], displayLeagues: [], fromCache: false });
+      this.setData({ loading: false, error: "", entryId: 0, leagues: [], displayLeagues: [], fromCache: false });
       return;
     }
 
-    const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
+    const principalChanged = this.data.entryId > 0 && this.data.entryId !== entryId;
     const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
     if (principalChanged || seasonChanged) {
       this.loadedSeason = undefined;

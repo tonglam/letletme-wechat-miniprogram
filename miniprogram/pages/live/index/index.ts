@@ -4,7 +4,7 @@ import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 
 PerformancePage({
   data: {
-    entryId: undefined as number | undefined,
+    entryId: 0,
     event: 0,
     cards: [
       {
@@ -33,7 +33,7 @@ PerformancePage({
 
   onShow() {
     const app = getApp<IAppOption>();
-    this.setData({ entryId: app.globalData.entryId, event: app.globalData.gw });
+    this.setData({ entryId: app.globalData.entryId ?? 0, event: app.globalData.gw });
   },
 
   onOpenEntryStrip() {

@@ -31,9 +31,9 @@
     <text class="phase-banner-text">本轮结果结算处理中，最终结果以官方确认为准</text>
   </view>
 
-  <app-error-state wx:if="{{error && !hasTeamData}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasTeamData}}" text="加载球队数据" />
-  <view wx:elif="{{emptyState && !hasTeamData}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{emptyState && !hasTeamData}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
       title="{{emptyTitle}}"

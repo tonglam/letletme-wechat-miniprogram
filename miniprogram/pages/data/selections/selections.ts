@@ -78,7 +78,7 @@ PerformancePage({
     emptyActionText: "",
     statsEmptyTitle: "本轮还没有选择率数据",
     statsEmptyDescription: "GW 数据同步后会显示联赛内的阵容趋势",
-    entryId: undefined,
+    entryId: 0,
     event: 1,
     maxGw: 1,
     tournaments: [],
@@ -109,7 +109,7 @@ PerformancePage({
     }
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
-      entryId: app.globalData.entryId,
+      entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });

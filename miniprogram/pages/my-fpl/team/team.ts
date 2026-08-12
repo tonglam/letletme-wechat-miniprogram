@@ -169,7 +169,7 @@ Page({
     emptyTitle: "",
     emptyDescription: "",
     emptyActionText: "",
-    entryId: undefined,
+    entryId: 0,
     event: 1,
     maxGw: 1,
     activeTab: "squad",
@@ -212,7 +212,7 @@ Page({
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
     this.setData({
-      entryId: app.globalData.entryId,
+      entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
@@ -376,7 +376,7 @@ Page({
     this.transferPayload = null;
     this.tabRequestId += 1;
     this.setData({
-      entryId: nextEntryId,
+      entryId: nextEntryId ?? 0,
       loading: false,
       error: "",
       transferError: "",
