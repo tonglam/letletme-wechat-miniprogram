@@ -17,7 +17,8 @@
 | Data deployed | f23e634af76031a4eb76dbcda58706a899f62f9e |
 | GraphQL under test | 75de0566fb4f7cdfa4e94ede58dbcfbf79556415 |
 | Web under test | 72d2d740f0862c33776085a41070515ecb5db7df |
-| Mini code under test | be6d2ae76d0fc56b50e91e46f20395c1dcb022f2 |
+| Mini performance baseline | be6d2ae76d0fc56b50e91e46f20395c1dcb022f2 |
+| Mini final behavior head | 0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f |
 | WeChat DevTools | 2.01.2510290 |
 | 基础库 | 3.15.2 |
 | 设备 | iPhone 12/13 (Pro), iOS 10.0.1 |
@@ -168,9 +169,19 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 - 真实 404 与 GraphQL AST validation 均各 3 次，明确 `stale=false`。
 - 401 单次 refresh/replay、其他 4xx/validation 不 stale、partial 不写缓存由 181 项自动测试覆盖。当前 DevTools 无真实 session token，不伪装成登录态 UI 实测。
 
+### Final review exact-head 竞态验收
+
+| 场景 | 实测 | 结果 |
+|---|---|---|
+| Price hidden settle | hidden 期间成功响应仍提交，回页保留 sentinel | 通过 |
+| Live Match tab race | 在途 Core 响应后保持 `finished / 已完赛` | 通过 |
+| CurrentEventInfo partial | 抛错并保持 season/event/contextRevision last-good | 通过 |
+
+最终 SHA `0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f` 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。
+
 ## 10. 自动检查与后端守卫
 
-- Mini：181/181 tests；typecheck 通过；lint 通过。
+- Mini：182/182 tests；typecheck 通过；lint 通过。
 - GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。
 - Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。
 - Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。
@@ -182,7 +193,8 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。
 3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。
 4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。
-5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。
+5. 5/20/20 性能分布采自功能代码 SHA `be6d2ae`；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 `0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f`。
+6. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。
 
 ## 12. 下一步监控
 

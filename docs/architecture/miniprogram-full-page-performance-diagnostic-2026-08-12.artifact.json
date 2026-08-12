@@ -5,7 +5,7 @@
     "surface": "report",
     "title": "小程序全页面性能整改最终验收报告",
     "description": "WeChat Mini Program full-page lifecycle, caching, failure semantics and backend read-path acceptance.",
-    "generatedAt": "2026-08-12T19:02:23.234Z",
+    "generatedAt": "2026-08-12T19:21:54.762Z",
     "sources": [
       {
         "id": "data-positive-sql",
@@ -150,17 +150,17 @@
       {
         "id": "errors",
         "type": "markdown",
-        "body": "## 错误、stale、竞态与快速失败\n\n| 场景 | 样本 | 最大可见/完成 | stale | 网络行为 | 结果 |\n|---|---|---|---|---|---|\n| 离线 + last-good | 3 | 63ms | 是 | 不发网/允许回退 | 通过 |\n| 离线 + 无缓存 | 3 | 38ms | 否 | 不发网 | 通过 |\n| 在线 3 秒 soft failure | 3 | 2922ms | 否 | 请求继续 | 通过 |\n| 迟到成功提交 | 3 | 3227ms | 否 | revision 匹配后提交 | 通过 |\n| 非法路由参数 | 3 | 101ms | 否 | 0 | 通过 |\n| 真实 HTTP 404 | 3 | 24ms | 否 | 真实 Web route | 通过 |\n| 真实 GraphQL AST validation | 3 | 90ms | 否 | 标准 3000 -> 4000 | 通过 |\n\n- 已知 offline + last-good 在 63ms 内显示持续 stale 提示；无缓存在 38ms 内显示可重试错误。\n- 3 秒 soft failure 在 2914–2922ms 触发，迟到成功在 revision 仍匹配时提交并清除错误。\n- 真实 404 与 GraphQL AST validation 均各 3 次，明确 `stale=false`。\n- 401 单次 refresh/replay、其他 4xx/validation 不 stale、partial 不写缓存由 181 项自动测试覆盖。当前 DevTools 无真实 session token，不伪装成登录态 UI 实测。"
+        "body": "## 错误、stale、竞态与快速失败\n\n| 场景 | 样本 | 最大可见/完成 | stale | 网络行为 | 结果 |\n|---|---|---|---|---|---|\n| 离线 + last-good | 3 | 63ms | 是 | 不发网/允许回退 | 通过 |\n| 离线 + 无缓存 | 3 | 38ms | 否 | 不发网 | 通过 |\n| 在线 3 秒 soft failure | 3 | 2922ms | 否 | 请求继续 | 通过 |\n| 迟到成功提交 | 3 | 3227ms | 否 | revision 匹配后提交 | 通过 |\n| 非法路由参数 | 3 | 101ms | 否 | 0 | 通过 |\n| 真实 HTTP 404 | 3 | 24ms | 否 | 真实 Web route | 通过 |\n| 真实 GraphQL AST validation | 3 | 90ms | 否 | 标准 3000 -> 4000 | 通过 |\n\n- 已知 offline + last-good 在 63ms 内显示持续 stale 提示；无缓存在 38ms 内显示可重试错误。\n- 3 秒 soft failure 在 2914–2922ms 触发，迟到成功在 revision 仍匹配时提交并清除错误。\n- 真实 404 与 GraphQL AST validation 均各 3 次，明确 `stale=false`。\n- 401 单次 refresh/replay、其他 4xx/validation 不 stale、partial 不写缓存由 181 项自动测试覆盖。当前 DevTools 无真实 session token，不伪装成登录态 UI 实测。\n\n### Final review exact-head 竞态验收\n\n| 场景 | exact-head 结果 |\n|---|---|\n| Price hidden settle | hidden 期间成功响应仍提交，回页保留 sentinel |\n| Live Match tab race | 在途 Core 响应后保持 finished / 已完赛 |\n| CurrentEventInfo partial | 抛错并保持 season/event/contextRevision last-good |"
       },
       {
         "id": "checks-auto",
         "type": "markdown",
-        "body": "## 自动检查与后端守卫\n\n- Mini：181/181 tests；typecheck 通过；lint 通过。\n- GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。\n- Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。\n- Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。\n- Storage：`season:unknown`、legacy GraphQL key、原始 token、Bearer、email、openid、entryId/variables telemetry 均为 0。"
+        "body": "## 自动检查与后端守卫\n\n- Mini：182/182 tests；typecheck 通过；lint 通过。\n- GraphQL：376 passed、4 skipped；typecheck、lint、format check 通过。\n- Data：单元、集成、typecheck、lint、build 通过；migration apply/rollback 与 view contract 已验证。\n- Web：production build 标准代理通过；public、requestId、429 透传通过；GraphQL route DB limiter 为 0。\n- Storage：`season:unknown`、legacy GraphQL key、原始 token、Bearer、email、openid、entryId/variables telemetry 均为 0。\n\n最终 SHA 0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f 再次完成 25 页面 smoke：23 个物理路由一致，2 个为锁定兼容重定向（data→explore、summary/entry→my-fpl/team），语义终态 25/25，console/exception 0。"
       },
       {
         "id": "limitations",
         "type": "markdown",
-        "body": "## 限制、稳健性与残余风险\n\n1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。\n2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。\n3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。\n4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。\n5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。"
+        "body": "## 限制、稳健性与残余风险\n\n1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。\n2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。\n3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。\n4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。\n5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。\n\n- 5/20/20 性能分布采自功能代码 SHA be6d2ae；最终 3 个 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 SHA 0a3d3ad81db3d0c34257ce5f7444d5c7dfcdd31f，并另行 25/25 验证。"
       },
       {
         "id": "next",
@@ -176,7 +176,7 @@
   },
   "snapshot": {
     "version": 1,
-    "generatedAt": "2026-08-12T19:02:23.234Z",
+    "generatedAt": "2026-08-12T19:21:54.762Z",
     "status": "ready",
     "datasets": {
       "headline": [
@@ -4467,6 +4467,325 @@
           "durationMs": 0.111,
           "resultCount": 2,
           "positive": true
+        }
+      ],
+      "final_review_races": [
+        {
+          "scenario": "Price hidden settle",
+          "passed": true,
+          "detail": "rise=1; loading=false; error=none"
+        },
+        {
+          "scenario": "Live Match tab race",
+          "passed": true,
+          "detail": "status=finished; label=已完赛"
+        },
+        {
+          "scenario": "CurrentEventInfo partial",
+          "passed": true,
+          "detail": "error=比赛周信息暂时不可用，请稍后重试; revision=1"
+        }
+      ],
+      "final_exact_head_smoke": [
+        {
+          "requested": "pages/home/index/index",
+          "actual": "pages/home/index/index",
+          "elapsedMs": 3730,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-fixtures",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/account/link/link",
+          "actual": "pages/account/link/link",
+          "elapsedMs": 3718,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/live/index/index",
+          "actual": "pages/live/index/index",
+          "elapsedMs": 3722,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/index/index",
+          "actual": "pages/explore/index/index",
+          "elapsedMs": 3726,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/entry/search/search",
+          "actual": "pages/entry/search/search",
+          "elapsedMs": 3730,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/entry/profile/profile",
+          "actual": "pages/entry/profile/profile",
+          "elapsedMs": 3729,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/live/entry/entry",
+          "actual": "pages/live/entry/entry",
+          "elapsedMs": 3756,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/live/match/match",
+          "actual": "pages/live/match/match",
+          "elapsedMs": 3720,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/live/tournament/tournament",
+          "actual": "pages/live/tournament/tournament",
+          "elapsedMs": 3754,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/players/players",
+          "actual": "pages/data/players/players",
+          "elapsedMs": 3759,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/player-detail/player-detail",
+          "actual": "pages/data/player-detail/player-detail",
+          "elapsedMs": 3733,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/teams/teams",
+          "actual": "pages/data/teams/teams",
+          "elapsedMs": 3698,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/team-detail/team-detail",
+          "actual": "pages/data/team-detail/team-detail",
+          "elapsedMs": 3740,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/price/price",
+          "actual": "pages/data/price/price",
+          "elapsedMs": 3735,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/data/selections/selections",
+          "actual": "pages/data/selections/selections",
+          "elapsedMs": 3722,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/summary/entry/entry",
+          "actual": "pages/my-fpl/team/team",
+          "elapsedMs": 3695,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/summary/tournament/tournament",
+          "actual": "pages/summary/tournament/tournament",
+          "elapsedMs": 3713,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/summary/gameweek/gameweek",
+          "actual": "pages/summary/gameweek/gameweek",
+          "elapsedMs": 3753,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/my-fpl/index/index",
+          "actual": "pages/my-fpl/index/index",
+          "elapsedMs": 3709,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/my-fpl/team/team",
+          "actual": "pages/my-fpl/team/team",
+          "elapsedMs": 3739,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/my-fpl/leagues/leagues",
+          "actual": "pages/my-fpl/leagues/leagues",
+          "elapsedMs": 3737,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/competitions/index/index",
+          "actual": "pages/competitions/index/index",
+          "elapsedMs": 3717,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/explore/index/index",
+          "actual": "pages/explore/index/index",
+          "elapsedMs": 3718,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/explore/fixtures/fixtures",
+          "actual": "pages/explore/fixtures/fixtures",
+          "elapsedMs": 3737,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
+        },
+        {
+          "requested": "pages/performance/index/index",
+          "actual": "pages/performance/index/index",
+          "elapsedMs": 3735,
+          "primaryFound": true,
+          "primarySelector": "#perf-primary-content",
+          "loading": false,
+          "refreshing": false,
+          "error": "",
+          "empty": false,
+          "hasTerminal": true
         }
       ]
     }
