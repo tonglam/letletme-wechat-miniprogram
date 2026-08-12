@@ -33,6 +33,7 @@ interface MatchGroup {
 interface LiveMatchLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
+  trackNavigation?: boolean;
 }
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -614,7 +615,7 @@ Page({
       this.targetEventId = context.displayEvent || 0;
       this.armContextDeadline(context.nextDeadlineAt);
       this.perfTracker.mark("contextReadyAt");
-      await this.loadData({ background: true, forceRefresh: true });
+      await this.loadData({ background: true, forceRefresh: true, trackNavigation: true });
     } catch (error) {
       this.showContextError(error);
     } finally {
@@ -631,6 +632,9 @@ Page({
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const preserveData = options.background === true && this.data.hasData;
+    const navigationTracker = options.background === true && options.trackNavigation !== true
+      ? undefined
+      : this.perfTracker;
     this.setData(preserveData
       ? { refreshing: true, error: "" }
       : { loading: true, error: "" });
@@ -644,12 +648,12 @@ Page({
         this.currentEventId = context.currentEvent || 0;
         this.targetEventId = targetEvent;
         this.armContextDeadline(context.nextDeadlineAt);
-        this.perfTracker?.mark("primaryRequestStartAt");
+        navigationTracker?.mark("primaryRequestStartAt");
         const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
           forceRefresh: options.forceRefresh,
-          trace: this.perfTracker
+          trace: navigationTracker
             ? {
-                navigationId: this.perfTracker.navigationId,
+                navigationId: navigationTracker.navigationId,
                 callerSurface: "live-match-schedule",
                 trigger: options.forceRefresh ? "refresh" : "load",
                 forceReason: options.forceRefresh ? "user-refresh" : undefined,
@@ -658,7 +662,7 @@ Page({
             : undefined
         });
         if (requestId !== this.liveRequestId) return;
-        this.perfTracker?.mark("primaryResponseAt");
+        navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
         this.coreMatches = core;
         const now = Date.now();
@@ -681,8 +685,8 @@ Page({
             : "",
           lastUpdated: formatTime(new Date(coreRead.meta.storedAt || Date.now()))
         }, () => {
-          this.perfTracker?.mark("primarySetDataAt");
-          wx.nextTick(() => this.perfTracker?.observePrimary());
+          navigationTracker?.mark("primarySetDataAt");
+          wx.nextTick(() => navigationTracker?.observePrimary());
         });
         if (this.liveWindow) {
           // Arm revision recovery before the overlay request so a failed first

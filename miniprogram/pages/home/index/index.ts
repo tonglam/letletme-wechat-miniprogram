@@ -137,6 +137,7 @@ Page({
   _fixtureGwRequestId: 0,
   _loadedContextRevision: 0,
   _perfTracker: undefined as PagePerformanceTracker | undefined,
+  _pageVisible: false,
 
   async onLoad() {
     this._initialLoadDone = false;
@@ -155,6 +156,7 @@ Page({
   },
 
   async onShow() {
+    this._pageVisible = true;
     if (!this._initialLoadDone) return;
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "warm-enter");
     try {
@@ -187,6 +189,13 @@ Page({
   },
 
   onUnload() {
+    this._pageVisible = false;
+    this.stopCountdown();
+    this._perfTracker?.disconnect();
+  },
+
+  onHide() {
+    this._pageVisible = false;
     this.stopCountdown();
     this._perfTracker?.disconnect();
   },
@@ -396,7 +405,10 @@ Page({
       const entryId = app.globalData.entryId;
       if (!entryId) return;
       try {
-        const entry = await getEntryInfo(entryId, forceRefresh);
+        const entryTrace = primaryTrace
+          ? { ...primaryTrace, callerSurface: "home-entry" }
+          : undefined;
+        const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
         if (requestId === this._loadRequestId) this.setData({ entry, entryError: "" });
       } catch (error) {
         if (requestId === this._loadRequestId) {
@@ -475,6 +487,7 @@ Page({
     this.stopCountdown();
     this.countdownTimer = setTimeout(() => {
       this.countdownTimer = undefined;
+      if (!this._pageVisible) return;
       void this.refreshHome(true);
     }, HOME_DEADLINE_RETRY_MS) as unknown as number;
   },

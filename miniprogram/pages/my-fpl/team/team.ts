@@ -629,7 +629,20 @@ Page({
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.phaseBannerRequestId += 1;
-    this.setData({ event: event.detail.value, phaseBanner: "", hasTeamData: false });
+    this.setData({
+      event: event.detail.value,
+      phaseBanner: "",
+      error: "",
+      emptyState: "",
+      headerTitle: "球队数据",
+      headerSubtitle: "",
+      overviewStats: [],
+      eventStats: [],
+      squadRows: [],
+      hasSquad: false,
+      hasTeamData: false,
+      supportAvailable: false
+    });
     this.loadData(true);
   },
 

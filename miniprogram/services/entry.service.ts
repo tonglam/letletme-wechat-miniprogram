@@ -1,5 +1,6 @@
 import type { EntryHistory, EntryInfo, EntryLeague, EntrySearchResult, EntryTransfer } from "../models/entry";
 import { graphqlRequest } from "./graphql.service";
+import type { PageRequestTrace } from "./graphql.service";
 
 const GET_ENTRY = `
   query GetEntry($id: Int!) {
@@ -134,10 +135,15 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
   return entry ? [entry] : [];
 }
 
-export async function getEntryInfo(entry: number, forceRefresh = false): Promise<EntryInfo> {
+export async function getEntryInfo(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryInfo> {
   const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
     cachePolicy: "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {
