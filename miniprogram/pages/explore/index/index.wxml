@@ -10,19 +10,21 @@
 
   <view wx:for="{{groups}}" wx:key="title" class="section">
     <view class="group-title">{{item.title}}</view>
-    <view
-      wx:for="{{item.cards}}"
-      wx:for-item="card"
-      wx:key="url"
-      class="card route-card"
-      data-url="{{card.url}}"
-      bindtap="onOpenCard"
-    >
-      <view>
-        <view class="card-title">{{card.title}}</view>
+    <view class="route-grid">
+      <view
+        wx:for="{{item.cards}}"
+        wx:for-item="card"
+        wx:key="url"
+        class="card route-card"
+        data-url="{{card.url}}"
+        bindtap="onOpenCard"
+      >
+        <view class="route-card-head">
+          <view class="card-title">{{card.title}}</view>
+          <text class="action">打开</text>
+        </view>
         <view class="card-desc">{{card.description}}</view>
       </view>
-      <text class="action">打开</text>
     </view>
   </view>
 
