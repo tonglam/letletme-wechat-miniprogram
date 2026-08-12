@@ -256,7 +256,7 @@ Page({
           }
         : undefined
     });
-    observeSoftTimeout(readTask, 3000, () => {
+    observeSoftTimeout(readTask, 2900, () => {
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.perfTracker?.mark("softFailureAt");
       this.setData({

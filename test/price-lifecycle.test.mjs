@@ -13,7 +13,7 @@ test("price page keeps date identity and stale state while team directory remain
   assert.match(page, /readPlayerValueByDate\(changeDate/);
   assert.match(page, /staleMessage/);
   assert.match(page, /loadTeamOptions/);
-  assert.match(page, /observeSoftTimeout\(readTask, 3000/);
+  assert.match(page, /observeSoftTimeout\(readTask, 2900/);
   assert.match(page, /mark\("softFailureAt"\)/);
   assert.match(page, /!this\.pageActive \|\| !isCurrentRevision/);
   assert.match(page, /\.\.\.splitChanges\(read\.data\),\s*error: ""/);
