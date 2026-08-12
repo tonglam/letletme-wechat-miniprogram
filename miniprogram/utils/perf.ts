@@ -51,6 +51,7 @@ export interface RenderCommitRecord {
 
 export interface HomeFixtureTimingRecord {
   surface: "home-fixtures";
+  trigger: "load" | "onShow";
   mode: "cold" | "warm" | "refresh";
   requestDuration: number;
   responseToSetData: number;

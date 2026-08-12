@@ -108,12 +108,23 @@ Page({
 
   async onShow() {
     if (!this._initialLoadDone) return;
+    const resumedAt = Date.now();
     await this.ensureAppDataReady();
     this.syncAppState();
     // Returning to the tab within a minute keeps the already-loaded data;
     // pull-to-refresh and the deadline rollover still force a reload.
     if (Date.now() - this._lastLoadAt >= 60 * 1000) {
       this.loadPage();
+    } else {
+      recordHomeFixtureTiming({
+        surface: "home-fixtures",
+        trigger: "onShow",
+        mode: "warm",
+        requestDuration: 0,
+        responseToSetData: 0,
+        setDataCallback: 0,
+        loadToVisible: Date.now() - resumedAt
+      });
     }
     this.startCountdown();
   },
@@ -191,6 +202,7 @@ Page({
           });
           recordHomeFixtureTiming({
             surface: "home-fixtures",
+            trigger: "load",
             mode: forceRefresh ? "refresh" : hadFixtureRows ? "warm" : "cold",
             requestDuration: fixtureResponseAt - fixtureRequestStartedAt,
             responseToSetData: fixtureCommitStartedAt - fixtureResponseAt,
