@@ -353,7 +353,7 @@ Page({
     // normal personal surface, however, must track the authoritative follow
     // even when a request's 401 recovery changes it mid-flight.
     if (this.data.viewOnly) return false;
-    const nextEntryId = currentFollowEntryId();
+    const nextEntryId = currentFollowEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
     this.liveRefresh?.stop();
@@ -364,7 +364,7 @@ Page({
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.setData({
-      entryId: nextEntryId ?? 0,
+      entryId: nextEntryId,
       loading: false,
       refreshing: false,
       transfersLoading: false,

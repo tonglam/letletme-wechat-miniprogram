@@ -366,7 +366,7 @@ Page({
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {
-    const nextEntryId = currentFollowEntryId();
+    const nextEntryId = currentFollowEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
     this.loadRequestId += 1;
@@ -376,7 +376,7 @@ Page({
     this.transferPayload = null;
     this.tabRequestId += 1;
     this.setData({
-      entryId: nextEntryId ?? 0,
+      entryId: nextEntryId,
       loading: false,
       error: "",
       transferError: "",

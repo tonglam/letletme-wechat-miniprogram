@@ -555,7 +555,7 @@ PerformancePage({
   },
 
   restartForPrincipalChange(entryId: number): boolean {
-    const nextEntryId = currentFollowEntryId();
+    const nextEntryId = currentFollowEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
     this.liveRefresh?.stop();
@@ -567,7 +567,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.setData({
-      entryId: nextEntryId ?? 0,
+      entryId: nextEntryId,
       loading: false,
       refreshing: false,
       hasData: false,
