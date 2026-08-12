@@ -134,6 +134,12 @@ export async function readCoreEventFixtureSchedule(
       trace: options.trace
     }
   );
+  if (result.errors.length > 0) {
+    throw new Error(
+      result.errors.map((error) => error.message).filter(Boolean).join("; ")
+      || "赛程数据暂时不可用，请稍后重试"
+    );
+  }
   return {
     data: (result.data.eventFixtures || []).map((fixture) => mapFixturePayload(fixture, event)),
     meta: result.meta

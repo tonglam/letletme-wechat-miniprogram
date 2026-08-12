@@ -33,3 +33,9 @@ test("My FPL warm resume observes retained terminal state without refetching", (
   const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("_loadedAt: 0"));
   assert.match(onShow, /hasTeamData \|\| Boolean\(this\.data\.emptyState\) \|\| Boolean\(this\.data\.error\)[\s\S]*observePrimary/);
 });
+
+test("My FPL invalidates lazy support payloads on season rollover", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  assert.match(page, /invalidateSeasonSupport\(\)[\s\S]*this\.tabRequestId \+= 1[\s\S]*this\.historyPayload = null[\s\S]*this\.transferPayload = null/);
+  assert.equal((page.match(/if \(seasonChanged\) this\.invalidateSeasonSupport\(\)/g) || []).length, 2);
+});

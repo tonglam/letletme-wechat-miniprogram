@@ -12,6 +12,11 @@ test("Tournament directory has one GraphQL operation and one season-aware read",
   assert.equal((service.match(/(?:return|await) readDirectory\(entry/g) || []).length, 4);
   assert.match(service, /getEntryPointsRaceTournament[\s\S]*const rows = await readDirectory/);
   assert.match(service, /getEntrySummaryTournaments[\s\S]*const rows = await readDirectory/);
+  const directoryRead = service.indexOf("const result = await graphqlRead<EntryTournamentsResponse>");
+  const partialGuard = service.indexOf("if (result.errors.length > 0)", directoryRead);
+  const mapping = service.indexOf("result.data.entryTournaments || []", directoryRead);
+  assert.ok(directoryRead >= 0 && partialGuard > directoryRead && mapping > partialGuard);
+  assert.match(service, /async function readDirectory[\s\S]*if \(!season\)[\s\S]*ensureAppContext\([\s\S]*forceRefresh: true/);
 });
 
 test("Live Tournament skips live rows for empty metadata or no current event", () => {

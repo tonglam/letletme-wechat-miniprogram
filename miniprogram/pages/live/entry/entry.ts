@@ -696,7 +696,19 @@ Page({
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
-    this.setData({ event: event.detail.value, hasData: false, noPicks: false, lastUpdated: "" });
+    // Detach both the rendered rows and any in-flight transfer read from the
+    // previous GW before the new score response can make the page visible.
+    this.transfersRequestId += 1;
+    this.loadTransfersAfterLive = false;
+    this.setData({
+      event: event.detail.value,
+      hasData: false,
+      noPicks: false,
+      lastUpdated: "",
+      transfers: [],
+      transfersLoading: false,
+      transfersError: ""
+    });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
     this.liveRefresh?.sync();

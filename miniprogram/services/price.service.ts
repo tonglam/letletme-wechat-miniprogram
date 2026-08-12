@@ -213,6 +213,12 @@ export async function readPlayerValueByDate(
     forceRefresh: options.forceRefresh,
     trace: options.trace
   });
+  if (result.errors.length > 0) {
+    throw new Error(
+      result.errors.map((error) => error.message).filter(Boolean).join("; ")
+      || "身价变化数据暂时不可用，请稍后重试"
+    );
+  }
   return {
     data: (result.data.playerValues || [])
       .filter((value) => value.value !== value.lastValue)

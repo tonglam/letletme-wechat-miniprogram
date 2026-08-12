@@ -31,3 +31,19 @@ test("warm resume observes retained Core schedule without refetching", () => {
   const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("onHide()"));
   assert.match(onShow, /resumed && \(this\.data\.hasData \|\| Boolean\(this\.data\.error\)\)[\s\S]*observePrimary/);
 });
+
+test("current-event schedule arms a kickoff transition without preseason Live work", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  assert.match(page, /armKickoffTransition\([\s\S]*this\.targetEventId !== this\.currentEventId[\s\S]*setTimeout/);
+  assert.match(page, /this\.armKickoffTransition\(coreRead\.data\)/);
+  assert.match(page, /onHide\(\)[\s\S]*this\.clearKickoffTransition\(\)/);
+  assert.match(page, /catch \(error\)[\s\S]*this\.armKickoffTransition\(this\.coreMatches, true\)/);
+});
+
+test("fixture service rejects partial errors before mapping an empty schedule", () => {
+  const service = source("miniprogram/services/fixture.service.ts");
+  const read = service.indexOf("const result = await graphqlRead<CoreEventFixtureScheduleResponse>");
+  const guard = service.indexOf("if (result.errors.length > 0)", read);
+  const mapping = service.indexOf("data: (result.data.eventFixtures || [])", read);
+  assert.ok(read >= 0 && guard > read && mapping > guard);
+});

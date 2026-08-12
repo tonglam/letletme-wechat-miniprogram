@@ -30,6 +30,14 @@ test("price primary content includes success, empty and error states", () => {
   assert.match(template, /app-error-state[\s\S]*app-empty-state/);
 });
 
+test("price service rejects partial errors before mapping an empty board", () => {
+  const service = source("miniprogram/services/price.service.ts");
+  const read = service.indexOf("const result = await graphqlRead<PlayerValuesResponse>");
+  const guard = service.indexOf("if (result.errors.length > 0)", read);
+  const mapping = service.indexOf("data: (result.data.playerValues || [])", read);
+  assert.ok(read >= 0 && guard > read && mapping > guard);
+});
+
 test("price warm resume records viewport visibility without refetching", () => {
   const page = source("miniprogram/pages/data/price/price.ts");
   const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));

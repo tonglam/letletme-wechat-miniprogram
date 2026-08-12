@@ -27,3 +27,12 @@ test("no-entry state observes primary only after setData commits", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(page, /if \(!entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
 });
+
+test("changing GW invalidates and clears deferred transfer data", () => {
+  const page = source("miniprogram/pages/live/entry/entry.ts");
+  const handler = page.slice(page.indexOf("onGwChange"), page.indexOf("onRetry"));
+  assert.match(handler, /this\.transfersRequestId \+= 1/);
+  assert.match(handler, /this\.loadTransfersAfterLive = false/);
+  assert.match(handler, /transfers: \[\]/);
+  assert.match(handler, /transfersLoading: false/);
+});

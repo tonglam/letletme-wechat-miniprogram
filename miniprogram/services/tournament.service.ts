@@ -2,7 +2,7 @@ import { graphqlRead, graphqlRequest } from "./graphql.service";
 import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from "../models/tournament";
 import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
-import { getAppContextSnapshot } from "./app-context.service";
+import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
 
 const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -143,6 +143,12 @@ export async function readEntryTournamentDirectory(
       trace: options.trace
     }
   );
+  if (result.errors.length > 0) {
+    throw new Error(
+      result.errors.map((error) => error.message).filter(Boolean).join("; ")
+      || "赛事目录暂时不可用，请稍后重试"
+    );
+  }
   return { data: result.data.entryTournaments || [], meta: result.meta };
 }
 
@@ -152,7 +158,18 @@ function currentSeason(): string {
 }
 
 async function readDirectory(entry: number, forceRefresh = false): Promise<EntryTournamentRow[]> {
-  return (await readEntryTournamentDirectory(entry, currentSeason(), { forceRefresh })).data;
+  let season = currentSeason();
+  if (!season) {
+    const context = await ensureAppContext({
+      reason: forceRefresh ? "pull-refresh" : "page-load",
+      // A missing season means the shared launch read failed. A direct page
+      // retry must bypass unresolved-context backoff so connectivity can
+      // recover without requiring an app hide/show cycle.
+      forceRefresh: true
+    });
+    season = context.season;
+  }
+  return (await readEntryTournamentDirectory(entry, season, { forceRefresh })).data;
 }
 
 export interface TournamentEventResult {

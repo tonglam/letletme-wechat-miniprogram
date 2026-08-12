@@ -247,6 +247,7 @@ Page({
     const contextChanged = seasonChanged || (eventChanged && wasCurrentEvent);
     if (contextChanged) {
       this.phaseBannerRequestId += 1;
+      if (seasonChanged) this.invalidateSeasonSupport();
       this.setData({
         maxGw: nextGw,
         event: nextGw,
@@ -255,6 +256,8 @@ Page({
         ...(seasonChanged ? {
           error: "",
           transferError: "",
+          tabLoading: false,
+          tabError: "",
           headerTitle: "球队数据",
           headerSubtitle: "",
           overviewStats: [],
@@ -298,6 +301,14 @@ Page({
     return ensureAppContext({ reason });
   },
 
+  invalidateSeasonSupport() {
+    // Lazy tab payloads are season-scoped even though they are retained in
+    // memory. Invalidate the active request and both payloads atomically.
+    this.tabRequestId += 1;
+    this.historyPayload = null;
+    this.transferPayload = null;
+  },
+
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
@@ -320,6 +331,7 @@ Page({
     const contextChanged = seasonChanged || (eventChanged && wasCurrentEvent);
     if (contextChanged) {
       this.phaseBannerRequestId += 1;
+      if (seasonChanged) this.invalidateSeasonSupport();
       this.setData({
         maxGw: nextGw,
         event: nextGw,
@@ -328,6 +340,8 @@ Page({
         ...(seasonChanged ? {
           error: "",
           transferError: "",
+          tabLoading: false,
+          tabError: "",
           headerTitle: "球队数据",
           headerSubtitle: "",
           overviewStats: [],

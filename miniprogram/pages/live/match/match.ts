@@ -288,6 +288,7 @@ Page({
   targetEventId: 0,
   coreMatches: [] as LiveMatch[],
   liveWindow: false,
+  kickoffTransitionTimer: undefined as number | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
@@ -382,6 +383,54 @@ Page({
     });
   },
 
+  clearKickoffTransition() {
+    if (this.kickoffTransitionTimer !== undefined) {
+      clearTimeout(this.kickoffTransitionTimer);
+      this.kickoffTransitionTimer = undefined;
+    }
+  },
+
+  armKickoffTransition(fixtures: Array<{ finished?: boolean; kickoffTime?: string }>, retry = false) {
+    this.clearKickoffTransition();
+    if (
+      !this.pageVisible
+      || this.currentEventId <= 0
+      || this.targetEventId !== this.currentEventId
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+    const kickoffTimes = fixtures
+      .filter((fixture) => !fixture.finished && Boolean(fixture.kickoffTime))
+      .map((fixture) => new Date(fixture.kickoffTime as string).getTime())
+      .filter((kickoff) => Number.isFinite(kickoff));
+    const nextKickoff = kickoffTimes
+      .filter((kickoff) => kickoff > now)
+      .sort((left, right) => left - right)[0];
+    const targetAt = retry ? now + 30_000 : nextKickoff;
+    if (targetAt === undefined) return;
+
+    // Long timers are chunked so a far-away kickoff does not overflow the
+    // JavaScript timer range. The callback re-checks visibility and context.
+    const delay = Math.min(Math.max(0, targetAt - now + 250), 2_147_000_000);
+    this.kickoffTransitionTimer = setTimeout(() => {
+      this.kickoffTransitionTimer = undefined;
+      if (
+        !this.pageVisible
+        || this.currentEventId <= 0
+        || this.targetEventId !== this.currentEventId
+      ) {
+        return;
+      }
+      if (targetAt > Date.now()) {
+        this.armKickoffTransition(fixtures);
+        return;
+      }
+      void this.loadData({ background: true, forceRefresh: true });
+    }, delay) as unknown as number;
+  },
+
   showContextError(error: unknown) {
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
     this.setData({ loading: false, refreshing: false, error: message }, () => {
@@ -435,6 +484,7 @@ Page({
     if (nextSeason) this.loadedSeason = nextSeason;
     if (seasonChanged || nextCurrentEventId !== this.currentEventId || nextTargetEventId !== this.targetEventId) {
       this.liveRefresh?.stop();
+      this.clearKickoffTransition();
       // The request key is otherwise only the status, which can be unchanged
       // across a GW rollover. Detach and invalidate the old event request
       // before the replacement load so its result can never enter this view.
@@ -456,6 +506,7 @@ Page({
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
+    this.armKickoffTransition(this.coreMatches);
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
@@ -465,12 +516,14 @@ Page({
   onHide() {
     this.pageVisible = false;
     this.liveRefresh?.stop();
+    this.clearKickoffTransition();
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
     this.liveRefresh?.dispose();
+    this.clearKickoffTransition();
     this.perfTracker?.disconnect();
   },
 
@@ -531,6 +584,7 @@ Page({
           !fixture.finished
           && (fixture.started === true || Boolean(fixture.kickoffTime && new Date(fixture.kickoffTime).getTime() <= now))
         );
+        this.armKickoffTransition(coreRead.data);
         const activeStatus = this.data.status;
         const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label || "比赛";
         const matches = filterMatches(core, activeStatus);
@@ -546,6 +600,9 @@ Page({
           wx.nextTick(() => this.perfTracker?.observePrimary());
         });
         if (this.liveWindow) {
+          // Arm revision recovery before the overlay request so a failed first
+          // Live acquisition after kickoff still recovers automatically.
+          this.liveRefresh?.sync();
           const liveResult = await getLiveMatchByStatusSnapshot("all", options.forceRefresh === true);
           if (requestId !== this.liveRequestId) return;
           this.liveSnapshot = liveResult.snapshot;
@@ -569,6 +626,7 @@ Page({
       } catch (error) {
         if (requestId !== this.liveRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+        this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
