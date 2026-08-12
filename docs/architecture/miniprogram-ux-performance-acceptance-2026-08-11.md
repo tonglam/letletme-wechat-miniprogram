@@ -508,3 +508,15 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 ### 验收决定
 
 当前已确认：Fixture 正向依赖、Fixture 首屏分段、刷新性能、一次 admission、Web limiter DB 查询为零、Fixture 不进入 Live。当前未确认：冷启动最大值门槛、warm page `n=20`、PlayerValues positive miss、部署后线上精确 SHA。报告状态保持 **代码已实施，尚未验收**；不进入下一仓库合并、部署或小程序上传。
+
+## 2026-08-12 warm 样本修订
+
+埋点修复提交为小程序 `6544b8c`：`HomeFixtureTimingRecord` 增加 `trigger=load|onShow`，真实 freshness 有效的 `onShow` 记录为 warm；本次 DevTools 采集使用正确的 Explore -> 模拟器左上角 Home 返回路径。
+
+本次合规 warm cached-page 样本为 `n=20`，全部 `CoreEventFixtureSchedule` 为 memory/storage 命中、`networkAttempted=false`：
+
+- Fixture 可见：p50 `27ms`，p95 `38ms`，max `39ms`。
+- Fixture request：p50 `1ms`，p95 `1ms`，max `1ms`。
+- setData callback：p50 `26ms`，p95 `37ms`，max `38ms`。
+
+这组数据覆盖的是页面缓存重载，不宣称 freshness 有效 `onShow`；本次模拟器返回路径没有触发可单独统计的 `onShow`。此前“warm n=20 缺失”的结论由本节修订为“warm cached-page n=20 已完成，onShow 单独样本未观测”。冷启动最大 `2702ms` 和 PlayerValues positive miss 仍是未通过项，报告状态不变。
