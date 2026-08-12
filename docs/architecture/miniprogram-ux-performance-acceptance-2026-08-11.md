@@ -551,3 +551,43 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 - 4000 未签名直连返回 `401 UNTRUSTED_INGRESS`；3000 `/api/graphql` 的 `CoreEventFixtureSchedule` 返回 `200`、10 条 Fixture，单次约 `120ms`。
 - 运行时 `MiniHomeSupplement` 的实际 schema 为 `miniProgramNotice`、无参 `eventOverallResult`、`playerValues(changeDate)`；提交带 `eventId` 的查询会得到 `GRAPHQL_VALIDATION_FAILED: Unknown argument eventId`，去掉该参数后返回 `200`、约 `501ms`。这与计划示例中的 `eventOverallResult(eventId: Int!)` 不一致，但没有修改 schema。
 - DevTools Network 面板当前只显示资源计数，没有暴露可读的请求 URL；因此“全部小程序 Network 请求只能到 3000”仍是未完全证明项，不能用 env 默认值替代 Network 证据。
+
+## 2026-08-12 页面稳定加载与限流验收
+
+### 页面结果
+
+通过 DevTools “新增编译模式 -> 编译 -> 等待完整页面初始化 -> 读取 Webview route 和调试器 Errors”完成 25 个注册页面验收。首轮遍历中 `players` 和 `my-fpl/team` 在编译尚未稳定时读到 `Errors: 1/2`；分别等待完整初始化后复验，均为 `Errors: 0`。
+
+| 请求页面 | 稳定 Webview route | 结果 |
+|---|---|---|
+| `pages/account/link/link` | `pages/account/link/link` | 通过，Errors 0 |
+| `pages/competitions/index/index` | `pages/competitions/index/index` | 通过，Errors 0 |
+| `pages/data/index/index` | `pages/explore/index/index` | 通过，预期 shell 跳转 |
+| `pages/data/player-detail/player-detail` | `pages/data/player-detail/player-detail` | 通过，Errors 0 |
+| `pages/data/players/players` | `pages/data/players/players` | 复验通过，Errors 0 |
+| `pages/data/price/price` | `pages/data/price/price` | 通过，Errors 0 |
+| `pages/data/selections/selections` | `pages/data/selections/selections` | 通过，Errors 0 |
+| `pages/data/team-detail/team-detail` | `pages/data/team-detail/team-detail` | 通过，Errors 0 |
+| `pages/data/teams/teams` | `pages/data/teams/teams` | 通过，Errors 0 |
+| `pages/entry/profile/profile` | `pages/entry/profile/profile` | 通过，Errors 0 |
+| `pages/entry/search/search` | `pages/entry/search/search` | 通过，Errors 0 |
+| `pages/explore/fixtures/fixtures` | `pages/explore/fixtures/fixtures` | 通过，Errors 0 |
+| `pages/explore/index/index` | `pages/explore/index/index` | 通过，Errors 0 |
+| `pages/home/index/index` | `pages/home/index/index` | 通过，Errors 0 |
+| `pages/live/entry/entry` | `pages/live/entry/entry` | 通过，Errors 0 |
+| `pages/live/index/index` | `pages/live/index/index` | 通过，Errors 0 |
+| `pages/live/match/match` | `pages/live/match/match` | 通过，Errors 0 |
+| `pages/live/tournament/tournament` | `pages/live/tournament/tournament` | 通过，Errors 0 |
+| `pages/my-fpl/index/index` | `pages/my-fpl/index/index` | 通过，Errors 0 |
+| `pages/my-fpl/leagues/leagues` | `pages/my-fpl/leagues/leagues` | 通过，Errors 0 |
+| `pages/my-fpl/team/team` | `pages/my-fpl/team/team` | 复验通过，Errors 0 |
+| `pages/performance/index/index` | `pages/performance/index/index` | 通过，Errors 0 |
+| `pages/summary/entry/entry` | `pages/my-fpl/team/team` | 通过，预期兼容跳转 |
+| `pages/summary/gameweek/gameweek` | `pages/summary/gameweek/gameweek` | 通过，Errors 0 |
+| `pages/summary/tournament/tournament` | `pages/summary/tournament/tournament` | 通过，Errors 0 |
+
+页面空态由 `players` 的无搜索结果/目录空态、`my-fpl/team` 的“球队总结还没生成”状态和 `summary/tournament` 的联赛待就绪状态实际显示；需要微信登录或不可逆绑定的按钮未执行。错误/重试分支由小程序自动测试覆盖，未通过 UI 伪造失败请求。
+
+### Web limiter 实测
+
+同一 `CoreEventFixtureSchedule` public operation 并发 180 次经 `127.0.0.1:3000/api/graphql`：`120` 次 HTTP `200`，`60` 次 HTTP `429`；首个拒绝响应为 `Retry-After: 60`，body code 为 `RATE_LIMITED`。该批次后紧接的 CurrentEventInfo 得到同样的 `429` 是预期窗口行为，不是 GraphQL 业务失败。Web 根页面 `http=200`，响应中没有 `UNTRUSTED_INGRESS`。
