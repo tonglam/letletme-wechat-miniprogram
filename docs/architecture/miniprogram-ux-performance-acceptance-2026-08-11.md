@@ -438,6 +438,10 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 
 追加的 20 次真实下拉手势观察上界为 `1172-1205ms`。这包含 DevTools 手势、状态观察和工具等待，不作为产品 p95。对应后端 trace 中 Fixture 单请求约 `289-365ms`；连续手势使 secondary admission 排队到约 `280-296ms`，`MiniHomeSupplement` 约 `860-870ms`，但 secondary 不阻塞 Fixture 提交。当前仍缺每次从 `forceRefresh` 开始到 `setData` callback/Native visible 的一对一时间戳。
 
+### 分段埋点已补齐
+
+小程序提交 `252c5b1` 在 `perf:v1` 中新增 `homeFixtureTimings`，每次首页 Fixture 记录 `cold/warm/refresh`、请求耗时、response 到 `setData`、`setData callback` 和 load 到 visible；原有 API 与 render commit 记录不变。该提交之后需要重新编译 DevTools 并重新采样，旧样本不与新埋点混合。
+
 ### 自动检查
 
 - GraphQL：`352 pass / 4 skip / 0 fail`；`tsc --noEmit`、lint、format check 通过。

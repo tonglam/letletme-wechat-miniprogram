@@ -817,6 +817,8 @@
   <p>清除模拟器数据缓存后普通编译，页面显示十条 Fixture；trace 顺序为 <code>CurrentEventInfo 290.8ms -> CoreEventFixtureSchedule 292.8ms -> MiniHomeSupplement 441.2ms</code>，<code>GetEntry 933.5ms</code> 在其后。DevTools 控制台报告 <code>[system] Launch Time: 1192 ms</code>。从点击编译到 CUA 观察页面的约 4.96s 包含编译、工具等待和后置请求，不能作为产品首屏时间。</p>
   <p>当前仍不能证明冷启动到首批 Fixture 可见最大值 <code>&lt;=1.2s</code>：只有单次 Launch Time，缺少 app context start 到 Fixture visible 的独立时间戳。页面刷新按钮命中 Fixture cache，没有产生 force-refresh operation；下拉刷新 n=20 尚未取得。</p>
   <p>追加的 20 次真实下拉手势观察上界为 <code>1172-1205ms</code>，包含 DevTools 手势、状态观察和工具等待，不作为产品 p95。对应后端 trace 中 Fixture 单请求约 <code>289-365ms</code>；连续手势使 secondary admission 排队到约 <code>280-296ms</code>，<code>MiniHomeSupplement</code> 约 <code>860-870ms</code>，但 secondary 不阻塞 Fixture 提交。仍缺每次从 <code>forceRefresh</code> 到 <code>setData</code> callback/Native visible 的一对一时间戳。</p>
+  <h3>分段埋点已补齐</h3>
+  <p>小程序提交 <code>252c5b1</code> 在 <code>perf:v1</code> 中新增 <code>homeFixtureTimings</code>，每次首页 Fixture 记录 <code>cold/warm/refresh</code>、请求耗时、response 到 <code>setData</code>、<code>setData callback</code> 和 load 到 visible；原有 API 与 render commit 记录不变。该提交之后需要重新编译 DevTools 并重新采样，旧样本不与新埋点混合。</p>
   <h3>自动检查</h3>
   <ul>
     <li>GraphQL：352 pass / 4 skip / 0 fail；tsc、lint、format check 通过。</li>
