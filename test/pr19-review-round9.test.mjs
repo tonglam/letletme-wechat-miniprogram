@@ -31,7 +31,8 @@ test("Match automatic background work does not mutate a completed navigation tra
     /navigationTracker = options\.background === true && options\.trackNavigation !== true[\s\S]*undefined[\s\S]*this\.perfTracker/
   );
   assert.match(match, /navigationTracker\?\.mark\("primaryRequestStartAt"\)/);
-  assert.match(match, /trace: navigationTracker/);
+  assert.match(match, /trace: requestTrace/);
+  assert.match(match, /getLiveMatchByStatusSnapshot\([\s\S]*requestTrace/);
   assert.match(
     match,
     /onPullDownRefresh\(\)[\s\S]*loadData\(\{ background: true, forceRefresh: true, trackNavigation: true \}\)/

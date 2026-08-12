@@ -459,7 +459,7 @@ Page({
       this.cachedLiveStoredAt = undefined;
       this.setData({ matches: [], groups: [], hasData: false, fixtureStaleMessage: "", lastUpdated: "" });
       this.liveRefresh?.sync();
-      await this.loadData({ forceRefresh: true });
+      await this.loadData({ background: true, forceRefresh: true });
       this.syncDisplayState();
     } catch {
       this.armContextDeadline(undefined, true);
@@ -648,18 +648,21 @@ Page({
         this.currentEventId = context.currentEvent || 0;
         this.targetEventId = targetEvent;
         this.armContextDeadline(context.nextDeadlineAt);
-        navigationTracker?.mark("primaryRequestStartAt");
-        const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
-          forceRefresh: options.forceRefresh,
-          trace: navigationTracker
+        const requestTrace = options.background === true && options.trackNavigation !== true
+          ? null
+          : navigationTracker
             ? {
                 navigationId: navigationTracker.navigationId,
                 callerSurface: "live-match-schedule",
-                trigger: options.forceRefresh ? "refresh" : "load",
-                forceReason: options.forceRefresh ? "user-refresh" : undefined,
+                trigger: options.forceRefresh ? "refresh" as const : "load" as const,
+                forceReason: options.forceRefresh ? "user-refresh" as const : undefined,
                 contextRevision: context.contextRevision
               }
-            : undefined
+            : undefined;
+        navigationTracker?.mark("primaryRequestStartAt");
+        const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
+          forceRefresh: options.forceRefresh,
+          trace: requestTrace
         });
         if (requestId !== this.liveRequestId) return;
         navigationTracker?.mark("primaryResponseAt");
@@ -692,7 +695,11 @@ Page({
           // Arm revision recovery before the overlay request so a failed first
           // Live acquisition after kickoff still recovers automatically.
           this.liveRefresh?.sync();
-          const liveResult = await getLiveMatchByStatusSnapshot("all", options.forceRefresh === true);
+          const liveResult = await getLiveMatchByStatusSnapshot(
+            "all",
+            options.forceRefresh === true,
+            requestTrace
+          );
           if (requestId !== this.liveRequestId) return;
           this.liveSnapshot = liveResult.snapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;

@@ -472,6 +472,7 @@ Page({
 
   startCountdown() {
     this.stopCountdown();
+    if (!this._pageVisible) return;
     this.updateCountdown();
     this.countdownTimer = setInterval(() => this.updateCountdown(), 1000) as unknown as number;
   },

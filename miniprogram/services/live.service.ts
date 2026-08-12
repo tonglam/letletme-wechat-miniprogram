@@ -164,7 +164,7 @@ export async function getLivePointsByEntrySnapshot(
   entry: number,
   event: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace | null
 ): Promise<LiveSnapshotResult<LiveEntryResult>> {
   const variables = { eventId: event, entryId: entry };
   const data = await graphqlRequest<CalcLivePointsByEntryResponse>(CALC_LIVE_POINTS_BY_ENTRY, variables, {
@@ -320,7 +320,7 @@ function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
 export async function getLiveMatchByStatusSnapshot(
   status: string,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace | null
 ): Promise<LiveSnapshotResult<LiveMatch[]>> {
   const variables = {};
   const data = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {

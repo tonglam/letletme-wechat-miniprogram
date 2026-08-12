@@ -2,7 +2,7 @@ import type { GraphQLReadMeta, PageRequestTrace } from "./graphql.service";
 
 export interface ServiceReadOptions {
   forceRefresh?: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }
 
 export interface DomainRead<T> {

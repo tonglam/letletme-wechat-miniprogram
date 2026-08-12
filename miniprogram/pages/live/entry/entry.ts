@@ -63,6 +63,7 @@ interface LiveEntryLoadOptions {
   background?: boolean;
   includeTransfers?: boolean;
   forceRefresh?: boolean;
+  trackNavigation?: boolean;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -332,7 +333,12 @@ Page({
     try {
       await this.ensureContext("pull-refresh");
       this.perfTracker.mark("contextReadyAt");
-      await this.retryWithContext({ background: true, includeTransfers: true, forceRefresh: true });
+      await this.retryWithContext({
+        background: true,
+        includeTransfers: true,
+        forceRefresh: true,
+        trackNavigation: true
+      });
     } catch (error) {
       this.showContextError(error);
     } finally {
@@ -474,6 +480,9 @@ Page({
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const background = options.background === true && this.data.hasData;
+    const navigationTracker = options.background === true && options.trackNavigation !== true
+      ? undefined
+      : this.perfTracker;
     this.setData(background
       ? { refreshing: true, error: "" }
       : {
@@ -486,27 +495,30 @@ Page({
 
     const request = (async () => {
       try {
-        this.perfTracker?.mark("primaryRequestStartAt");
+        navigationTracker?.mark("primaryRequestStartAt");
         const context = getAppContextSnapshot();
+        const requestTrace = options.background === true && options.trackNavigation !== true
+          ? null
+          : navigationTracker && context
+            ? {
+                navigationId: navigationTracker.navigationId,
+                callerSurface: "live-entry",
+                trigger: options.forceRefresh ? "refresh" as const : "load" as const,
+                forceReason: options.forceRefresh ? "user-refresh" as const : undefined,
+                contextRevision: context.contextRevision
+              }
+            : undefined;
         const liveResult = await getLivePointsByEntrySnapshot(
           entryId,
           eventId,
           options.forceRefresh === true,
-          this.perfTracker && context
-            ? {
-                navigationId: this.perfTracker.navigationId,
-                callerSurface: "live-entry",
-                trigger: options.forceRefresh ? "refresh" : "load",
-                forceReason: options.forceRefresh ? "user-refresh" : undefined,
-                contextRevision: context.contextRevision
-              }
-            : undefined
+          requestTrace
         );
         if (requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
-        this.perfTracker?.mark("primaryResponseAt");
+        navigationTracker?.mark("primaryResponseAt");
         if (result.availability === "NO_PICKS") {
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
@@ -527,8 +539,8 @@ Page({
             transfersError: "",
             lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
           }, () => {
-            this.perfTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => this.perfTracker?.observePrimary());
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
           });
           this.liveRefresh?.stop();
           this.loadTransfersAfterLive = false;
@@ -569,8 +581,8 @@ Page({
           managers,
           lastUpdated: formatTime(new Date(fetchedAt))
         }, () => {
-          this.perfTracker?.mark("primarySetDataAt");
-          wx.nextTick(() => this.perfTracker?.observePrimary());
+          navigationTracker?.mark("primarySetDataAt");
+          wx.nextTick(() => navigationTracker?.observePrimary());
         });
         this.liveRefresh?.sync();
         if (this.loadTransfersAfterLive) {

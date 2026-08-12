@@ -56,7 +56,7 @@ export interface GraphQLOptions {
   forceRefresh?: boolean;
   season?: string;
   cacheVariant?: string;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }
 
 export interface PageRequestTrace {
@@ -86,8 +86,9 @@ export interface GraphQLReadResult<T> {
 }
 
 function resolvePageRequestTrace(
-  explicitTrace?: PageRequestTrace
+  explicitTrace?: PageRequestTrace | null
 ): PageRequestTrace | undefined {
+  if (explicitTrace === null) return undefined;
   if (explicitTrace) return explicitTrace;
   const activeTrace = getActivePagePerformanceTrace();
   if (!activeTrace) return undefined;
