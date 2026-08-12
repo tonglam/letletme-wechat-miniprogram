@@ -150,7 +150,8 @@ export async function getFixtureWindow(
   startEvent: number,
   horizon: number,
   season: string | undefined,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: ServiceReadOptions["trace"]
 ): Promise<Fixture[]> {
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const events = fixtureWindowEvents(startEvent, horizon);
@@ -158,7 +159,8 @@ export async function getFixtureWindow(
   const data = await graphqlRequest<FixtureWindowResponse>(request.query, request.variables, {
     cachePolicy: "fixtures",
     cacheVariant: `season:${season}`,
-    forceRefresh
+    forceRefresh,
+    trace
   });
 
   return events.flatMap((event, index) =>

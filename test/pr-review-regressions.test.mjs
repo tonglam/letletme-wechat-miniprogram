@@ -221,7 +221,7 @@ test("fixture windows honor event and season cache identity on open and resume",
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(fixtures, /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
-  assert.match(fixtures, /onRetry\(\)[\s\S]*retryWithContext\(\)[\s\S]*syncEventContext\(true\)[\s\S]*load\(true\)/);
+  assert.match(fixtures, /onRetry\(\)[\s\S]*retryWithContext\(\)[\s\S]*syncEventContext\(true\)[\s\S]*load\(true, trace\)/);
 });
 
 test("My FPL partial brief reads retain only fields from the failed source", () => {
@@ -293,10 +293,10 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   const common = source("miniprogram/services/common.service.ts");
   const home = source("miniprogram/pages/home/index/index.ts");
   assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false\)/);
-  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false\)/);
-  assert.match(fixtures, /await this\.load\(seasonChanged\)/);
-  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh\)/);
-  assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
+  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false, trace\)/);
+  assert.match(fixtures, /await this\.load\(seasonChanged, trace\)/);
+  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh, trace\)/);
+  assert.match(fixtures, /getTeamList\(season, forceRefresh, trace\)/);
   assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
   assert.match(service, /eventFixtures\(eventId:/);
   assert.match(service, /query CoreEventFixtureSchedule/);

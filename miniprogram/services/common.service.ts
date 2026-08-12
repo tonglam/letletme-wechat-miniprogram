@@ -108,12 +108,17 @@ interface TeamsResponse {
   }>;
 }
 
-export async function getTeamList(_season: string, forceRefresh = false): Promise<TeamOption[]> {
+export async function getTeamList(
+  _season: string,
+  forceRefresh = false,
+  trace?: ServiceReadOptions["trace"]
+): Promise<TeamOption[]> {
   if (!_season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<TeamsResponse>(TEAMS, {}, {
     cachePolicy: "team-directory",
     cacheVariant: `season:${_season}`,
-    forceRefresh
+    forceRefresh,
+    trace
   });
   return (data.teams || []).map((team) => ({
     id: team.id,

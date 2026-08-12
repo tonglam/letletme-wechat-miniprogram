@@ -9,6 +9,7 @@ import {
   type FixtureRunTeam
 } from "../../../utils/fixture-run";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
 
 const FALLBACK_MAX_EVENT = 38;
 
@@ -33,25 +34,28 @@ PerformancePage({
   hasShown: false,
 
   async onLoad() {
+    const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "load" });
     await this.syncEventContext(false);
     // Season is part of fixture/team cache identity, so an ordinary first
     // read can reuse fresh data without crossing a rollover.
-    await this.load(false);
+    await this.load(false, trace);
   },
 
   async onShow() {
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
+    const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "show" });
     const seasonChanged = await this.syncEventContext(false);
     // A normal cached read lets the fixture service's 30-minute TTL bound
     // staleness. A season rollover bypasses both fixture and team caches.
-    await this.load(seasonChanged);
+    await this.load(seasonChanged, trace);
   },
 
   onPullDownRefresh() {
+    const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
     return this.syncEventContext(true)
-      .then(() => this.load(true))
+      .then(() => this.load(true, trace))
       .finally(() => wx.stopPullDownRefresh());
   },
 
@@ -87,7 +91,13 @@ PerformancePage({
     return false;
   },
 
-  async load(forceRefresh = false) {
+  async load(
+    forceRefresh = false,
+    trace = capturePageRequestTrace({
+      callerSurface: "explore-fixtures",
+      trigger: forceRefresh ? "refresh" : "load"
+    })
+  ) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
     const season = getApp<IAppOption>().globalData.season;
@@ -102,8 +112,8 @@ PerformancePage({
     this.setData({ loading: !hadLastGood, error: "" });
     try {
       const [fixtures, teams] = await Promise.all([
-        getFixtureWindow(startEvent, horizon, season, forceRefresh),
-        getTeamList(season, forceRefresh)
+        getFixtureWindow(startEvent, horizon, season, forceRefresh, trace),
+        getTeamList(season, forceRefresh, trace)
       ]);
       if (requestId !== this.requestId) return;
       this.fixtures = fixtures;
@@ -148,12 +158,18 @@ PerformancePage({
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.selectedWindowByUser = startEvent !== currentGw;
     this.setData({ startEvent });
-    void this.load();
+    void this.load(false, capturePageRequestTrace({
+      callerSurface: "explore-fixtures",
+      trigger: "tab"
+    }));
   },
 
   onHorizonChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { horizon: number }>) {
     this.setData({ horizon: normalizeHorizon(Number(event.currentTarget.dataset.horizon)) });
-    void this.load();
+    void this.load(false, capturePageRequestTrace({
+      callerSurface: "explore-fixtures",
+      trigger: "tab"
+    }));
   },
 
   onRetry() {
@@ -161,9 +177,10 @@ PerformancePage({
   },
 
   async retryWithContext() {
+    const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
     try {
       await this.syncEventContext(true);
-      await this.load(true);
+      await this.load(true, trace);
     } catch (error) {
       this.setData({
         loading: false,
