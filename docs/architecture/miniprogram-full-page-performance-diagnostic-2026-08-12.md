@@ -2,9 +2,9 @@
 
 ## 执行摘要
 
-**日期：** 2026-08-13  
-**状态：** **已修复并验收**  
-**范围：** 25/25 注册页面、AppContext、缓存与请求归因、P0/P1 页面生命周期、PlayerValues、Fixture、Live NO_PICKS、错误与离线恢复  
+**日期：** 2026-08-13
+**状态：** **已修复并验收**
+**范围：** 25/25 注册页面、AppContext、缓存与请求归因、P0/P1 页面生命周期、PlayerValues、Fixture、Live NO_PICKS、错误与离线恢复
 **拓扑：** WeChat DevTools → `127.0.0.1:3000/api/graphql` → `127.0.0.1:4000/graphql`
 
 本轮不是通过延长 TTL 或提前关闭 loading 绕过性能问题。Data view 改为 bounded previous-row 访问，GraphQL 保持一个 read pool 连接，Mini 页面按 primary/secondary/lazy 分层，并使用真实 viewport intersection 作为首屏完成点。
