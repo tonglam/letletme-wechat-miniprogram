@@ -46,4 +46,5 @@ test("My FPL cold context failure commits a retryable terminal state", () => {
   assert.match(page, /showContextError\(error: unknown\)[\s\S]*this\.contextUnavailable = true[\s\S]*loading: false[\s\S]*observePrimary/);
   assert.match(page, /onRetry\(\)[\s\S]*if \(this\.contextUnavailable\)[\s\S]*recoverContext\("pull-refresh"\)/);
   assert.match(page, /recoverContext[\s\S]*this\.ensureContext\(reason, true\)[\s\S]*initializeFromContext\(true\)/);
+  assert.match(page, /async onShow\(\)[\s\S]*if \(this\.contextUnavailable\)[\s\S]*recoverContext\("page-show"\)[\s\S]*return[\s\S]*this\.ensureContext\("page-show"\)/);
 });

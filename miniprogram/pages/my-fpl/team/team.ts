@@ -267,18 +267,14 @@ Page({
     const app = getApp<IAppOption>();
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "warm-enter");
+    if (this.contextUnavailable) {
+      await this.recoverContext("page-show");
+      return;
+    }
     try {
       await this.ensureContext("page-show");
       this.perfTracker.mark("contextReadyAt");
-      if (this.contextUnavailable) {
-        await this.recoverContext("page-show");
-        return;
-      }
-    } catch (error) {
-      if (this.contextUnavailable) {
-        this.showContextError(error);
-        return;
-      }
+    } catch {
       // A resident page may continue using its retained context.
     }
     const entryId = this.data.entryId;
