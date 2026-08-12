@@ -23,3 +23,9 @@ test("preseason uses displayEvent schedule without a Live overlay", () => {
   const statusHandler = page.slice(page.indexOf("onStatusTap"));
   assert.doesNotMatch(statusHandler.slice(0, statusHandler.indexOf("onRetry")), /loadData\(/);
 });
+
+test("warm resume observes retained Core schedule without refetching", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("onHide()"));
+  assert.match(onShow, /resumed && \(this\.data\.hasData \|\| Boolean\(this\.data\.error\)\)[\s\S]*observePrimary/);
+});

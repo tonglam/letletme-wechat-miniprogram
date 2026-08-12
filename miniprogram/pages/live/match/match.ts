@@ -410,6 +410,9 @@ Page({
         return;
       }
     }
+    if (resumed && (this.data.hasData || Boolean(this.data.error))) {
+      wx.nextTick(() => this.perfTracker?.observePrimary());
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
