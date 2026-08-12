@@ -10,6 +10,9 @@ test("home paints Core fixtures before starting independent secondary sections",
   const primaryCommit = page.indexOf("fixtureRows: fixtureResult.fixtures.map");
   const secondaryStart = page.indexOf("void this.loadSecondaryData");
   assert.ok(fixtureAwait >= 0 && primaryCommit > fixtureAwait && secondaryStart > primaryCommit);
+  assert.match(page, /await this\.syncAppState\([\s\S]*this\._perfTracker\?\.mark\("primaryRequestStartAt"\)/);
+  assert.match(page, /syncAppState\(extra: Partial<HomeData> = \{\}\): Promise<void>[\s\S]*return setDataAsync\(this/);
+  assert.doesNotMatch(page, /this\._loadedContextRevision = context\.contextRevision;\s*this\.syncAppState\(\);\s*this\.startCountdown\(\);\s*await this\.loadPage\(\)/);
   assert.match(page, /Promise\.allSettled\(\[entryTask, supplementTask\]\)/);
   assert.match(page, /getEntryInfo[\s\S]*this\.setData\(\{ entry, entryError: "" \}\)/);
   assert.match(page, /getMiniHomeSupplement[\s\S]*\.then\(\(supplement\)/);

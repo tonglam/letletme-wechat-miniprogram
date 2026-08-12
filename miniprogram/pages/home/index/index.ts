@@ -21,7 +21,7 @@ import {
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import type { PageRequestTrace } from "../../../services/graphql.service";
-import { observeSoftTimeout } from "../../../utils/page-request";
+import { observeSoftTimeout, setDataAsync } from "../../../utils/page-request";
 
 interface HomeData {
   loading: boolean;
@@ -117,10 +117,9 @@ Page({
     const context = await ensureAppContext({ reason: "page-load" });
     this._perfTracker.mark("contextReadyAt");
     this._loadedContextRevision = context.contextRevision;
-    this.syncAppState();
-    this.startCountdown();
     await this.loadPage();
     this._initialLoadDone = true;
+    this.startCountdown();
   },
 
   async onShow() {
@@ -173,7 +172,7 @@ Page({
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
       const hadFixtureRows = this.data.fixtureRows.length > 0 && this.data.selectedFixtureGw === fixtureGw;
-      this.syncAppState({
+      await this.syncAppState({
         loading: !this._initialLoadDone && !hadFixtureRows,
         fixtureLoading: !hadFixtureRows,
         error: "",
@@ -362,9 +361,9 @@ Page({
     this._perfTracker?.mark("secondaryCompleteAt");
   },
 
-  syncAppState(extra: Partial<HomeData> = {}) {
+  syncAppState(extra: Partial<HomeData> = {}): Promise<void> {
     const app = getApp<IAppOption>();
-    this.setData({
+    return setDataAsync(this, {
       gw: app.globalData.gw,
       nextGw: app.globalData.nextGw,
       minFixtureGw: app.globalData.nextGw,
