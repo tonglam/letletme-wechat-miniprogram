@@ -24,6 +24,11 @@ function schedulePrimaryObservation(page: InstrumentedPage): void {
   observe();
 }
 
+function observeLifecycleSettlement(result: unknown, page: InstrumentedPage): void {
+  const settled = () => schedulePrimaryObservation(page);
+  void Promise.resolve(result).then(settled, settled);
+}
+
 function startTracker(
   page: InstrumentedPage,
   trigger: "cold-launch" | "warm-enter" | "refresh"
@@ -67,7 +72,7 @@ export const PerformancePage = ((options: unknown): void => {
       wrapSetData(this);
       startTracker(this, "cold-launch");
       const result = originalOnLoad?.apply(this, args);
-      void Promise.resolve(result).finally(() => schedulePrimaryObservation(this));
+      observeLifecycleSettlement(result, this);
       return result;
     },
     onShow(this: InstrumentedPage, ...args: unknown[]) {
@@ -76,13 +81,13 @@ export const PerformancePage = ((options: unknown): void => {
       }
       this.__performanceShown = true;
       const result = originalOnShow?.apply(this, args);
-      void Promise.resolve(result).finally(() => schedulePrimaryObservation(this));
+      observeLifecycleSettlement(result, this);
       return result;
     },
     onPullDownRefresh(this: InstrumentedPage, ...args: unknown[]) {
       startTracker(this, "refresh");
       const result = originalOnPullDownRefresh?.apply(this, args);
-      void Promise.resolve(result).finally(() => schedulePrimaryObservation(this));
+      observeLifecycleSettlement(result, this);
       return result;
     },
     onHide(this: InstrumentedPage, ...args: unknown[]) {

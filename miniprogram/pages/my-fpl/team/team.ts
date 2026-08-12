@@ -567,9 +567,9 @@ Page({
   async loadTab(tab: EntrySummaryTab, forceRefresh: boolean): Promise<void> {
     if (tab === "squad" || !this.data.entryId) return;
     const requestId = ++this.tabRequestId;
+    const entryId = this.data.entryId;
     this.setData({ tabLoading: true, tabError: "" });
     try {
-      const entryId = this.data.entryId;
       let historyPayload = this.historyPayload;
       let transferPayload = this.transferPayload;
       if (forceRefresh || !historyPayload) {
@@ -604,7 +604,7 @@ Page({
         transferError: ""
       });
     } catch (error) {
-      if (this.restartForPrincipalChange(this.data.entryId)) return;
+      if (this.restartForPrincipalChange(entryId)) return;
       if (requestId !== this.tabRequestId) return;
       const message = error instanceof Error ? error.message : "分页数据加载失败";
       this.setData({

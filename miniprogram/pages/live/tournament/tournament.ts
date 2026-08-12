@@ -739,7 +739,8 @@ PerformancePage({
     }
 
     const eventId = this.data.event;
-    if (!Number.isSafeInteger(eventId) || eventId <= 0) {
+    const hasNoParticipants = selected.participantCount === 0;
+    if (hasNoParticipants || !Number.isSafeInteger(eventId) || eventId <= 0) {
       this.setData({
         rows: [],
         displayedRows: [],
@@ -747,7 +748,13 @@ PerformancePage({
         loading: false,
         refreshing: false,
         error: "",
-        errorSuffix: ""
+        errorSuffix: "",
+        resultsEmptyTitle: hasNoParticipants
+          ? "当前竞赛还没有参赛球队"
+          : "当前暂无进行中的比赛周",
+        resultsEmptyDescription: hasNoParticipants
+          ? "有球队加入后再显示实时排名"
+          : "比赛周开始后再显示实时排名"
       });
       this.syncDisplayState();
       return Promise.resolve();

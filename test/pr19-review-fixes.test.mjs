@@ -28,6 +28,9 @@ test("soft timeout observes a rejected task without creating a rejected finally 
   });
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(timedOut, false);
+  const performancePage = source("miniprogram/utils/performance-page.ts");
+  assert.doesNotMatch(performancePage, /Promise\.resolve\(result\)\.finally/);
+  assert.match(performancePage, /Promise\.resolve\(result\)\.then\(settled, settled\)/);
 });
 
 test("price context is optional while season-scoped deep links await it", () => {
@@ -115,6 +118,13 @@ test("Live Tournament rejects event zero before any row request", async () => {
   await tournamentPage.loadRows.call(context);
   assert.deepEqual(context.data.rows, []);
   assert.equal(context.data.loading, false);
+
+  context.data.event = 33;
+  context.data.selectedTournament = { id: "league-1", name: "League", participantCount: 0 };
+  context.data.rows = [{ entry: 123 }];
+  await tournamentPage.loadRows.call(context);
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.data.resultsEmptyTitle, "当前竞赛还没有参赛球队");
 });
 
 test("My FPL support payload stays local until principal validation and updates chip totals", () => {
