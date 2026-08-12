@@ -4,7 +4,7 @@
     <view class="subtitle">输入 Entry ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
   </view>
 
-  <view class="lookup-card section">
+  <view id="perf-primary-content" class="lookup-card section">
     <view class="field-label">FPL Entry ID</view>
     <view class="input-shell">
       <input

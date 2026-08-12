@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntrySummaryTournaments,
   getTournamentSummary,
@@ -60,7 +61,7 @@ interface SummaryData {
   hasMetrics: boolean;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",

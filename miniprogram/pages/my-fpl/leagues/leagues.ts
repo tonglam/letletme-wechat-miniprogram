@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getMyFplLeagues } from "../../../services/my-fpl.service";
 import type { MyFplLeagueBrief } from "../../../models/my-fpl";
 import { goToEntrySearch } from "../../../utils/navigation";
@@ -42,7 +43,7 @@ export function readLeaguesCache(
   return null;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: true,
     error: "",

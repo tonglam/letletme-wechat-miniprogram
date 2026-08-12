@@ -17,6 +17,12 @@ export interface ApiRecord {
   source?: ApiRecordSource;
   networkAttempted?: boolean;
   cacheAgeBucket?: string;
+  callerSurface?: string;
+  trigger?: string;
+  forceReason?: string;
+  contextRevision?: number;
+  cacheVariantHash?: string;
+  requestId?: string;
   ts: number;
 }
 
@@ -25,6 +31,29 @@ export interface ApiRecordDetails {
   source?: ApiRecordSource;
   networkAttempted?: boolean;
   cacheAgeBucket?: string;
+  callerSurface?: string;
+  trigger?: string;
+  forceReason?: string;
+  contextRevision?: number;
+  cacheVariantHash?: string;
+  requestId?: string;
+}
+
+export interface PagePerformanceRecord {
+  navigationId: string;
+  route: string;
+  trigger: "cold-launch" | "warm-enter" | "refresh";
+  routeStartedAt: number;
+  contextReadyAt?: number;
+  primaryRequestStartAt?: number;
+  primaryResponseAt?: number;
+  primarySetDataAt?: number;
+  primaryViewportVisibleAt?: number;
+  secondaryCompleteAt?: number;
+  softFailureAt?: number;
+  operationCount: number;
+  networkOperationCount: number;
+  ts: number;
 }
 
 export interface LiveTransitionRecord {
@@ -68,6 +97,7 @@ export interface StoredPerf {
   myFplVisits?: MyFplVisitRecord[];
   competitionVisits?: CompetitionVisitRecord[];
   exploreVisits?: ExploreVisitRecord[];
+  pagePerformance?: PagePerformanceRecord[];
   launchDuration?: number;
   launchTs?: number;
 }
@@ -159,8 +189,52 @@ export function recordApi(
     source: details.source,
     networkAttempted: details.networkAttempted,
     cacheAgeBucket: details.cacheAgeBucket,
+    callerSurface: details.callerSurface,
+    trigger: details.trigger,
+    forceReason: details.forceReason,
+    contextRevision: details.contextRevision,
+    cacheVariantHash: details.cacheVariantHash,
+    requestId: details.requestId,
     ts: Date.now()
   });
+  flush();
+}
+
+export function recordPagePerformance(record: Omit<PagePerformanceRecord, "ts">): void {
+  const data = load();
+  if (!Array.isArray(data.pagePerformance)) data.pagePerformance = [];
+  const existing = data.pagePerformance.findIndex(
+    (item) => item.navigationId === record.navigationId
+  );
+  if (existing >= 0) {
+    const previous = data.pagePerformance[existing];
+    data.pagePerformance[existing] = {
+      ...record,
+      operationCount: Math.max(record.operationCount, previous.operationCount),
+      networkOperationCount: Math.max(
+        record.networkOperationCount,
+        previous.networkOperationCount
+      ),
+      ts: Date.now()
+    };
+  } else {
+    if (data.pagePerformance.length >= MAX_RECORDS) {
+      data.pagePerformance.splice(0, data.pagePerformance.length - MAX_RECORDS + 1);
+    }
+    data.pagePerformance.push({ ...record, ts: Date.now() });
+  }
+  flush();
+}
+
+export function recordPageOperation(
+  navigationId: string,
+  kind: "logical" | "network"
+): void {
+  const data = load();
+  const record = data.pagePerformance?.find((item) => item.navigationId === navigationId);
+  if (!record) return;
+  if (kind === "logical") record.operationCount += 1;
+  if (kind === "network") record.networkOperationCount += 1;
   flush();
 }
 
@@ -236,7 +310,8 @@ export function getPerf(): StoredPerf {
     liveTransitions: (data.liveTransitions ?? []).slice(),
     myFplVisits: (data.myFplVisits ?? []).slice(),
     competitionVisits: (data.competitionVisits ?? []).slice(),
-    exploreVisits: (data.exploreVisits ?? []).slice()
+    exploreVisits: (data.exploreVisits ?? []).slice(),
+    pagePerformance: (data.pagePerformance ?? []).slice()
   };
 }
 
@@ -248,7 +323,8 @@ export function clearPerf(): void {
     liveTransitions: [],
     myFplVisits: [],
     competitionVisits: [],
-    exploreVisits: []
+    exploreVisits: [],
+    pagePerformance: []
   };
   try {
     wx.removeStorage({ key: STORAGE_KEY });

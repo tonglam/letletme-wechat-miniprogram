@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 
 /**
@@ -5,7 +6,7 @@ import { routes } from "../../../config/routes";
  * /pages/my-fpl/team/team. Existing shared links and the 统计 nav group keep
  * working by redirecting; the shell carries no content of its own.
  */
-Page({
+PerformancePage({
   onLoad(options: Record<string, string | undefined>) {
     const query = Object.keys(options || {})
       .filter((key) => options[key] !== undefined)

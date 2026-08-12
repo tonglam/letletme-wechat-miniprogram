@@ -21,7 +21,7 @@
 
   <app-loading wx:if="{{loading}}" text="加载赛程" />
   <block wx:else>
-    <view class="section team-list">
+    <view id="perf-primary-content" class="section team-list">
       <view wx:for="{{runs}}" wx:key="teamId" class="team-card">
         <view class="team-name">{{item.teamName}}</view>
         <view class="chip-row">

@@ -1,8 +1,9 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
 import { routes } from "../../../config/routes";
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",

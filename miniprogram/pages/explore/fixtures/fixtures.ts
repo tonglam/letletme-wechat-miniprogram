@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getFixtureWindow } from "../../../services/fixture.service";
 import { getTeamList } from "../../../services/common.service";
 import type { Fixture } from "../../../models/common";
@@ -11,7 +12,7 @@ import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 
 const FALLBACK_MAX_EVENT = 38;
 
-Page({
+PerformancePage({
   data: {
     loading: true,
     error: "",

@@ -4,9 +4,9 @@
     <view class="subtitle">选择球队查看详情。</view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队" />
-  <view wx:else class="section card">
+  <view id="perf-primary-content" wx:else class="section card">
     <app-empty-state
       wx:if="{{teams.length === 0}}"
       eyebrow="名单待就绪"

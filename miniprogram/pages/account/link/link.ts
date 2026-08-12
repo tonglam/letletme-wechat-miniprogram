@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   confirmMiniProgramEmailLink,
   logoutMiniProgramSession,
@@ -5,7 +6,7 @@ import {
 } from '../../../services/auth.service';
 import { switchToHome } from '../../../utils/navigation';
 
-Page({
+PerformancePage({
   data: { email: '', code: '', sending: false, confirming: false, error: '' },
 
   onEmailInput(event: WechatMiniprogram.Input) {

@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getCurrentSnapshotState,
   getMyFplContext,
@@ -93,7 +94,7 @@ export function readOverviewCache(
   return null;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: true,
     phase: "PRE_DEADLINE" as MyFplPhase,

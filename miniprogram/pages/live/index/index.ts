@@ -1,7 +1,8 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 
-Page({
+PerformancePage({
   data: {
     entryId: undefined as number | undefined,
     event: 0,

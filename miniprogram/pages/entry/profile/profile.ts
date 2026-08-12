@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { EntryInfo } from "../../../models/entry";
@@ -11,7 +12,7 @@ interface EntryProfileData {
   entry: EntryInfo;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",

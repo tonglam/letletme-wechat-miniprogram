@@ -1,8 +1,9 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamList } from "../../../services/common.service";
 import type { TeamOption } from "../../../models/common";
 import { goToTeamDetail } from "../../../utils/navigation";
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",

@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getMiniGameweekSummary } from "../../../services/summary.service";
 import type { GameweekOverallSummary } from "../../../models/summary";
 import {
@@ -43,7 +44,7 @@ interface GameweekSummaryData {
   hasTransfers: boolean;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     refreshing: false,

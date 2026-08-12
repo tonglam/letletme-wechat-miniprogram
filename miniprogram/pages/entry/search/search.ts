@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
 import { routes } from "../../../config/routes";
@@ -18,7 +19,7 @@ interface EntrySearchData {
   isCurrentEntry: boolean;
 }
 
-Page({
+PerformancePage({
   data: {
     manualEntryId: "",
     loading: false,

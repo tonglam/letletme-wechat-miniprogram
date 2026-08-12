@@ -1,5 +1,5 @@
 <view class="page">
-  <view wx:if="{{emptyState}}" class="section">
+  <view id="perf-primary-content" wx:if="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="还没选球员"
       title="先从球员列表选择一名球员"
@@ -9,9 +9,9 @@
       bind:action="onBackToPlayers"
     />
   </view>
-  <app-error-state wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球员详情" />
-  <view wx:else class="section card">
+  <view id="perf-primary-content" wx:else class="section card">
     <view class="title">{{player.name || '球员详情'}}</view>
     <view class="subtitle">{{player.team || ''}} {{player.position || ''}}</view>
     <view class="detail-row">

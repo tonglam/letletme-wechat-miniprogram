@@ -1,8 +1,9 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
 import { routes } from "../../../config/routes";
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",

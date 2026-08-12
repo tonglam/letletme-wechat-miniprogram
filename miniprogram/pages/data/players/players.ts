@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getPlayersForPickerPage,
   type PlayerPickerPageResult
@@ -32,7 +33,7 @@ export function shouldApplyPlayerResponse(
   return responseRevision === currentRevision;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     loadingMore: false,

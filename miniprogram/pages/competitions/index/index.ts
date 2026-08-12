@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getMyCompetitionsCompat } from "../../../services/competition.service";
 import type { CompetitionListItem } from "../../../models/competition";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
@@ -45,7 +46,7 @@ export function readListCache(
   return null;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: true,
     error: "",

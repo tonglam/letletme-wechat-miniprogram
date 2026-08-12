@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 
 /**
@@ -5,7 +6,7 @@ import { routes } from "../../../config/routes";
  * overview at /pages/explore/index/index. Existing shared links and stale
  * tab state keep working by redirecting; the shell carries no content.
  */
-Page({
+PerformancePage({
   onLoad() {
     wx.redirectTo({ url: routes.exploreIndex });
   }

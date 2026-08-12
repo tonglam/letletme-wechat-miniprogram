@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntryPointsRaceTournament,
   getTournamentSelectionStats
@@ -65,7 +66,7 @@ const TABS: TabOption[] = [
   { key: "transfersOut", label: "转出" }
 ];
 
-Page({
+PerformancePage({
   data: {
     loadingTournaments: false,
     loadingStats: false,
