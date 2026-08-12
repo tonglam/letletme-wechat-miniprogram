@@ -341,7 +341,7 @@
       <div class="badges">
         <span class="badge">诊断报告，不是 main 验收声明</span>
         <span class="badge">WeChat DevTools</span>
-        <span class="badge">Web :3001 → GraphQL :4000</span>
+        <span class="badge">Web :3000 → GraphQL :4000</span>
         <span class="badge">后端到 setData 全链路</span>
       </div>
     </header>
@@ -726,5 +726,67 @@
   <p>冷启动、暖页面、单次 Fixture operation、零 Live 调用和 renderer callback 已通过；GraphQL full-selection、Web proxy、刷新可见时间和完整下拉刷新仍失败。三个功能/诊断分支均不得合并到 <code>main</code>，不得触发 GraphQL 部署，也不得上传微信开发版 <code>1.0.2</code>。</p>
 </section>
   </main>
+
+</html>
+<section id="current-read-path-audit-2026-08-12" class="report-section">
+  <h2>2026-08-12 当前分支最终验收记录</h2>
+  <p class="status status-warning"><strong>代码已实施，尚未验收</strong></p>
+  <p>本节覆盖当前三个 optimize 分支的最新运行证据。自动检查通过不等于性能门槛通过；当前硬门槛失败，因此不执行合并、部署或微信开发版上传。</p>
+  <h3>版本与环境</h3>
+  <table>
+    <thead><tr><th>项目</th><th>实际值</th></tr></thead>
+    <tbody>
+      <tr><td>GraphQL</td><td><code>codex/optimize-miniprogram-read-path</code> / <code>2337d1b23b2a819812a1ee30dd7c8278ac3cd883</code></td></tr>
+      <tr><td>Web</td><td><code>codex/optimize-graphql-proxy-read-path</code> / <code>d73227689eeffe946e63083a9281d4234a15c310</code></td></tr>
+      <tr><td>Mini</td><td><code>codex/optimize-home-read-path</code> / <code>481f68fea529bb1cd13800223c0eaaae859f4965</code></td></tr>
+      <tr><td>DevTools</td><td>Stable <code>2.01.2510290</code>，基础库 <code>3.15.2</code></td></tr>
+      <tr><td>链路</td><td>Mini -> <code>127.0.0.1:3000/api/graphql</code> -> <code>127.0.0.1:4000/graphql</code></td></tr>
+      <tr><td>结果</td><td>当前目标 worktree 显示 10 条 Fixture；HTTP 样本全部 200、数量 10、GraphQL errors 为 0</td></tr>
+    </tbody>
+  </table>
+  <h3>自动检查</h3>
+  <ul>
+    <li>GraphQL: 348 pass，4 skip，0 fail；typecheck、lint、format check 通过。</li>
+    <li>Web: 335 pass，5 skip，0 fail；typecheck、lint、production build 通过。</li>
+    <li>Mini: 139/139 pass；typecheck、lint、DevTools build-npm 通过。</li>
+  </ul>
+  <h3>链路归因</h3>
+  <ul>
+    <li>动态 admission 当前是每 operation 一次原子 Redis admission EVAL；旧报告中“三次串行动态限流”/“四次远程 EVAL”的说法已过时。</li>
+    <li>publication pointer 仍有独立 Redis read。当前串行样本中 admission 与 publication 远程阶段约为 142--408ms，RTT 抖动是 Fixture p95 未达标的主要外部开销。</li>
+    <li>Current season 为启动期加载的不可变值；请求路径和 health 没有 season DB query。</li>
+    <li><code>eventFixtures</code> 走 Core Fixtures，不进入 Live snapshot；测试、trace 与当前 <code>CoreEventFixtureSchedule</code> 日志没有页面触发的 LiveSnapshot operation。</li>
+    <li><code>GetPlayerValues</code> empty miss 的当前 trace 中 <code>databaseChanges</code> 约 832ms；negative hit 不进入数据库和 enrichment。</li>
+  </ul>
+  <h3>严格性能门槛</h3>
+  <p>HTTP 样本按 endpoint 串行采集。冷启动、暖页面、刷新和 response-to-setData 的正式多样本计时在当前最终 SHA 上尚未完整取得，单次 DevTools 观察不替代正式 p95。</p>
+  <table>
+    <thead><tr><th>指标</th><th>门槛</th><th>当前样本</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>GraphQL Fixture 暖进程直连</td><td>p95 &lt;= 350ms</td><td>n=20，p50 775.18ms，p95 925.79ms，max 944.48ms</td><td class="fail">失败</td></tr>
+      <tr><td>经 Web Fixture</td><td>p95 &lt;= 450ms</td><td>n=20，p50 755.35ms，p95 929.77ms，max 953.69ms</td><td class="fail">失败</td></tr>
+      <tr><td>暖页面到 Fixture 可见</td><td>p95 &lt;= 550ms</td><td>DevTools spot 583ms，n=1</td><td>未完成正式验收</td></tr>
+      <tr><td>冷启动到 Fixture 可见</td><td>max &lt;= 1.2s</td><td>DevTools launch spot 3014ms，n=1</td><td class="fail">未达标/需重测</td></tr>
+      <tr><td>刷新到 Fixture 可见</td><td>p95 &lt;= 600ms</td><td>DevTools spot 583ms，n=1</td><td>未完成正式验收</td></tr>
+      <tr><td>MiniHomeSupplement warm</td><td>p95 &lt;= 650ms</td><td>n=20，p50 445.44ms，p95 452.25ms，max 1427.11ms</td><td>p95 通过，存在 outlier</td></tr>
+      <tr><td>GetPlayerValues negative hit 经 Web</td><td>p95 &lt;= 500ms</td><td>n=10，p50 441.64ms，p95 445.88ms</td><td class="pass">通过</td></tr>
+      <tr><td>GetPlayerValues empty miss 经 Web</td><td>&lt;= 1.0s</td><td>首次 miss 1110.48ms；随后 negative hit 441.09ms</td><td class="fail">失败</td></tr>
+      <tr><td>response -> setData callback</td><td>p95 &lt;= 50ms</td><td>当前最终 SHA 未取得正式 n&gt;=10 样本</td><td>未完成正式验收</td></tr>
+      <tr><td>GraphQL limiter admission</td><td>每 operation 1 次 EVAL</td><td>代码、单测、运行链路一致</td><td class="pass">通过</td></tr>
+      <tr><td>请求期 season DB query</td><td>0</td><td>启动加载；连续请求与 health 无 season 查询</td><td class="pass">通过</td></tr>
+      <tr><td>Web GraphQL limiter DB query</td><td>0</td><td>route 源码/测试确认未调用 DB limiter</td><td class="pass">通过</td></tr>
+      <tr><td>Fixture Live snapshot</td><td>0</td><td>Core fixture 单测、trace 和当前 operation 日志</td><td class="pass">通过</td></tr>
+    </tbody>
+  </table>
+  <h3>结论</h3>
+  <ol>
+    <li>GraphQL 直连 Fixture p95 925.79ms，超过 350ms；Web Fixture p95 929.77ms，超过 450ms。</li>
+    <li><code>GetPlayerValues</code> empty miss 为 1110.48ms，超过 1.0s。</li>
+    <li>冷启动、暖页面、刷新、response-to-setData 尚未取得正式多样本，不能用单次 583ms 或 3014ms 宣称通过。</li>
+    <li>当前不执行 GraphQL/Web/小程序 fast-forward、线上部署或微信开发版 <code>1.0.2</code> 上传。</li>
+  </ol>
+  <p>后续应在当前分段 trace 下处理 Redis admission/publication RTT 和 empty miss 的约 832ms databaseChanges 阶段；不能通过增加 TTL、隐藏请求或调整报告口径绕过门槛。</p>
+</section>
+
 </body>
 </html>
