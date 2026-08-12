@@ -39,3 +39,11 @@ test("My FPL invalidates lazy support payloads on season rollover", () => {
   assert.match(page, /invalidateSeasonSupport\(\)[\s\S]*this\.tabRequestId \+= 1[\s\S]*this\.historyPayload = null[\s\S]*this\.transferPayload = null/);
   assert.equal((page.match(/if \(seasonChanged\) this\.invalidateSeasonSupport\(\)/g) || []).length, 2);
 });
+
+test("My FPL cold context failure commits a retryable terminal state", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  assert.match(page, /async onLoad\(\)[\s\S]*catch \(error\)[\s\S]*this\.showContextError\(error\)[\s\S]*return/);
+  assert.match(page, /showContextError\(error: unknown\)[\s\S]*this\.contextUnavailable = true[\s\S]*loading: false[\s\S]*observePrimary/);
+  assert.match(page, /onRetry\(\)[\s\S]*if \(this\.contextUnavailable\)[\s\S]*recoverContext\("pull-refresh"\)/);
+  assert.match(page, /recoverContext[\s\S]*this\.ensureContext\(reason, true\)[\s\S]*initializeFromContext\(true\)/);
+});

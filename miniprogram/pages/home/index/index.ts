@@ -313,7 +313,8 @@ Page({
       if (requestId !== this._loadRequestId) return;
 
       this._lastLoadAt = Date.now();
-      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace);
+      const secondaryTracker = this._perfTracker;
+      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, secondaryTracker);
     } catch (error) {
       if (requestId === this._loadRequestId) {
         this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
@@ -374,7 +375,8 @@ Page({
     requestId: number,
     currentGw: number,
     forceRefresh: boolean,
-    primaryTrace?: PageRequestTrace
+    primaryTrace?: PageRequestTrace,
+    tracker?: PagePerformanceTracker
   ) {
     const app = getApp<IAppOption>();
     this.setData({
@@ -435,7 +437,7 @@ Page({
       });
     await Promise.allSettled([entryTask, supplementTask]);
     if (requestId !== this._loadRequestId) return;
-    this._perfTracker?.mark("secondaryCompleteAt");
+    tracker?.mark("secondaryCompleteAt");
   },
 
   syncAppState(extra: Partial<HomeData> = {}): Promise<void> {

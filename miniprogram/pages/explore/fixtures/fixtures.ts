@@ -157,6 +157,18 @@ PerformancePage({
   },
 
   onRetry() {
-    void this.load(true);
+    void this.retryWithContext();
+  },
+
+  async retryWithContext() {
+    try {
+      await this.syncEventContext(true);
+      await this.load(true);
+    } catch (error) {
+      this.setData({
+        loading: false,
+        error: error instanceof Error ? error.message : "赛季和比赛轮信息加载失败"
+      });
+    }
   }
 });

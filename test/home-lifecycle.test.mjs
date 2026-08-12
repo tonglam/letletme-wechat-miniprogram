@@ -26,3 +26,10 @@ test("home first viewport order is deadline, fixtures, entry, then auxiliary not
   const notice = template.indexOf("notice-strip");
   assert.ok(deadline >= 0 && fixtures > deadline && entry > fixtures && notice > entry);
 });
+
+test("home secondary completion stays on the navigation tracker that started it", () => {
+  const page = source("miniprogram/pages/home/index/index.ts");
+  assert.match(page, /const secondaryTracker = this\._perfTracker[\s\S]*loadSecondaryData\([\s\S]*secondaryTracker\)/);
+  assert.match(page, /loadSecondaryData\([\s\S]*tracker\?: PagePerformanceTracker[\s\S]*tracker\?\.mark\("secondaryCompleteAt"\)/);
+  assert.doesNotMatch(page, /this\._perfTracker\?\.mark\("secondaryCompleteAt"\)/);
+});

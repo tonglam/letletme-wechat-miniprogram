@@ -200,8 +200,17 @@ Page({
 
   async onLoad() {
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "cold-launch");
-    await this.ensureContext("page-load");
+    try {
+      await this.ensureContext("page-load");
+    } catch (error) {
+      this.showContextError(error);
+      return;
+    }
     this.perfTracker.mark("contextReadyAt");
+    await this.initializeFromContext(false);
+  },
+
+  async initializeFromContext(forceRefresh: boolean) {
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -220,7 +229,34 @@ Page({
     });
     // First paint honors the reporting policy; explicit refresh and context
     // changes still bypass it below.
-    this.loadData(false);
+    await this.loadData(forceRefresh);
+  },
+
+  showContextError(error: unknown) {
+    this.contextUnavailable = true;
+    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData({
+      loading: false,
+      error: message,
+      emptyState: "",
+      hasTeamData: false,
+      supportAvailable: false
+    }, () => {
+      this.perfTracker?.mark("primarySetDataAt");
+      wx.nextTick(() => this.perfTracker?.observePrimary());
+    });
+  },
+
+  async recoverContext(reason: "page-show" | "pull-refresh") {
+    this.setData({ loading: true, error: "" });
+    try {
+      await this.ensureContext(reason, true);
+      this.contextUnavailable = false;
+      this.perfTracker?.mark("contextReadyAt");
+      await this.initializeFromContext(true);
+    } catch (error) {
+      this.showContextError(error);
+    }
   },
 
   async onShow() {
@@ -234,7 +270,17 @@ Page({
     try {
       await this.ensureContext("page-show");
       this.perfTracker.mark("contextReadyAt");
-    } catch { /* retain the last known context */ }
+      if (this.contextUnavailable) {
+        await this.recoverContext("page-show");
+        return;
+      }
+    } catch (error) {
+      if (this.contextUnavailable) {
+        this.showContextError(error);
+        return;
+      }
+      // A resident page may continue using its retained context.
+    }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) return;
 
@@ -295,10 +341,11 @@ Page({
   historyPayload: null as EntryHistoryPayload | null,
   transferPayload: null as EntryGameweekTransfers[] | null,
   tabRequestId: 0,
+  contextUnavailable: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
-  ensureContext(reason: "page-load" | "page-show" | "pull-refresh") {
-    return ensureAppContext({ reason });
+  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+    return ensureAppContext({ reason, forceRefresh });
   },
 
   invalidateSeasonSupport() {
@@ -312,6 +359,11 @@ Page({
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
+    if (this.contextUnavailable) {
+      await this.recoverContext("pull-refresh");
+      wx.stopPullDownRefresh();
+      return;
+    }
     const app = getApp<IAppOption>();
     try {
       await this.ensureContext("pull-refresh");
@@ -641,6 +693,10 @@ Page({
   },
 
   onRetry() {
+    if (this.contextUnavailable) {
+      void this.recoverContext("pull-refresh");
+      return;
+    }
     if (this.data.activeTab === "squad") {
       void this.loadData(true);
       return;

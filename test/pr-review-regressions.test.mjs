@@ -221,6 +221,7 @@ test("fixture windows honor event and season cache identity on open and resume",
   assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(fixtures, /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
+  assert.match(fixtures, /onRetry\(\)[\s\S]*retryWithContext\(\)[\s\S]*syncEventContext\(true\)[\s\S]*load\(true\)/);
 });
 
 test("My FPL partial brief reads retain only fields from the failed source", () => {
@@ -422,7 +423,8 @@ test("first personal paints honor season-aware event and reporting policies", ()
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false\)/);
   assert.match(overview, /if \(resumed\)[\s\S]*this\.loadOverview\(false\)/);
-  assert.match(team, /async onLoad\(\)[\s\S]*this\.loadData\(false\)/);
+  assert.match(team, /async onLoad\(\)[\s\S]*this\.initializeFromContext\(false\)/);
+  assert.match(team, /async initializeFromContext\(forceRefresh: boolean\)[\s\S]*this\.loadData\(forceRefresh\)/);
   assert.match(overview, /event === undefined/);
 });
 
