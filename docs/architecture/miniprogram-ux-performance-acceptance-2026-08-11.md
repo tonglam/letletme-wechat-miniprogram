@@ -436,6 +436,8 @@ GraphQL 进程首次装载 Core publication 时还会 `MGET` 6 个数据块、�
 
 因此当前仍不能证明“冷启动到首批 Fixture 可见最大值 `<=1.2s`”：只有单次 DevTools Launch Time，缺少从 app context start 到 Fixture visible 的独立时间戳。页面刷新按钮还命中了 Fixture cache，没有产生 force-refresh operation；下拉刷新 n=20 尚未取得。
 
+追加的 20 次真实下拉手势观察上界为 `1172-1205ms`。这包含 DevTools 手势、状态观察和工具等待，不作为产品 p95。对应后端 trace 中 Fixture 单请求约 `289-365ms`；连续手势使 secondary admission 排队到约 `280-296ms`，`MiniHomeSupplement` 约 `860-870ms`，但 secondary 不阻塞 Fixture 提交。当前仍缺每次从 `forceRefresh` 开始到 `setData` callback/Native visible 的一对一时间戳。
+
 ### 自动检查
 
 - GraphQL：`352 pass / 4 skip / 0 fail`；`tsc --noEmit`、lint、format check 通过。
