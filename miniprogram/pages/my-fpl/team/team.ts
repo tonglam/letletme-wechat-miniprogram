@@ -271,6 +271,7 @@ Page({
   },
 
   async recoverContext(reason: "page-show" | "pull-refresh") {
+    const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
       trigger: reason === "page-show" ? "show" : "refresh",
@@ -279,12 +280,12 @@ Page({
     this.setData({ loading: true, error: "" });
     try {
       await this.ensureContext(reason, true);
-      if (!this.pageVisible) return;
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.contextUnavailable = false;
-      this.perfTracker?.mark("contextReadyAt");
-      await this.initializeFromContext(true, trace);
+      tracker?.mark("contextReadyAt");
+      await this.initializeFromContext(true, trace, tracker);
     } catch (error) {
-      if (this.pageVisible) this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker) this.showContextError(error);
     }
   },
 
@@ -416,21 +417,28 @@ Page({
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
+    const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh" });
-    if (this.contextUnavailable) {
+    if (this.contextUnavailable || this.data.maxGw <= 0) {
       await this.recoverContext("pull-refresh");
       wx.stopPullDownRefresh();
       return;
     }
     const app = getApp<IAppOption>();
     try {
-      await this.ensureContext("pull-refresh");
-      if (!this.pageVisible) {
+      await this.ensureContext("pull-refresh", true);
+      if (!this.pageVisible || this.perfTracker !== tracker) {
         wx.stopPullDownRefresh();
         return;
       }
-      this.perfTracker.mark("contextReadyAt");
-    } catch { /* reload the retained context */ }
+      tracker.mark("contextReadyAt");
+    } catch {
+      if (!this.pageVisible || this.perfTracker !== tracker) {
+        wx.stopPullDownRefresh();
+        return;
+      }
+      // A resident page may still refresh retained reporting data.
+    }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) {
       wx.stopPullDownRefresh();

@@ -21,7 +21,11 @@ import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
 import { normalizeTransfer, type TransferRow } from "./transfer";
-import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import {
+  ensureAppContext,
+  getAppContextSnapshot,
+  type AppContextSnapshot
+} from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -136,6 +140,7 @@ Page({
   resumeLiveAfterShow: false,
   resumeStartupAfterShow: false,
   startupPending: false,
+  refreshContextPending: false,
   routeEntryId: 0,
   hasRouteEntry: false,
 
@@ -354,7 +359,7 @@ Page({
   },
 
   onHide() {
-    this.resumeStartupAfterShow = this.startupPending;
+    this.resumeStartupAfterShow = this.startupPending || this.refreshContextPending;
     this.pageVisible = false;
     this.liveRefresh?.stop();
     this.resumeLiveAfterShow = !this.resumeStartupAfterShow && this.liveRequest !== null;
@@ -376,6 +381,7 @@ Page({
     this.resumeLiveAfterShow = false;
     this.resumeStartupAfterShow = false;
     this.startupPending = false;
+    this.refreshContextPending = false;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;
@@ -391,18 +397,25 @@ Page({
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
+    const tracker = this.perfTracker;
+    this.refreshContextPending = true;
     try {
-      await this.ensureContext("pull-refresh");
-      this.perfTracker.mark("contextReadyAt");
+      const context = await this.ensureContext("pull-refresh", true);
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
+      this.refreshContextPending = false;
+      tracker.mark("contextReadyAt");
       await this.retryWithContext({
         background: true,
         includeTransfers: true,
         forceRefresh: true,
         trackNavigation: true
-      });
+      }, context);
     } catch (error) {
-      this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker) {
+        this.showContextError(error);
+      }
     } finally {
+      if (this.perfTracker === tracker) this.refreshContextPending = false;
       wx.stopPullDownRefresh();
     }
   },
@@ -416,15 +429,18 @@ Page({
     this.syncDisplayState();
   },
 
-  async retryWithContext(options: LiveEntryLoadOptions = {}) {
+  async retryWithContext(
+    options: LiveEntryLoadOptions = {},
+    refreshedContext?: AppContextSnapshot
+  ) {
     // An offseason page has event=0 by design. Refresh the shared event
     // context before retrying so a newly opened GW can be discovered without
     // requiring a hide/resume cycle.
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
-      let context;
+      let context: AppContextSnapshot;
       try {
-        context = await this.ensureContext("pull-refresh", true);
+        context = refreshedContext ?? await this.ensureContext("pull-refresh", true);
       } catch (error) {
         this.showContextError(error);
         return;
