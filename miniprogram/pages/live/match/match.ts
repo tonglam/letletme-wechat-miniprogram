@@ -312,6 +312,10 @@ Page({
   resumeLoadAfterShow: false,
   startupPending: false,
   refreshContextPending: false,
+  forcedRefreshPending: false,
+  forcedRefreshBackground: false,
+  resumeForcedRefreshAfterShow: false,
+  resumeForcedRefreshBackground: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -526,39 +530,60 @@ Page({
     this.syncDisplayState();
   },
 
-  async retryWithContext() {
-    if (!this.targetEventId) {
-      let context;
-      try {
-        context = await this.ensureContext("pull-refresh", true);
-      } catch (error) {
-        this.showContextError(error);
-        return;
-      }
+  async runForcedRefresh(tracker: PagePerformanceTracker, background: boolean) {
+    this.forcedRefreshPending = true;
+    this.forcedRefreshBackground = background;
+    this.refreshContextPending = true;
+    try {
+      const context = await this.ensureContext("pull-refresh", true);
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
+      this.refreshContextPending = false;
       this.currentEventId = context.currentEvent || 0;
       this.targetEventId = context.displayEvent || 0;
       this.loadedSeason = context.season || this.loadedSeason;
+      this.armContextDeadline(context.nextDeadlineAt);
+      tracker.mark("contextReadyAt");
       if (!this.targetEventId) {
-        this.setData({ loading: false, error: "当前赛季暂无赛程" }, () => {
-          wx.nextTick(() => this.perfTracker?.observePrimary());
+        this.setData({ loading: false, refreshing: false, error: "当前赛季暂无赛程" }, () => {
+          wx.nextTick(() => tracker.observePrimary());
         });
         return;
       }
       this.initLiveRefresh();
+      await this.loadData({ background, forceRefresh: true, trackNavigation: true });
+    } catch (error) {
+      if (this.pageVisible && this.perfTracker === tracker) this.showContextError(error);
+    } finally {
+      if (this.pageVisible && this.perfTracker === tracker) {
+        this.refreshContextPending = false;
+        this.forcedRefreshPending = false;
+        this.forcedRefreshBackground = false;
+      }
     }
-    this.perfTracker?.mark("contextReadyAt");
-    return this.loadData({ forceRefresh: true });
   },
 
   async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    const resumeForcedRefresh = resumed && this.resumeForcedRefreshAfterShow;
+    const resumeForcedRefreshBackground = this.resumeForcedRefreshBackground;
+    this.resumeForcedRefreshAfterShow = false;
+    this.resumeForcedRefreshBackground = false;
     const resumeInterruptedLoad = resumed && this.resumeLoadAfterShow;
     let context = getAppContextSnapshot();
     if (resumed) {
       this.perfTracker?.disconnect();
-      this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "warm-enter");
+      this.perfTracker = new PagePerformanceTracker(
+        this,
+        "pages/live/match/match",
+        resumeForcedRefresh ? "refresh" : "warm-enter"
+      );
+      if (resumeForcedRefresh) {
+        this.resumeLoadAfterShow = false;
+        await this.runForcedRefresh(this.perfTracker, resumeForcedRefreshBackground);
+        return;
+      }
       try {
         context = await this.ensureContext("page-show");
         this.perfTracker.mark("contextReadyAt");
@@ -616,9 +641,11 @@ Page({
 
   onHide() {
     this.pageVisible = false;
-    this.resumeLoadAfterShow = this.startupPending
+    this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
+    this.resumeForcedRefreshBackground = this.forcedRefreshBackground;
+    this.resumeLoadAfterShow = !this.resumeForcedRefreshAfterShow && (this.startupPending
       || this.refreshContextPending
-      || Boolean(this.liveRequest && !this.data.hasData);
+      || Boolean(this.liveRequest && !this.data.hasData));
     if (this.liveRequest) {
       this.liveRequestId += 1;
       this.liveRequest = null;
@@ -633,8 +660,12 @@ Page({
   onUnload() {
     this.pageVisible = false;
     this.resumeLoadAfterShow = false;
+    this.resumeForcedRefreshAfterShow = false;
+    this.resumeForcedRefreshBackground = false;
     this.startupPending = false;
     this.refreshContextPending = false;
+    this.forcedRefreshPending = false;
+    this.forcedRefreshBackground = false;
     this.liveRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";
@@ -648,24 +679,9 @@ Page({
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
     const tracker = this.perfTracker;
-    this.refreshContextPending = true;
     try {
-      // Pull-to-refresh is an explicit recovery action. It must bypass the
-      // unresolved-context retry backoff after the backend becomes healthy.
-      const context = await this.ensureContext("pull-refresh", true);
-      if (!this.pageVisible || this.perfTracker !== tracker) return;
-      this.refreshContextPending = false;
-      this.currentEventId = context.currentEvent || 0;
-      this.targetEventId = context.displayEvent || 0;
-      this.armContextDeadline(context.nextDeadlineAt);
-      this.perfTracker.mark("contextReadyAt");
-      await this.loadData({ background: true, forceRefresh: true, trackNavigation: true });
-    } catch (error) {
-      if (this.pageVisible && this.perfTracker === tracker) {
-        this.showContextError(error);
-      }
+      await this.runForcedRefresh(tracker, true);
     } finally {
-      if (this.perfTracker === tracker) this.refreshContextPending = false;
       wx.stopPullDownRefresh();
     }
   },
@@ -867,6 +883,6 @@ Page({
   onRetry() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
-    void this.retryWithContext();
+    void this.runForcedRefresh(this.perfTracker, false);
   }
 });

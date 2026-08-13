@@ -6,10 +6,8 @@ const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "
 
 test("Live Match pull refresh bypasses unresolved AppContext backoff", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
-  assert.match(
-    page,
-    /async onPullDownRefresh\(\)[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*loadData\(\{ background: true, forceRefresh: true, trackNavigation: true \}\)/
-  );
+  assert.match(page, /async onPullDownRefresh\(\)[\s\S]*runForcedRefresh\(tracker, true\)/);
+  assert.match(page, /runForcedRefresh\([\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true \}\)/);
 });
 
 test("My FPL Team retry recovers both failed and unresolved context", () => {

@@ -10,7 +10,7 @@ const source = (path) => readFileSync(resolve(root, path), "utf8");
 test("Tournament Summary resumes the selected summary context", () => {
   const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
   assert.match(summary, /resumeStage: null as TournamentSummaryResumeStage \| null/);
-  assert.match(summary, /resumeStage === "summary"[\s\S]*loadSummary\(false, trace\)[\s\S]*resumeStage === "tournaments"[\s\S]*loadTournaments\(false, trace\)/);
+  assert.match(summary, /resumeStage === "summary"[\s\S]*loadSummary\(resumeForceRefresh, trace\)[\s\S]*resumeStage === "tournaments"[\s\S]*loadTournaments\(resumeForceRefresh, trace\)/);
   assert.match(summary, /resumeStage = this\.startupPending[\s\S]*\? "initialize"[\s\S]*: this\.activeLoadStage/);
 });
 

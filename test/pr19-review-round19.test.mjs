@@ -54,7 +54,7 @@ test("Match retries create a refresh tracker", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /onRetry\(\)[\s\S]*perfTracker\?\.disconnect\(\)[\s\S]*new PagePerformanceTracker\(this, "pages\/live\/match\/match", "refresh"\)[\s\S]*retryWithContext\(\)/
+    /onRetry\(\)[\s\S]*perfTracker\?\.disconnect\(\)[\s\S]*new PagePerformanceTracker\(this, "pages\/live\/match\/match", "refresh"\)[\s\S]*runForcedRefresh\(this\.perfTracker, false\)/
   );
 });
 

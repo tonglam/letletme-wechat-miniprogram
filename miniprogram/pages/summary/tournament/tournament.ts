@@ -103,6 +103,8 @@ PerformancePage({
   resumeStage: null as TournamentSummaryResumeStage | null,
   activeLoadStage: null as Exclude<TournamentSummaryResumeStage, "initialize"> | null,
   summaryRequestId: 0,
+  activeLoadForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -144,20 +146,22 @@ PerformancePage({
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return;
     const resumeStage = this.resumeStage;
+    const resumeForceRefresh = this.resumeForceRefresh;
     this.resumeOnShow = false;
     this.resumeStage = null;
+    this.resumeForceRefresh = false;
     const trace = capturePageRequestTrace({
       callerSurface: resumeStage === "summary" ? "summary-tournament-results" : "summary-tournament",
       trigger: "show"
     });
     if (resumeStage === "summary") {
       this.setData({ loading: false });
-      await this.loadSummary(false, trace);
+      await this.loadSummary(resumeForceRefresh, trace);
       return;
     }
     if (resumeStage === "tournaments") {
       this.setData({ loading: false });
-      await this.loadTournaments(false, trace);
+      await this.loadTournaments(resumeForceRefresh, trace);
       return;
     }
     await this.initializePage(trace);
@@ -169,6 +173,7 @@ PerformancePage({
       ? "initialize"
       : this.activeLoadStage;
     this.resumeOnShow = this.resumeStage !== null;
+    this.resumeForceRefresh = this.resumeStage !== null && this.activeLoadForceRefresh;
     this.lifecycleRevision += 1;
     this.summaryRequestId += 1;
   },
@@ -178,6 +183,8 @@ PerformancePage({
     this.resumeOnShow = false;
     this.resumeStage = null;
     this.activeLoadStage = null;
+    this.activeLoadForceRefresh = false;
+    this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
     this.summaryRequestId += 1;
   },
@@ -236,6 +243,7 @@ PerformancePage({
       emptyActionText: ""
     });
     this.activeLoadStage = "tournaments";
+    this.activeLoadForceRefresh = forceRefresh;
     const eventBeforeDirectoryRead = this.data.event;
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
@@ -275,6 +283,7 @@ PerformancePage({
     } finally {
       if (isActiveLifecycle() && this.activeLoadStage === "tournaments") {
         this.activeLoadStage = null;
+        this.activeLoadForceRefresh = false;
         this.setData({ loading: false });
       }
     }
@@ -303,6 +312,7 @@ PerformancePage({
     );
 
     this.activeLoadStage = "summary";
+    this.activeLoadForceRefresh = forceRefresh;
     this.setData({ loading: true, error: "" });
     try {
       const payload = await getTournamentSummary(
@@ -323,6 +333,7 @@ PerformancePage({
       if (isActiveRequest()) this.setData({ loading: false });
       if (isActiveRequest() && this.activeLoadStage === "summary") {
         this.activeLoadStage = null;
+        this.activeLoadForceRefresh = false;
       }
     }
   },

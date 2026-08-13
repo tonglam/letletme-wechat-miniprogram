@@ -55,6 +55,10 @@ PerformancePage({
   requestRevision: 0,
   pageVisible: false,
   hasShown: false,
+  paginationPending: false,
+  paginationCursor: null as number | null,
+  resumePaginationAfterShow: false,
+  resumePaginationCursor: null as number | null,
 
   async onLoad(options: Record<string, string | undefined>) {
     this.pageVisible = true;
@@ -67,8 +71,15 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    const resumePagination = resumed && this.resumePaginationAfterShow;
+    const resumeCursor = this.resumePaginationCursor;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     if (this.data.loadingMore) {
       this.setData({ loadingMore: false });
+    }
+    if (resumePagination && resumeCursor !== null) {
+      return this.loadMoreFromCursor(resumeCursor);
     }
     if (resumed && this.data.loading) {
       return this.startSearch(this.data.keyword);
@@ -77,12 +88,20 @@ PerformancePage({
   },
 
   onHide() {
+    this.resumePaginationAfterShow = this.paginationPending;
+    this.resumePaginationCursor = this.paginationCursor;
+    this.paginationPending = false;
+    this.paginationCursor = null;
     this.pageVisible = false;
     this.requestRevision += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     this.requestRevision += 1;
   },
 
@@ -96,6 +115,10 @@ PerformancePage({
   },
 
   async startSearch(keyword: string, forceRefresh = false): Promise<void> {
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     this.requestRevision += 1;
     const revision = this.requestRevision;
     const trace = capturePageRequestTrace({
@@ -182,16 +205,25 @@ PerformancePage({
   },
 
   loadMore(): Promise<void> {
+    const cursor = this.data.nextCursor;
     if (this.data.loading || this.data.loadingMore || !this.data.hasMore) {
       return Promise.resolve();
     }
+    if (cursor === null) return Promise.resolve();
+    return this.loadMoreFromCursor(cursor);
+  },
+
+  loadMoreFromCursor(cursor: number): Promise<void> {
+    const revision = this.requestRevision;
+    this.paginationPending = true;
+    this.paginationCursor = cursor;
     this.setData({ loadingMore: true, loadMoreError: "" });
-    return this.fetchPage(
-      this.requestRevision,
-      this.data.nextCursor,
-      true,
-      false
-    );
+    return this.fetchPage(revision, cursor, true, false).finally(() => {
+      if (this.pageVisible && revision === this.requestRevision) {
+        this.paginationPending = false;
+        this.paginationCursor = null;
+      }
+    });
   },
 
   onSearch(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {

@@ -106,10 +106,8 @@ test("tournament directory recovery resyncs the fallback GW without overriding a
 
 test("Live Match pull refresh surfaces context failures and always stops the spinner", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
-  assert.match(
-    match,
-    /async onPullDownRefresh\(\)[\s\S]*await this\.ensureContext\("pull-refresh", true\)[\s\S]*catch \(error\) \{[\s\S]*this\.pageVisible && this\.perfTracker === tracker[\s\S]*this\.showContextError\(error\);[\s\S]*\} finally \{[\s\S]*wx\.stopPullDownRefresh\(\)/
-  );
+  assert.match(match, /async onPullDownRefresh\(\)[\s\S]*await this\.runForcedRefresh\(tracker, true\)[\s\S]*finally \{[\s\S]*wx\.stopPullDownRefresh\(\)/);
+  assert.match(match, /runForcedRefresh\([\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*showContextError\(error\)/);
 });
 
 test("wrapped asynchronous pull refresh handlers return their actual work", () => {

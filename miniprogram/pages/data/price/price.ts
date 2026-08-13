@@ -159,6 +159,8 @@ Page({
   startupPending: false,
   resumeStage: null as PriceResumeStage | null,
   historyRequestRevision: 0,
+  playerRefreshPending: false,
+  resumePlayerRefreshAfterShow: false,
 
   async onLoad() {
     this.pageActive = true;
@@ -182,13 +184,24 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
+    const resumePlayerRefresh = this.resumePlayerRefreshAfterShow;
+    this.resumePlayerRefreshAfterShow = false;
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "warm-enter");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/data/price/price",
+      resumePlayerRefresh ? "refresh" : "warm-enter"
+    );
     const tracker = this.perfTracker;
     const selector = this.primarySelector();
     tracker.mark("contextReadyAt");
     const resumeStage = this.resumeStage;
     this.resumeStage = null;
+    if (resumePlayerRefresh) {
+      this.setData({ playerLoading: false, loadingMore: false, historyLoading: false });
+      void this.runPlayerRefresh(tracker);
+      return;
+    }
     if (resumeStage === "daily") {
       this.setData({ loading: false, refreshing: false });
       void this.loadDailyChanges();
@@ -218,7 +231,10 @@ Page({
       clearTimeout(this.playerSearchTimer);
       this.playerSearchTimer = undefined;
     }
-    this.resumeStage = this.data.activeMode === "player"
+    this.resumePlayerRefreshAfterShow = this.playerRefreshPending;
+    this.resumeStage = this.resumePlayerRefreshAfterShow
+      ? null
+      : this.data.activeMode === "player"
       ? this.data.historyLoading
         ? "history"
         : pendingSearch
@@ -230,6 +246,7 @@ Page({
         ? "daily"
         : null;
     this.pageActive = false;
+    this.playerRefreshPending = false;
     nextRequestRevision(this.dailyRequestOwner, "daily");
     this.invalidatePlayerRequest();
     this.historyRequestRevision += 1;
@@ -239,6 +256,8 @@ Page({
   onUnload() {
     this.pageActive = false;
     this.resumeStage = null;
+    this.playerRefreshPending = false;
+    this.resumePlayerRefreshAfterShow = false;
     nextRequestRevision(this.dailyRequestOwner, "daily");
     this.invalidatePlayerRequest();
     this.historyRequestRevision += 1;
@@ -253,7 +272,7 @@ Page({
     const tracker = this.perfTracker;
     if (this.data.activeMode === "player") {
       tracker?.mark("primaryRequestStartAt");
-      const task = this.refreshPlayerMode().then(() => {
+      const task = this.runPlayerRefresh(tracker).then(() => {
         tracker?.mark("primaryResponseAt");
         tracker?.mark("primarySetDataAt");
         wx.nextTick(() => tracker?.observePrimary("#perf-primary-player"));
@@ -266,7 +285,8 @@ Page({
 
   onRetry() {
     if (this.data.activeMode === "player") {
-      this.refreshPlayerMode();
+      this.startDailyRefreshTrace();
+      void this.runPlayerRefresh(this.perfTracker);
       return;
     }
     this.startDailyRefreshTrace();
@@ -653,11 +673,24 @@ Page({
     if (this.data.teamOptions.length === 1) {
       await this.loadTeamOptions(true);
     }
+    if (!this.pageActive) return;
     if (this.isPlayerListReady()) {
       await this.startPlayerSearch(true);
     }
+    if (!this.pageActive) return;
     if (this.data.selectedPlayer?.element) {
       await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
+    }
+  },
+
+  async runPlayerRefresh(tracker?: PagePerformanceTracker): Promise<void> {
+    this.playerRefreshPending = true;
+    try {
+      await this.refreshPlayerMode();
+    } finally {
+      if (this.pageActive && (!tracker || this.perfTracker === tracker)) {
+        this.playerRefreshPending = false;
+      }
     }
   }
 });

@@ -885,7 +885,7 @@ Page({
   onRetry() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
-    this.retryWithContext({ includeTransfers: true, forceRefresh: true });
+    void this.runForcedRefresh(this.perfTracker);
   },
 
   onChooseEntry() {

@@ -16,12 +16,10 @@ test("Live Match hidden pull refresh is owned and resumed", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
   assert.match(
     page,
-    /onHide\(\)[\s\S]*resumeLoadAfterShow = this\.startupPending[\s\S]*this\.refreshContextPending[\s\S]*Boolean\(this\.liveRequest && !this\.data\.hasData\)/
+    /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = !this\.resumeForcedRefreshAfterShow[\s\S]*this\.refreshContextPending[\s\S]*Boolean\(this\.liveRequest && !this\.data\.hasData\)/
   );
-  assert.match(
-    page,
-    /onPullDownRefresh\(\)[\s\S]*const tracker = this\.perfTracker;[\s\S]*refreshContextPending = true[\s\S]*await this\.ensureContext\("pull-refresh", true\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
-  );
+  assert.match(page, /onPullDownRefresh\(\)[\s\S]*const tracker = this\.perfTracker;[\s\S]*runForcedRefresh\(tracker, true\)/);
+  assert.match(page, /runForcedRefresh\([\s\S]*refreshContextPending = true[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/);
   assert.match(
     page,
     /if \(resumeInterruptedLoad\) \{[\s\S]*refreshContextPending = false[\s\S]*initLiveRefresh\(\)/
