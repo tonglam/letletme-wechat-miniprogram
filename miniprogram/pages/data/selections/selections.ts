@@ -106,6 +106,8 @@ PerformancePage({
   startupPending: false,
   resumeOnShow: false,
   resumeStage: null as SelectionsResumeStage | null,
+  activeTournamentForceRefresh: false,
+  resumeTournamentForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -147,8 +149,10 @@ PerformancePage({
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return;
     const resumeStage = this.resumeStage;
+    const resumeTournamentForceRefresh = this.resumeTournamentForceRefresh;
     this.resumeOnShow = false;
     this.resumeStage = null;
+    this.resumeTournamentForceRefresh = false;
     const trace = capturePageRequestTrace({
       callerSurface: resumeStage === "stats" ? "data-selections-stats" : "data-selections",
       trigger: "show"
@@ -160,7 +164,7 @@ PerformancePage({
     }
     if (resumeStage === "tournaments") {
       this.setData({ loadingTournaments: false, loadingStats: false });
-      await this.loadTournaments(false, trace);
+      await this.loadTournaments(resumeTournamentForceRefresh, trace);
       return;
     }
     await this.initializePage(trace);
@@ -176,6 +180,8 @@ PerformancePage({
           ? "tournaments"
           : null;
     this.resumeOnShow = this.resumeStage !== null;
+    this.resumeTournamentForceRefresh = this.resumeStage === "tournaments"
+      && this.activeTournamentForceRefresh;
     this.lifecycleRevision += 1;
   },
 
@@ -183,6 +189,8 @@ PerformancePage({
     this.pageVisible = false;
     this.resumeOnShow = false;
     this.resumeStage = null;
+    this.resumeTournamentForceRefresh = false;
+    this.activeTournamentForceRefresh = false;
     this.lifecycleRevision += 1;
   },
 
@@ -217,6 +225,7 @@ PerformancePage({
       callerSurface: "data-selections",
       trigger: forceRefresh ? "refresh" : "load"
     });
+    this.activeTournamentForceRefresh = forceRefresh;
     if (!this.data.entryId) {
       this.setData({
         loadingTournaments: false,
@@ -282,7 +291,10 @@ PerformancePage({
       if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "阵容选择数据加载失败" });
     } finally {
-      if (isActiveLifecycle()) this.setData({ loadingTournaments: false });
+      if (isActiveLifecycle()) {
+        this.activeTournamentForceRefresh = false;
+        this.setData({ loadingTournaments: false });
+      }
     }
   },
 

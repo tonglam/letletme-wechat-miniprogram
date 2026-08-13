@@ -18,13 +18,10 @@ test("My FPL Team explicit refresh is forced and tracker-owned", () => {
 
 test("Live Entry hidden refresh replays startup and reuses forced context", () => {
   const page = read("miniprogram/pages/live/entry/entry.ts");
+  assert.match(page, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending/);
   assert.match(
     page,
-    /onHide\(\)[\s\S]*resumeStartupAfterShow = this\.startupPending \|\| this\.refreshContextPending/
-  );
-  assert.match(
-    page,
-    /onPullDownRefresh\(\)[\s\S]*refreshContextPending = true[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*this\.perfTracker !== tracker[\s\S]*retryWithContext\([\s\S]*}, context\)/
+    /onPullDownRefresh\(\)[\s\S]*runForcedRefresh\(tracker\)[\s\S]*runForcedRefresh\([\s\S]*refreshContextPending = true[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*this\.perfTracker !== tracker[\s\S]*retryWithContext\([\s\S]*}, context\)/
   );
   assert.match(
     page,

@@ -296,9 +296,22 @@ Page({
     if (!resumed) return;
 
     const app = getApp<IAppOption>();
+    const resumeForcedRefresh = this.resumeRefreshAfterShow;
+    this.resumeRefreshAfterShow = false;
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "warm-enter");
-    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "show" });
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/my-fpl/team/team",
+      resumeForcedRefresh ? "refresh" : "warm-enter"
+    );
+    const trace = capturePageRequestTrace({
+      callerSurface: "my-fpl-team-primary",
+      trigger: resumeForcedRefresh ? "refresh" : "show"
+    });
+    if (resumeForcedRefresh) {
+      await this.runForcedRefresh(this.perfTracker, trace);
+      return;
+    }
     if (this.contextUnavailable) {
       await this.recoverContext("page-show");
       return;
@@ -400,6 +413,8 @@ Page({
   contextUnavailable: false,
   startupPending: false,
   resumeStartupAfterShow: false,
+  refreshPending: false,
+  resumeRefreshAfterShow: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
@@ -419,29 +434,36 @@ Page({
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
     const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh" });
+    try {
+      await this.runForcedRefresh(tracker, trace);
+    } finally {
+      wx.stopPullDownRefresh();
+    }
+  },
+
+  async runForcedRefresh(tracker: PagePerformanceTracker, trace?: PageRequestTrace) {
+    this.refreshPending = true;
     if (this.contextUnavailable || this.data.maxGw <= 0) {
       await this.recoverContext("pull-refresh");
-      wx.stopPullDownRefresh();
+      if (this.pageVisible && this.perfTracker === tracker) this.refreshPending = false;
       return;
     }
     const app = getApp<IAppOption>();
     try {
       await this.ensureContext("pull-refresh", true);
       if (!this.pageVisible || this.perfTracker !== tracker) {
-        wx.stopPullDownRefresh();
         return;
       }
       tracker.mark("contextReadyAt");
     } catch {
       if (!this.pageVisible || this.perfTracker !== tracker) {
-        wx.stopPullDownRefresh();
         return;
       }
       // A resident page may still refresh retained reporting data.
     }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) {
-      wx.stopPullDownRefresh();
+      this.refreshPending = false;
       return;
     }
     const nextGw = Number(app.globalData.gw) || 0;
@@ -485,7 +507,7 @@ Page({
       this.setData({ maxGw: nextGw });
     }
     await this.loadData(true, trace, true);
-    wx.stopPullDownRefresh();
+    if (this.pageVisible && this.perfTracker === tracker) this.refreshPending = false;
   },
 
   onHide() {
@@ -493,6 +515,8 @@ Page({
       ? this.data.activeTab
       : null;
     this.resumeStartupAfterShow = this.startupPending;
+    this.resumeRefreshAfterShow = this.refreshPending;
+    if (this.resumeRefreshAfterShow) this.resumeStartupAfterShow = false;
     this.pageVisible = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
@@ -506,6 +530,8 @@ Page({
     this.resumeTab = null;
     this.startupPending = false;
     this.resumeStartupAfterShow = false;
+    this.refreshPending = false;
+    this.resumeRefreshAfterShow = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
     this.phaseBannerRequestId += 1;

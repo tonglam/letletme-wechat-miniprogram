@@ -40,8 +40,8 @@ test("Match and Tournament resume interrupted primary loads", () => {
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(match, /onHide\(\)[\s\S]*resumeLoadAfterShow = this\.startupPending[\s\S]*Boolean\(this\.liveRequest && !this\.data\.hasData\)[\s\S]*liveRequestId \+= 1/);
   assert.match(match, /resumeInterruptedLoad && !this\.data\.hasData[\s\S]*loadData\(\{ forceRefresh: true \}\)/);
-  assert.match(tournament, /onHide\(\)[\s\S]*resumeDirectoryAfterShow = this\.data\.loading && !this\.data\.selectedTournament[\s\S]*tournamentListRequestId \+= 1/);
-  assert.match(tournament, /resumed && this\.resumeDirectoryAfterShow && !this\.data\.selectedTournament[\s\S]*loadTournaments\(false\)/);
+  assert.match(tournament, /onHide\(\)[\s\S]*resumeDirectoryAfterShow = this\.directoryRequestPending[\s\S]*tournamentListRequestId \+= 1/);
+  assert.match(tournament, /resumed && this\.resumeDirectoryAfterShow[\s\S]*loadTournaments\(forceRefresh\)/);
 });
 
 test("My FPL primary errors and Teams retries use primary recovery", () => {

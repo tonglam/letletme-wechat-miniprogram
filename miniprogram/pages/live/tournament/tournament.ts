@@ -347,8 +347,11 @@ PerformancePage({
   failedEntryCount: 0,
   retainedRowCount: 0,
   resumeDirectoryAfterShow: false,
+  resumeDirectoryForceRefresh: false,
   resumeStartupAfterShow: false,
   resumeRowsAfterShow: false,
+  directoryRequestPending: false,
+  directoryRequestForceRefresh: false,
   startupPending: false,
   startupGeneration: 0,
 
@@ -568,9 +571,12 @@ PerformancePage({
         this.setData({ maxGw: nextEventId });
       }
     }
-    if (resumed && this.resumeDirectoryAfterShow && !this.data.selectedTournament) {
+    if (resumed && this.resumeDirectoryAfterShow) {
+      const forceRefresh = this.resumeDirectoryForceRefresh;
       this.resumeDirectoryAfterShow = false;
-      await this.loadTournaments(false);
+      this.resumeDirectoryForceRefresh = false;
+      this.resumeRowsAfterShow = false;
+      await this.loadTournaments(forceRefresh);
       return;
     }
     if (resumed && this.resumeRowsAfterShow && this.data.selectedTournament) {
@@ -586,14 +592,19 @@ PerformancePage({
 
   onHide() {
     this.pageVisible = false;
-    this.resumeDirectoryAfterShow = this.data.loading && !this.data.selectedTournament;
-    this.resumeRowsAfterShow = Boolean(this.rowsRequest && this.data.selectedTournament);
+    this.resumeDirectoryAfterShow = this.directoryRequestPending;
+    this.resumeDirectoryForceRefresh = this.directoryRequestPending
+      && this.directoryRequestForceRefresh;
+    this.resumeRowsAfterShow = !this.resumeDirectoryAfterShow
+      && Boolean(this.rowsRequest && this.data.selectedTournament);
     if (this.startupPending) {
       this.resumeStartupAfterShow = true;
       this.resumeDirectoryAfterShow = false;
     }
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
+    this.directoryRequestPending = false;
+    this.directoryRequestForceRefresh = false;
     this.rowsRequestId += 1;
     this.rowsRequest = null;
     this.rowsRequestKey = "";
@@ -603,8 +614,11 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeDirectoryAfterShow = false;
+    this.resumeDirectoryForceRefresh = false;
     this.resumeStartupAfterShow = false;
     this.resumeRowsAfterShow = false;
+    this.directoryRequestPending = false;
+    this.directoryRequestForceRefresh = false;
     this.startupPending = false;
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
@@ -720,6 +734,8 @@ PerformancePage({
     if (this.restartForPrincipalChange(entryId)) return;
 
     const requestId = ++this.tournamentListRequestId;
+    this.directoryRequestPending = true;
+    this.directoryRequestForceRefresh = forceRefresh;
 
     this.setData({
       loading: true,
@@ -820,6 +836,8 @@ PerformancePage({
       });
     } finally {
       if (this.pageVisible && requestId === this.tournamentListRequestId) {
+        this.directoryRequestPending = false;
+        this.directoryRequestForceRefresh = false;
         this.setData({ loading: false });
       }
     }

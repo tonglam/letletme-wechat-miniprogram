@@ -22,7 +22,8 @@ test("a successful cold login commits its binding only inside auth service", () 
 test("My FPL pull refresh waits for the visible deferred tab", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
 
-  assert.match(page, /await this\.loadData\(true, trace, true\);\s+wx\.stopPullDownRefresh\(\)/);
+  assert.match(page, /onPullDownRefresh\(\)[\s\S]*await this\.runForcedRefresh\(tracker, trace\)[\s\S]*wx\.stopPullDownRefresh\(\)/);
+  assert.match(page, /runForcedRefresh\([\s\S]*await this\.loadData\(true, trace, true\)/);
   assert.match(page, /loadData\([\s\S]*awaitActiveTab = false/);
   assert.match(page, /const tabTask = this\.loadTab[\s\S]*if \(awaitActiveTab\) await tabTask;\s+else void tabTask;/);
 });

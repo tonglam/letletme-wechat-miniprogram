@@ -22,7 +22,7 @@ test("Home invalidates and resumes a refresh interrupted by page hide", () => {
 
 test("Live Tournament invalidates and resumes interrupted row reads", () => {
   const page = read("miniprogram/pages/live/tournament/tournament.ts");
-  assert.match(page, /onHide\(\)[\s\S]*resumeRowsAfterShow = Boolean\(this\.rowsRequest[\s\S]*rowsRequestId \+= 1[\s\S]*rowsRequest = null/);
+  assert.match(page, /onHide\(\)[\s\S]*resumeRowsAfterShow = !this\.resumeDirectoryAfterShow[\s\S]*Boolean\(this\.rowsRequest[\s\S]*rowsRequestId \+= 1[\s\S]*rowsRequest = null/);
   assert.match(page, /onShow\(\)[\s\S]*resumeRowsAfterShow[\s\S]*loadRows\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/);
   assert.match(page, /if \(!this\.pageVisible \|\| requestId !== this\.rowsRequestId\) return;/);
 });

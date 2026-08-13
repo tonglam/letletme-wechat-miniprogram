@@ -141,6 +141,8 @@ Page({
   resumeStartupAfterShow: false,
   startupPending: false,
   refreshContextPending: false,
+  forcedRefreshPending: false,
+  resumeForcedRefreshAfterShow: false,
   routeEntryId: 0,
   hasRouteEntry: false,
 
@@ -270,8 +272,18 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
+      const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
+      this.resumeForcedRefreshAfterShow = false;
       this.perfTracker?.disconnect();
-      this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "warm-enter");
+      this.perfTracker = new PagePerformanceTracker(
+        this,
+        "pages/live/entry/entry",
+        resumeForcedRefresh ? "refresh" : "warm-enter"
+      );
+      if (resumeForcedRefresh) {
+        await this.runForcedRefresh(this.perfTracker);
+        return;
+      }
       if (this.resumeStartupAfterShow) {
         this.resumeStartupAfterShow = false;
         await this.initializeFromContext("page-show", this.perfTracker);
@@ -362,10 +374,13 @@ Page({
   },
 
   onHide() {
-    this.resumeStartupAfterShow = this.startupPending || this.refreshContextPending;
+    this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
+    this.resumeStartupAfterShow = !this.resumeForcedRefreshAfterShow && this.startupPending;
     this.pageVisible = false;
     this.liveRefresh?.stop();
-    this.resumeLiveAfterShow = !this.resumeStartupAfterShow && this.liveRequest !== null;
+    this.resumeLiveAfterShow = !this.resumeStartupAfterShow
+      && !this.resumeForcedRefreshAfterShow
+      && this.liveRequest !== null;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;
@@ -383,8 +398,10 @@ Page({
     this.liveRefresh?.dispose();
     this.resumeLiveAfterShow = false;
     this.resumeStartupAfterShow = false;
+    this.resumeForcedRefreshAfterShow = false;
     this.startupPending = false;
     this.refreshContextPending = false;
+    this.forcedRefreshPending = false;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;
@@ -401,6 +418,15 @@ Page({
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
     const tracker = this.perfTracker;
+    try {
+      await this.runForcedRefresh(tracker);
+    } finally {
+      wx.stopPullDownRefresh();
+    }
+  },
+
+  async runForcedRefresh(tracker: PagePerformanceTracker) {
+    this.forcedRefreshPending = true;
     this.refreshContextPending = true;
     try {
       const context = await this.ensureContext("pull-refresh", true);
@@ -418,8 +444,10 @@ Page({
         this.showContextError(error);
       }
     } finally {
-      if (this.perfTracker === tracker) this.refreshContextPending = false;
-      wx.stopPullDownRefresh();
+      if (this.pageVisible && this.perfTracker === tracker) {
+        this.refreshContextPending = false;
+        this.forcedRefreshPending = false;
+      }
     }
   },
 
