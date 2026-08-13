@@ -271,6 +271,7 @@ Page({
   },
 
   async recoverContext(reason: "page-show" | "pull-refresh") {
+    this.contextRecoveryPending = true;
     const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
@@ -286,6 +287,8 @@ Page({
       await this.initializeFromContext(true, trace, tracker);
     } catch (error) {
       if (this.pageVisible && this.perfTracker === tracker) this.showContextError(error);
+    } finally {
+      if (this.pageVisible && this.perfTracker === tracker) this.contextRecoveryPending = false;
     }
   },
 
@@ -304,6 +307,11 @@ Page({
       "pages/my-fpl/team/team",
       resumeForcedRefresh ? "refresh" : "warm-enter"
     );
+    if (this.resumeContextRecovery) {
+      this.resumeContextRecovery = false;
+      await this.recoverContext("page-show");
+      return;
+    }
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
       trigger: resumeForcedRefresh ? "refresh" : "show"
@@ -411,6 +419,8 @@ Page({
   tabRequestId: 0,
   resumeTab: null as EntrySummaryTab | null,
   contextUnavailable: false,
+  contextRecoveryPending: false,
+  resumeContextRecovery: false,
   startupPending: false,
   resumeStartupAfterShow: false,
   refreshPending: false,
@@ -511,6 +521,7 @@ Page({
   },
 
   onHide() {
+    this.resumeContextRecovery = this.resumeContextRecovery || this.contextRecoveryPending;
     this.resumeTab = this.data.tabLoading && this.data.activeTab !== "squad"
       ? this.data.activeTab
       : null;
@@ -527,6 +538,8 @@ Page({
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeContextRecovery = false;
+    this.contextRecoveryPending = false;
     this.resumeTab = null;
     this.startupPending = false;
     this.resumeStartupAfterShow = false;

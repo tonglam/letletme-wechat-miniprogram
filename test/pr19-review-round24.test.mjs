@@ -16,7 +16,7 @@ for (const [label, path, resultField, serviceCall, surface] of [
     assert.match(page, new RegExp(`capturePageRequestTrace\\([\\s\\S]*callerSurface: "${surface}"`));
     assert.match(page, /await ensureAppContext\([\s\S]*if \(!isActiveRequest\(\)\) return/);
     assert.match(page, new RegExp(`${serviceCall}\\([^;]*trace\\)[\\s\\S]*if \\(!isActiveRequest\\(\\)\\) return`));
-    assert.match(page, new RegExp(`onHide\\(\\)[\\s\\S]*resumeOnShow = this\\.data\\.loading && !this\\.data\\.${resultField}[\\s\\S]*lifecycleRevision \\+= 1`));
-    assert.match(page, /onShow\(\)[\s\S]*resumeOnShow[\s\S]*loadData\("show"\)/);
+    assert.match(page, new RegExp(`onHide\\(\\)[\\s\\S]*resumeOnShow = (?:this\\.data\\.loading && !this\\.data\\.${resultField}|this\\.forceRefreshPending \\|\\| \\(this\\.data\\.loading && !this\\.data\\.${resultField}\\))[\\s\\S]*lifecycleRevision \\+= 1`));
+    assert.match(page, /onShow\(\)[\s\S]*resumeOnShow[\s\S]*loadData\("show"(?:, forceRefresh)?\)/);
   });
 }
