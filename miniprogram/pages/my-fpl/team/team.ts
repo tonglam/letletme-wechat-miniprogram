@@ -395,19 +395,25 @@ Page({
       && !this.data.error;
     const resumeTab = this.resumeTab;
     const resumeTabForceRefresh = this.resumeTabForceRefresh;
-    this.resumeTab = null;
-    this.resumeTabForceRefresh = false;
+    const clearResumeTab = () => {
+      if (this.resumeTab === resumeTab) {
+        this.resumeTab = null;
+        this.resumeTabForceRefresh = false;
+      }
+    };
     const primaryReloaded = contextChanged
       || primaryMissing
       || Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
     if (primaryReloaded) {
       await this.loadData(contextChanged || resumeTabForceRefresh, trace);
+      if (this.tabForceRefreshPending || this.data.tabLoading) clearResumeTab();
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
     if (!primaryReloaded && resumeTab && resumeTab === this.data.activeTab && resumeTab !== "squad") {
       this.setData({ tabLoading: false });
       await this.loadTab(resumeTab, resumeTabForceRefresh, trace);
+      clearResumeTab();
     }
   },
 
