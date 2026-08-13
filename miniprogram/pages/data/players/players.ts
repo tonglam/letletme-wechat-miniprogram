@@ -79,18 +79,34 @@ PerformancePage({
     const resumeCursor = this.resumePaginationCursor;
     const resumeSearch = resumed && this.resumeSearchAfterShow;
     const resumeSearchForceRefresh = this.resumeSearchForceRefresh;
-    this.resumePaginationAfterShow = false;
-    this.resumePaginationCursor = null;
-    this.resumeSearchAfterShow = false;
-    this.resumeSearchForceRefresh = false;
     if (this.data.loadingMore) {
       this.setData({ loadingMore: false });
     }
     if (resumePagination && resumeCursor !== null) {
-      return this.loadMoreFromCursor(resumeCursor);
+      const task = this.loadMoreFromCursor(resumeCursor);
+      if (this.paginationPending && this.paginationCursor === resumeCursor) {
+        this.resumePaginationAfterShow = false;
+        this.resumePaginationCursor = null;
+      }
+      return task.finally(() => {
+        if (this.pageVisible && !this.paginationPending && this.resumePaginationCursor === resumeCursor) {
+          this.resumePaginationAfterShow = false;
+          this.resumePaginationCursor = null;
+        }
+      });
     }
     if (resumeSearch) {
-      return this.startSearch(this.data.keyword, resumeSearchForceRefresh);
+      const task = this.startSearch(this.data.keyword, resumeSearchForceRefresh);
+      if (this.searchPending && this.searchPendingForceRefresh === resumeSearchForceRefresh) {
+        this.resumeSearchAfterShow = false;
+        this.resumeSearchForceRefresh = false;
+      }
+      return task.finally(() => {
+        if (this.pageVisible && !this.searchPending && this.resumeSearchAfterShow) {
+          this.resumeSearchAfterShow = false;
+          this.resumeSearchForceRefresh = false;
+        }
+      });
     }
     if (resumed && this.data.loading) {
       return this.startSearch(this.data.keyword);

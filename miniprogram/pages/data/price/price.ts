@@ -207,8 +207,6 @@ Page({
     const resumePaginationCursor = this.resumePaginationCursor;
     this.resumeStage = null;
     this.resumeStageForceRefresh = false;
-    this.resumePaginationAfterShow = false;
-    this.resumePaginationCursor = null;
     if (resumePlayerRefresh) {
       this.setData({ playerLoading: false, loadingMore: false, historyLoading: false });
       void this.runPlayerRefresh(tracker);
@@ -218,8 +216,17 @@ Page({
       this.setData({ loadingMore: false });
       this.paginationPending = false;
       this.paginationCursor = null;
-      void this.loadMorePlayers(resumePaginationCursor);
-      return;
+      const task = this.loadMorePlayers(resumePaginationCursor);
+      if (this.paginationPending && this.paginationCursor === resumePaginationCursor) {
+        this.resumePaginationAfterShow = false;
+        this.resumePaginationCursor = null;
+      }
+      return task.finally(() => {
+        if (this.pageActive && !this.paginationPending && this.resumePaginationCursor === resumePaginationCursor) {
+          this.resumePaginationAfterShow = false;
+          this.resumePaginationCursor = null;
+        }
+      });
     }
     if (resumeStage === "daily") {
       this.setData({ loading: false, refreshing: false });
