@@ -369,7 +369,7 @@ test("no-follow actions survive context failure and profile checks compare the r
 test("forced My FPL refresh reaches the cached team identity read", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const service = source("miniprogram/services/my-fpl.service.ts");
-  assert.match(overview, /getMyFplTeamBrief\(context\.entryId, event, forceRefresh\)/);
+  assert.match(overview, /loadOverviewSecondary\([\s\S]*context\.entryId,[\s\S]*forceRefresh[\s\S]*getMyFplTeamBrief\(entryId, event, forceRefresh\)/);
   assert.match(service, /getMyFplTeamBrief\([\s\S]*forceRefresh = false[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
 });
 
@@ -377,9 +377,10 @@ test("Home first show cannot race the initial page load", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   assert.match(
     home,
-    /async onLoad\(\)[\s\S]*_initialLoadDone = false[\s\S]*await this\.loadPage\(\)[\s\S]*_initialLoadDone = true/
+    /onLoad\(\)[\s\S]*_initialLoadDone = false[\s\S]*startHomeLifecycle\("cold-launch", "page-load"\)/
   );
-  assert.match(home, /async onShow\(\)[\s\S]*if \(!this\._initialLoadDone\) return/);
+  assert.match(home, /async onShow\(\)[\s\S]*if \(this\._resumeStartupOnShow\)[\s\S]*startHomeLifecycle\("warm-enter", "page-show"\)[\s\S]*if \(!this\._initialLoadDone\) return/);
+  assert.match(home, /startHomeLifecycle\([\s\S]*const isActiveLifecycle = \(\) => \([\s\S]*await this\.loadPage\(false, tracker\)[\s\S]*_initialLoadDone = true/);
 });
 
 test("profile and tournament pull-to-refresh bypass reporting caches", () => {

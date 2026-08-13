@@ -9,9 +9,9 @@ const performancePageSource = readFileSync("miniprogram/utils/performance-page.t
 test("warm Home work stops when its page hides during context resolution", () => {
   assert.match(
     homeSource,
-    /const context = await ensureAppContext\(\{ reason: "page-show" \}\);\s+if \(!this\._pageVisible\) return;\s+this\._perfTracker\.mark\("contextReadyAt"\)/
+    /const context = await ensureAppContext\(\{ reason: "page-show" \}\);[\s\S]*lifecycleRevision !== this\._lifecycleRevision[\s\S]*tracker !== this\._perfTracker[\s\S]*tracker\.mark\("contextReadyAt"\)/
   );
-  assert.match(homeSource, /if \(this\._pageVisible\) this\.showContextError\(error\);/);
+  assert.match(homeSource, /startHomeLifecycle\([\s\S]*if \(isActiveLifecycle\(\)\) this\.showContextError\(error, tracker\)/);
 });
 
 test("queued Entry forced follow-ups merge tracked refresh intent", () => {

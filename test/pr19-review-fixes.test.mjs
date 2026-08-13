@@ -139,7 +139,7 @@ test("cold context failures settle Home and all Live page loading states", () =>
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   const match = source("miniprogram/pages/live/match/match.ts");
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
-  assert.match(home, /async onLoad\(\)[\s\S]*catch \(error\)[\s\S]*this\.showContextError\(error\)/);
+  assert.match(home, /startHomeLifecycle\([\s\S]*catch \(error\)[\s\S]*if \(isActiveLifecycle\(\)\) this\.showContextError\(error, tracker\)/);
   for (const page of [entry, match, tournament]) {
     assert.match(page, /let context = getAppContextSnapshot\(\)[\s\S]*catch \(error\)[\s\S]*if \(!context\)[\s\S]*this\.showContextError\(error\)/);
     assert.match(page, /showContextError\(error: unknown\)[\s\S]*loading: false/);

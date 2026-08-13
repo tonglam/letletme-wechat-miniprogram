@@ -7,9 +7,9 @@ const source = (path) => readFileSync(path, "utf8");
 test("cold Home work stops when the page hides during context resolution", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
 
-  assert.match(page, /async onLoad\(\) \{\s+this\._pageVisible = true/);
-  assert.match(page, /const context = await ensureAppContext\(\{ reason: "page-load" \}\);\s+if \(!this\._pageVisible\) return;/);
-  assert.match(page, /catch \(error\) \{\s+if \(this\._pageVisible\) this\.showContextError\(error\)/);
+  assert.match(page, /onLoad\(\) \{\s+this\._pageVisible = true[\s\S]*startHomeLifecycle\("cold-launch", "page-load"\)/);
+  assert.match(page, /startHomeLifecycle\([\s\S]*const context = await ensureAppContext\(\{ reason \}\);\s+if \(!isActiveLifecycle\(\)\) return;/);
+  assert.match(page, /catch \(error\) \{\s+if \(isActiveLifecycle\(\)\) this\.showContextError\(error, tracker\)/);
 });
 
 test("a successful cold login commits its binding only inside auth service", () => {

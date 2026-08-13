@@ -208,13 +208,15 @@ Page({
   },
 
   onHide() {
-    this.resumeStage = this.startupPending || this.data.loading || this.data.refreshing
-      ? "daily"
-      : this.data.historyLoading
+    this.resumeStage = this.data.activeMode === "player"
+      ? this.data.historyLoading
         ? "history"
-        : this.data.playerLoading || this.data.loadingMore
+        : this.startupPending || this.data.playerLoading || this.data.loadingMore
           ? "player"
-          : null;
+          : null
+      : this.startupPending || this.data.loading || this.data.refreshing
+        ? "daily"
+        : null;
     this.pageActive = false;
     nextRequestRevision(this.dailyRequestOwner, "daily");
     this.invalidatePlayerRequest();

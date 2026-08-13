@@ -140,33 +140,39 @@ Page({
   _pageVisible: false,
   _secondaryPending: false,
   _resumeSecondaryOnShow: false,
+  _startupPending: false,
+  _resumeStartupOnShow: false,
+  _hasShown: false,
+  _lifecycleRevision: 0,
 
-  async onLoad() {
+  onLoad() {
     this._pageVisible = true;
     this._initialLoadDone = false;
-    this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "cold-launch");
-    try {
-      const context = await ensureAppContext({ reason: "page-load" });
-      if (!this._pageVisible) return;
-      this._perfTracker.mark("contextReadyAt");
-      this._loadedContextRevision = context.contextRevision;
-      await this.loadPage();
-    } catch (error) {
-      if (this._pageVisible) this.showContextError(error);
-    } finally {
-      this._initialLoadDone = true;
-      this.startCountdown();
-    }
+    return this.startHomeLifecycle("cold-launch", "page-load");
   },
 
   async onShow() {
     this._pageVisible = true;
+    const resumed = this._hasShown;
+    this._hasShown = true;
+    if (!resumed) return;
+    if (this._resumeStartupOnShow) {
+      this._resumeStartupOnShow = false;
+      await this.startHomeLifecycle("warm-enter", "page-show");
+      return;
+    }
     if (!this._initialLoadDone) return;
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "warm-enter");
+    const tracker = this._perfTracker;
+    const lifecycleRevision = this._lifecycleRevision;
     try {
       const context = await ensureAppContext({ reason: "page-show" });
-      if (!this._pageVisible) return;
-      this._perfTracker.mark("contextReadyAt");
+      if (
+        !this._pageVisible
+        || lifecycleRevision !== this._lifecycleRevision
+        || tracker !== this._perfTracker
+      ) return;
+      tracker.mark("contextReadyAt");
       this.syncAppState();
       if (shouldReloadHome(
         this._lastLoadAt,
@@ -177,7 +183,7 @@ Page({
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
-        wx.nextTick(() => this._perfTracker?.observePrimary("#perf-primary-fixtures"));
+        wx.nextTick(() => tracker.observePrimary("#perf-primary-fixtures"));
         recordHomeFixtureTiming({
           surface: "home-fixtures",
           trigger: "onShow",
@@ -198,9 +204,41 @@ Page({
     this.startCountdown();
   },
 
+  async startHomeLifecycle(
+    trigger: "cold-launch" | "warm-enter",
+    reason: "page-load" | "page-show"
+  ) {
+    const lifecycleRevision = this._lifecycleRevision;
+    this._startupPending = true;
+    this._perfTracker?.disconnect();
+    const tracker = new PagePerformanceTracker(this, "pages/home/index/index", trigger);
+    this._perfTracker = tracker;
+    const isActiveLifecycle = () => (
+      this._pageVisible
+      && lifecycleRevision === this._lifecycleRevision
+      && tracker === this._perfTracker
+    );
+    try {
+      const context = await ensureAppContext({ reason });
+      if (!isActiveLifecycle()) return;
+      tracker.mark("contextReadyAt");
+      this._loadedContextRevision = context.contextRevision;
+      await this.loadPage(false, tracker);
+    } catch (error) {
+      if (isActiveLifecycle()) this.showContextError(error, tracker);
+    } finally {
+      if (!isActiveLifecycle()) return;
+      this._startupPending = false;
+      this._initialLoadDone = true;
+      this.startCountdown();
+    }
+  },
+
   onUnload() {
     this._pageVisible = false;
     this._resumeSecondaryOnShow = false;
+    this._resumeStartupOnShow = false;
+    this._lifecycleRevision += 1;
     this._loadRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
@@ -208,7 +246,9 @@ Page({
 
   onHide() {
     this._pageVisible = false;
+    this._resumeStartupOnShow = this._startupPending;
     this._resumeSecondaryOnShow = this._secondaryPending;
+    this._lifecycleRevision += 1;
     this._loadRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
@@ -232,6 +272,7 @@ Page({
     const app = getApp<IAppOption>();
     if (!app.globalData.gw) {
       const context = await ensureAppContext({ reason: "page-load" });
+      if (!this._pageVisible || requestId !== this._loadRequestId) return false;
       this._loadedContextRevision = context.contextRevision;
       this.syncAppState();
     }
