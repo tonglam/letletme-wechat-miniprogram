@@ -5399,5 +5399,5 @@ h08fJM7287ss+/RB3ITI/xKT92d55fBpXX3JqrVAVB4LwKkvkZxqTMloP4HTeP/504d19UXlpbL4
     <li>Report status remains <strong>代码已实施，尚未验收</strong>.</li>
   </ul>
 </section>
-</body>
+<section id="cold-start-final-evidence-2026-08-14" style="border:2px solid #166534;padding:20px;margin:20px 0"><h2>2026-08-14 冷启动门槛复核</h2><p><strong>状态：代码已实施，尚未验收。</strong> 当前 main 通过标准链路完成 5 次清 storage 后冷启动，Fixture primary visible 样本为 825、833、886、940、997ms，最大值 997ms，满足 &lt;=1500ms。</p><table><thead><tr><th>指标</th><th>结果</th><th>结论</th></tr></thead><tbody><tr><td>Fixture rows</td><td>每次 10</td><td>通过</td></tr><tr><td>Fixture network operation</td><td>每次 1</td><td>通过</td></tr><tr><td>Live acquisition</td><td>0</td><td>通过</td></tr><tr><td>GraphQL</td><td>HTTP 200，无 GraphQL errors</td><td>通过</td></tr></tbody></table><p>代表 trace：Web proxy 339.14ms；GraphQL preAuthAdmission 55.24ms、principalAdmission 51.82ms、fixtures.coreAcquisition 205.99ms，未进入 Live。真实登录 Entry/READY、My FPL Team、Entry History、Tournament rich-state 仍缺少可审计样本，因此不上传 1.0.2，不改为“已修复并验收”。</p></section></body>
 </html>

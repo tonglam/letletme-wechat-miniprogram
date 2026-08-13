@@ -479,3 +479,24 @@ Home/Price 20 次样本均显示正确数据，失败数为 0；Home 每次有�
 ### 当前最终状态
 
 最新后端主线下，旧的 Home/Price 性能失败已不再复现，当前小程序页面代码无需为过时后端成本增加改动。剩余未闭环项只有冷启动完整 5 次样本，以及真实登录 Entry/READY 状态页面的 rich-state 性能样本；在这两项补齐前，报告状态继续保持 **代码已实施，尚未验收**，不上传微信开发版，不声明完整线上发布通过。
+
+## 2026-08-14 冷启动门槛复核（当前 main，最新证据）
+
+本节覆盖并 supersede 前文“冷启动样本不足”的结论。测试使用当前小程序 `main=8112777739ff96439b13d3e55f8c4269124e3c47`，GraphQL `origin/main=e8fd704c9f6377970ef897a9022720c41853910c`，Web `origin/main=a2be1096f7e465c03ff0c58202e15e1c469cb645`；链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`。每次样本均先清除模拟器 storage，再调用 `restartMiniProgram`，重新连接新页面实例；没有使用旧页面 binding、L1 命中或 storage 命中结果。
+
+| 指标 | 样本 | 结果 | 门槛 | 结论 |
+|---|---:|---:|---:|---|
+| Home Fixture primary viewport visible | 5 | `825, 833, 886, 940, 997ms` | 最大值 `<=1500ms` | 通过 |
+| Home Fixture visible p50 | 5 | `886ms` | 仅作描述 | 不计算 p95，样本少于 10 |
+| Fixture rows | 5 | 每次 `10` | `10` | 通过 |
+| Fixture operation | 5 | 每次网络 `1` | 恰好 `1` | 通过 |
+| 总网络 operations | 5 | 每次 `2` | 页面预算允许 | 通过 |
+| Live snapshot acquisition | 5 | `0` | `0` | 通过 |
+| GraphQL operation | 5 | HTTP `200`、GraphQL 无错误 | 成功率 `100%` | 通过 |
+
+同一批次的页面 telemetry 均为 `trigger=cold-launch`、`loading=false`、`fixtureLoading=false`，Fixture operation source 为 `network`，每次均有 requestId。后端关联 trace 的代表样本为：Web proxy 总耗时 `339.14ms`，GraphQL `preAuthAdmission=55.24ms`、`principalAdmission=51.82ms`、`fixtures.coreAcquisition=205.99ms`，未进入 Live acquisition。该证据支持“主要时间在请求链路，非 10 条 Fixture 的 setData/render”这一判断。
+
+### 当前剩余硬门槛
+
+- 真实登录 `Entry/READY`、My FPL Team、Entry History、Tournament rich-state 仍没有可审计测试账号样本；当前 no-entry 快速失败不能替代 rich-state 验收。
+- 因此总体状态仍为 **代码已实施，尚未验收**；不上传微信开发版 `1.0.2`，不声明整套线上 main 已通过。
