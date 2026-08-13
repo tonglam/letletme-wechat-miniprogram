@@ -16,7 +16,10 @@ import { formatCompactNumber } from "../../../utils/summary-format";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import { currentFollowEntryId } from "../../../utils/follow";
-import { ensureAppContext } from "../../../services/app-context.service";
+import {
+  ensureAppContext,
+  getAppContextSnapshot
+} from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import {
   capturePageRequestTrace,
@@ -205,20 +208,30 @@ Page({
   async onLoad() {
     this.pageVisible = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "cold-launch");
+    const tracker = this.perfTracker;
+    this.startupPending = true;
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "load" });
     try {
       await this.ensureContext("page-load");
     } catch (error) {
-      if (this.pageVisible) this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker) {
+        this.startupPending = false;
+        this.showContextError(error);
+      }
       return;
     }
-    if (!this.pageVisible) return;
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.perfTracker.mark("contextReadyAt");
-    await this.initializeFromContext(false, trace);
+    await this.initializeFromContext(false, trace, tracker);
   },
 
-  async initializeFromContext(forceRefresh: boolean, trace?: PageRequestTrace) {
+  async initializeFromContext(
+    forceRefresh: boolean,
+    trace?: PageRequestTrace,
+    tracker?: PagePerformanceTracker
+  ) {
     const app = getApp<IAppOption>();
+    const owningTracker = tracker ?? this.perfTracker;
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
       // fallback: the account may have been relinked, so wait for the
@@ -227,9 +240,11 @@ Page({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
-    if (!this.pageVisible) return;
+    if (!this.pageVisible || this.perfTracker !== owningTracker) return;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
+    this.startupPending = false;
+    this.resumeStartupAfterShow = false;
     this.setData({
       entryId: app.globalData.entryId ?? 0,
       event: currentGw,
@@ -291,10 +306,22 @@ Page({
       await this.ensureContext("page-show");
       if (!this.pageVisible) return;
       this.perfTracker.mark("contextReadyAt");
-    } catch {
+    } catch (error) {
+      if (this.resumeStartupAfterShow && !getAppContextSnapshot()) {
+        this.startupPending = false;
+        this.resumeStartupAfterShow = false;
+        this.showContextError(error);
+        return;
+      }
       // A resident page may continue using its retained context.
     }
     if (!this.pageVisible) return;
+    if (this.resumeStartupAfterShow) {
+      this.resumeStartupAfterShow = false;
+      this.startupPending = true;
+      await this.initializeFromContext(false, trace, this.perfTracker);
+      return;
+    }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) return;
 
@@ -370,6 +397,8 @@ Page({
   tabRequestId: 0,
   resumeTab: null as EntrySummaryTab | null,
   contextUnavailable: false,
+  startupPending: false,
+  resumeStartupAfterShow: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
@@ -455,6 +484,7 @@ Page({
     this.resumeTab = this.data.tabLoading && this.data.activeTab !== "squad"
       ? this.data.activeTab
       : null;
+    this.resumeStartupAfterShow = this.startupPending;
     this.pageVisible = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
@@ -466,6 +496,8 @@ Page({
   onUnload() {
     this.pageVisible = false;
     this.resumeTab = null;
+    this.startupPending = false;
+    this.resumeStartupAfterShow = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
     this.phaseBannerRequestId += 1;

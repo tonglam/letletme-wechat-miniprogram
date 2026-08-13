@@ -347,31 +347,45 @@ PerformancePage({
   failedEntryCount: 0,
   retainedRowCount: 0,
   resumeDirectoryAfterShow: false,
+  resumeStartupAfterShow: false,
+  startupPending: false,
+  startupGeneration: 0,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad() {
-    const app = getApp<IAppOption>();
     this.pageVisible = true;
     const trace = capturePageRequestTrace({
       callerSurface: "live-tournament-directory",
       trigger: "load"
     });
+    await this.initializeFromContext("page-load", trace);
+  },
+
+  async initializeFromContext(
+    reason: "page-load" | "page-show",
+    trace?: PageRequestTrace
+  ) {
+    const app = getApp<IAppOption>();
+    const startupGeneration = ++this.startupGeneration;
+    this.startupPending = true;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
     let context = getAppContextSnapshot();
     try {
-      context = await this.ensureContext("page-load");
+      context = await this.ensureContext(reason);
     } catch (error) {
       if (!context) {
+        if (!this.pageVisible || this.startupGeneration !== startupGeneration) return;
+        this.startupPending = false;
         this.showContextError(error);
         return;
       }
     }
-    if (!context) return;
+    if (!context || !this.pageVisible || this.startupGeneration !== startupGeneration) return;
     this.loadedSeason = context.season || undefined;
     if (!getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
@@ -380,12 +394,14 @@ PerformancePage({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
-    if (!this.pageVisible) return;
+    if (!this.pageVisible || this.startupGeneration !== startupGeneration) return;
     const currentGw = context.currentEvent || 0;
+    this.startupPending = false;
+    this.resumeStartupAfterShow = false;
     this.setData({ entryId: app.globalData.entryId ?? 0, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
     if (!this.data.entryId || currentGw > 0) {
-      this.loadTournaments(false, trace);
+      await this.loadTournaments(false, trace);
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
     }
@@ -462,6 +478,15 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed && this.resumeStartupAfterShow) {
+      this.resumeStartupAfterShow = false;
+      const trace = capturePageRequestTrace({
+        callerSurface: "live-tournament-directory",
+        trigger: "show"
+      });
+      await this.initializeFromContext("page-show", trace);
+      return;
+    }
     if (resumed) {
       const app = getApp<IAppOption>();
       let context;
@@ -556,6 +581,11 @@ PerformancePage({
   onHide() {
     this.pageVisible = false;
     this.resumeDirectoryAfterShow = this.data.loading && !this.data.selectedTournament;
+    if (this.startupPending) {
+      this.resumeStartupAfterShow = true;
+      this.resumeDirectoryAfterShow = false;
+    }
+    this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
     this.liveRefresh?.stop();
   },
@@ -563,6 +593,9 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeDirectoryAfterShow = false;
+    this.resumeStartupAfterShow = false;
+    this.startupPending = false;
+    this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
     this.liveRefresh?.dispose();
   },

@@ -15,7 +15,30 @@ type InstrumentedPage = {
   __performanceSetDataWrapped?: boolean;
   __performanceVisible?: boolean;
   __performanceGeneration?: number;
+  __performancePendingLifecycles?: Record<number, number>;
 };
+
+function hasPendingLifecycle(page: InstrumentedPage, generation?: number): boolean {
+  if (generation === undefined) return false;
+  return (page.__performancePendingLifecycles?.[generation] ?? 0) > 0;
+}
+
+function beginLifecycle(page: InstrumentedPage, generation: number): void {
+  const pending = page.__performancePendingLifecycles ?? {};
+  pending[generation] = (pending[generation] ?? 0) + 1;
+  page.__performancePendingLifecycles = pending;
+}
+
+function finishLifecycle(page: InstrumentedPage, generation: number): void {
+  const pending = page.__performancePendingLifecycles;
+  const count = pending?.[generation] ?? 0;
+  if (count > 1) {
+    pending![generation] = count - 1;
+    return;
+  }
+  if (pending) delete pending[generation];
+  schedulePrimaryObservation(page, generation);
+}
 
 function schedulePrimaryObservation(
   page: InstrumentedPage,
@@ -37,7 +60,7 @@ function observeLifecycleSettlement(
   page: InstrumentedPage,
   generation: number
 ): void {
-  const settled = () => schedulePrimaryObservation(page, generation);
+  const settled = () => finishLifecycle(page, generation);
   void Promise.resolve(result).then(settled, settled);
 }
 
@@ -59,6 +82,7 @@ function startTracker(
 function stopTracker(page: InstrumentedPage): void {
   page.__performanceVisible = false;
   page.__performanceGeneration = (page.__performanceGeneration ?? 0) + 1;
+  page.__performancePendingLifecycles = {};
   page.__performanceTracker?.disconnect();
 }
 
@@ -70,7 +94,11 @@ function wrapSetData(page: InstrumentedPage): void {
     const generation = page.__performanceGeneration;
     original(data, () => {
       callback?.();
-      schedulePrimaryObservation(page, generation);
+      // Cached/intermediate commits must not close a refresh or navigation
+      // measurement while its owning lifecycle is still awaiting the network.
+      if (!hasPendingLifecycle(page, generation)) {
+        schedulePrimaryObservation(page, generation);
+      }
     });
   };
 }
@@ -94,6 +122,7 @@ export const PerformancePage = ((options: unknown): void => {
       wrapSetData(this);
       this.__performanceVisible = true;
       const generation = startTracker(this, "cold-launch");
+      beginLifecycle(this, generation);
       const result = originalOnLoad?.apply(this, args);
       observeLifecycleSettlement(result, this, generation);
       return result;
@@ -105,12 +134,14 @@ export const PerformancePage = ((options: unknown): void => {
         generation = startTracker(this, "warm-enter");
       }
       this.__performanceShown = true;
+      beginLifecycle(this, generation);
       const result = originalOnShow?.apply(this, args);
       observeLifecycleSettlement(result, this, generation);
       return result;
     },
     onPullDownRefresh(this: InstrumentedPage, ...args: unknown[]) {
       const generation = startTracker(this, "refresh");
+      beginLifecycle(this, generation);
       const result = originalOnPullDownRefresh?.apply(this, args);
       observeLifecycleSettlement(result, this, generation);
       return result;

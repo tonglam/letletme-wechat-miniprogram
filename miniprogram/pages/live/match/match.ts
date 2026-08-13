@@ -342,6 +342,7 @@ Page({
       context = await this.ensureContext("page-load");
     } catch (error) {
       if (!context) {
+        if (!this.pageVisible || this.perfTracker !== tracker) return;
         this.showContextError(error);
         this.startupPending = false;
         return;
@@ -566,6 +567,9 @@ Page({
     if (resumeInterruptedLoad) {
       this.resumeLoadAfterShow = false;
       this.startupPending = false;
+      // A cold startup can be abandoned before onLoad creates the controller.
+      // The replacement lifecycle owns both the load and its recovery polling.
+      this.initLiveRefresh();
     }
     const nextCurrentEventId = context?.currentEvent || 0;
     const nextTargetEventId = context?.displayEvent || 0;
