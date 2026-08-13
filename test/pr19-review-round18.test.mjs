@@ -16,7 +16,7 @@ test("Live Tournament captures the cold trace before auth and stops hidden conti
 
   assert.match(page, /async onLoad\(\) \{\s+this\.pageVisible = true;\s+const trace = capturePageRequestTrace[\s\S]*initializeFromContext\("page-load", trace\)/);
   assert.match(page, /async initializeFromContext[\s\S]*const startupGeneration = \+\+this\.startupGeneration[\s\S]*await app\.authReady; \} catch \{\}[\s\S]*this\.startupGeneration !== startupGeneration/);
-  assert.match(page, /await this\.loadTournaments\(false, trace\)/);
+  assert.match(page, /await this\.loadTournaments\(forceRefresh, trace\)/);
 });
 
 test("Live Entry controls get a fresh refresh tracker", () => {

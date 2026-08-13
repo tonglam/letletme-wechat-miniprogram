@@ -24,12 +24,14 @@ interface TeamResponse {
 export async function getTeamSummary(
   teamId: number | string,
   season: string,
+  forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<TeamSummary> {
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) }, {
     cachePolicy: "team-directory",
     season,
+    forceRefresh,
     trace
   });
   if (!data.team) {

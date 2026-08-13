@@ -20,11 +20,11 @@ test("Live Tournament hide-show replays context, authority, and directory startu
   const page = read("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(
     page,
-    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason\)[\s\S]*await app\.authReady[\s\S]*entryId: app\.globalData\.entryId[\s\S]*this\.initLiveRefresh\(\)[\s\S]*await this\.loadTournaments\(false, trace\)/
+    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason, forceRefresh\)[\s\S]*await app\.authReady[\s\S]*entryId: app\.globalData\.entryId[\s\S]*this\.initLiveRefresh\(\)[\s\S]*await this\.loadTournaments\(forceRefresh, trace\)/
   );
   assert.match(
     page,
-    /onShow\(\)[\s\S]*resumeStartupAfterShow[\s\S]*initializeFromContext\("page-show", trace\)/
+    /onShow\(\)[\s\S]*resumeStartupAfterShow[\s\S]*initializeFromContext\("page-show", trace, forceRefresh\)/
   );
   assert.match(
     page,

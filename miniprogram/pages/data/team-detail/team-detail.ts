@@ -89,7 +89,7 @@ PerformancePage({
       }
       if (!isActiveRequest()) return;
       this.setData({ season });
-      const team = await getTeamSummary(this.data.teamId, season, trace);
+      const team = await getTeamSummary(this.data.teamId, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
       this.setData({ team });
     } catch (error) {

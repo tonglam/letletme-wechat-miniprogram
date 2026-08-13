@@ -66,7 +66,7 @@ test("team detail consumes its route season and team cache identity includes it"
   const service = source("miniprogram/services/team.service.ts");
   assert.match(page, /this\.routeSeason = options\.season \|\| ""/);
   assert.match(page, /season = this\.routeSeason \|\| context\.season \|\| season/);
-  assert.match(service, /getTeamSummary\([\s\S]*teamId: number \| string,[\s\S]*season: string,[\s\S]*trace\?: PageRequestTrace[\s\S]*cachePolicy: "team-directory",\s*season,\s*trace/);
+  assert.match(service, /getTeamSummary\([\s\S]*teamId: number \| string,[\s\S]*season: string,[\s\S]*forceRefresh = false,[\s\S]*trace\?: PageRequestTrace[\s\S]*cachePolicy: "team-directory",[\s\S]*season,[\s\S]*forceRefresh,[\s\S]*trace/);
   assert.doesNotMatch(service, /_season/);
 });
 

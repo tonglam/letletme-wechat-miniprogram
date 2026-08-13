@@ -874,6 +874,10 @@ Page({
       goToEntrySearch();
       return;
     }
+    if (this.contextUnavailable || this.data.maxGw <= 0) {
+      void this.recoverContext("pull-refresh");
+      return;
+    }
     this.loadData(true);
   }
 });

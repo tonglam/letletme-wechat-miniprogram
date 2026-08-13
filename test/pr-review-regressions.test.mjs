@@ -100,7 +100,7 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
-    /if \(contextMissing \|\| deadlineExpired\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
+    /const forceContextForUserRefresh = !deadlineTriggered[\s\S]*if \(forceContextForUserRefresh \|\| contextMissing \|\| deadlineExpired\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
   );
 });
 

@@ -349,10 +349,12 @@ PerformancePage({
   resumeDirectoryAfterShow: false,
   resumeDirectoryForceRefresh: false,
   resumeStartupAfterShow: false,
+  resumeStartupForceRefresh: false,
   resumeRowsAfterShow: false,
   directoryRequestPending: false,
   directoryRequestForceRefresh: false,
   startupPending: false,
+  startupForceRefresh: false,
   startupGeneration: 0,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
@@ -370,17 +372,19 @@ PerformancePage({
 
   async initializeFromContext(
     reason: "page-load" | "page-show",
-    trace?: PageRequestTrace
+    trace?: PageRequestTrace,
+    forceRefresh = false
   ) {
     const app = getApp<IAppOption>();
     const startupGeneration = ++this.startupGeneration;
     this.startupPending = true;
+    this.startupForceRefresh = forceRefresh;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
     let context = getAppContextSnapshot();
     try {
-      context = await this.ensureContext(reason);
+      context = await this.ensureContext(reason, forceRefresh);
     } catch (error) {
       if (!context) {
         if (!this.pageVisible || this.startupGeneration !== startupGeneration) return;
@@ -405,7 +409,7 @@ PerformancePage({
     this.setData({ entryId: app.globalData.entryId ?? 0, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
     if (!this.data.entryId || currentGw > 0) {
-      await this.loadTournaments(false, trace);
+      await this.loadTournaments(forceRefresh, trace);
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
     }
@@ -483,12 +487,14 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed && this.resumeStartupAfterShow) {
+      const forceRefresh = this.resumeStartupForceRefresh;
       this.resumeStartupAfterShow = false;
+      this.resumeStartupForceRefresh = false;
       const trace = capturePageRequestTrace({
         callerSurface: "live-tournament-directory",
         trigger: "show"
       });
-      await this.initializeFromContext("page-show", trace);
+      await this.initializeFromContext("page-show", trace, forceRefresh);
       return;
     }
     if (resumed) {
@@ -601,6 +607,7 @@ PerformancePage({
         && Boolean(this.rowsRequest && this.data.selectedTournament));
     if (this.startupPending) {
       this.resumeStartupAfterShow = true;
+      this.resumeStartupForceRefresh = this.startupForceRefresh;
     }
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
@@ -641,6 +648,7 @@ PerformancePage({
       const app = getApp<IAppOption>();
       const recoveryGeneration = ++this.startupGeneration;
       this.startupPending = true;
+      this.startupForceRefresh = true;
       let context;
       try {
         context = await this.ensureContext("pull-refresh", true);

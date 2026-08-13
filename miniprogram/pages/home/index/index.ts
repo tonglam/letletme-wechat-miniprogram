@@ -440,7 +440,8 @@ Page({
       const contextMissing = !app.globalData.gw || !app.globalData.nextGw;
       const deadlineExpired = Boolean(app.globalData.utcDeadline)
         && getDeadlineDiffMs(app.globalData.utcDeadline) <= 0;
-      if (contextMissing || deadlineExpired) {
+      const forceContextForUserRefresh = !deadlineTriggered;
+      if (forceContextForUserRefresh || contextMissing || deadlineExpired) {
         const context = await ensureAppContext({
           forceRefresh: true,
           reason: "pull-refresh",
