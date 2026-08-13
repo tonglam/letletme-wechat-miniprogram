@@ -8,15 +8,15 @@ test("Explore Fixtures captures lifecycle traces before delayed context reads", 
   const page = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(
     page,
-    /async onLoad\(\) \{\s+const trace = capturePageRequestTrace[\s\S]*?await this\.syncEventContext\(false\);[\s\S]*?await this\.load\(false, trace\);/
+    /async onLoad\(\)[\s\S]*?const lifecycleRevision = this\.lifecycleRevision;[\s\S]*?const trace = capturePageRequestTrace[\s\S]*?await this\.syncEventContext\(false, lifecycleRevision\);[\s\S]*?await this\.load\(false, trace, lifecycleRevision\);/
   );
   assert.match(
     page,
-    /async onShow\(\)[\s\S]*?const trace = capturePageRequestTrace[\s\S]*?await this\.syncEventContext\(false\);[\s\S]*?await this\.load\(seasonChanged, trace\);/
+    /async onShow\(\)[\s\S]*?const lifecycleRevision = this\.lifecycleRevision;[\s\S]*?const trace = capturePageRequestTrace[\s\S]*?await this\.syncEventContext\(false, lifecycleRevision\);[\s\S]*?await this\.load\(seasonChanged, trace, lifecycleRevision\);/
   );
   assert.match(
     page,
-    /onPullDownRefresh\(\)[\s\S]*?const trace = capturePageRequestTrace[\s\S]*?syncEventContext\(true\)[\s\S]*?this\.load\(true, trace\)/
+    /onPullDownRefresh\(\)[\s\S]*?const lifecycleRevision = this\.lifecycleRevision;[\s\S]*?const trace = capturePageRequestTrace[\s\S]*?syncEventContext\(true, lifecycleRevision\)[\s\S]*?this\.load\(true, trace, lifecycleRevision\)/
   );
 });
 

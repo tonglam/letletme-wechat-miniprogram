@@ -32,36 +32,61 @@ PerformancePage({
   selectedWindowByUser: false,
   requestId: 0,
   hasShown: false,
+  pageVisible: false,
+  lifecycleRevision: 0,
 
   async onLoad() {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "load" });
-    await this.syncEventContext(false);
+    const seasonChanged = await this.syncEventContext(false, lifecycleRevision);
+    if (seasonChanged === null) return;
     // Season is part of fixture/team cache identity, so an ordinary first
     // read can reuse fresh data without crossing a rollover.
-    await this.load(false, trace);
+    await this.load(false, trace, lifecycleRevision);
   },
 
   async onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
+    const lifecycleRevision = this.lifecycleRevision;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "show" });
-    const seasonChanged = await this.syncEventContext(false);
+    const seasonChanged = await this.syncEventContext(false, lifecycleRevision);
+    if (seasonChanged === null) return;
     // A normal cached read lets the fixture service's 30-minute TTL bound
     // staleness. A season rollover bypasses both fixture and team caches.
-    await this.load(seasonChanged, trace);
+    await this.load(seasonChanged, trace, lifecycleRevision);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
   onPullDownRefresh() {
+    const lifecycleRevision = this.lifecycleRevision;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
-    return this.syncEventContext(true)
-      .then(() => this.load(true, trace))
+    return this.syncEventContext(true, lifecycleRevision)
+      .then((seasonChanged: boolean | null) => seasonChanged === null
+        ? undefined
+        : this.load(true, trace, lifecycleRevision))
       .finally(() => wx.stopPullDownRefresh());
   },
 
-  async syncEventContext(forceRefresh = false) {
+  async syncEventContext(forceRefresh = false, lifecycleRevision?: number): Promise<boolean | null> {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const app = getApp<IAppOption>();
     try { await app.initAppData(forceRefresh); } catch { /* the picker falls back to GW 1 */ }
+    if (!this.pageVisible || ownerRevision !== this.lifecycleRevision) return null;
     const season = app.globalData.season;
     const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
     const gw = Math.max(1, Number(app.globalData.gw) || 1);
@@ -96,9 +121,17 @@ PerformancePage({
     trace = capturePageRequestTrace({
       callerSurface: "explore-fixtures",
       trigger: forceRefresh ? "refresh" : "load"
-    })
+    }),
+    lifecycleRevision?: number
   ) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
+    const isActiveRequest = () => (
+      this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId
+    );
+    if (!isActiveRequest()) return;
     const loadStart = Date.now();
     const season = getApp<IAppOption>().globalData.season;
     const startEvent = this.data.startEvent;
@@ -115,7 +148,7 @@ PerformancePage({
         getFixtureWindow(startEvent, horizon, season, forceRefresh, trace),
         getTeamList(season, forceRefresh, trace)
       ]);
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       this.fixtures = fixtures;
       this.teams = teams;
       this.loadedSeason = season;
@@ -133,7 +166,7 @@ PerformancePage({
         durationBucket: durationBucket(Date.now() - loadStart)
       });
     } catch (error) {
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,
@@ -177,11 +210,14 @@ PerformancePage({
   },
 
   async retryWithContext() {
+    const lifecycleRevision = this.lifecycleRevision;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
     try {
-      await this.syncEventContext(true);
-      await this.load(true, trace);
+      const seasonChanged = await this.syncEventContext(true, lifecycleRevision);
+      if (seasonChanged === null) return;
+      await this.load(true, trace, lifecycleRevision);
     } catch (error) {
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       this.setData({
         loading: false,
         error: error instanceof Error ? error.message : "赛季和比赛轮信息加载失败"

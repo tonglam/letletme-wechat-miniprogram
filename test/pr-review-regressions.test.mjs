@@ -217,11 +217,11 @@ test("fixture windows honor event and season cache identity on open and resume",
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(app, /await ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*reason:/);
   assert.match(app, /await this\._pendingInit;[\s\S]*return this\.initAppData\(true\)/);
-  assert.match(fixtures, /await this\.syncEventContext\(false\)/);
-  assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false\)/);
+  assert.match(fixtures, /await this\.syncEventContext\(false, lifecycleRevision\)/);
+  assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false, lifecycleRevision\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(fixtures, /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
-  assert.match(fixtures, /onRetry\(\)[\s\S]*retryWithContext\(\)[\s\S]*syncEventContext\(true\)[\s\S]*load\(true, trace\)/);
+  assert.match(fixtures, /onRetry\(\)[\s\S]*retryWithContext\(\)[\s\S]*syncEventContext\(true, lifecycleRevision\)[\s\S]*load\(true, trace, lifecycleRevision\)/);
 });
 
 test("My FPL partial brief reads retain only fields from the failed source", () => {
@@ -292,9 +292,9 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   const service = source("miniprogram/services/fixture.service.ts");
   const common = source("miniprogram/services/common.service.ts");
   const home = source("miniprogram/pages/home/index/index.ts");
-  assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false\)/);
-  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false, trace\)/);
-  assert.match(fixtures, /await this\.load\(seasonChanged, trace\)/);
+  assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false, lifecycleRevision\)/);
+  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false, trace, lifecycleRevision\)/);
+  assert.match(fixtures, /await this\.load\(seasonChanged, trace, lifecycleRevision\)/);
   assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh, trace\)/);
   assert.match(fixtures, /getTeamList\(season, forceRefresh, trace\)/);
   assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
