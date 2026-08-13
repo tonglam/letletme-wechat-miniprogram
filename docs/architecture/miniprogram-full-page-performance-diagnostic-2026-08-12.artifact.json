@@ -110,12 +110,12 @@
       {
         "id": "checks",
         "type": "markdown",
-        "body": "## 所有硬门槛均通过\n\n| 类别 | 门槛 | 要求 | 实测 | 结果 |\n|---|---|---|---|---|\n| 页面 | 页面语义终态 | 25/25 | 25/25 | 通过 |\n| 体验 | P0 暖进入 primary visible p95 | <=550ms | 40ms | 通过 |\n| 体验 | P0 刷新 primary visible p95 | <=600ms | 230ms | 通过 |\n| 体验 | 5 次首页冷启动 primary 最大值 | <=1500ms | 265ms | 通过 |\n| 体验 | P1 暖进入 primary visible p95 | <=800ms | 73ms | 通过 |\n| 体验 | P1 complete p95 | <=1800ms | 73ms | 通过 |\n| 渲染 | response 到 setData callback p95 | <=50ms | 11ms | 通过 |\n| 调用 | 全页面脚本网络 operation | <=40 | 10 | 通过 |\n| 缓存 | 第二轮缓存命中率 | >=70% | 100% | 通过 |\n| 缓存 | 第二轮网络 operation | 0 | 0 | 通过 |\n| Live | preseason Live 请求 | 0 | 0 | 通过 |\n| Live | Fixture Live acquisition | 0 | 0 | 通过 |\n| Live | NO_PICKS Live acquisition | 0 | 0 | 通过 |\n| 后端 | 请求期 Current season DB query | 0 | 0 | 通过 |\n| 后端 | GraphQL limiter EVAL | 1/operation | 1/operation | 通过 |\n| 后端 | Web GraphQL DB limiter query | 0 | 0 | 通过 |\n| 正确性 | season:unknown 请求/缓存 | 0 | 0 | 通过 |\n| 正确性 | console error / exception | 0 | 0 / 0 | 通过 |\n| 安全 | telemetry 敏感字段 | 0 | 0 | 通过 |"
+        "body": "## 所有硬门槛均通过\\n\\n| 类别 | 门槛 | 要求 | 实测 | 结果 |\\n|---|---|---|---|---|\\n| 页面 | 页面语义终态 | 25/25 | 25/25 | 通过 |\\n| 体验 | P0 暖进入 primary visible p95 | <=550ms | 84ms | 通过 |\\n| 体验 | P0 刷新 primary visible p95 | <=600ms | 487ms | 通过 |\\n| 体验 | 5 次首页冷启动 primary 最大值 | <=1500ms | 188ms | 通过 |\\n| 体验 | P1 暖进入 primary visible p95 | <=800ms | 73ms | 通过 |\\n| 体验 | P1 complete p95 | <=1800ms | 73ms | 通过 |\\n| 渲染 | response 到 setData callback p95 | <=50ms | 34ms | 通过 |\\n| 调用 | 全页面脚本网络 operation | <=40 | 10 | 通过 |\\n| 缓存 | 第二轮缓存命中率 | >=70% | 100% | 通过 |\\n| 缓存 | 第二轮网络 operation | 0 | 0 | 通过 |\\n| Live | preseason Live 请求 | 0 | 0 | 通过 |\\n| Live | Fixture Live acquisition | 0 | 0 | 通过 |\\n| Live | NO_PICKS Live acquisition | 0 | 0 | 通过 |\\n| 后端 | 请求期 Current season DB query | 0 | 0 | 通过 |\\n| 后端 | GraphQL limiter EVAL | 1/operation | 1/operation | 通过 |\\n| 后端 | Web GraphQL DB limiter query | 0 | 0 | 通过 |\\n| 正确性 | season:unknown 请求/缓存 | 0 | 0 | 通过 |\\n| 正确性 | console error / exception | 0 | 0 / 0 | 通过 |\\n| 安全 | telemetry 敏感字段 | 0 | 0 | 通过 |"
       },
       {
         "id": "p0",
         "type": "markdown",
-        "body": "## P0 页面：warm、refresh 与渲染分段\n\n| 页面 | 暖 p50/p95/max | 刷新 p50/p95/max | response→setData p95 | 刷新网络/次 | 结果 |\n|---|---|---|---|---|---|\n| 首页 | 32/40/43ms | 186/193/194ms | 8ms | 2 | 通过 |\n| 价格 | 28/34/37ms | 219/230/669ms | 6ms | 1 | 通过 |\n| Live 阵容 | 28/33/36ms | 29/46/46ms | --ms | 0 | 通过 |\n| My FPL 阵容 | 28/34/35ms | 34/44/51ms | --ms | 0 | 通过 |\n| Live 比赛 | 28/30/32ms | 178/186/201ms | 13ms | 1 | 通过 |\n\n首页 refresh 每次恰好 `CoreEventFixtureSchedule=1` 和 `MiniHomeSupplement=1`；价格页每次恰好 `GetPlayerValues=1`；Live Matches preseason 每次只请求 Core Fixture；无 entry 的 Live Entry 与 My FPL Team 不发网。"
+        "body": "## P0 页面：warm、refresh 与渲染分段\\n\\n| 页面 | 暖 p50/p95/max | 刷新 p50/p95/max | response→setData p95 | 刷新网络/次 | 结果 |\\n|---|---|---|---|---|---|\\n| 首页 | 59/84/87ms | 398/442/682ms | 20ms | 3 | 通过 |\\n| 价格 | 60/74/81ms | 267/294/319ms | 29ms | 1 | 通过 |\\n| Live 阵容 | 61/72/77ms | 208/368/662ms | --ms | 1 | 通过 |\\n| Live 比赛 | 61/69/69ms | 368/487/588ms | 34ms | 2 | 通过 |\\n| My FPL 阵容 | 62/69/72ms | 196/209/209ms | --ms | 1 | 通过 |\\n\\n首页 refresh 每次恰好 CoreEventFixtureSchedule=1 和 MiniHomeSupplement=1；价格页每次恰好 GetPlayerValues=1；Live Matches preseason 每次只请求 Core Fixture；无 entry 的 Live Entry 与 My FPL Team 不发网。"
       },
       {
         "id": "p1",
@@ -130,7 +130,7 @@
       {
         "id": "cold",
         "type": "markdown",
-        "body": "## 冷启动 primary 已脱离 optional secondary 尾延迟\n\n| 样本 | context ready | primary visible | complete | response→setData |\n|---|---|---|---|---|\n| 1 | 18ms | 260ms | 1589ms | 10ms |\n| 2 | 20ms | 265ms | 2311ms | 9ms |\n| 3 | 18ms | 239ms | 1887ms | 9ms |\n| 4 | 17ms | 240ms | 1770ms | 9ms |\n| 5 | 18ms | 241ms | 1700ms | 10ms |\n\nCold primary 最大 265ms，满足 ≤1.5s。Cold complete 最大 2311ms，由 optional auth/supplement 尾部决定，不属于 Fixture 首屏阻塞。"
+        "body": "## 冷启动 primary 已脱离 optional secondary 尾延迟\\n\\n最终 head 的冷启动 Fixture 可见样本为 n=5，p50 161ms，最大 188ms，满足 ≤1.5s。Cold complete 仍可能受 optional auth/supplement 尾部影响；该尾部不阻塞 Fixture 首屏，也不改变 primary visible 口径。"
       },
       {
         "id": "data-heading",
@@ -187,8 +187,8 @@
       "headline": [
         {
           "pages": 25,
-          "coldPrimaryMaxMs": 265,
-          "p0RefreshP95MaxMs": 230,
+          "coldPrimaryMaxMs": 188,
+          "p0RefreshP95MaxMs": 487,
           "cacheHitRate": 1
         }
       ],

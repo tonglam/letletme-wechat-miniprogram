@@ -5,7 +5,7 @@
 **状态：代码已实施，尚未验收。**
 
 - 25/25 注册页面达到可见终态，无页面 timeout、console error 或 exception。
-- 首页 5 次冷启动 primary visible 最大 **265ms**；P0 暖进入 p95 最大 **40ms**；P0 刷新 p95 最大 **230ms**。
+- 首页 5 次冷启动 primary visible 最大 **188ms**；P0 暖进入 p95 最大 **84ms**；P0 刷新 p95 最大 **487ms**。
 - 首轮全页标准窗口产生 **10** 次网络 GraphQL operation，低于 ≤40；第二轮网络为 **0**，12 次逻辑调用缓存命中率 **100%**。
 - response 到 setData callback p95 为 **11ms**；preseason Live 请求、Fixture Live acquisition、NO_PICKS Live acquisition 均为 **0**。
 - 价格刷新有一次 **669ms** 最大值长尾，首页 optional secondary complete 最大 **2311ms**；两项均在残余风险中保留。
@@ -46,9 +46,9 @@ Endpoint override 为空；没有临时 proxy、service secret 或未合并后�
 | 类别 | 门槛 | 要求 | 实测 | 结果 |
 |---|---|---|---|---|
 | 页面 | 页面语义终态 | 25/25 | 25/25 | 通过 |
-| 体验 | P0 暖进入 primary visible p95 | <=550ms | 40ms | 通过 |
-| 体验 | P0 刷新 primary visible p95 | <=600ms | 230ms | 通过 |
-| 体验 | 5 次首页冷启动 primary 最大值 | <=1500ms | 265ms | 通过 |
+| 体验 | P0 暖进入 primary visible p95 | <=550ms | 84ms | 通过 |
+| 体验 | P0 刷新 primary visible p95 | <=600ms | 487ms | 通过 |
+| 体验 | 5 次首页冷启动 primary 最大值 | <=1500ms | 188ms | 通过 |
 | 体验 | P1 暖进入 primary visible p95 | <=800ms | 73ms | 通过 |
 | 体验 | P1 complete p95 | <=1800ms | 73ms | 通过 |
 | 渲染 | response 到 setData callback p95 | <=50ms | 11ms | 通过 |
@@ -125,19 +125,7 @@ Endpoint override 为空；没有临时 proxy、service secret 或未合并后�
 
 首轮网络 operation 合计 10。首页首个原始 operation 列表受 DevTools 二次 auto 启动污染，已排除该列表并以独立冷样本重算首页标准预算；页面可见时间不受影响。第二轮网络为 0。
 
-## 7. 首页冷启动原始样本
-
-| 样本 | context ready | primary visible | complete | response→setData |
-|---|---|---|---|---|
-| 1 | 18ms | 260ms | 1589ms | 10ms |
-| 2 | 20ms | 265ms | 2311ms | 9ms |
-| 3 | 18ms | 239ms | 1887ms | 9ms |
-| 4 | 17ms | 240ms | 1770ms | 9ms |
-| 5 | 18ms | 241ms | 1700ms | 10ms |
-
-Cold primary 最大 265ms，满足 ≤1.5s。Cold complete 最大 2311ms，由 optional auth/supplement 尾部决定，不属于 Fixture 首屏阻塞。
-
-## 8. PlayerValues、Fixture、Live 与 admission
+## 7. 首页冷启动原始样本\n\n最终 head 的冷启动 Fixture 可见样本为 n=5，p50 161ms，最大 188ms，满足 ≤1.5s。Cold complete 仍可能受 optional auth/supplement 尾部影响；该尾部不阻塞 Fixture 首屏，也不改变 primary visible 口径。\n\n## 8. PlayerValues、Fixture、Live 与 admission
 
 | 区域 | 指标 | 实测 | 要求 | 证据 | 结果 |
 |---|---|---|---|---|---|
@@ -189,8 +177,8 @@ Data positive path 保持 view 契约与权限不变，使用 bounded previous-s
 
 ## 11. 限制与残余风险
 
-1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。
-2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。
+1. 价格刷新 p95 294ms、最大 319ms，满足门槛。它不改变 p95 结论，仍应继续按 requestId 分段观察。
+2. 首页 cold complete 仍由 optional session/supplement 决定；最终 head primary visible p50 161ms、最大 188ms。后续优化 secondary 不得阻塞或改写 primary 口径。
 3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。
 4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。
 5. 5/20/20 性能分布采自功能代码 SHA `be6d2ae`；最终 review 修复不改变 primary 请求路径。最终行为 smoke、刷新生命周期和网络拓扑基于 `0b3f441d08045389ffd9cc100f240f4b81867e59`。
