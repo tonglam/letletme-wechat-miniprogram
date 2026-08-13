@@ -440,8 +440,8 @@ Page({
       const contextMissing = !app.globalData.gw || !app.globalData.nextGw;
       const deadlineExpired = Boolean(app.globalData.utcDeadline)
         && getDeadlineDiffMs(app.globalData.utcDeadline) <= 0;
-      const forceContextForUserRefresh = !deadlineTriggered;
-      if (forceContextForUserRefresh || contextMissing || deadlineExpired) {
+      const refreshContext = contextMissing || deadlineExpired;
+      if (refreshContext) {
         const context = await ensureAppContext({
           forceRefresh: true,
           reason: "pull-refresh",
@@ -453,6 +453,12 @@ Page({
         await this.syncAppState();
         if (!isActiveRefresh()) return;
       } else {
+        const context = await ensureAppContext({
+          reason: "pull-refresh",
+          trace: deadlineTriggered ? null : undefined
+        });
+        if (!isActiveRefresh()) return;
+        this._loadedContextRevision = context.contextRevision;
         tracker?.mark("contextReadyAt");
       }
       const fixtureFresh = await this.loadPage(true, tracker);
