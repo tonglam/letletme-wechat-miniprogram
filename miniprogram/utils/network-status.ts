@@ -4,6 +4,7 @@ let initializationPromise: Promise<void> | null = null;
 let listenerRegistrationAttempted = false;
 let listenerInstalled = false;
 let lastProbeAt = 0;
+let networkStatusGeneration = 0;
 
 const LISTENERLESS_REPROBE_MS = 5_000;
 
@@ -19,6 +20,7 @@ export function initializeNetworkStatus(): Promise<void> {
     try {
       if (typeof wx.onNetworkStatusChange === "function") {
         wx.onNetworkStatusChange((result) => {
+          networkStatusGeneration += 1;
           knownOnline = result.isConnected;
         });
         listenerInstalled = true;
@@ -29,6 +31,7 @@ export function initializeNetworkStatus(): Promise<void> {
   }
 
   lastProbeAt = Date.now();
+  const probeGeneration = networkStatusGeneration;
   initializationPromise = new Promise<void>((resolve) => {
     let settled = false;
     const timeout = setTimeout(() => finish(), 250);
@@ -41,11 +44,15 @@ export function initializeNetworkStatus(): Promise<void> {
     try {
       wx.getNetworkType({
         success: (result) => {
-          knownOnline = result.networkType !== "none";
+          if (probeGeneration === networkStatusGeneration) {
+            knownOnline = result.networkType !== "none";
+          }
           finish();
         },
         fail: () => {
-          knownOnline = null;
+          if (probeGeneration === networkStatusGeneration) {
+            knownOnline = null;
+          }
           finish();
         },
         complete: finish
@@ -76,6 +83,7 @@ export function setKnownNetworkStatusForTest(
   initialized = true;
   initializationPromise = null;
   knownOnline = online;
+  networkStatusGeneration += 1;
   listenerRegistrationAttempted = true;
   listenerInstalled = options.listenerInstalled ?? true;
   lastProbeAt = options.lastProbeAt ?? Date.now();

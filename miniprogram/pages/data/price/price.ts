@@ -488,6 +488,13 @@ Page({
     return this.playerRequestRevision;
   },
 
+  clearPaginationOwnership() {
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
+  },
+
   startPlayerSearch(forceRefresh = false): Promise<void> {
     const revision = this.invalidatePlayerRequest();
     this.paginationPending = false;
@@ -586,6 +593,7 @@ Page({
   onPlayerKeywordInput(event: WechatMiniprogram.Input) {
     this.setData({ playerKeyword: event.detail.value });
     const revision = this.invalidatePlayerRequest();
+    this.clearPaginationOwnership();
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
     }
@@ -631,6 +639,7 @@ Page({
       this.playerSearchTimer = undefined;
     }
     this.invalidatePlayerRequest();
+    this.clearPaginationOwnership();
     this.setData({
       playerKeyword: "",
       teamFilter: ALL_VALUE,

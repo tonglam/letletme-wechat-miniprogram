@@ -1,4 +1,4 @@
-import { getCurrentEventAndDeadline } from "./common.service";
+import { ensureAppContext } from "./app-context.service";
 import { getEntryEventResult, getEntryInfo, getEntryLeagueInfo } from "./entry.service";
 import { getLiveSnapshot } from "./live.service";
 import { getApiSessionToken } from "./auth.service";
@@ -81,12 +81,17 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
   let utcDeadline: string | undefined;
   let eventContextAvailable = false;
   try {
-    const eventInfo = await getCurrentEventAndDeadline(forceRefresh);
+    const appContext = await ensureAppContext({
+      reason: "page-load",
+      forceRefresh
+    });
     eventContextAvailable = true;
-    season = eventInfo.season;
-    currentEvent = eventInfo.currentEvent;
-    nextEvent = eventInfo.nextEvent;
-    utcDeadline = eventInfo.utcDeadline;
+    season = appContext.season || undefined;
+    currentEvent = appContext.currentEvent ?? undefined;
+    nextEvent = appContext.nextEvent ?? undefined;
+    utcDeadline = appContext.nextDeadlineAt
+      ? new Date(appContext.nextDeadlineAt).toISOString()
+      : undefined;
   } catch {
     // Degrade to principal-only context; the page shows a data state.
   }

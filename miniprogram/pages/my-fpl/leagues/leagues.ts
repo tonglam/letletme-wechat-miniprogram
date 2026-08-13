@@ -125,9 +125,13 @@ PerformancePage({
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "refresh" });
     this.loadPending = true;
     this.loadForceRefresh = true;
-    try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-    if (!this.pageVisible) return;
-    await this.loadLeagues(true, trace).finally(() => wx.stopPullDownRefresh());
+    try {
+      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+      if (!this.pageVisible) return;
+      await this.loadLeagues(true, trace);
+    } finally {
+      wx.stopPullDownRefresh();
+    }
   },
 
   async loadLeagues(
