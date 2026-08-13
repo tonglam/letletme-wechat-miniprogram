@@ -5,6 +5,7 @@ import { ensureAppContext } from "../../../services/app-context.service";
 
 PerformancePage({
   data: {
+    contextResolved: false,
     entryId: 0,
     event: 0,
     cards: [
@@ -32,14 +33,44 @@ PerformancePage({
     ]
   },
 
-  async onShow() {
+  pageVisible: false,
+  lifecycleRevision: 0,
+
+  onLoad() {
+    this.pageVisible = true;
+    return this.loadContext("page-load");
+  },
+
+  onShow() {
+    this.pageVisible = true;
+    if (!this.data.contextResolved) return undefined;
+    return this.loadContext("page-show");
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+  },
+
+  async loadContext(reason: "page-load" | "page-show") {
+    const lifecycleRevision = this.lifecycleRevision;
     try {
-      await ensureAppContext({ reason: "page-show" });
+      await ensureAppContext({ reason });
     } catch {
       // Keep the landing page usable with the last normalized app state.
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
-    this.setData({ entryId: app.globalData.entryId ?? 0, event: app.globalData.gw });
+    this.setData({
+      contextResolved: true,
+      entryId: app.globalData.entryId ?? 0,
+      event: app.globalData.gw
+    });
   },
 
   onOpenEntryStrip() {

@@ -61,23 +61,53 @@ PerformancePage({
   requestId: 0,
   hasShown: false,
   loadedSeason: undefined as string | undefined,
+  pageVisible: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
 
   async onLoad() {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "load" });
     await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    void this.loadLeagues(false, trace);
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.startupPending = false;
+    await this.loadLeagues(false, trace, lifecycleRevision);
   },
 
   async onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (resumed) {
+    if (resumed || this.resumeOnShow) {
+      this.resumeOnShow = false;
+      const lifecycleRevision = this.lifecycleRevision;
       const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "show" });
       // Re-read the follow pointer after a handoff or team switch (§9).
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      void this.loadLeagues(false, trace);
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+      await this.loadLeagues(false, trace, lifecycleRevision);
     }
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.startupPending || this.data.loading;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
   async onPullDownRefresh() {
@@ -91,9 +121,14 @@ PerformancePage({
     trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
       callerSurface: "my-fpl-leagues",
       trigger: forceRefresh ? "refresh" : "load"
-    })
+    }),
+    lifecycleRevision?: number
   ) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     const entryId = currentFollowEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
 
@@ -125,7 +160,7 @@ PerformancePage({
 
     try {
       const leagues = await getMyFplLeagues(entryId, forceRefresh, trace);
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });
@@ -151,7 +186,7 @@ PerformancePage({
         }
       } catch { /* cache is best effort */ }
     } catch (error) {
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ leagues: [], displayLeagues: [], fromCache: false });

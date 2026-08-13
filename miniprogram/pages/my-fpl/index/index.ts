@@ -136,11 +136,16 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
-      // Return from the website handoff or team search: re-read the follow
-      // pointer before any personal content (§9 return refresh).
-      return this.loadOverview(false);
+      return this.resumeOverview();
     }
     return undefined;
+  },
+
+  async resumeOverview() {
+    const lifecycleRevision = this.lifecycleRevision;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await this.loadOverview(false, lifecycleRevision);
   },
 
   onHide() {

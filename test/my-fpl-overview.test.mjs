@@ -116,7 +116,7 @@ test("non-live primary with a ready principal opens the team review", () => {
   assert.deepEqual(urls, ["/pages/my-fpl/team/team"]);
 });
 
-test("resume re-reads the follow pointer; first show does not double-load", () => {
+test("resume re-reads the follow pointer; first show does not double-load", async () => {
   const loads = [];
   const context = {
     ...overviewPage,
@@ -132,6 +132,7 @@ test("resume re-reads the follow pointer; first show does not double-load", () =
   assert.deepEqual(loads, [], "first show skips the reload that onLoad already started");
 
   overviewPage.onShow.call(context);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(loads, [false], "resume revalidates through the named context and reporting policies");
 });
 

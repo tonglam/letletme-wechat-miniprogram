@@ -64,23 +64,53 @@ PerformancePage({
   requestId: 0,
   hasShown: false,
   loadedSeason: undefined as string | undefined,
+  pageVisible: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
 
   async onLoad() {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "load" });
     await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    void this.loadList(false, trace);
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.startupPending = false;
+    await this.loadList(false, trace, lifecycleRevision);
   },
 
   async onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (resumed) {
+    if (resumed || this.resumeOnShow) {
+      this.resumeOnShow = false;
+      const lifecycleRevision = this.lifecycleRevision;
       const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "show" });
       // Website return / team switch: principal and list revalidate (§10.1).
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      void this.loadList(false, trace);
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+      await this.loadList(false, trace, lifecycleRevision);
     }
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.startupPending || this.data.loading;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
   async onPullDownRefresh() {
@@ -94,9 +124,14 @@ PerformancePage({
     trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
       callerSurface: "competitions",
       trigger: forceRefresh ? "refresh" : "load"
-    })
+    }),
+    lifecycleRevision?: number
   ) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     const loadStart = Date.now();
     const entryId = currentFollowEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
@@ -136,7 +171,7 @@ PerformancePage({
 
     try {
       const items = await getMyCompetitionsCompat(entryId, forceRefresh, trace);
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });
@@ -172,7 +207,7 @@ PerformancePage({
         }
       } catch { /* cache is best effort */ }
     } catch (error) {
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });

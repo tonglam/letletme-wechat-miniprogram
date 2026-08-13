@@ -40,6 +40,6 @@ test("Live landing waits for shared cold-start context before painting GW", () =
   assert.match(live, /import \{ ensureAppContext \}/);
   assert.match(
     live,
-    /async onShow\(\)[\s\S]*await ensureAppContext\(\{ reason: "page-show" \}\)[\s\S]*globalData\.gw/
+    /async loadContext\([\s\S]*await ensureAppContext\(\{ reason \}\)[\s\S]*contextResolved: true[\s\S]*event: app\.globalData\.gw/
   );
 });

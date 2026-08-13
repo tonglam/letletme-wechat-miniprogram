@@ -8,7 +8,7 @@
     <view class="gw-pill-dark">GW {{event || '-'}}</view>
   </view>
 
-  <view id="perf-primary-content" class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip">
+  <view id="{{contextResolved ? 'perf-primary-content' : ''}}" wx:if="{{contextResolved}}" class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip">
     <view>
       <view class="strip-label">{{entryId ? '当前球队' : '还没有我的球队'}}</view>
       <view wx:if="{{entryId}}" class="strip-value">Entry #{{entryId}}</view>

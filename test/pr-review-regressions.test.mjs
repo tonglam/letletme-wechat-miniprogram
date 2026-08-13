@@ -268,7 +268,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
-  assert.match(competitions, /if \(resumed\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(competitions, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadList\(false, trace, lifecycleRevision\)/);
   assert.match(competitions, /cached\.season === season/);
   assert.match(
     competitions,
@@ -283,7 +283,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false, trace\)/);
+  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
   assert.match(leagues, /cached\.season === season/);
 });
 
@@ -321,8 +321,8 @@ test("initial league and competition payloads use named session cache policies",
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const common = source("miniprogram/services/common.service.ts");
-  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace\)/);
-  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false, trace\)/);
+  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
+  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false, trace, lifecycleRevision\)/);
   assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
   assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
   assert.doesNotMatch(common, /season:unknown/);
@@ -388,7 +388,7 @@ test("profile and tournament pull-to-refresh bypass reporting caches", () => {
   const tournament = source("miniprogram/pages/summary/tournament/tournament.ts");
   const service = source("miniprogram/services/tournament.service.ts");
   assert.match(profile, /onPullDownRefresh\(\)[\s\S]*loadEntry\(Number\(this\.data\.entryId\), true\)/);
-  assert.match(profile, /loadEntry\(entryId: number, forceRefresh = false\)[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
+  assert.match(profile, /async loadEntry\([\s\S]*entryId: number,[\s\S]*forceRefresh = false,[\s\S]*getEntryInfo\(entryId, forceRefresh, trace\)/);
   assert.match(tournament, /async refreshData\(\)[\s\S]*loadTournaments\(true\)/);
   assert.match(tournament, /loadTournaments\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh, trace\)[\s\S]*loadSummary\(forceRefresh, trace\)/);
   assert.match(tournament, /loadSummary\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh,[\s\S]*trace/);
@@ -422,8 +422,8 @@ test("historical Live selections reset when the season changes", () => {
 test("first personal paints honor season-aware event and reporting policies", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
-  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false\)/);
-  assert.match(overview, /if \(resumed\)[\s\S]*this\.loadOverview\(false\)/);
+  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false/);
+  assert.match(overview, /async resumeOverview\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadOverview\(false, lifecycleRevision\)/);
   assert.match(team, /async onLoad\(\)[\s\S]*capturePageRequestTrace[\s\S]*this\.initializeFromContext\(false, trace\)/);
   assert.match(team, /async initializeFromContext\(forceRefresh: boolean, trace\?: PageRequestTrace\)[\s\S]*this\.loadData\(forceRefresh, trace\)/);
   assert.match(overview, /event === undefined/);

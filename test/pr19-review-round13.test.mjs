@@ -12,7 +12,7 @@ for (const [name, path, loadMethod, surface] of [
     const page = source(path);
     assert.match(
       page,
-      new RegExp(`async onLoad\\(\\) \\{\\s+const trace = capturePageRequestTrace\\(\\{ callerSurface: "${surface}", trigger: "load" \\}\\);[\\s\\S]*?await waitForAuthoritativeFollow\\(\\);[\\s\\S]*?${loadMethod}\\(false, trace\\)`)
+      new RegExp(`async onLoad\\(\\)[\\s\\S]*?const trace = capturePageRequestTrace\\(\\{ callerSurface: "${surface}", trigger: "load" \\}\\);[\\s\\S]*?await waitForAuthoritativeFollow\\(\\);[\\s\\S]*?${loadMethod}\\(false, trace, lifecycleRevision\\)`)
     );
     assert.match(
       page,

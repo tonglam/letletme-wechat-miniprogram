@@ -3,6 +3,10 @@ import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { EntryInfo } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 
 interface EntryProfileData {
   loading: boolean;
@@ -21,7 +25,16 @@ PerformancePage({
     entry: {}
   } as EntryProfileData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  requestId: 0,
+  resumeOnShow: false,
+
   async onLoad(options: Record<string, string | undefined>) {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
+    const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger: "load" });
     const app = getApp<IAppOption>();
     if (!options.entry && !getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -31,29 +44,66 @@ PerformancePage({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const entryId = Number(options.entry || app.globalData.entryId);
     this.setData({ entryId: Number.isFinite(entryId) ? entryId : 0 });
-    this.loadEntry(entryId);
+    await this.loadEntry(entryId, false, trace, lifecycleRevision);
+  },
+
+  onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return undefined;
+    this.resumeOnShow = false;
+    const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger: "show" });
+    return this.loadEntry(Number(this.data.entryId), false, trace, this.lifecycleRevision);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.data.loading;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
   onPullDownRefresh() {
     return this.loadEntry(Number(this.data.entryId), true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadEntry(entryId: number, forceRefresh = false) {
+  async loadEntry(
+    entryId: number,
+    forceRefresh = false,
+    trace?: PageRequestTrace,
+    lifecycleRevision?: number
+  ) {
     if (!Number.isFinite(entryId) || entryId <= 0) {
       this.setData({ loading: false, error: "", emptyState: true, entry: {} });
       return;
     }
 
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    const requestId = ++this.requestId;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     this.setData({ loading: true, error: "", emptyState: false, entryId });
     try {
-      const entry = await getEntryInfo(entryId, forceRefresh);
+      const entry = await getEntryInfo(entryId, forceRefresh, trace);
+      if (!isActiveRequest()) return;
       this.setData({ entry });
     } catch (error) {
+      if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "球队资料加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveRequest()) this.setData({ loading: false });
     }
   },
 
