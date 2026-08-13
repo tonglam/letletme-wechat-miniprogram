@@ -30,13 +30,23 @@ PerformancePage({
   lifecycleRevision: 0,
   requestId: 0,
   resumeOnShow: false,
+  routeEntry: undefined as string | undefined,
 
   async onLoad(options: Record<string, string | undefined>) {
     this.pageVisible = true;
+    this.routeEntry = options.entry;
     const lifecycleRevision = this.lifecycleRevision;
-    const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger: "load" });
+    await this.loadAuthoritativeEntry("load", lifecycleRevision);
+  },
+
+  async loadAuthoritativeEntry(
+    trigger: "load" | "show",
+    lifecycleRevision?: number
+  ) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger });
     const app = getApp<IAppOption>();
-    if (!options.entry && !getApiSessionToken()) {
+    if (!this.routeEntry && !getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
       // fallback: the account may have been relinked, so wait for the
       // refreshed profile before snapshotting the entry. Enter the loading
@@ -44,10 +54,10 @@ PerformancePage({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
-    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-    const entryId = Number(options.entry || app.globalData.entryId);
+    if (!this.pageVisible || ownerRevision !== this.lifecycleRevision) return;
+    const entryId = Number(this.routeEntry || app.globalData.entryId);
     this.setData({ entryId: Number.isFinite(entryId) ? entryId : 0 });
-    await this.loadEntry(entryId, false, trace, lifecycleRevision);
+    await this.loadEntry(entryId, false, trace, ownerRevision);
   },
 
   onShow() {
@@ -56,8 +66,7 @@ PerformancePage({
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return undefined;
     this.resumeOnShow = false;
-    const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger: "show" });
-    return this.loadEntry(Number(this.data.entryId), false, trace, this.lifecycleRevision);
+    return this.loadAuthoritativeEntry("show", this.lifecycleRevision);
   },
 
   onHide() {

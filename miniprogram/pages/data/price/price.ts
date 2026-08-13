@@ -16,7 +16,7 @@ import {
 } from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
-type PriceResumeStage = "daily" | "player" | "history";
+type PriceResumeStage = "daily" | "player" | "history" | "search";
 
 interface FilterOption {
   label: string;
@@ -199,6 +199,11 @@ Page({
       void this.ensurePlayerModeReady();
       return;
     }
+    if (resumeStage === "search") {
+      this.setData({ playerLoading: false, loadingMore: false });
+      void this.startPlayerSearch(false);
+      return;
+    }
     if (resumeStage === "history" && this.data.selectedPlayer?.element) {
       this.setData({ historyLoading: false });
       void this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
@@ -208,10 +213,17 @@ Page({
   },
 
   onHide() {
+    const pendingSearch = this.playerSearchTimer !== undefined;
+    if (pendingSearch) {
+      clearTimeout(this.playerSearchTimer);
+      this.playerSearchTimer = undefined;
+    }
     this.resumeStage = this.data.activeMode === "player"
       ? this.data.historyLoading
         ? "history"
-        : this.startupPending || this.data.playerLoading || this.data.loadingMore
+        : pendingSearch
+          ? "search"
+          : this.startupPending || this.data.playerLoading || this.data.loadingMore
           ? "player"
           : null
       : this.startupPending || this.data.loading || this.data.refreshing
@@ -364,7 +376,7 @@ Page({
     }
   },
 
-  async loadTeamOptions(): Promise<void> {
+  async loadTeamOptions(forceRefresh = false): Promise<void> {
     const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({
       callerSurface: "price-team-directory",
@@ -372,10 +384,10 @@ Page({
     });
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const context = await ensureAppContext({ reason: "page-load" });
+      const context = await ensureAppContext({ reason: "page-load", forceRefresh });
       if (!this.pageActive || this.perfTracker !== tracker) return;
       const season = context.season;
-      const teams = await getTeamList(season, false, trace) as TeamDirectoryItem[];
+      const teams = await getTeamList(season, forceRefresh, trace) as TeamDirectoryItem[];
       if (!this.pageActive || this.perfTracker !== tracker) return;
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },
@@ -542,7 +554,7 @@ Page({
 
   onRetryPlayers() {
     if (this.data.teamOptions.length === 1) {
-      this.loadTeamOptions().then(() => this.startPlayerSearch(true));
+      this.loadTeamOptions(true).then(() => this.startPlayerSearch(true));
       return;
     }
     this.startPlayerSearch(true);
@@ -639,7 +651,7 @@ Page({
 
   async refreshPlayerMode(): Promise<void> {
     if (this.data.teamOptions.length === 1) {
-      await this.loadTeamOptions();
+      await this.loadTeamOptions(true);
     }
     if (this.isPlayerListReady()) {
       await this.startPlayerSearch(true);

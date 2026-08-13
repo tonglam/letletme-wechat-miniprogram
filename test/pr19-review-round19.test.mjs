@@ -60,13 +60,13 @@ test("Match retries create a refresh tracker", () => {
 
 test("Price player setup preserves its trace and stops after hide", () => {
   const price = source("miniprogram/pages/data/price/price.ts");
-  assert.match(price, /loadTeamOptions\(\)[\s\S]*const tracker = this\.perfTracker[\s\S]*capturePageRequestTrace/);
+  assert.match(price, /loadTeamOptions\(forceRefresh = false\)[\s\S]*const tracker = this\.perfTracker[\s\S]*capturePageRequestTrace/);
   assert.match(
     price,
-    /await ensureAppContext[\s\S]*if \(!this\.pageActive \|\| this\.perfTracker !== tracker\) return[\s\S]*getTeamList\(season, false, trace\)/
+    /await ensureAppContext[\s\S]*if \(!this\.pageActive \|\| this\.perfTracker !== tracker\) return[\s\S]*getTeamList\(season, forceRefresh, trace\)/
   );
   assert.match(
     price,
-    /getTeamList\(season, false, trace\)[\s\S]*if \(!this\.pageActive \|\| this\.perfTracker !== tracker\) return/
+    /getTeamList\(season, forceRefresh, trace\)[\s\S]*if \(!this\.pageActive \|\| this\.perfTracker !== tracker\) return/
   );
 });

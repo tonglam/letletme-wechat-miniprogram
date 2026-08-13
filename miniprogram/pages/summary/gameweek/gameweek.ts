@@ -2,6 +2,10 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getMiniGameweekSummary } from "../../../services/summary.service";
 import type { GameweekOverallSummary } from "../../../models/summary";
 import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
+import {
   asArray,
   asRecord,
   fieldText,
@@ -73,11 +77,51 @@ PerformancePage({
     hasTransfers: false
   } as GameweekSummaryData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  requestId: 0,
+  startupPending: false,
+  resumeOnShow: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    return this.startPageLoad("load");
+  },
+
+  onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return undefined;
+    this.resumeOnShow = false;
+    return this.startPageLoad("show");
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.startupPending || this.data.loading || this.data.refreshing;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  async startPageLoad(trigger: "load" | "show") {
+    const lifecycleRevision = this.lifecycleRevision;
+    const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger });
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.startupPending = false;
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.setData({ event: currentGw, maxGw: currentGw });
-    this.loadData();
+    await this.loadData(false, trace, lifecycleRevision);
   },
 
   onPullDownRefresh() {
@@ -91,7 +135,20 @@ PerformancePage({
     }
   },
 
-  async loadData(forceRefresh = false) {
+  async loadData(
+    forceRefresh = false,
+    trace?: PageRequestTrace,
+    lifecycleRevision?: number
+  ) {
+    const requestTrace = trace ?? capturePageRequestTrace({
+      callerSurface: "gameweek-summary",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    const requestId = ++this.requestId;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     this.setData({
       loading: true,
       error: "",
@@ -102,7 +159,8 @@ PerformancePage({
       staleNotice: ""
     });
     try {
-      const result = await getMiniGameweekSummary(this.data.event, forceRefresh);
+      const result = await getMiniGameweekSummary(this.data.event, forceRefresh, requestTrace);
+      if (!isActiveRequest()) return;
       const sectionErrors = Object.values(result.errors);
       if (sectionErrors.every(Boolean)) {
         this.setData({ error: sectionErrors[0] || "GW 总结加载失败" });
@@ -123,9 +181,10 @@ PerformancePage({
         staleNotice: result.meta.stale ? "当前为上次成功数据" : ""
       });
     } catch (error) {
+      if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "GW 总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveRequest()) this.setData({ loading: false });
     }
   },
 

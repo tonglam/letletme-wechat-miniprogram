@@ -383,7 +383,8 @@ function attachTeamNames(summary: GameweekOverallSummary): GameweekOverallSummar
 
 export async function getMiniGameweekSummary(
   event: number,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace
 ): Promise<MiniGameweekSummaryResult> {
   const result = await graphqlRead<MiniGameweekSummaryResponse>(
     MINI_GAMEWEEK_SUMMARY_QUERY,
@@ -392,7 +393,8 @@ export async function getMiniGameweekSummary(
       authMode: "public",
       cachePolicy: "historical",
       cacheVariant: `event:${event}`,
-      forceRefresh
+      forceRefresh,
+      trace
     }
   );
   const data = result.data;

@@ -34,6 +34,7 @@ PerformancePage({
   },
 
   pageVisible: false,
+  hasShown: false,
   lifecycleRevision: 0,
 
   onLoad() {
@@ -43,7 +44,9 @@ PerformancePage({
 
   onShow() {
     this.pageVisible = true;
-    if (!this.data.contextResolved) return undefined;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return undefined;
     return this.loadContext("page-show");
   },
 

@@ -27,7 +27,7 @@ for (const [label, path, loadMethod] of [
 
 test("Entry Profile owns auth and entry reads for its visible lifecycle", () => {
   const page = source("miniprogram/pages/entry/profile/profile.ts");
-  assert.match(page, /capturePageRequestTrace\(\{ callerSurface: "entry-profile", trigger: "load" \}\)[\s\S]*await app\.authReady[\s\S]*lifecycleRevision !== this\.lifecycleRevision/);
+  assert.match(page, /async loadAuthoritativeEntry\([\s\S]*capturePageRequestTrace\(\{ callerSurface: "entry-profile", trigger \}\)[\s\S]*await app\.authReady[\s\S]*ownerRevision !== this\.lifecycleRevision/);
   assert.match(page, /getEntryInfo\(entryId, forceRefresh, trace\)[\s\S]*if \(!isActiveRequest\(\)\) return/);
   assert.match(page, /onHide\(\)[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
 });
