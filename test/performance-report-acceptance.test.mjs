@@ -24,3 +24,21 @@ test("performance report evidence keeps sampled and final commits explicit", () 
     assert.match(document, /1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c/);
   }
 });
+
+test("performance report refresh summaries agree with raw samples", () => {
+  const rows = artifact.snapshot.datasets.raw_p0_refresh;
+  const summaryByPage = new Map(artifact.snapshot.datasets.p0.map((row) => [row.page, row]));
+  const nearestRank = (values, percentile) => {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    return sorted[Math.max(0, Math.ceil(sorted.length * percentile) - 1)];
+  };
+  for (const page of new Set(rows.map((row) => row.page))) {
+    const pageRows = rows.filter((row) => row.page === page);
+    const visible = pageRows.map((row) => row.primaryVisibleMs);
+    const summary = summaryByPage.get(page);
+    assert.ok(summary, `missing summary for ${page}`);
+    assert.equal(summary.refreshP50Ms, nearestRank(visible, 0.5));
+    assert.equal(summary.refreshP95Ms, nearestRank(visible, 0.95));
+    assert.equal(summary.refreshMaxMs, Math.max(...visible));
+  }
+});
