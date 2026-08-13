@@ -99,12 +99,24 @@ PerformancePage({
     if (!resumed || !this.resumeStage) return undefined;
     const resumeStage = this.resumeStage;
     const resumeForceRefresh = this.resumeForceRefresh || resumeStage === "refresh";
-    this.resumeStage = null;
-    this.resumeForceRefresh = false;
-    if (resumeStage === "startup") return this.startPageLoad("show");
+    if (resumeStage === "startup") {
+      const task = this.startPageLoad("show");
+      return task.finally(() => {
+        if (this.pageVisible && !this.startupPending) {
+          this.resumeStage = null;
+          this.resumeForceRefresh = false;
+        }
+      });
+    }
     this.setData({ loading: false, refreshing: false });
     const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger: "show" });
-    return this.loadData(resumeForceRefresh, trace, this.lifecycleRevision);
+    const task = this.loadData(resumeForceRefresh, trace, this.lifecycleRevision);
+    return task.finally(() => {
+      if (this.pageVisible && !this.activeLoadForceRefresh) {
+        this.resumeStage = null;
+        this.resumeForceRefresh = false;
+      }
+    });
   },
 
   onHide() {

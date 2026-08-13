@@ -54,8 +54,10 @@ PerformancePage({
     this.hasShown = true;
     if (!resumed) return;
     if (this.resumeForceRefresh) {
-      this.resumeForceRefresh = false;
       await this.runForcedRefresh();
+      if (this.pageVisible && !this.refreshPending) {
+        this.resumeForceRefresh = false;
+      }
       return;
     }
     const lifecycleRevision = this.lifecycleRevision;
