@@ -5,7 +5,7 @@
     "surface": "report",
     "title": "小程序全页面性能整改最终验收报告",
     "description": "WeChat Mini Program full-page lifecycle, caching, failure semantics and backend read-path acceptance.",
-    "generatedAt": "2026-08-13T00:00:00.000Z",
+    "generatedAt": "2026-08-14T00:00:00.000Z",
     "sources": [
       {
         "id": "data-positive-sql",
@@ -100,22 +100,22 @@
       {
         "id": "summary",
         "type": "markdown",
-        "body": "## 技术结论\\n\\n状态：代码已实施，尚未验收。GraphQL 与小程序代码门禁通过，生产 Web public operation p95 达标；本地 Web runtime role 缺失，完整同 head DevTools 性能样本尚未闭环。"
+        "body": "## 当前结论\n\n状态：代码已实施，尚未验收。最新 origin/main 后端基线下 Home/Price 刷新门槛通过，25/25 页面语义通过；冷启动完整 5 次样本和真实登录 rich-state 仍缺证据。标准链路为 DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql，3000 当前未监听。"
       },
       {
         "id": "scope",
         "type": "markdown",
-        "body": "## 范围、环境与计时口径\n\n测试环境为 WeChat DevTools 2.01.2510290、基础库 3.15.2、iPhone 12/13 Pro、390×753 CSS px。调用链固定为 DevTools → 127.0.0.1:3000/api/graphql → 127.0.0.1:4000/graphql，endpoint override 为空。Primary visible 使用固定节点的首次 viewport intersection；complete 使用 secondaryCompleteAt；p95 使用 nearest-rank 且仅在 n≥10 时计算。"
+        "body": "## 当前环境与版本\n\n小程序 main 92da7e4b6dfb18c9e2b87273ae1cd1833d11764f；GraphQL origin/main df38f89f6a55e5dc5ee72af108cee940154610c，Web origin/main a2be1096f7e465c03ff0c58202e15e1c469cb645；DevTools Stable 2.01.2510290、基础库 3.15.2、iPhone 12/13 Pro、390x753 CSS px。P95 使用 n>=10 nearest-rank，DevTools 操作严格串行。"
       },
       {
         "id": "checks",
         "type": "markdown",
-        "body": "## 硬门槛当前状态\\n\\nGraphQL/小程序自动检查通过，生产 MiniHomeSupplement p95 385.450ms；本地 3000 因缺少 letletme_web_runtime 返回 500，完整 DevTools 性能门槛暂不通过。"
+        "body": "## 硬门槛当前状态\n\nHome refresh p95 389ms <= 600ms，Price refresh p95 343ms <= 600ms，25/25 页面语义、自动检查、typecheck、lint、CI/review 已完成。冷启动只有 2 个当前 main 可关联样本，完整 5 次不足；真实登录 rich-state 仍不足。因此仍不上传开发版，状态不改为“已修复并验收”。"
       },
       {
         "id": "p0",
         "type": "markdown",
-        "body": "## P0 页面：warm、refresh 与渲染分段\\n\\n| 页面 | 暖 p50/p95/max | 刷新 p50/p95/max | response→setData p95 | 刷新网络/次 | 结果 |\\n|---|---|---|---|---|---|\\n| 首页 | 59/84/87ms | 398/442/682ms | 20ms | 3 | 通过 |\\n| 价格 | 60/74/81ms | 267/294/319ms | 29ms | 1 | 通过 |\\n| Live 阵容 | 61/72/77ms | 208/368/662ms | --ms | 1 | 通过 |\\n| Live 比赛 | 61/69/69ms | 368/487/588ms | 34ms | 2 | 通过 |\\n| My FPL 阵容 | 62/69/72ms | 196/209/209ms | --ms | 1 | 通过 |\\n\\n首页 refresh 每次恰好 CoreEventFixtureSchedule=1 和 MiniHomeSupplement=1；价格页每次恰好 GetPlayerValues=1；Live Matches preseason 每次只请求 Core Fixture；无 entry 的 Live Entry 与 My FPL Team 不发网。"
+        "body": "## P0 当前 origin/main 有效样本\n\n| 页面/状态 | n | p50 | p95 | max | 网络/次 | 结果 |\n|---|---:|---:|---:|---:|---:|---|\n| Home refresh primary visible | 20 | 326ms | 389ms | 414ms | 2 | 通过 |\n| Home response->setData | 20 | 20ms | 28ms | 50ms | - | 通过 |\n| Price refresh primary visible | 20 | 320ms | 343ms | 366ms | 1 | 通过 |\n| Price response->setData | 20 | 19ms | 25ms | 26ms | - | 通过 |\n\nHome 每次一次 CoreEventFixtureSchedule + 一次 MiniHomeSupplement；Price 每次一次 GetPlayerValues；失败 0。"
       },
       {
         "id": "p1",
@@ -125,12 +125,12 @@
       {
         "id": "pages",
         "type": "markdown",
-        "body": "## 25 页面两轮遍历：第二轮网络为零\n\n| 页面 | 首轮 primary | 第二轮 primary | 首轮网络 | 第二轮网络 | 终态 |\n|---|---|---|---|---|---|\n| 首页 | 260ms | 102ms | 3 | 0 | 通过 |\n| 账号绑定 | 61ms | 58ms | 0 | 0 | 通过 |\n| Live 首页 | 70ms | 75ms | 0 | 0 | 通过 |\n| 探索 | 63ms | 87ms | 0 | 0 | 通过 |\n| 球队搜索 | 81ms | 63ms | 0 | 0 | 通过 |\n| 球队资料 | 74ms | 75ms | 0 | 0 | 通过 |\n| Live 阵容 | 91ms | 77ms | 0 | 0 | 通过 |\n| Live 比赛 | 100ms | 110ms | 0 | 0 | 通过 |\n| Live 赛事 | 93ms | 76ms | 0 | 0 | 通过 |\n| 球员目录 | 480ms | 117ms | 1 | 0 | 通过 |\n| 球员详情 | 174ms | 111ms | 1 | 0 | 通过 |\n| 球队目录 | 160ms | 91ms | 1 | 0 | 通过 |\n| 球队详情 | 150ms | 90ms | 1 | 0 | 通过 |\n| 价格 | 207ms | 83ms | 1 | 0 | 通过 |\n| 选择率 | 75ms | 102ms | 0 | 0 | 通过 |\n| My FPL 阵容 | 82ms | 84ms | 0 | 0 | 通过 |\n| 赛事总结 | 87ms | 76ms | 0 | 0 | 通过 |\n| GW 总结 | 937ms | 79ms | 1 | 0 | 通过 |\n| My FPL 首页 | 89ms | 87ms | 0 | 0 | 通过 |\n| My FPL 阵容 | 104ms | 84ms | 0 | 0 | 通过 |\n| 我的联赛 | 69ms | 70ms | 0 | 0 | 通过 |\n| 赛事入口 | 69ms | 92ms | 0 | 0 | 通过 |\n| 探索 | 106ms | 87ms | 0 | 0 | 通过 |\n| Fixture 浏览 | 187ms | 92ms | 1 | 0 | 通过 |\n| 性能页 | 70ms | 67ms | 0 | 0 | 通过 |\n\n首轮网络 operation 合计 10。首页首个原始 operation 列表受 DevTools 二次 auto 启动污染，已排除该列表并以独立冷样本重算首页标准预算；页面可见时间不受影响。第二轮网络为 0。"
+        "body": "## 25 页面语义回归\n\n当前 main 串行 reLaunch 25/25：primaryFound 25/25，loading/refreshing/pending 全部结束，console exception 0，automation exception 0。两个预期兼容重定向为 data->explore、summary/entry->my-fpl/team；非法 Entry 参数显示内联错误而非无限 loading。该结果是语义证据，不替代性能 p95。"
       },
       {
         "id": "cold",
         "type": "markdown",
-        "body": "## 冷启动 primary 已脱离 optional secondary 尾延迟\\n\\n最终 head 的冷启动 Fixture 可见样本为 n=5，p50 161ms，最大 188ms，满足 ≤1.5s。Cold complete 仍可能受 optional auth/supplement 尾部影响；该尾部不阻塞 Fixture 首屏，也不改变 primary visible 口径。"
+        "body": "## 冷启动\n\n当前 main 手动重启已取得 2 个可关联样本，Fixture 10 条正常显示，primary visible 约 161-190ms，走现有 storage cache。批量 restartMiniProgram runner 在 DevTools automation 层卡死并已停止，不计入样本；完整 n=5 仍不足。"
       },
       {
         "id": "data-heading",
@@ -145,7 +145,7 @@
       {
         "id": "backend",
         "type": "markdown",
-        "body": "## Fixture、Live、admission 与代理守卫\n\n| 区域 | 指标 | 实测 | 要求 | 证据 | 结果 |\n|---|---|---|---|---|---|\n| PlayerValues negative hit | 经 Web p95 | 203ms | <=500ms | GraphQL | 通过 |\n| PlayerValues empty miss | 经 Web max | 349ms | <=1s | GraphQL | 通过 |\n| PlayerValues positive DB | DB stage p95 | 1.129ms | <=350ms | Data | 通过 |\n| Fixture | Core/Live acquisition | 1 / 0 | 1 / 0 | GraphQL | 通过 |\n| NO_PICKS | Live acquisition | 0 | 0 | GraphQL | 通过 |\n| Admission | Redis EVAL/operation | 1 | 1 | GraphQL | 通过 |\n| Current season | 请求期 DB query | 0 | 0 | GraphQL | 通过 |\n| Web proxy | DB limiter query | 0 | 0 | Web | 通过 |\n\nData positive path 保持 view 契约与权限不变，使用 bounded previous-snapshot lookup。运行 season 2627 当时没有真实 rise/fall，因此 positive DB 路径使用一次性 PostgreSQL 15 test fixture；未修改运行数据库。"
+        "body": "## 最新后端 operation 基准\n\n| Operation | p50 | p95/max | n | HTTP/GraphQL |\n|---|---:|---:|---:|---|\n| CoreEventFixtureSchedule | 182ms | 578ms | 10 | 10/10 200，无 errors |\n| MiniHomeSupplement | 229ms | 748ms | 10 | 10/10 200，无 errors |\n| GetPlayerValues | 231ms | 305ms | 10 | 10/10 200，无 errors |\n\n旧 66f4948 临时 GraphQL 进程的 0.5-1.1s 结果仅作历史诊断。最新 request summary 显示 GetPlayerValues 主要为 cacheRead/publication/admission，未进入 enrichment；不能据客户端总耗时猜 SQL。"
       },
       {
         "id": "errors",
@@ -160,22 +160,22 @@
       {
         "id": "exact-head-review",
         "type": "markdown",
-        "body": "## 当前 Head Review 闭环\n\n最终代码 head：67faafdf9dd20a9e71ba691420c0f7404f8b23a0。本地 npm test 347/347、typecheck、lint 已通过；Codex review 和 GitHub review thread resolve 待完成。"
+        "body": "## 当前 Head Review\n\n小程序 main 92da7e4b6dfb18c9e2b87273ae1cd1833d11764f 与 origin/main 一致；PR #26/#27 已按 CI 与精确 head Codex Review 完成并合并。GraphQL admission PR #53 review 发现有效安全回归，已关闭未合并。Review clean 不等于性能门槛完成。"
       },
       {
         "id": "limitations",
         "type": "markdown",
-        "body": "## 限制、稳健性与残余风险\n\n1. 价格刷新 p95 230ms 通过，但有一次 669ms 长尾。它不改变 p95 结论，仍应继续按 requestId 分段观察。\n2. 首页 cold complete 最大 2311ms，由 optional session/supplement 决定；primary 最大 265ms。后续优化 secondary 不得阻塞或改写 primary 口径。\n3. 当前 DevTools 未绑定真实用户，登录 rich-state 依靠自动测试和后端 NO_PICKS/READY 契约覆盖。\n4. 首个真实调价日仍需补 positive PlayerValues 完整 GraphQL enrichment p95。\n5. 失效的 `wx.request` mock 9 个样本没有 request/page telemetry，全部丢弃，未计作通过或失败。\n\n- 5/20/20 性能分布采自功能代码 SHA be6d2ae；最终 review 修复不改变 primary 请求路径。最终行为 smoke 与竞态注入基于 SHA 0b3f441d08045389ffd9cc100f240f4b81867e59，并另行 25/25 验证。"
+        "body": "## 未闭环项\n\n1. 冷启动完整 5 次当前 main 样本不足，不能引用旧 SHA 数据。\n2. 真实登录 Entry/READY、My FPL、Live rich-state 尚未取得。\n3. GraphQL PR #53 的“一次 EVAL admission”经约 20 分钟 Codex Review 返回 1 P1/2 P2，均有效，已关闭未合并；安全两阶段 admission 保留。\n4. 不通过延长 TTL、隐藏请求、提前关闭 loading 或删除样本改变结论。"
       },
       {
         "id": "next",
         "type": "markdown",
-        "body": "## 后续监控\n\n1. 首个真实调价日复测 positive PlayerValues 端到端分段。\n2. 有测试账号时补 Entry、My FPL 和 Live READY 登录 rich-state UI 样本。\n3. 对价格 669ms 最大值和首页 secondary complete 建趋势观察；禁止通过延长 TTL、隐藏请求或提前关闭 loading 改写口径。\n"
+        "body": "## 下一步\n\n1. 用 DevTools 手动重启方式补足 5 个 cold-launch 可关联样本。\n2. 使用真实测试账号补 Entry/READY rich-state。\n3. 如继续优化 admission，必须先设计同时满足 pre-validation fixed charge、weighted quota 不误扣、allowed metrics 完整记录的实现，再走新 PR 全流程。"
       },
       {
         "id": "questions",
         "type": "markdown",
-        "body": "## 进一步问题\n\n当前没有阻塞合并的性能问题。下一轮最值得回答的是价格刷新 669ms 单点长尾是否来自网络抖动、Redis RTT 还是 resolver 阶段，以及真实调价日 positive enrichment 的端到端分布。"
+        "body": "## 当前结论\n\n旧性能失败来自过时 GraphQL runtime，不是 10 条 fixture 渲染。最新 origin/main 下 Home/Price refresh 已通过；剩余问题是冷启动和登录 rich-state 证据缺口。"
       }
     ],
     "currentPostMerge": {
@@ -5104,5 +5104,47 @@
     "port3000InCurrentAcceptance": false,
     "status": "代码已实施，尚未验收",
     "networkP95Gate": "incomplete-sample-set"
+  },
+  "currentPostMerge": {
+    "status": "代码已实施，尚未验收",
+    "miniProgramMainSha": "92da7e4b6dfb18c9e2b87273ae1cd1833d11764f",
+    "graphqlOriginMainSha": "df38f89f6a55e5dc5ee72af108cee940154610c",
+    "webOriginMainSha": "a2be1096f7e465c03ff0c58202e15e1c469cb645",
+    "pullRequests": [
+      26,
+      27
+    ],
+    "codexReview": "mini merged clean; graphql admission PR 53 findings and closed unmerged",
+    "ci": "mini and graphql checks passed",
+    "graphqlHealth": 200,
+    "webProxy": "http://127.0.0.1:3001/api/graphql",
+    "graphqlUpstream": "http://127.0.0.1:4000/graphql",
+    "pageSemantics": {
+      "registered": 25,
+      "completed": 25,
+      "failed": 0,
+      "exceptions": 0
+    },
+    "performance": {
+      "homeRefresh": {
+        "n": 20,
+        "p50": 326,
+        "p95": 389,
+        "max": 414
+      },
+      "priceRefresh": {
+        "n": 20,
+        "p50": 320,
+        "p95": 343,
+        "max": 366
+      },
+      "cold": {
+        "n": 2,
+        "max": 190,
+        "status": "insufficient"
+      }
+    },
+    "strictPerformanceSamples": "incomplete",
+    "release": "blocked until cold and rich-state evidence is complete"
   }
 }

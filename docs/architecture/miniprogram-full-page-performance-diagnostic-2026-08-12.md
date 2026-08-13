@@ -1,5 +1,7 @@
 # 小程序全页面性能整改最终验收报告
 
+> **当前生效结论（2026-08-14）：** 以本节及文末“当前主分支深度复核”为准，历史章节中的旧 SHA、旧端口和“全部性能门槛通过”结论不再代表当前验收状态。当前小程序 `main=92da7e4b6dfb18c9e2b87273ae1cd1833d11764f`，本地标准链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`；`3000` 当前未监听。代码 review/CI 已完成，但严格性能门槛仍有失败项，报告状态保持 **代码已实施，尚未验收**。
+
 ## 执行摘要
 
 > **2026-08-14 当前审查结论：** GraphQL 已部署、小程序 `main=3aff7b25` 已合并；标准本地验收链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`，首页功能链路已通过，但严格性能证据尚未闭环，报告状态保持“代码已实施，尚未验收”。
@@ -361,3 +363,119 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 - A real DevTools run through the `3001` override produced successful `CurrentEventInfo`, `CoreEventFixtureSchedule`, and `MiniHomeSupplement` network operations; the home page rendered 10 Fixture rows and recorded native viewport visibility. The measured sample was not promoted to the final p95 gate because it was not the complete required cold/warm/refresh sample set.
 - Clearing persistent storage alone is insufficient to prove a network request when the DevTools page process retains L1 memory. Memory-hit runs are therefore excluded from the network-chain evidence.
 - The report status remains **代码已实施，尚未验收**. It must not be changed to **已修复并验收** until the required cold, warm, refresh, error-state, and full-page sample gates are complete.
+
+## 2026-08-14 当前主分支深度复核
+
+### 版本、端口与验收边界
+
+| 项目 | 当前证据 |
+|---|---|
+| 小程序 | `main=92da7e4b6dfb18c9e2b87273ae1cd1833d11764f`，工作树 clean，与 `origin/main` 一致 |
+| GraphQL | 本地运行进程来自 `66f49484f6380159621ed2dbb1c1fe68edd4922f`，`127.0.0.1:4000/health=200` |
+| Web | 本地运行进程代码 SHA `593e2b70c3bd717f191672c32119ceb69afbd26d`，监听 `*:3001` |
+| DevTools | Stable `2.01.2510290`，基础库 `3.15.2`，本地 main 工程 |
+| 端口 | `3000` 无监听；`3001` 为 Web proxy；`4000` 为 GraphQL |
+| 状态 | **代码已实施，尚未验收**；未上传 `1.0.2`，未声明发布通过 |
+
+### 真实成功 operation 的网络基准
+
+以下均为现有小程序 query，经 `127.0.0.1:3001/api/graphql`，每个 operation 10 次，HTTP 200 且无 GraphQL errors；p95 使用 n=10 nearest-rank。
+
+| Operation | 响应体 | p50 | p95/max | 初步判断 |
+|---|---:|---:|---:|---|
+| `CoreEventFixtureSchedule` | 3100B | 338ms | 398ms | 已接近但未超过单请求目标；不是 10 条 fixture 的渲染耗时 |
+| `MiniHomeSupplement` | 11200B | 525ms | 876ms | 超出 warm supplement `650ms` 门槛，存在长尾 |
+| `GetPlayerValues` | 29B（当前日期空结果） | 521ms | 1111ms | 超出经 Web hit/empty miss 的严格门槛；首个请求明显长尾 |
+| `MiniProgramNotice` | 34B | 594ms | 1084ms | 即使返回极小数据也有同类固定成本，不能归因于 payload 或 setData |
+
+手写的错误 Fixture selection 返回 HTTP 400，已从基准中排除；报告不把契约错误样本当作性能样本。
+
+### P0 当前有效样本与失败项
+
+| 页面/状态 | 样本 | 当前 p95 | 门槛 | 结果 |
+|---|---:|---:|---:|---|
+| Home warm primary visible | 20 | 63ms | 550ms | 通过 |
+| Home refresh primary visible | 20 | 658ms | 600ms | **失败，+58ms** |
+| Price warm primary visible | 20 | 55ms | 550ms | 通过 |
+| Price refresh primary visible | 20 | 933ms | 600ms | **失败，+333ms** |
+| Live Match refresh（PR #27 后串行有效样本） | 20 | 476ms | 600ms | 通过 |
+| Live Entry 无 entry 快速失败 | 20 | 61ms | 550ms | 通过；这是 no-entry 分支，不代表 READY 登录态 |
+| My FPL Team 无 entry 快速失败 | 20 | 68ms | 550ms | 通过；这是 no-entry 分支，不代表登录态 |
+
+Home/Price 的 `response -> setData` p95 分别约 `26ms/27ms`；Live Match 修复后约 `43ms`。因此当前超时主要发生在网络/请求链，不在小程序列表渲染。冷启动现有有效样本最大约 `162ms`，但由于不是同一最终 head 的完整 5/20/20 统计，不升级为最终通过证据。
+
+### 根因判断与未决证据
+
+1. `GetPlayerValues` 返回 `29B`，`MiniProgramNotice` 返回 `34B`，二者都在约 `0.5s` 起步并出现 `1s` 级长尾，说明代理、GraphQL admission/publication/resolver 的固定成本优先级高于 JSON、列表渲染和 `setData`。
+2. `GetPlayerValues` 的 repository 已有 `cacheRead/cacheParse/databaseChanges/coreSnapshot/statsEnrichment/fixtureTeamEnrichment/transform/cacheWrite` 分段；空结果应在数据库阶段后提前返回，正结果才并发 enrichment。本轮尚未取得对应 requestId 的后端 stage summary，因此不能把 `1.11s` 归因到某个 SQL 或 Redis 阶段。
+3. `MiniHomeSupplement` 包含 notice、overall result 和 player values 三个 root field；它的 p95 `876ms` 与独立 notice p95 `1084ms` 表明合并 operation 并未消除每个请求的 admission/proxy 固定开销，且仍有公共 resolver 长尾。需要用同一 requestId 的 root span 区分串行/并行和每个 resolver 的贡献。
+4. `CoreEventFixtureSchedule` 已使用 Core Fixture source；有效 p95 `398ms`，而页面 response 到 `setData` 仅几十毫秒，当前没有证据支持“10 条 fixture 渲染导致 1–2 秒”。
+5. 当前还缺少真实 entry/READY 状态下 Live Entry、My FPL Team、Entry History、Tournament 等页面的登录态样本；no-entry 快速失败不能覆盖这些页面的完整用户路径。
+
+### 下一步，不改口径也不加 TTL
+
+1. 用本次 3001 请求的 `X-Request-Id` 关联 GraphQL 最终 summary，逐请求读取 `admission`、`publication`、`playerValues.*`、`apolloExecute` 和 `responseBuild`，先确认 1s 长尾属于哪一段。
+2. 对 `GetPlayerValues` 分三组重测：negative hit、empty miss、positive miss；每组至少 10 次，记录数据库 query 次数和 enrichment 次数。若 hit 仍约 0.5s，优先排查公共 admission/proxy；若只有 miss 超时，再看 `databaseChanges`。
+3. 对 `MiniHomeSupplement` 拆 root-field span，不拆成额外客户端请求；先判断是否存在 resolver 串行、重复 publication/core snapshot 或单个慢字段，再决定是否需要 GraphQL 内部优化。
+4. 对 Home/Price refresh 重新做单页面串行采样，保留 navigation、operationName、requestId 和 viewport visible；并行操控 DevTools 的样本一律作废。
+5. 有真实测试账号后再验收 Live READY、My FPL Team、Entry/League/Tournament 路径；在此之前不把 no-entry 的快速失败写成全页面通过。
+
+### 结论
+
+代码和 review 流程没有被当前性能问题阻塞；真正未完成的是性能门槛。当前应继续深挖请求阶段，不应通过延长 TTL、隐藏 secondary、提前关闭 loading 或删除失败样本来“通过”。
+
+## 2026-08-14 最新 origin/main 复核结果
+
+### 后端基线纠正
+
+此前本报告引用的 `66f4948` GraphQL 临时进程不是当前 GraphQL `origin/main`，导致 `GetPlayerValues` 和首页辅助请求的耗时被高估。当前重测使用：
+
+| 组件 | 当前验收基线 |
+|---|---|
+| 小程序 | `main=92da7e4b6dfb18c9e2b87273ae1cd1833d11764f` |
+| GraphQL | `origin/main=df38f89f6a55e5dc5ee72af108cee940154610c`，本地 `4000`，health `200` |
+| Web | `origin/main=a2be1096f7e465c03ff0c58202e15e1c469cb645`，本地 `3001` |
+| DevTools | Stable `2.01.2510290`，基础库 `3.15.2`，iPhone 12/13 Pro，390×753 CSS px |
+| 链路 | `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql` |
+
+旧 GraphQL 运行时的性能结果只保留为历史诊断，不再作为当前失败依据。
+
+### 当前有效性能证据
+
+| 页面/场景 | n | p50 | p95 | max | 网络预算 | 结果 |
+|---|---:|---:|---:|---:|---:|---|
+| Home refresh primary visible | 20 | 326ms | 389ms | 414ms | 2（Fixture + Supplement） | 通过 |
+| Home refresh response→setData | 20 | 20ms | 28ms | 50ms | - | 通过 |
+| Price refresh primary visible | 20 | 320ms | 343ms | 366ms | 1（GetPlayerValues） | 通过 |
+| Price refresh response→setData | 20 | 19ms | 25ms | 26ms | - | 通过 |
+| `CoreEventFixtureSchedule` latest backend direct via 3001 | 10 | 182ms | 578ms | 578ms | 1 | 10/10 HTTP 200 |
+| `MiniHomeSupplement` latest backend direct via 3001 | 10 | 229ms | 748ms | 748ms | 1 | 10/10 HTTP 200 |
+| `GetPlayerValues` latest backend direct via 3001 | 10 | 231ms | 305ms | 305ms | 1 | 10/10 HTTP 200 |
+
+Home/Price 20 次样本均显示正确数据，失败数为 0；Home 每次有且仅有一次 `CoreEventFixtureSchedule` 网络请求，Price 每次有且仅有一次 `GetPlayerValues` 网络请求。`response -> setData` 均在门槛内，说明渲染不是旧的 600ms/900ms 长尾来源。
+
+### 当前页面语义验收
+
+- 注册页面 `25/25` 完成串行 `reLaunch`。
+- `primaryFound=25/25`，loading/refreshing/pending 状态全部结束。
+- console exception `0`，automation exception `0`。
+- `pages/data/index/index -> pages/explore/index/index` 和 `pages/summary/entry/entry -> pages/my-fpl/team/team` 是预期兼容重定向。
+- 非法 Entry 参数显示内联错误，不产生无限 loading。
+
+### 冷启动证据状态
+
+手动重启已取得 2 个当前 main 冷启动记录：Fixture 10 条正常显示，primary visible 约 `161–190ms`，走已有 storage cache；批量 `restartMiniProgram` runner 在 DevTools automation 层卡死，未产出完整 5 个可关联样本，已停止且不计入样本。因此冷启动门槛仍标记为 **样本不足**，不能用旧报告的冷启动数据替代。
+
+### GraphQL admission review 结论
+
+为验证“每 operation 一次 Redis EVAL”创建的 GraphQL PR #53 已经过约 20 分钟 Codex Review，返回 1 个 P1、2 个 P2，均有效，已关闭且未合并：
+
+- fixed trusted-ingress admission 必须在 body/GraphQL validation 前保护 malformed/complexity 请求。
+- global/ingress bucket 被拒时不能同时扣 weighted principal quota。
+- weighted bucket 拒绝时仍要保留 preceding bucket 的 allowed metrics。
+
+结论是“一次 EVAL 覆盖 fixed admission 与解析后 weighted admission”与现有安全顺序不兼容；当前 GraphQL main 保留两阶段 admission，不为追求单次 EVAL 改变限流安全语义。PR #53 的 CI 为 `401 pass / 5 skip`，但 review 不 clean，故未合并。
+
+### 当前最终状态
+
+最新后端主线下，旧的 Home/Price 性能失败已不再复现，当前小程序页面代码无需为过时后端成本增加改动。剩余未闭环项只有冷启动完整 5 次样本，以及真实登录 Entry/READY 状态页面的 rich-state 性能样本；在这两项补齐前，报告状态继续保持 **代码已实施，尚未验收**，不上传微信开发版，不声明完整线上发布通过。
