@@ -14,8 +14,14 @@ PerformancePage({
     player: undefined as PlayerDetail | undefined
   },
 
+  routeSeason: "",
+
   onLoad(options: Record<string, string | undefined>) {
-    this.setData({ code: options.code || "", season: options.season || getApp<IAppOption>().globalData.season });
+    this.routeSeason = options.season || "";
+    this.setData({
+      code: options.code || "",
+      season: this.routeSeason || getApp<IAppOption>().globalData.season
+    });
     return this.loadData();
   },
 
@@ -27,10 +33,10 @@ PerformancePage({
 
     this.setData({ loading: true, error: "", emptyState: false });
     try {
-      let season = this.data.season;
+      let season = this.routeSeason;
       try {
         const context = await ensureAppContext({ reason: "page-load" });
-        season = season || context.season;
+        season = this.routeSeason || context.season;
       } catch (error) {
         if (!season) throw error;
       }

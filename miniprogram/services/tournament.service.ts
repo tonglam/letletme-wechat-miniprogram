@@ -170,7 +170,8 @@ async function readDirectory(
       // A missing season means the shared launch read failed. A direct page
       // retry must bypass unresolved-context backoff so connectivity can
       // recover without requiring an app hide/show cycle.
-      forceRefresh: true
+      forceRefresh: true,
+      trace
     });
     season = context.season;
   }
