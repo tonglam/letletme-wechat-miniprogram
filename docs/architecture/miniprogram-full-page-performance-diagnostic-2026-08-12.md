@@ -69,11 +69,11 @@ Endpoint override 为空；没有临时 proxy、service secret 或未合并后�
 
 | 页面 | 暖 p50/p95/max | 刷新 p50/p95/max | response→setData p95 | 刷新网络/次 | 结果 |
 |---|---|---|---|---|---|
-| 首页 | 32/40/43ms | 186/193/194ms | 8ms | 2 | 通过 |
-| 价格 | 28/34/37ms | 219/230/669ms | 6ms | 1 | 通过 |
-| Live 阵容 | 28/33/36ms | 29/46/46ms | --ms | 0 | 通过 |
-| My FPL 阵容 | 28/34/35ms | 34/44/51ms | --ms | 0 | 通过 |
-| Live 比赛 | 28/30/32ms | 178/186/201ms | 13ms | 1 | 通过 |
+| 首页 | 59/84/87ms | 398/442/682ms | 20ms | 3 | 通过 |
+| 价格 | 60/74/81ms | 267/294/319ms | 29ms | 1 | 通过 |
+| Live 阵容 | 61/72/77ms | 208/368/662ms | --ms | 1 | 通过 |
+| My FPL 阵容 | 62/69/72ms | 196/209/209ms | --ms | 1 | 通过 |
+| Live 比赛 | 61/69/69ms | 368/487/588ms | 34ms | 2 | 通过 |
 
 首页 refresh 每次恰好 `CoreEventFixtureSchedule=1` 和 `MiniHomeSupplement=1`；价格页每次恰好 `GetPlayerValues=1`；Live Matches preseason 每次只请求 Core Fixture；无 entry 的 Live Entry 与 My FPL Team 不发网。
 
