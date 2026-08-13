@@ -34,3 +34,16 @@ test("home secondary completion stays on the navigation tracker that started it"
   assert.match(page, /loadSecondaryData\([\s\S]*tracker: PagePerformanceTracker \| null[\s\S]*tracker\?\.mark\("secondaryCompleteAt"\)/);
   assert.doesNotMatch(page, /this\._perfTracker\?\.mark\("secondaryCompleteAt"\)/);
 });
+
+test("home pull refresh does not force CurrentEventInfo while context is fresh", () => {
+  const page = source("miniprogram/pages/home/index/index.ts");
+  assert.match(
+    page,
+    /const refreshContext = contextMissing \|\| deadlineExpired;[\s\S]*if \(refreshContext\)[\s\S]*forceRefresh: true/
+  );
+  assert.match(
+    page,
+    /else \{[\s\S]*ensureAppContext\(\{[\s\S]*reason: "pull-refresh"[\s\S]*\}\);[\s\S]*loadPage\(true, tracker\)/
+  );
+  assert.doesNotMatch(page, /const forceContextForUserRefresh = !deadlineTriggered/);
+});

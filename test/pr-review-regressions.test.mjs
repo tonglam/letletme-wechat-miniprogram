@@ -100,8 +100,9 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
-    /const forceContextForUserRefresh = !deadlineTriggered[\s\S]*if \(forceContextForUserRefresh \|\| contextMissing \|\| deadlineExpired\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
+    /const refreshContext = contextMissing \|\| deadlineExpired[\s\S]*if \(refreshContext\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
   );
+  assert.doesNotMatch(home, /const forceContextForUserRefresh = !deadlineTriggered/);
 });
 
 test("empty fixture directories clear previously composed cards", () => {
