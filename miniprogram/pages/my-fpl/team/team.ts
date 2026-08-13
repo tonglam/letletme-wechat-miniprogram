@@ -849,11 +849,21 @@ Page({
       return;
     }
     if (this.data.error) {
-      void this.loadData(true);
+      if (this.perfTracker) {
+        void this.runForcedRefresh(
+          this.perfTracker,
+          capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh", forceReason: "user-refresh" })
+        );
+      }
       return;
     }
     if (this.data.activeTab === "squad") {
-      void this.loadData(true);
+      if (this.perfTracker) {
+        void this.runForcedRefresh(
+          this.perfTracker,
+          capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh", forceReason: "user-refresh" })
+        );
+      }
       return;
     }
     void this.loadTab(this.data.activeTab, true);

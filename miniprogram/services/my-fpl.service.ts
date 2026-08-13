@@ -85,7 +85,9 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
       reason: "page-load",
       forceRefresh
     });
-    eventContextAvailable = true;
+    eventContextAvailable =
+      appContext.phase !== "unresolved" &&
+      (appContext.displayEvent !== null || appContext.phase === "settled");
     season = appContext.season || undefined;
     currentEvent = appContext.currentEvent ?? undefined;
     nextEvent = appContext.nextEvent ?? undefined;

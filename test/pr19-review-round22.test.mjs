@@ -15,7 +15,7 @@ test("Teams owns context and directory continuations for the active lifecycle", 
   assert.match(teams, /const trace = originatingTrace \|\| capturePageRequestTrace\([\s\S]*callerSurface: "data-teams"/);
   assert.match(teams, /await ensureAppContext\([\s\S]*if \(!isActiveLifecycle\(\)\) return;[\s\S]*getTeamList\(context\.season, forceRefresh, trace\)[\s\S]*if \(!isActiveLifecycle\(\)\) return/);
   assert.match(teams, /onHide\(\)[\s\S]*resumeOnShow = this\.data\.loading[\s\S]*lifecycleRevision \+= 1/);
-  assert.match(teams, /onShow\(\)[\s\S]*resumeOnShow[\s\S]*loadData\(false, trace\)/);
+  assert.match(teams, /onShow\(\)[\s\S]*resumeForceRefresh[\s\S]*loadData\(resumeForceRefresh, trace\)/);
 });
 
 test("Selections resumes interrupted stats without resetting picker context", () => {

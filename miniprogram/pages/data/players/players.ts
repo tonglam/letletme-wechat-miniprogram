@@ -59,6 +59,10 @@ PerformancePage({
   paginationCursor: null as number | null,
   resumePaginationAfterShow: false,
   resumePaginationCursor: null as number | null,
+  searchPending: false,
+  searchPendingForceRefresh: false,
+  resumeSearchAfterShow: false,
+  resumeSearchForceRefresh: false,
 
   async onLoad(options: Record<string, string | undefined>) {
     this.pageVisible = true;
@@ -73,13 +77,20 @@ PerformancePage({
     this.hasShown = true;
     const resumePagination = resumed && this.resumePaginationAfterShow;
     const resumeCursor = this.resumePaginationCursor;
+    const resumeSearch = resumed && this.resumeSearchAfterShow;
+    const resumeSearchForceRefresh = this.resumeSearchForceRefresh;
     this.resumePaginationAfterShow = false;
     this.resumePaginationCursor = null;
+    this.resumeSearchAfterShow = false;
+    this.resumeSearchForceRefresh = false;
     if (this.data.loadingMore) {
       this.setData({ loadingMore: false });
     }
     if (resumePagination && resumeCursor !== null) {
       return this.loadMoreFromCursor(resumeCursor);
+    }
+    if (resumeSearch) {
+      return this.startSearch(this.data.keyword, resumeSearchForceRefresh);
     }
     if (resumed && this.data.loading) {
       return this.startSearch(this.data.keyword);
@@ -88,6 +99,8 @@ PerformancePage({
   },
 
   onHide() {
+    this.resumeSearchAfterShow = this.searchPending;
+    this.resumeSearchForceRefresh = this.searchPendingForceRefresh;
     this.resumePaginationAfterShow = this.paginationPending;
     this.resumePaginationCursor = this.paginationCursor;
     this.paginationPending = false;
@@ -102,6 +115,10 @@ PerformancePage({
     this.paginationCursor = null;
     this.resumePaginationAfterShow = false;
     this.resumePaginationCursor = null;
+    this.searchPending = false;
+    this.searchPendingForceRefresh = false;
+    this.resumeSearchAfterShow = false;
+    this.resumeSearchForceRefresh = false;
     this.requestRevision += 1;
   },
 
@@ -115,6 +132,8 @@ PerformancePage({
   },
 
   async startSearch(keyword: string, forceRefresh = false): Promise<void> {
+    this.searchPending = true;
+    this.searchPendingForceRefresh = forceRefresh;
     this.paginationPending = false;
     this.paginationCursor = null;
     this.resumePaginationAfterShow = false;
@@ -145,8 +164,14 @@ PerformancePage({
       });
       if (!this.pageVisible || !shouldApplyPlayerResponse(revision, this.requestRevision)) return;
       await this.fetchPage(revision, null, false, forceRefresh, trace);
+      if (this.pageVisible && shouldApplyPlayerResponse(revision, this.requestRevision)) {
+        this.searchPending = false;
+        this.searchPendingForceRefresh = false;
+      }
     } catch (error) {
       if (!this.pageVisible || !shouldApplyPlayerResponse(revision, this.requestRevision)) return;
+      this.searchPending = false;
+      this.searchPendingForceRefresh = false;
       this.setData({
         loading: false,
         loadingMore: false,

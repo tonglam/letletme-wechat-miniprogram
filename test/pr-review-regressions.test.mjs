@@ -59,7 +59,7 @@ test("failed event metadata is represented as unavailable, not offseason", () =>
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const template = source("miniprogram/pages/my-fpl/index/index.wxml");
   assert.match(service, /eventContextAvailable = false/);
-  assert.match(service, /eventContextAvailable = true/);
+  assert.match(service, /eventContextAvailable =\s*appContext\.phase !== "unresolved"/);
   assert.match(overview, /if \(!context\.eventContextAvailable\)/);
   assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
 });
@@ -434,7 +434,7 @@ test("Match and Team retries bypass repeating-season caches", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
-  assert.match(team, /onRetry\(\)[\s\S]*activeTab === "squad"[\s\S]*this\.loadData\(true\)[\s\S]*this\.loadTab/);
+  assert.match(team, /onRetry\(\)[\s\S]*data\.error[\s\S]*runForcedRefresh\([\s\S]*activeTab === "squad"[\s\S]*runForcedRefresh\(/);
   assert.match(team, /onEmptyAction\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(team, /const contextChanged = seasonChanged \|\| \(eventChanged && wasCurrentEvent\)/);
   assert.match(team, /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/);

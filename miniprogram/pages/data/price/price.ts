@@ -626,11 +626,7 @@ Page({
   },
 
   onRetryPlayers() {
-    if (this.data.teamOptions.length === 1) {
-      this.loadTeamOptions(true).then(() => this.startPlayerSearch(true));
-      return;
-    }
-    this.startPlayerSearch(true);
+    void this.runPlayerRefresh(this.perfTracker);
   },
 
   onClearPlayerFilters() {
