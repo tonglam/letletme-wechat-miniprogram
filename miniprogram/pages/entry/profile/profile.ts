@@ -30,6 +30,9 @@ PerformancePage({
   lifecycleRevision: 0,
   requestId: 0,
   resumeOnShow: false,
+  authorityPending: false,
+  authorityForceRefresh: false,
+  resumeForceRefresh: false,
   routeEntry: undefined as string | undefined,
 
   async onLoad(options: Record<string, string | undefined>) {
@@ -40,10 +43,13 @@ PerformancePage({
   },
 
   async loadAuthoritativeEntry(
-    trigger: "load" | "show",
-    lifecycleRevision?: number
+    trigger: "load" | "show" | "refresh",
+    lifecycleRevision?: number,
+    forceRefresh = false
   ) {
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    this.authorityPending = true;
+    this.authorityForceRefresh = forceRefresh;
     const trace = capturePageRequestTrace({ callerSurface: "entry-profile", trigger });
     const app = getApp<IAppOption>();
     if (!this.routeEntry && !getApiSessionToken()) {
@@ -57,7 +63,11 @@ PerformancePage({
     if (!this.pageVisible || ownerRevision !== this.lifecycleRevision) return;
     const entryId = Number(this.routeEntry || app.globalData.entryId);
     this.setData({ entryId: Number.isFinite(entryId) ? entryId : 0 });
-    await this.loadEntry(entryId, false, trace, ownerRevision);
+    await this.loadEntry(entryId, forceRefresh, trace, ownerRevision);
+    if (this.pageVisible && ownerRevision === this.lifecycleRevision) {
+      this.authorityPending = false;
+      this.authorityForceRefresh = false;
+    }
   },
 
   onShow() {
@@ -65,13 +75,20 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return undefined;
+    const forceRefresh = this.resumeForceRefresh;
     this.resumeOnShow = false;
-    return this.loadAuthoritativeEntry("show", this.lifecycleRevision);
+    this.resumeForceRefresh = false;
+    return this.loadAuthoritativeEntry("show", this.lifecycleRevision, forceRefresh);
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.data.loading;
+    this.resumeOnShow = this.resumeOnShow || this.data.loading || this.authorityPending;
+    if (this.authorityPending) {
+      this.resumeForceRefresh = this.resumeForceRefresh || this.authorityForceRefresh;
+    }
+    this.authorityPending = false;
+    this.authorityForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
@@ -79,12 +96,16 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeOnShow = false;
+    this.resumeForceRefresh = false;
+    this.authorityPending = false;
+    this.authorityForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   onPullDownRefresh() {
-    return this.loadEntry(Number(this.data.entryId), true).finally(() => wx.stopPullDownRefresh());
+    return this.loadAuthoritativeEntry("refresh", this.lifecycleRevision, true)
+      .finally(() => wx.stopPullDownRefresh());
   },
 
   async loadEntry(
@@ -117,7 +138,7 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadEntry(Number(this.data.entryId));
+    void this.loadAuthoritativeEntry("refresh", this.lifecycleRevision, true);
   },
 
   onLinkAccount() {

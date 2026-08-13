@@ -643,9 +643,10 @@ Page({
     this.pageVisible = false;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
     this.resumeForcedRefreshBackground = this.forcedRefreshBackground;
-    this.resumeLoadAfterShow = !this.resumeForcedRefreshAfterShow && (this.startupPending
-      || this.refreshContextPending
-      || Boolean(this.liveRequest && !this.data.hasData));
+    this.resumeLoadAfterShow = this.resumeLoadAfterShow
+      || (!this.resumeForcedRefreshAfterShow && (this.startupPending
+        || this.refreshContextPending
+        || Boolean(this.liveRequest && !this.data.hasData)));
     if (this.liveRequest) {
       this.liveRequestId += 1;
       this.liveRequest = null;

@@ -592,14 +592,15 @@ PerformancePage({
 
   onHide() {
     this.pageVisible = false;
-    this.resumeDirectoryAfterShow = this.directoryRequestPending;
-    this.resumeDirectoryForceRefresh = this.directoryRequestPending
-      && this.directoryRequestForceRefresh;
-    this.resumeRowsAfterShow = !this.resumeDirectoryAfterShow
-      && Boolean(this.rowsRequest && this.data.selectedTournament);
+    if (this.directoryRequestPending) {
+      this.resumeDirectoryAfterShow = true;
+      this.resumeDirectoryForceRefresh = this.directoryRequestForceRefresh;
+    }
+    this.resumeRowsAfterShow = this.resumeRowsAfterShow
+      || (!this.resumeDirectoryAfterShow
+        && Boolean(this.rowsRequest && this.data.selectedTournament));
     if (this.startupPending) {
       this.resumeStartupAfterShow = true;
-      this.resumeDirectoryAfterShow = false;
     }
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;

@@ -116,6 +116,9 @@ PerformancePage({
   pageVisible: false,
   lifecycleRevision: 0,
   unsubscribeNetwork: undefined as (() => void) | undefined,
+  overviewRequestPending: false,
+  overviewRequestForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -143,19 +146,29 @@ PerformancePage({
 
   async resumeOverview() {
     const lifecycleRevision = this.lifecycleRevision;
+    const forceRefresh = this.resumeForceRefresh;
     await waitForAuthoritativeFollow();
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-    await this.loadOverview(false, lifecycleRevision);
+    this.resumeForceRefresh = false;
+    await this.loadOverview(forceRefresh, lifecycleRevision);
   },
 
   onHide() {
     this.pageVisible = false;
+    if (this.overviewRequestPending && this.overviewRequestForceRefresh) {
+      this.resumeForceRefresh = true;
+    }
+    this.overviewRequestPending = false;
+    this.overviewRequestForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeForceRefresh = false;
+    this.overviewRequestPending = false;
+    this.overviewRequestForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
     this.unsubscribeNetwork?.();
@@ -173,6 +186,19 @@ PerformancePage({
 
   async loadOverview(forceRefresh = false, lifecycleRevision?: number) {
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    this.overviewRequestPending = true;
+    this.overviewRequestForceRefresh = forceRefresh;
+    try {
+      await this.performLoadOverview(forceRefresh, ownerRevision);
+    } finally {
+      if (this.pageVisible && ownerRevision === this.lifecycleRevision) {
+        this.overviewRequestPending = false;
+        this.overviewRequestForceRefresh = false;
+      }
+    }
+  },
+
+  async performLoadOverview(forceRefresh: boolean, ownerRevision: number) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
     this.setData({ loading: true, error: "", leaguesUnavailable: false });
@@ -271,7 +297,7 @@ PerformancePage({
       return;
     }
 
-    void this.loadOverviewSecondary(
+    const secondaryTask = this.loadOverviewSecondary(
       requestId,
       ownerRevision,
       context,
@@ -281,6 +307,8 @@ PerformancePage({
       cached,
       forceRefresh
     );
+    if (forceRefresh) await secondaryTask;
+    else void secondaryTask;
   },
 
   async loadOverviewSecondary(

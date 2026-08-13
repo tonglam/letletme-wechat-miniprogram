@@ -7,7 +7,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 test("Live Tournament resumes an interrupted directory refresh with its force bit", () => {
   const page = read("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(page, /directoryRequestPending = true[\s\S]*directoryRequestForceRefresh = forceRefresh/);
-  assert.match(page, /onHide\(\)[\s\S]*resumeDirectoryAfterShow = this\.directoryRequestPending[\s\S]*resumeDirectoryForceRefresh/);
+  assert.match(page, /onHide\(\)[\s\S]*if \(this\.directoryRequestPending\)[\s\S]*resumeDirectoryAfterShow = true[\s\S]*resumeDirectoryForceRefresh/);
   assert.match(page, /onShow\(\)[\s\S]*resumeDirectoryAfterShow[\s\S]*loadTournaments\(forceRefresh\)/);
 });
 

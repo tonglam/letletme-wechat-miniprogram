@@ -34,6 +34,8 @@ PerformancePage({
   hasShown: false,
   pageVisible: false,
   lifecycleRevision: 0,
+  refreshPending: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -51,6 +53,11 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
+    if (this.resumeForceRefresh) {
+      this.resumeForceRefresh = false;
+      await this.runForcedRefresh();
+      return;
+    }
     const lifecycleRevision = this.lifecycleRevision;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "show" });
     const seasonChanged = await this.syncEventContext(false, lifecycleRevision);
@@ -62,23 +69,22 @@ PerformancePage({
 
   onHide() {
     this.pageVisible = false;
+    this.resumeForceRefresh = this.resumeForceRefresh || this.refreshPending;
+    this.refreshPending = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.refreshPending = false;
+    this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   onPullDownRefresh() {
-    const lifecycleRevision = this.lifecycleRevision;
-    const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
-    return this.syncEventContext(true, lifecycleRevision)
-      .then((seasonChanged: boolean | null) => seasonChanged === null
-        ? undefined
-        : this.load(true, trace, lifecycleRevision))
+    return this.runForcedRefresh()
       .finally(() => wx.stopPullDownRefresh());
   },
 
@@ -206,11 +212,12 @@ PerformancePage({
   },
 
   onRetry() {
-    void this.retryWithContext();
+    void this.runForcedRefresh();
   },
 
-  async retryWithContext() {
+  async runForcedRefresh() {
     const lifecycleRevision = this.lifecycleRevision;
+    this.refreshPending = true;
     const trace = capturePageRequestTrace({ callerSurface: "explore-fixtures", trigger: "refresh" });
     try {
       const seasonChanged = await this.syncEventContext(true, lifecycleRevision);
@@ -222,6 +229,10 @@ PerformancePage({
         loading: false,
         error: error instanceof Error ? error.message : "赛季和比赛轮信息加载失败"
       });
+    } finally {
+      if (this.pageVisible && lifecycleRevision === this.lifecycleRevision) {
+        this.refreshPending = false;
+      }
     }
   }
 });

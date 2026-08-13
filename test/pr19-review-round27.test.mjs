@@ -25,9 +25,9 @@ test("My FPL exposes its primary selector only after authoritative principal res
   const template = source("miniprogram/pages/my-fpl/index/index.wxml");
   assert.match(page, /principalResolved: false/);
   assert.match(page, /syncPrincipalState\(principalResolved = false\)[\s\S]*principalResolved \? \{ principalResolved: true \}/);
-  assert.match(page, /if \(!this\.pageVisible \|\| lifecycleRevision !== this\.lifecycleRevision\) return[\s\S]*await this\.loadOverview\(false, lifecycleRevision\)/);
+  assert.match(page, /if \(!this\.pageVisible \|\| lifecycleRevision !== this\.lifecycleRevision\) return[\s\S]*await this\.loadOverview\(forceRefresh, lifecycleRevision\)/);
   assert.match(page, /isStale\(requestId: number, lifecycleRevision: number\)[\s\S]*!this\.pageVisible[\s\S]*lifecycleRevision !== this\.lifecycleRevision/);
-  assert.match(page, /syncPrincipalState\(true\)[\s\S]*void this\.loadOverviewSecondary\(/);
+  assert.match(page, /syncPrincipalState\(true\)[\s\S]*const secondaryTask = this\.loadOverviewSecondary\(/);
   assert.match(page, /async loadOverviewSecondary\([\s\S]*Promise\.all\(/);
   assert.match(template, /principalResolved && \(eventContextAvailable \|\| principalState === 'NO_FOLLOW'\)/);
 });

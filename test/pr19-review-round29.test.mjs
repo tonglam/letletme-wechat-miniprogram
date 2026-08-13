@@ -14,7 +14,7 @@ test("Live landing resumes an unresolved context after hide/show", () => {
 test("Entry Profile repeats authority resolution before a resumed read", () => {
   const page = source("miniprogram/pages/entry/profile/profile.ts");
   assert.match(page, /async loadAuthoritativeEntry\([\s\S]*await app\.authReady[\s\S]*this\.routeEntry \|\| app\.globalData\.entryId/);
-  assert.match(page, /onShow\(\)[\s\S]*loadAuthoritativeEntry\("show", this\.lifecycleRevision\)/);
+  assert.match(page, /onShow\(\)[\s\S]*loadAuthoritativeEntry\("show", this\.lifecycleRevision, forceRefresh\)/);
 });
 
 test("Gameweek Summary binds cold startup and GraphQL attribution to page ownership", () => {
