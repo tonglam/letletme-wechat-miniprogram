@@ -80,7 +80,7 @@ export async function getMiniHomeSupplement(
   eventId: number,
   changeDate: string,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace | null
 ): Promise<MiniHomeSupplementResult> {
   const result = await graphqlRead<MiniHomeSupplementResponse>(
     MINI_HOME_SUPPLEMENT_QUERY,

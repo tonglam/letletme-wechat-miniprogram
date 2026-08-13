@@ -1,4 +1,5 @@
 import { readCurrentEventAndDeadline } from "./common.service";
+import type { PageRequestTrace } from "./graphql.service";
 import { formatDeadline } from "../utils/date";
 import {
   commitEntryBindingState,
@@ -13,6 +14,7 @@ export type { AppContextSnapshot, AppEventPhase } from "./app-context-state";
 
 export interface EnsureAppContextOptions {
   forceRefresh?: boolean;
+  trace?: PageRequestTrace | null;
   reason: "app-launch" | "app-show" | "page-load" | "page-show" | "pull-refresh" | "auth-change";
 }
 
@@ -51,8 +53,11 @@ function syncGlobalData(snapshot: AppContextSnapshot): void {
   app.globalData.contextRevision = snapshot.contextRevision;
 }
 
-async function loadContext(forceRefresh: boolean): Promise<AppContextSnapshot> {
-  const read = await readCurrentEventAndDeadline({ forceRefresh });
+async function loadContext(
+  forceRefresh: boolean,
+  trace?: PageRequestTrace | null
+): Promise<AppContextSnapshot> {
+  const read = await readCurrentEventAndDeadline({ forceRefresh, trace });
   const currentEvent = read.data.currentEvent || null;
   const nextEvent = read.data.nextEvent || null;
   const deadlineTime = read.data.utcDeadline ? new Date(read.data.utcDeadline).getTime() : NaN;
@@ -103,7 +108,7 @@ export async function ensureAppContext(
     return ensureAppContext(options);
   }
   pendingForced = Boolean(options.forceRefresh);
-  const task = loadContext(Boolean(options.forceRefresh));
+  const task = loadContext(Boolean(options.forceRefresh), options.trace);
   pending = task;
   try {
     return await task;

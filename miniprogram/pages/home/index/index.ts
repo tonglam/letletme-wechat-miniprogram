@@ -207,7 +207,13 @@ Page({
     return this.refreshHome().finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadPage(forceRefresh = false) {
+  async loadPage(
+    forceRefresh = false,
+    originatingTracker?: PagePerformanceTracker | null
+  ) {
+    const tracker = originatingTracker === undefined
+      ? this._perfTracker ?? null
+      : originatingTracker;
     const requestId = ++this._loadRequestId;
     const app = getApp<IAppOption>();
     if (!app.globalData.gw) {
@@ -235,16 +241,16 @@ Page({
 
       let fixtureError = "";
       const snapshot = getAppContextSnapshot();
-      const trace: PageRequestTrace | undefined = this._perfTracker && snapshot
+      const trace: PageRequestTrace | null = tracker && snapshot
         ? {
-            navigationId: this._perfTracker.navigationId,
+            navigationId: tracker.navigationId,
             callerSurface: "home-fixtures",
             trigger: forceRefresh ? "refresh" : "load",
             forceReason: forceRefresh ? "user-refresh" : undefined,
             contextRevision: snapshot.contextRevision
           }
-        : undefined;
-      this._perfTracker?.mark("primaryRequestStartAt");
+        : null;
+      tracker?.mark("primaryRequestStartAt");
       const fixtureTask = readCoreEventFixtureSchedule(
         fixtureGw,
         String(app.globalData.season || ""),
@@ -265,7 +271,7 @@ Page({
       });
       observeSoftTimeout(fixtureTask, 3000, () => {
         if (requestId !== this._loadRequestId) return;
-        this._perfTracker?.mark("softFailureAt");
+        tracker?.mark("softFailureAt");
         this.setData({
           loading: false,
           fixtureLoading: false,
@@ -275,7 +281,7 @@ Page({
       });
       const fixtureResult = await fixtureTask;
       const fixtureResponseAt = Date.now();
-      this._perfTracker?.mark("primaryResponseAt");
+      tracker?.mark("primaryResponseAt");
       if (requestId !== this._loadRequestId) return;
       if (fixtureResult.failed && hadFixtureRows) {
         fixtureError = "";
@@ -301,8 +307,8 @@ Page({
           fixtureLoading: false,
           loading: false
         }, () => {
-          this._perfTracker?.mark("primarySetDataAt");
-          wx.nextTick(() => this._perfTracker?.observePrimary("#perf-primary-fixtures"));
+          tracker?.mark("primarySetDataAt");
+          wx.nextTick(() => tracker?.observePrimary("#perf-primary-fixtures"));
           const fixtureSetDataCallbackAt = Date.now();
           recordRenderCommit({
             surface: "home-fixtures",
@@ -324,8 +330,7 @@ Page({
       if (requestId !== this._loadRequestId) return;
 
       this._lastLoadAt = Date.now();
-      const secondaryTracker = this._perfTracker;
-      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, secondaryTracker);
+      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);
     } catch (error) {
       if (requestId === this._loadRequestId) {
         this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
@@ -338,6 +343,7 @@ Page({
   },
 
   async refreshHome(deadlineTriggered = false) {
+    const tracker = deadlineTriggered ? null : this._perfTracker ?? null;
     this.setData({ error: "" });
     try {
       const app = getApp<IAppOption>();
@@ -345,18 +351,30 @@ Page({
       const deadlineExpired = Boolean(app.globalData.utcDeadline)
         && getDeadlineDiffMs(app.globalData.utcDeadline) <= 0;
       if (contextMissing || deadlineExpired) {
-        const context = await ensureAppContext({ forceRefresh: true, reason: "pull-refresh" });
+        const context = await ensureAppContext({
+          forceRefresh: true,
+          reason: "pull-refresh",
+          trace: deadlineTriggered ? null : undefined
+        });
         this._loadedContextRevision = context.contextRevision;
-        this._perfTracker?.mark("contextReadyAt");
-        this.syncAppState();
+        tracker?.mark("contextReadyAt");
+        await this.syncAppState();
       } else {
-        this._perfTracker?.mark("contextReadyAt");
+        tracker?.mark("contextReadyAt");
       }
-      await this.loadPage(true);
-      this.startCountdown();
-      wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
+      await this.loadPage(true, tracker);
+      const refreshedDeadlineExpired = Boolean(this.data.utcDeadline)
+        && getDeadlineDiffMs(this.data.utcDeadline) <= 0;
+      if (deadlineTriggered && refreshedDeadlineExpired) {
+        this.scheduleDeadlineRetry();
+      } else {
+        this.startCountdown();
+      }
+      if (!deadlineTriggered) {
+        wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
+      }
     } catch (error) {
-      this.showContextError(error);
+      this.showContextError(error, tracker);
       if (deadlineTriggered) {
         this.scheduleDeadlineRetry();
       }
@@ -365,7 +383,13 @@ Page({
     }
   },
 
-  showContextError(error: unknown) {
+  showContextError(
+    error: unknown,
+    originatingTracker?: PagePerformanceTracker | null
+  ) {
+    const tracker = originatingTracker === undefined
+      ? this._perfTracker ?? null
+      : originatingTracker;
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
     const hasFixtureRows = this.data.fixtureRows.length > 0;
     const primarySelector = hasFixtureRows
@@ -380,8 +404,8 @@ Page({
         ? `${message}，当前继续显示上次成功赛程`
         : ""
     }, () => {
-      this._perfTracker?.mark("primarySetDataAt");
-      wx.nextTick(() => this._perfTracker?.observePrimary(primarySelector));
+      tracker?.mark("primarySetDataAt");
+      wx.nextTick(() => tracker?.observePrimary(primarySelector));
     });
   },
 
@@ -389,8 +413,8 @@ Page({
     requestId: number,
     currentGw: number,
     forceRefresh: boolean,
-    primaryTrace?: PageRequestTrace,
-    tracker?: PagePerformanceTracker
+    primaryTrace: PageRequestTrace | null,
+    tracker: PagePerformanceTracker | null
   ) {
     const app = getApp<IAppOption>();
     this.setData({
@@ -406,9 +430,9 @@ Page({
       const entryId = app.globalData.entryId;
       if (!entryId) return;
       try {
-        const entryTrace = primaryTrace
+        const entryTrace: PageRequestTrace | null = primaryTrace
           ? { ...primaryTrace, callerSurface: "home-entry" }
-          : undefined;
+          : null;
         const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
         if (requestId === this._loadRequestId) this.setData({ entry, entryError: "" });
       } catch (error) {
@@ -417,9 +441,9 @@ Page({
         }
       }
     })();
-    const supplementTrace = primaryTrace
+    const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
-      : undefined;
+      : null;
     const supplementTask = getMiniHomeSupplement(
       currentGw,
       formatDateKey(),
@@ -474,7 +498,7 @@ Page({
   startCountdown() {
     this.stopCountdown();
     if (!this._pageVisible) return;
-    this.updateCountdown();
+    if (this.updateCountdown()) return;
     this.countdownTimer = setInterval(() => this.updateCountdown(), 1000) as unknown as number;
   },
 
@@ -494,13 +518,15 @@ Page({
     }, HOME_DEADLINE_RETRY_MS) as unknown as number;
   },
 
-  updateCountdown() {
+  updateCountdown(): boolean {
     const ms = getDeadlineDiffMs(this.data.utcDeadline);
     this.setData({ countdown: formatCountdown(ms) });
     if (this.data.utcDeadline && ms <= 0) {
       this.stopCountdown();
       void this.refreshHome(true);
+      return true;
     }
+    return false;
   },
 
   async onRetry() {

@@ -138,7 +138,7 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
 export async function getEntryInfo(
   entry: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace | null
 ): Promise<EntryInfo> {
   const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
     cachePolicy: "reporting",

@@ -203,14 +203,16 @@ Page({
   } as EntrySummaryData,
 
   async onLoad() {
+    this.pageVisible = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "cold-launch");
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "load" });
     try {
       await this.ensureContext("page-load");
     } catch (error) {
-      this.showContextError(error);
+      if (this.pageVisible) this.showContextError(error);
       return;
     }
+    if (!this.pageVisible) return;
     this.perfTracker.mark("contextReadyAt");
     await this.initializeFromContext(false, trace);
   },
@@ -225,6 +227,7 @@ Page({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible) return;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
     this.setData({
@@ -261,15 +264,17 @@ Page({
     this.setData({ loading: true, error: "" });
     try {
       await this.ensureContext(reason, true);
+      if (!this.pageVisible) return;
       this.contextUnavailable = false;
       this.perfTracker?.mark("contextReadyAt");
       await this.initializeFromContext(true, trace);
     } catch (error) {
-      this.showContextError(error);
+      if (this.pageVisible) this.showContextError(error);
     }
   },
 
   async onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
@@ -284,10 +289,12 @@ Page({
     }
     try {
       await this.ensureContext("page-show");
+      if (!this.pageVisible) return;
       this.perfTracker.mark("contextReadyAt");
     } catch {
       // A resident page may continue using its retained context.
     }
+    if (!this.pageVisible) return;
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) return;
 
@@ -343,6 +350,7 @@ Page({
   loadRequestId: 0,
   phaseBannerRequestId: 0,
   hasShown: false,
+  pageVisible: false,
   loadedSeason: undefined as string | undefined,
   loadedDataSeason: undefined as string | undefined,
   historyPayload: null as EntryHistoryPayload | null,
@@ -375,6 +383,10 @@ Page({
     const app = getApp<IAppOption>();
     try {
       await this.ensureContext("pull-refresh");
+      if (!this.pageVisible) {
+        wx.stopPullDownRefresh();
+        return;
+      }
       this.perfTracker.mark("contextReadyAt");
     } catch { /* reload the retained context */ }
     const entryId = this.data.entryId;
@@ -427,10 +439,12 @@ Page({
   },
 
   onHide() {
+    this.pageVisible = false;
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
+    this.pageVisible = false;
     this.perfTracker?.disconnect();
   },
 
