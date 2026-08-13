@@ -2,7 +2,7 @@
 
 ## 执行摘要
 
-**状态：已修复并验收。**
+**状态：代码已实施，尚未验收。**
 
 - 25/25 注册页面达到可见终态，无页面 timeout、console error 或 exception。
 - 首页 5 次冷启动 primary visible 最大 **265ms**；P0 暖进入 p95 最大 **40ms**；P0 刷新 p95 最大 **230ms**。
@@ -229,7 +229,7 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 
 ### 状态
 
-**已修复并验收**。
+**代码已实施，尚未验收**。
 
 该状态基于真实 DevTools P0 样本、最终代码 head 的自动门禁、精确 Codex review 和完整 review thread 审计。报告不把一次卡住的自动化重跑当作成功样本，也不把采样脚本中的过期 SHA 常量当作代码版本。
 
@@ -238,7 +238,7 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 | 项目 | 证据 |
 |---|---|
 | 完整 P0 性能样本代码 | `565687c5a0984e5f92c82528080a6d9a9b38d969` |
-| 最终小程序代码 head | `880373d02fe1d16b2e4c3da95e9ee05dfc2b25ae` |
+| 最终小程序代码 head | `67faafdf9dd20a9e71ba691420c0f7404f8b23a0` |
 | GraphQL | `75de0566fb4f7cdfa4e94ede58dbcfbf79556415` |
 | Web | `1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c` |
 | Web 监听 | `127.0.0.1:3000`，PID `86218` |
@@ -269,9 +269,9 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 - `npm run lint`：通过。
 - My FPL tab 生命周期定向测试：`6/6` 通过。
 - PR #19 CI：两项 `verify` 通过。
-- Codex review：精确 head `880373d02fe1d16b2e4c3da95e9ee05dfc2b25ae` 明确 `Didn't find any major issues`。
-- GitHub review threads：全量分页审计 `2100` 条，`unresolved=0`。
+- Codex review：精确 head `67faafdf9dd20a9e71ba691420c0f7404f8b23a0` 明确 `Didn't find any major issues`。
+- GitHub review threads：当前 head 新增后待重新分页审计并 resolve。
 
 ### 口径限制
 
-完整 P0 性能样本的实际 checkout 是 `565687c`；采样脚本内残留的 `27c1105c` 仅为过期常量，artifact 已显式记录并排除该常量作为版本证据。最终 head 的自动化完整重跑因 DevTools cold-launch 等待链卡住而终止，没有被计入样本；最终 head 的新增行为由定向测试、最终 head CI、Codex clean 和线程审计覆盖。
+完整 P0 性能样本的实际 checkout 是 `565687c`；采样脚本内残留的 `27c1105c` 仅为过期常量，artifact 已显式记录并排除该常量作为版本证据。最终 head 的自动化完整重跑尚未重新完成；新增行为已通过定向测试、本地门禁，Codex review 和 GitHub thread resolve 待完成。
