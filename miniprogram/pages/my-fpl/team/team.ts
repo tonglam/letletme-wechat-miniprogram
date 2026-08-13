@@ -394,7 +394,9 @@ Page({
       && !this.data.emptyState
       && !this.data.error;
     const resumeTab = this.resumeTab;
+    const resumeTabForceRefresh = this.resumeTabForceRefresh;
     this.resumeTab = null;
+    this.resumeTabForceRefresh = false;
     const primaryReloaded = contextChanged
       || primaryMissing
       || Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
@@ -405,7 +407,7 @@ Page({
     }
     if (!primaryReloaded && resumeTab && resumeTab === this.data.activeTab && resumeTab !== "squad") {
       this.setData({ tabLoading: false });
-      await this.loadTab(resumeTab, false, trace);
+      await this.loadTab(resumeTab, resumeTabForceRefresh, trace);
     }
   },
 
@@ -420,6 +422,8 @@ Page({
   transferPayload: null as EntryGameweekTransfers[] | null,
   tabRequestId: 0,
   resumeTab: null as EntrySummaryTab | null,
+  resumeTabForceRefresh: false,
+  tabForceRefreshPending: false,
   contextUnavailable: false,
   contextRecoveryPending: false,
   resumeContextRecovery: false,
@@ -527,6 +531,9 @@ Page({
     this.resumeTab = this.data.tabLoading && this.data.activeTab !== "squad"
       ? this.data.activeTab
       : null;
+    this.resumeTabForceRefresh = this.resumeTab
+      ? this.resumeTabForceRefresh || this.tabForceRefreshPending
+      : false;
     this.resumeStartupAfterShow = this.startupPending;
     this.resumeRefreshAfterShow = this.refreshPending;
     if (this.resumeRefreshAfterShow) this.resumeStartupAfterShow = false;
@@ -543,6 +550,8 @@ Page({
     this.resumeContextRecovery = false;
     this.contextRecoveryPending = false;
     this.resumeTab = null;
+    this.resumeTabForceRefresh = false;
+    this.tabForceRefreshPending = false;
     this.startupPending = false;
     this.resumeStartupAfterShow = false;
     this.refreshPending = false;
@@ -785,6 +794,7 @@ Page({
 
   async loadTab(tab: EntrySummaryTab, forceRefresh: boolean, originatingTrace?: PageRequestTrace): Promise<void> {
     if (tab === "squad" || !this.data.entryId) return;
+    this.tabForceRefreshPending = forceRefresh;
     const requestId = ++this.tabRequestId;
     const entryId = this.data.entryId;
     const trace = originatingTrace
@@ -841,7 +851,10 @@ Page({
         ...(tab === "transfer" ? { transferError: message } : {})
       });
     } finally {
-      if (requestId === this.tabRequestId) this.setData({ tabLoading: false });
+      if (requestId === this.tabRequestId) {
+        this.tabForceRefreshPending = false;
+        this.setData({ tabLoading: false });
+      }
     }
   },
 

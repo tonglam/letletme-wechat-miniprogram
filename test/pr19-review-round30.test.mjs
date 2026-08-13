@@ -18,6 +18,6 @@ test("My FPL Team resumes an interrupted lazy tab independently of fresh primary
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(page, /resumeTab: null as EntrySummaryTab \| null/);
   assert.match(page, /onHide\(\)[\s\S]*this\.resumeTab = this\.data\.tabLoading[\s\S]*this\.data\.activeTab[\s\S]*tabRequestId \+= 1[\s\S]*tabLoading: false/);
-  assert.match(page, /const resumeTab = this\.resumeTab[\s\S]*const primaryReloaded[\s\S]*if \(!primaryReloaded && resumeTab[\s\S]*loadTab\(resumeTab, false, trace\)/);
+  assert.match(page, /const resumeTab = this\.resumeTab[\s\S]*const resumeTabForceRefresh = this\.resumeTabForceRefresh[\s\S]*const primaryReloaded[\s\S]*if \(!primaryReloaded && resumeTab[\s\S]*loadTab\(resumeTab, resumeTabForceRefresh, trace\)/);
   assert.match(page, /onUnload\(\)[\s\S]*this\.resumeTab = null/);
 });
