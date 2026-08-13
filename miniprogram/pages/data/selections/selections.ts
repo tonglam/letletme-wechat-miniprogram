@@ -108,6 +108,8 @@ PerformancePage({
   resumeStage: null as SelectionsResumeStage | null,
   activeTournamentForceRefresh: false,
   resumeTournamentForceRefresh: false,
+  activeStatsForceRefresh: false,
+  resumeStatsForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -150,16 +152,18 @@ PerformancePage({
     if (!resumed || !this.resumeOnShow) return;
     const resumeStage = this.resumeStage;
     const resumeTournamentForceRefresh = this.resumeTournamentForceRefresh;
+    const resumeStatsForceRefresh = this.resumeStatsForceRefresh;
     this.resumeOnShow = false;
     this.resumeStage = null;
     this.resumeTournamentForceRefresh = false;
+    this.resumeStatsForceRefresh = false;
     const trace = capturePageRequestTrace({
       callerSurface: resumeStage === "stats" ? "data-selections-stats" : "data-selections",
       trigger: "show"
     });
     if (resumeStage === "stats") {
       this.setData({ loadingTournaments: false, loadingStats: false });
-      await this.loadStats(false, trace);
+      await this.loadStats(resumeStatsForceRefresh, trace);
       return;
     }
     if (resumeStage === "tournaments") {
@@ -182,6 +186,8 @@ PerformancePage({
     this.resumeOnShow = this.resumeStage !== null;
     this.resumeTournamentForceRefresh = this.resumeStage === "tournaments"
       && this.activeTournamentForceRefresh;
+    this.resumeStatsForceRefresh = this.resumeStage === "stats"
+      && this.activeStatsForceRefresh;
     this.lifecycleRevision += 1;
   },
 
@@ -190,7 +196,9 @@ PerformancePage({
     this.resumeOnShow = false;
     this.resumeStage = null;
     this.resumeTournamentForceRefresh = false;
+    this.resumeStatsForceRefresh = false;
     this.activeTournamentForceRefresh = false;
+    this.activeStatsForceRefresh = false;
     this.lifecycleRevision += 1;
   },
 
@@ -305,6 +313,7 @@ PerformancePage({
       callerSurface: "data-selections-stats",
       trigger: "tab"
     });
+    this.activeStatsForceRefresh = forceRefresh;
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
     if (!tournament) {
       return;
@@ -346,6 +355,7 @@ PerformancePage({
       });
     } finally {
       if (isActiveLifecycle() && isActiveContext()) {
+        this.activeStatsForceRefresh = false;
         this.setData({ loadingStats: false });
       }
     }

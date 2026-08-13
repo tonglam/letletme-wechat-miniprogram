@@ -22,6 +22,6 @@ test("Selections resumes interrupted stats without resetting picker context", ()
   const selections = source("miniprogram/pages/data/selections/selections.ts");
   assert.match(selections, /resumeStage: null as SelectionsResumeStage \| null/);
   assert.match(selections, /resumeStage = this\.startupPending[\s\S]*\? "initialize"[\s\S]*\? "stats"[\s\S]*\? "tournaments"/);
-  assert.match(selections, /if \(resumeStage === "stats"\)[\s\S]*loadStats\(false, trace\)[\s\S]*if \(resumeStage === "tournaments"\)[\s\S]*loadTournaments\(resumeTournamentForceRefresh, trace\)[\s\S]*initializePage\(trace\)/);
+  assert.match(selections, /const resumeStatsForceRefresh = this\.resumeStatsForceRefresh[\s\S]*if \(resumeStage === "stats"\)[\s\S]*loadStats\(resumeStatsForceRefresh, trace\)[\s\S]*if \(resumeStage === "tournaments"\)[\s\S]*loadTournaments\(resumeTournamentForceRefresh, trace\)[\s\S]*initializePage\(trace\)/);
   assert.doesNotMatch(selections, /if \(resumeStage === "stats"\)[\s\S]{0,300}initializePage\(trace\)/);
 });
