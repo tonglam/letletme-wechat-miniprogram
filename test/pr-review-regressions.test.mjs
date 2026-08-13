@@ -100,7 +100,7 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
-    /const refreshContext = contextMissing \|\| deadlineExpired[\s\S]*if \(refreshContext\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
+    /const contextMissing = !app\.globalData\.season[\s\S]*!app\.globalData\.gw[\s\S]*!app\.globalData\.nextGw[\s\S]*const refreshContext = contextMissing \|\| deadlineExpired[\s\S]*if \(refreshContext\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
   );
   assert.doesNotMatch(home, /const forceContextForUserRefresh = !deadlineTriggered/);
 });

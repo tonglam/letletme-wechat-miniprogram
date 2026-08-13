@@ -437,7 +437,9 @@ Page({
     this.setData({ error: "" });
     try {
       const app = getApp<IAppOption>();
-      const contextMissing = !app.globalData.gw || !app.globalData.nextGw;
+      const contextMissing = !app.globalData.season
+        || !app.globalData.gw
+        || !app.globalData.nextGw;
       const deadlineExpired = Boolean(app.globalData.utcDeadline)
         && getDeadlineDiffMs(app.globalData.utcDeadline) <= 0;
       const refreshContext = contextMissing || deadlineExpired;

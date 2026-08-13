@@ -28,7 +28,7 @@ test("Live Tournament preserves forced startup across hide and show", () => {
 
 test("Home user refresh forces context only when missing or expired", () => {
   const page = read("miniprogram/pages/home/index/index.ts");
-  assert.match(page, /const refreshContext = contextMissing \|\| deadlineExpired/);
+  assert.match(page, /const contextMissing = !app\.globalData\.season[\s\S]*const refreshContext = contextMissing \|\| deadlineExpired/);
   assert.match(page, /if \(refreshContext\)[\s\S]*forceRefresh: true/);
   assert.doesNotMatch(page, /const forceContextForUserRefresh = !deadlineTriggered/);
 });

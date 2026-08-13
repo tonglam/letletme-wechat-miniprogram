@@ -39,7 +39,7 @@ test("home pull refresh does not force CurrentEventInfo while context is fresh",
   const page = source("miniprogram/pages/home/index/index.ts");
   assert.match(
     page,
-    /const refreshContext = contextMissing \|\| deadlineExpired;[\s\S]*if \(refreshContext\)[\s\S]*forceRefresh: true/
+    /const contextMissing = !app\.globalData\.season[\s\S]*!app\.globalData\.gw[\s\S]*!app\.globalData\.nextGw;[\s\S]*const refreshContext = contextMissing \|\| deadlineExpired;[\s\S]*if \(refreshContext\)[\s\S]*forceRefresh: true/
   );
   assert.match(
     page,
