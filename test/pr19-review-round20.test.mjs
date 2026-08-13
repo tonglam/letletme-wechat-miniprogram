@@ -58,7 +58,7 @@ test("My FPL invalidates hidden primary work before deferred tabs", () => {
     team,
     /await getEntryTeamStatsEventResult[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.loadRequestId\) return[\s\S]*this\.loadTab/
   );
-  assert.match(team, /const primaryMissing = !this\.data\.hasTeamData[\s\S]*contextChanged \|\| primaryMissing/);
+  assert.match(team, /const primaryMissing = !this\.data\.hasTeamData[\s\S]*const primaryReloaded = contextChanged[\s\S]*\|\| primaryMissing/);
 });
 
 test("tracked Match refreshes do not join untracked background requests", () => {

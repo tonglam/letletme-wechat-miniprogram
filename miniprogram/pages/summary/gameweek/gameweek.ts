@@ -19,6 +19,7 @@ import {
 } from "../../../utils/summary-format";
 
 type GameweekTab = "summary" | "dreamTeam" | "elite" | "transfers";
+type GameweekResumeStage = "startup" | "data" | "refresh";
 
 interface GameweekSummaryData {
   loading: boolean;
@@ -82,7 +83,7 @@ PerformancePage({
   lifecycleRevision: 0,
   requestId: 0,
   startupPending: false,
-  resumeOnShow: false,
+  resumeStage: null as GameweekResumeStage | null,
 
   async onLoad() {
     this.pageVisible = true;
@@ -93,21 +94,31 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (!resumed || !this.resumeOnShow) return undefined;
-    this.resumeOnShow = false;
-    return this.startPageLoad("show");
+    if (!resumed || !this.resumeStage) return undefined;
+    const resumeStage = this.resumeStage;
+    this.resumeStage = null;
+    if (resumeStage === "startup") return this.startPageLoad("show");
+    this.setData({ loading: false, refreshing: false });
+    const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger: "show" });
+    return this.loadData(resumeStage === "refresh", trace, this.lifecycleRevision);
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.startupPending || this.data.loading || this.data.refreshing;
+    this.resumeStage = this.startupPending
+      ? "startup"
+      : this.data.refreshing
+        ? "refresh"
+        : this.data.loading
+          ? "data"
+          : null;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
-    this.resumeOnShow = false;
+    this.resumeStage = null;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },

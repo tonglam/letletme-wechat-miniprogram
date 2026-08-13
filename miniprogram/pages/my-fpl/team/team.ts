@@ -342,10 +342,19 @@ Page({
     const primaryMissing = !this.data.hasTeamData
       && !this.data.emptyState
       && !this.data.error;
-    if (contextChanged || primaryMissing || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
+    const resumeTab = this.resumeTab;
+    this.resumeTab = null;
+    const primaryReloaded = contextChanged
+      || primaryMissing
+      || Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
+    if (primaryReloaded) {
       await this.loadData(contextChanged, trace);
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
+    }
+    if (!primaryReloaded && resumeTab && resumeTab === this.data.activeTab && resumeTab !== "squad") {
+      this.setData({ tabLoading: false });
+      await this.loadTab(resumeTab, false, trace);
     }
   },
 
@@ -359,6 +368,7 @@ Page({
   historyPayload: null as EntryHistoryPayload | null,
   transferPayload: null as EntryGameweekTransfers[] | null,
   tabRequestId: 0,
+  resumeTab: null as EntrySummaryTab | null,
   contextUnavailable: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
@@ -442,15 +452,20 @@ Page({
   },
 
   onHide() {
+    this.resumeTab = this.data.tabLoading && this.data.activeTab !== "squad"
+      ? this.data.activeTab
+      : null;
     this.pageVisible = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
+    if (this.data.tabLoading) this.setData({ tabLoading: false });
     this.phaseBannerRequestId += 1;
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeTab = null;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
     this.phaseBannerRequestId += 1;

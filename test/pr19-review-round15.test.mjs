@@ -35,6 +35,6 @@ test("My FPL Team abandons resumed work after the page becomes hidden", () => {
   assert.match(page, /pageVisible: false/);
   assert.match(page, /async onShow\(\) \{\s+this\.pageVisible = true/);
   assert.match(page, /await this\.ensureContext\("page-show"\);\s+if \(!this\.pageVisible\) return;/);
-  assert.match(page, /onHide\(\) \{\s+this\.pageVisible = false/);
+  assert.match(page, /onHide\(\)[\s\S]*this\.resumeTab = this\.data\.tabLoading[\s\S]*this\.pageVisible = false/);
   assert.match(page, /onUnload\(\) \{\s+this\.pageVisible = false/);
 });
