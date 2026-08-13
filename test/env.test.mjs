@@ -70,8 +70,8 @@ test("develop GraphQL defaults to the local Web proxy", () => {
   const previous = globalThis.wx;
   try {
     installWx("develop", {});
-    assert.equal(getGraphQLEndpoint(), "http://localhost:3000/api/graphql");
-    assert.equal(getMiniProgramApiBase(), "http://localhost:3000/api/miniprogram");
+    assert.equal(getGraphQLEndpoint(), "http://localhost:3001/api/graphql");
+    assert.equal(getMiniProgramApiBase(), "http://localhost:3001/api/miniprogram");
   } finally {
     globalThis.wx = previous;
   }
