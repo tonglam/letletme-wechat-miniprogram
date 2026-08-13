@@ -24,6 +24,7 @@ import { normalizeTransfer, type TransferRow } from "./transfer";
 import {
   ensureAppContext,
   getAppContextSnapshot,
+  shouldRefreshAppContext,
   type AppContextSnapshot
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
@@ -432,7 +433,11 @@ Page({
     this.forcedRefreshPending = true;
     this.refreshContextPending = true;
     try {
-      const context = await this.ensureContext("pull-refresh", true);
+      let context = getAppContextSnapshot();
+      if (shouldRefreshAppContext(context)) {
+        context = await this.ensureContext("pull-refresh", true);
+      }
+      if (!context) throw new Error("赛季和比赛轮信息加载失败");
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
       tracker.mark("contextReadyAt");

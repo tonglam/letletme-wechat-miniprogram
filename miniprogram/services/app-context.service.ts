@@ -124,6 +124,17 @@ export function getAppContextSnapshot(): AppContextSnapshot | null {
   return readAppContextSnapshot();
 }
 
+export function shouldRefreshAppContext(
+  snapshot: AppContextSnapshot | null,
+  now = Date.now()
+): boolean {
+  return !snapshot
+    || snapshot.stale
+    || !snapshot.season
+    || !snapshot.displayEvent
+    || snapshot.freshUntil <= now;
+}
+
 export function commitEntryBinding(
   entryId: number | null,
   reason: "restore" | "login" | "logout" | "rebind" | "token-rotation"

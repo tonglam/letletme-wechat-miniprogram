@@ -2,7 +2,11 @@ import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services
 import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
 import type { Fixture } from "../../../models/common";
-import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import {
+  ensureAppContext,
+  getAppContextSnapshot,
+  shouldRefreshAppContext
+} from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
@@ -535,7 +539,11 @@ Page({
     this.forcedRefreshBackground = background;
     this.refreshContextPending = true;
     try {
-      const context = await this.ensureContext("pull-refresh", true);
+      let context = getAppContextSnapshot();
+      if (shouldRefreshAppContext(context)) {
+        context = await this.ensureContext("pull-refresh", true);
+      }
+      if (!context) throw new Error("赛季和比赛轮信息加载失败");
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
       this.currentEventId = context.currentEvent || 0;

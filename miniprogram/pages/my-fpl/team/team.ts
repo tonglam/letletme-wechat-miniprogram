@@ -18,7 +18,8 @@ import type { LiveSnapshotState } from "../../../models/live";
 import { currentFollowEntryId } from "../../../utils/follow";
 import {
   ensureAppContext,
-  getAppContextSnapshot
+  getAppContextSnapshot,
+  shouldRefreshAppContext
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import {
@@ -472,7 +473,11 @@ Page({
     }
     const app = getApp<IAppOption>();
     try {
-      await this.ensureContext("pull-refresh", true);
+      let context = getAppContextSnapshot();
+      if (shouldRefreshAppContext(context)) {
+        context = await this.ensureContext("pull-refresh", true);
+      }
+      if (!context) throw new Error("赛季和比赛轮信息加载失败");
       if (!this.pageVisible || this.perfTracker !== tracker) {
         return;
       }
