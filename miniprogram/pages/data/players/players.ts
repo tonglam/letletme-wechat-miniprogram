@@ -116,7 +116,10 @@ PerformancePage({
       hasMore: false
     });
     try {
-      await ensureAppContext({ reason: "page-load" });
+      await ensureAppContext({
+        reason: forceRefresh ? "pull-refresh" : "page-load",
+        forceRefresh
+      });
       if (!this.pageVisible || !shouldApplyPlayerResponse(revision, this.requestRevision)) return;
       await this.fetchPage(revision, null, false, forceRefresh, trace);
     } catch (error) {

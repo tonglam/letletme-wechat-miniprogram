@@ -17,8 +17,7 @@ test("price page keeps date identity and stale state while team directory remain
   assert.match(page, /mark\("softFailureAt"\)/);
   assert.match(page, /!this\.pageActive \|\| !isCurrentRevision/);
   const successCommit = page.slice(page.indexOf("const read = await readTask"), page.indexOf("} catch", page.indexOf("const read = await readTask")));
-  assert.match(successCommit, /if \(!isCurrentRevision\(this\.dailyRequestOwner, "daily", revision\)\) return/);
-  assert.doesNotMatch(successCommit, /pageActive/);
+  assert.match(successCommit, /if \(!this\.pageActive \|\| !isCurrentRevision\(this\.dailyRequestOwner, "daily", revision\)\) return/);
   assert.match(page, /\.\.\.splitChanges\(read\.data\),\s*error: ""/);
   assert.doesNotMatch(page, /Promise\.all\([^)]*readPlayerValueByDate[^)]*getTeamList/);
 });
@@ -38,12 +37,14 @@ test("price service rejects partial errors before mapping an empty board", () =>
   assert.ok(read >= 0 && guard > read && mapping > guard);
 });
 
-test("price warm resume records viewport visibility without refetching", () => {
+test("price warm resume only refetches an interrupted stage", () => {
   const page = source("miniprogram/pages/data/price/price.ts");
   const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
   assert.match(onShow, /warm-enter/);
-  assert.match(onShow, /observePrimary/);
-  assert.doesNotMatch(onShow, /loadDailyChanges|readPlayerValueByDate/);
+  assert.match(onShow, /if \(resumeStage === "daily"\)[\s\S]*loadDailyChanges\(\)/);
+  assert.match(onShow, /if \(resumeStage === "player"\)[\s\S]*ensurePlayerModeReady\(\)/);
+  assert.match(onShow, /if \(resumeStage === "history"[\s\S]*loadSelectedPlayerHistory/);
+  assert.match(onShow, /wx\.nextTick\(\(\) => tracker\.observePrimary\(selector\)\)/);
 });
 
 test("price date changes and retries create an isolated refresh trace", () => {

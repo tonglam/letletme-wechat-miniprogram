@@ -138,6 +138,8 @@ Page({
   _loadedContextRevision: 0,
   _perfTracker: undefined as PagePerformanceTracker | undefined,
   _pageVisible: false,
+  _secondaryPending: false,
+  _resumeSecondaryOnShow: false,
 
   async onLoad() {
     this._pageVisible = true;
@@ -171,6 +173,7 @@ Page({
         this._loadedContextRevision,
         context.contextRevision
       )) {
+        this._resumeSecondaryOnShow = false;
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
@@ -184,6 +187,10 @@ Page({
           setDataCallback: 0,
           loadToVisible: 0
         });
+        if (this._resumeSecondaryOnShow) {
+          this._resumeSecondaryOnShow = false;
+          this.startSecondaryData();
+        }
       }
     } catch (error) {
       if (this._pageVisible) this.showContextError(error);
@@ -193,12 +200,16 @@ Page({
 
   onUnload() {
     this._pageVisible = false;
+    this._resumeSecondaryOnShow = false;
+    this._loadRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
   },
 
   onHide() {
     this._pageVisible = false;
+    this._resumeSecondaryOnShow = this._secondaryPending;
+    this._loadRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
   },
@@ -213,6 +224,7 @@ Page({
     forceRefresh = false,
     originatingTracker?: PagePerformanceTracker | null
   ) {
+    this._resumeSecondaryOnShow = false;
     const tracker = originatingTracker === undefined
       ? this._perfTracker ?? null
       : originatingTracker;
@@ -420,6 +432,9 @@ Page({
     primaryTrace: PageRequestTrace | null,
     tracker: PagePerformanceTracker | null
   ) {
+    const isActiveSecondary = () => this._pageVisible && requestId === this._loadRequestId;
+    if (!isActiveSecondary()) return;
+    this._secondaryPending = true;
     const app = getApp<IAppOption>();
     this.setData({
       supplementLoading: true,
@@ -431,6 +446,7 @@ Page({
       if (!getApiSessionToken()) {
         try { await app.authReady; } catch {}
       }
+      if (!isActiveSecondary()) return;
       const entryId = app.globalData.entryId;
       if (!entryId) return;
       try {
@@ -438,9 +454,9 @@ Page({
           ? { ...primaryTrace, callerSurface: "home-entry" }
           : null;
         const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
-        if (requestId === this._loadRequestId) this.setData({ entry, entryError: "" });
+        if (isActiveSecondary()) this.setData({ entry, entryError: "" });
       } catch (error) {
-        if (requestId === this._loadRequestId) {
+        if (isActiveSecondary()) {
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
         }
       }
@@ -465,7 +481,7 @@ Page({
         }
       }))
       .then((supplement) => {
-        if (requestId !== this._loadRequestId) return;
+        if (!isActiveSecondary()) return;
         const priceGroups = mapHomePriceChanges(supplement.playerValues);
         this.setData({
           priceError: supplement.errors.playerValues,
@@ -481,8 +497,30 @@ Page({
         });
       });
     await Promise.allSettled([entryTask, supplementTask]);
-    if (requestId !== this._loadRequestId) return;
+    if (!isActiveSecondary()) return;
+    this._secondaryPending = false;
     tracker?.mark("secondaryCompleteAt");
+  },
+
+  startSecondaryData() {
+    const requestId = ++this._loadRequestId;
+    const snapshot = getAppContextSnapshot();
+    const tracker = this._perfTracker ?? null;
+    const trace: PageRequestTrace | null = tracker && snapshot
+      ? {
+          navigationId: tracker.navigationId,
+          callerSurface: "home-fixtures",
+          trigger: "show",
+          contextRevision: snapshot.contextRevision
+        }
+      : null;
+    void this.loadSecondaryData(
+      requestId,
+      getApp<IAppOption>().globalData.gw,
+      false,
+      trace,
+      tracker
+    );
   },
 
   syncAppState(extra: Partial<HomeData> = {}): Promise<void> {

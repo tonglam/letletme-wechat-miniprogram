@@ -16,6 +16,7 @@ import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
 type TournamentEmptyState = "" | "entry" | "tournaments";
+type TournamentSummaryResumeStage = "initialize" | "tournaments" | "summary";
 
 interface MetricCard {
   label: string;
@@ -99,6 +100,8 @@ PerformancePage({
   lifecycleRevision: 0,
   startupPending: false,
   resumeOnShow: false,
+  resumeStage: null as TournamentSummaryResumeStage | null,
+  activeLoadStage: null as Exclude<TournamentSummaryResumeStage, "initialize"> | null,
 
   async onLoad() {
     this.pageVisible = true;
@@ -139,23 +142,40 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return;
+    const resumeStage = this.resumeStage;
     this.resumeOnShow = false;
+    this.resumeStage = null;
     const trace = capturePageRequestTrace({
-      callerSurface: "summary-tournament",
+      callerSurface: resumeStage === "summary" ? "summary-tournament-results" : "summary-tournament",
       trigger: "show"
     });
+    if (resumeStage === "summary") {
+      this.setData({ loading: false });
+      await this.loadSummary(false, trace);
+      return;
+    }
+    if (resumeStage === "tournaments") {
+      this.setData({ loading: false });
+      await this.loadTournaments(false, trace);
+      return;
+    }
     await this.initializePage(trace);
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.startupPending || this.data.loading;
+    this.resumeStage = this.startupPending
+      ? "initialize"
+      : this.activeLoadStage;
+    this.resumeOnShow = this.resumeStage !== null;
     this.lifecycleRevision += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
     this.resumeOnShow = false;
+    this.resumeStage = null;
+    this.activeLoadStage = null;
     this.lifecycleRevision += 1;
   },
 
@@ -212,6 +232,7 @@ PerformancePage({
       emptyDescription: "",
       emptyActionText: ""
     });
+    this.activeLoadStage = "tournaments";
     const eventBeforeDirectoryRead = this.data.event;
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
@@ -249,7 +270,10 @@ PerformancePage({
       if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      if (isActiveLifecycle()) this.setData({ loading: false });
+      if (isActiveLifecycle() && this.activeLoadStage === "tournaments") {
+        this.activeLoadStage = null;
+        this.setData({ loading: false });
+      }
     }
   },
 
@@ -265,6 +289,7 @@ PerformancePage({
       return;
     }
 
+    this.activeLoadStage = "summary";
     this.setData({ loading: true, error: "" });
     try {
       const payload = await getTournamentSummary(
@@ -283,6 +308,9 @@ PerformancePage({
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
       if (isActiveLifecycle()) this.setData({ loading: false });
+      if (isActiveLifecycle() && this.activeLoadStage === "summary") {
+        this.activeLoadStage = null;
+      }
     }
   },
 

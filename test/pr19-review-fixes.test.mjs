@@ -41,9 +41,9 @@ test("price context is optional while season-scoped deep links await it", () => 
   const teamDetail = source("miniprogram/pages/data/team-detail/team-detail.ts");
   assert.match(price, /try \{[\s\S]*await ensureAppContext\(\{ reason: "page-load" \}\);[\s\S]*\} catch \{\}[\s\S]*loadDailyChanges/);
   assert.match(teams, /const context = await ensureAppContext[\s\S]*getTeamList\(context\.season, forceRefresh, trace\)/);
-  assert.match(players, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*await this\.fetchPage/);
-  assert.match(playerDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getPlayerInfoByCode/);
-  assert.match(teamDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getTeamSummary/);
+  assert.match(players, /await ensureAppContext\(\{[\s\S]*reason: forceRefresh \? "pull-refresh" : "page-load",[\s\S]*forceRefresh[\s\S]*await this\.fetchPage/);
+  assert.match(playerDetail, /await ensureAppContext\(\{[\s\S]*reason: forceRefresh \? "pull-refresh" : "page-load",[\s\S]*forceRefresh[\s\S]*getPlayerInfoByCode/);
+  assert.match(teamDetail, /await ensureAppContext\(\{[\s\S]*reason: forceRefresh \? "pull-refresh" : "page-load",[\s\S]*forceRefresh[\s\S]*getTeamSummary/);
 });
 
 test("price soft timeout belongs to its originating visible page tracker", () => {

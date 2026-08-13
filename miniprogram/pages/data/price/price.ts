@@ -16,6 +16,7 @@ import {
 } from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
+type PriceResumeStage = "daily" | "player" | "history";
 
 interface FilterOption {
   label: string;
@@ -155,9 +156,13 @@ Page({
   perfTracker: undefined as PagePerformanceTracker | undefined,
   pageActive: false,
   hasShown: false,
+  startupPending: false,
+  resumeStage: null as PriceResumeStage | null,
+  historyRequestRevision: 0,
 
   async onLoad() {
     this.pageActive = true;
+    this.startupPending = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "cold-launch");
     const tracker = this.perfTracker;
     // Today's public price read is not season-scoped. Context improves trace
@@ -166,6 +171,7 @@ Page({
     try {
       await ensureAppContext({ reason: "page-load" });
     } catch {}
+    this.startupPending = false;
     if (!this.pageActive || this.perfTracker !== tracker) return;
     tracker.mark("contextReadyAt");
     void this.loadDailyChanges();
@@ -181,16 +187,47 @@ Page({
     const tracker = this.perfTracker;
     const selector = this.primarySelector();
     tracker.mark("contextReadyAt");
+    const resumeStage = this.resumeStage;
+    this.resumeStage = null;
+    if (resumeStage === "daily") {
+      this.setData({ loading: false, refreshing: false });
+      void this.loadDailyChanges();
+      return;
+    }
+    if (resumeStage === "player") {
+      this.setData({ playerLoading: false, loadingMore: false });
+      void this.ensurePlayerModeReady();
+      return;
+    }
+    if (resumeStage === "history" && this.data.selectedPlayer?.element) {
+      this.setData({ historyLoading: false });
+      void this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
+      return;
+    }
     wx.nextTick(() => tracker.observePrimary(selector));
   },
 
   onHide() {
+    this.resumeStage = this.startupPending || this.data.loading || this.data.refreshing
+      ? "daily"
+      : this.data.historyLoading
+        ? "history"
+        : this.data.playerLoading || this.data.loadingMore
+          ? "player"
+          : null;
     this.pageActive = false;
+    nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.invalidatePlayerRequest();
+    this.historyRequestRevision += 1;
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageActive = false;
+    this.resumeStage = null;
+    nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.invalidatePlayerRequest();
+    this.historyRequestRevision += 1;
     this.perfTracker?.disconnect();
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
@@ -294,7 +331,7 @@ Page({
     });
     try {
       const read = await readTask;
-      if (!isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       tracker?.mark("primaryResponseAt");
       await setDataAsync(this, {
         ...splitChanges(read.data),
@@ -310,7 +347,7 @@ Page({
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });
       wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } finally {
-      if (isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
+      if (this.pageActive && isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
         this.setData({ loading: false, refreshing: false });
       }
     }
@@ -421,7 +458,7 @@ Page({
         cursor,
         forceRefresh
       });
-      if (revision !== this.playerRequestRevision) return;
+      if (!this.pageActive || revision !== this.playerRequestRevision) return;
 
       const players = append
         ? mergePlayers(this.data.players, page.items)
@@ -438,13 +475,13 @@ Page({
         playersError: ""
       });
     } catch (error) {
-      if (revision !== this.playerRequestRevision) return;
+      if (!this.pageActive || revision !== this.playerRequestRevision) return;
       this.setData({
         playersError: error instanceof Error ? error.message : "球员列表加载失败",
         ...(append ? {} : { playersLoaded: false })
       });
     } finally {
-      if (revision === this.playerRequestRevision) {
+      if (this.pageActive && revision === this.playerRequestRevision) {
         this.setData({ playerLoading: false, loadingMore: false });
       }
     }
@@ -573,14 +610,19 @@ Page({
   },
 
   async loadSelectedPlayerHistory(playerId: number, forceRefresh = false): Promise<void> {
+    const revision = ++this.historyRequestRevision;
     this.setData({ historyLoading: true, historyError: "" });
     try {
       const historyRows = await getPlayerValueByElement(playerId, forceRefresh);
+      if (!this.pageActive || revision !== this.historyRequestRevision) return;
       this.setData({ historyRows: historyRows.sort(sortByChangeDateDesc) });
     } catch (error) {
+      if (!this.pageActive || revision !== this.historyRequestRevision) return;
       this.setData({ historyError: error instanceof Error ? error.message : "球员身价历史加载失败" });
     } finally {
-      this.setData({ historyLoading: false });
+      if (this.pageActive && revision === this.historyRequestRevision) {
+        this.setData({ historyLoading: false });
+      }
     }
   },
 

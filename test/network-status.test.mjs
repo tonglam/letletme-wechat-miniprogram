@@ -33,6 +33,10 @@ globalThis.wx = {
 };
 
 const { graphqlRead } = await import("../miniprogram/services/graphql.service.ts");
+const {
+  initializeNetworkStatus,
+  setKnownNetworkStatusForTest
+} = await import("../miniprogram/utils/network-status.ts");
 
 test("cold offline GraphQL read awaits one initial probe and never starts transport", async () => {
   const startedAt = Date.now();
@@ -83,4 +87,14 @@ test("offline stale fast path notifies graphqlRequest callers before returning c
   } finally {
     Date.now = realDateNow;
   }
+});
+
+test("listenerless clients periodically re-probe after an offline launch", async () => {
+  const callsBefore = networkTypeCalls;
+  setKnownNetworkStatusForTest(false, {
+    listenerInstalled: false,
+    lastProbeAt: 0
+  });
+  await initializeNetworkStatus();
+  assert.equal(networkTypeCalls, callsBefore + 1);
 });

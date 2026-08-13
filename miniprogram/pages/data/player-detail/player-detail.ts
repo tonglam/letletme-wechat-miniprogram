@@ -58,7 +58,7 @@ PerformancePage({
     this.loadRequestId += 1;
   },
 
-  async loadData(trigger: PageRequestTrace["trigger"] = "load") {
+  async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
     if (!this.data.code) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
@@ -79,7 +79,10 @@ PerformancePage({
     try {
       let season = this.routeSeason;
       try {
-        const context = await ensureAppContext({ reason: "page-load" });
+        const context = await ensureAppContext({
+          reason: forceRefresh ? "pull-refresh" : "page-load",
+          forceRefresh
+        });
         season = this.routeSeason || context.season;
       } catch (error) {
         if (!season) throw error;
@@ -98,7 +101,7 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadData("refresh");
+    this.loadData("refresh", true);
   },
 
   onBackToPlayers() {
