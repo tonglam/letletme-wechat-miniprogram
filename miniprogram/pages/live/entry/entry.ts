@@ -744,6 +744,8 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
@@ -769,6 +771,8 @@ Page({
   },
 
   onRetry() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
     this.retryWithContext({ includeTransfers: true, forceRefresh: true });
   },
 

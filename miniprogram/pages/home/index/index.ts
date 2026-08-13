@@ -282,9 +282,9 @@ Page({
         });
       });
       const fixtureResult = await fixtureTask;
+      if (!this._pageVisible || requestId !== this._loadRequestId) return;
       const fixtureResponseAt = Date.now();
       tracker?.mark("primaryResponseAt");
-      if (requestId !== this._loadRequestId) return;
       if (fixtureResult.failed && hadFixtureRows) {
         fixtureError = "";
       }
@@ -329,7 +329,7 @@ Page({
           resolve();
         });
       });
-      if (requestId !== this._loadRequestId) return;
+      if (!this._pageVisible || requestId !== this._loadRequestId) return;
 
       this._lastLoadAt = Date.now();
       void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);

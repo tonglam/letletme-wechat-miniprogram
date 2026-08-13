@@ -353,6 +353,11 @@ PerformancePage({
 
   async onLoad() {
     const app = getApp<IAppOption>();
+    this.pageVisible = true;
+    const trace = capturePageRequestTrace({
+      callerSurface: "live-tournament-directory",
+      trigger: "load"
+    });
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders placeholder content as if it were loaded.
     this.setData({ loading: true });
@@ -374,11 +379,12 @@ PerformancePage({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible) return;
     const currentGw = context.currentEvent || 0;
     this.setData({ entryId: app.globalData.entryId ?? 0, event: currentGw, maxGw: currentGw });
     this.initLiveRefresh();
     if (!this.data.entryId || currentGw > 0) {
-      this.loadTournaments(false);
+      this.loadTournaments(false, trace);
     } else {
       this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
     }
