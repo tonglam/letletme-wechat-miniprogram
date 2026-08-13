@@ -3,6 +3,7 @@ import type { DomainRead, ServiceReadOptions } from "./service-read";
 import type { PlayerValue, PlayerValueChange } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 import { formatDateKey } from "../utils/date";
+import { getAppContextSnapshot } from "./app-context.service";
 
 const PLAYER_VALUES = `
   query GetPlayerValues($changeDate: Date!) {
@@ -228,8 +229,11 @@ export async function readPlayerValueByDate(
 }
 
 export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {
+  const season = getAppContextSnapshot()?.season;
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, {
     cachePolicy: "historical",
+    cacheVariant: `season:${season}`,
     forceRefresh
   });
   return (data.playerValueHistory || []).map((item) => enrichPriceChange({
