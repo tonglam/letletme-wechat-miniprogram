@@ -14,9 +14,9 @@ const home = readFileSync(
 describe("home public read path", () => {
   it("uses one three-root public supplement operation", () => {
     assert.match(service, /query MiniHomeSupplement/);
-    assert.match(service, /\$eventId: Int!/);
-    assert.match(service, /eventOverallResult\(eventId: \$eventId\)/);
-    assert.match(service, /\{ eventId, changeDate: normalizeChangeDate\(changeDate\) \}/);
+    assert.doesNotMatch(service, /\$eventId: Int!/);
+    assert.match(service, /eventOverallResult\s*\{/);
+    assert.match(service, /\{ changeDate: normalizeChangeDate\(changeDate\) \}/);
     assert.match(service, /miniProgramNotice/);
     assert.match(service, /eventOverallResult/);
     assert.match(service, /playerValues\(changeDate: \$changeDate\)/);
