@@ -351,3 +351,13 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 - 因此不上传微信开发版 `1.0.2`，不把报告状态改为“已修复并验收”。
 
 当前阻塞是严格性能样本采集器与 DevTools runtime 的关联不稳定，不是 GraphQL `4000` 未启动，也不是 `MiniHomeSupplement` 契约错误。
+
+## 2026-08-14 post-merge local-chain update
+
+- Mini Program `main` is `835899447c2b5ead72340b57f50bf1108b2d33ac`, merged through PR #24.
+- `develop` defaults now use `http://localhost:3001/api/graphql` and `http://localhost:3001/api/miniprogram`; the develop storage override remains available for temporary local endpoints.
+- The accepted local topology is `WeChat DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`. Port `3000` is not part of the current local acceptance chain.
+- At the time of this update, `4000/health` returned `200` with Redis, PostgreSQL, and season checks healthy; Web `3001/en` returned `200`.
+- A real DevTools run through the `3001` override produced successful `CurrentEventInfo`, `CoreEventFixtureSchedule`, and `MiniHomeSupplement` network operations; the home page rendered 10 Fixture rows and recorded native viewport visibility. The measured sample was not promoted to the final p95 gate because it was not the complete required cold/warm/refresh sample set.
+- Clearing persistent storage alone is insufficient to prove a network request when the DevTools page process retains L1 memory. Memory-hit runs are therefore excluded from the network-chain evidence.
+- The report status remains **代码已实施，尚未验收**. It must not be changed to **已修复并验收** until the required cold, warm, refresh, error-state, and full-page sample gates are complete.
