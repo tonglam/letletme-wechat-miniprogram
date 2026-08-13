@@ -37,6 +37,10 @@ export interface Fixture {
   teamShortName?: string;
   againstTeamShortName?: string;
   kickoffTime?: string;
+  started?: boolean;
+  minutes?: number;
+  homeScore?: number;
+  awayScore?: number;
   difficulty?: number;
   homeDifficulty?: number;
   awayDifficulty?: number;

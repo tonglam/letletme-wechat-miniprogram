@@ -1,5 +1,5 @@
 import { graphqlRead } from "./graphql.service";
-import type { GraphQLErrorInfo } from "./graphql.service";
+import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
 import type { PlayerValue } from "../models/player";
 import type { GameweekOverallSummary } from "../models/summary";
 
@@ -79,7 +79,8 @@ function normalizeChangeDate(changeDate: string): string {
 export async function getMiniHomeSupplement(
   eventId: number,
   changeDate: string,
-  forceRefresh = false
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
 ): Promise<MiniHomeSupplementResult> {
   const result = await graphqlRead<MiniHomeSupplementResponse>(
     MINI_HOME_SUPPLEMENT_QUERY,
@@ -88,7 +89,8 @@ export async function getMiniHomeSupplement(
       authMode: "public",
       cachePolicy: "market",
       cacheVariant: `event:${eventId}`,
-      forceRefresh
+      forceRefresh,
+      trace
     }
   );
   return {

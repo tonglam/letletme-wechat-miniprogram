@@ -1,5 +1,10 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getMiniGameweekSummary } from "../../../services/summary.service";
 import type { GameweekOverallSummary } from "../../../models/summary";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 import {
   asArray,
   asRecord,
@@ -14,6 +19,7 @@ import {
 } from "../../../utils/summary-format";
 
 type GameweekTab = "summary" | "dreamTeam" | "elite" | "transfers";
+type GameweekResumeStage = "startup" | "data" | "refresh";
 
 interface GameweekSummaryData {
   loading: boolean;
@@ -43,7 +49,7 @@ interface GameweekSummaryData {
   hasTransfers: boolean;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     refreshing: false,
@@ -72,15 +78,84 @@ Page({
     hasTransfers: false
   } as GameweekSummaryData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  requestId: 0,
+  startupPending: false,
+  resumeStage: null as GameweekResumeStage | null,
+  activeLoadForceRefresh: false,
+  resumeForceRefresh: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    return this.startPageLoad("load");
+  },
+
+  onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeStage) return undefined;
+    const resumeStage = this.resumeStage;
+    const resumeForceRefresh = this.resumeForceRefresh || resumeStage === "refresh";
+    if (resumeStage === "startup") {
+      const task = this.startPageLoad("show");
+      return task.finally(() => {
+        if (this.pageVisible && !this.startupPending) {
+          this.resumeStage = null;
+          this.resumeForceRefresh = false;
+        }
+      });
+    }
+    this.setData({ loading: false, refreshing: false });
+    const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger: "show" });
+    const task = this.loadData(resumeForceRefresh, trace, this.lifecycleRevision);
+    return task.finally(() => {
+      if (this.pageVisible && !this.activeLoadForceRefresh) {
+        this.resumeStage = null;
+        this.resumeForceRefresh = false;
+      }
+    });
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeForceRefresh = this.resumeForceRefresh || this.activeLoadForceRefresh;
+    this.resumeStage = this.startupPending
+      ? "startup"
+      : this.data.refreshing || this.activeLoadForceRefresh
+        ? "refresh"
+        : this.data.loading
+          ? "data"
+          : null;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeStage = null;
+    this.activeLoadForceRefresh = false;
+    this.resumeForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  async startPageLoad(trigger: "load" | "show") {
+    const lifecycleRevision = this.lifecycleRevision;
+    const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger });
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.startupPending = false;
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.setData({ event: currentGw, maxGw: currentGw });
-    this.loadData();
+    await this.loadData(false, trace, lifecycleRevision);
   },
 
   onPullDownRefresh() {
-    this.refreshData().finally(() => wx.stopPullDownRefresh());
+    return this.refreshData().finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -90,7 +165,21 @@ Page({
     }
   },
 
-  async loadData(forceRefresh = false) {
+  async loadData(
+    forceRefresh = false,
+    trace?: PageRequestTrace,
+    lifecycleRevision?: number
+  ) {
+    const requestTrace = trace ?? capturePageRequestTrace({
+      callerSurface: "gameweek-summary",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    const requestId = ++this.requestId;
+    this.activeLoadForceRefresh = forceRefresh;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     this.setData({
       loading: true,
       error: "",
@@ -101,7 +190,8 @@ Page({
       staleNotice: ""
     });
     try {
-      const result = await getMiniGameweekSummary(this.data.event, forceRefresh);
+      const result = await getMiniGameweekSummary(this.data.event, forceRefresh, requestTrace);
+      if (!isActiveRequest()) return;
       const sectionErrors = Object.values(result.errors);
       if (sectionErrors.every(Boolean)) {
         this.setData({ error: sectionErrors[0] || "GW 总结加载失败" });
@@ -122,9 +212,13 @@ Page({
         staleNotice: result.meta.stale ? "当前为上次成功数据" : ""
       });
     } catch (error) {
+      if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "GW 总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveRequest()) {
+        this.setData({ loading: false });
+        this.activeLoadForceRefresh = false;
+      }
     }
   },
 

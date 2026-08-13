@@ -18,27 +18,12 @@
     <view class="subtitle">{{entry.playerName || '选择球队后开始'}}</view>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <view wx:if="{{error}}" id="perf-primary-home-error">
+    <app-error-state message="{{error}}" bind:retry="onRetry" />
+  </view>
   <app-loading wx:elif="{{loading}}" text="加载首页数据" />
 
   <block wx:else>
-    <view wx:if="{{noticeText}}" class="notice-strip section">
-      <text class="notice-icon">i</text>
-      <text class="notice-text">{{noticeText}}</text>
-      <view class="notice-close" catchtap="onCloseNotice">×</view>
-    </view>
-
-    <view class="section">
-      <block wx:if="{{entryError}}">
-        <app-error-state message="{{entryError}}" bind:retry="onRetry" />
-        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry">更换球队</view>
-      </block>
-      <block wx:else>
-        <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
-        <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
-      </block>
-    </view>
-
     <view class="deadline-card scoreboard section">
       <view class="deadline-top">
         <view>
@@ -66,6 +51,61 @@
         </view>
       </view>
       <view wx:else class="deadline-empty">赛程更新后显示倒计时</view>
+    </view>
+
+    <view id="perf-primary-fixtures" class="section card fixture-card">
+      <view class="fixture-head">
+        <view class="section-title">GW{{selectedFixtureGw || nextGw || '-'}} 赛程</view>
+        <view class="fixture-stepper">
+          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw">
+            <text decode="{{true}}">&lt;</text>
+          </view>
+          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw">
+            <text decode="{{true}}">&gt;</text>
+          </view>
+        </view>
+      </view>
+      <app-error-state wx:if="{{fixtureError}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
+      <app-loading wx:elif="{{fixtureLoading}}" text="加载赛程" />
+      <data-status wx:elif="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
+      <app-empty-state
+        wx:elif="{{fixtureRows.length === 0}}"
+        title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
+        description="官方赛程发布后会自动显示在这里"
+        actionText="重新加载"
+        bind:action="onRetryFixtures"
+      />
+      <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
+        <view class="fixture-team home-team">
+          <text class="team-name">{{item.homeName}}</text>
+          <text wx:if="{{item.homeDifficulty}}" class="fdr fdr-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
+        </view>
+        <view class="fixture-center">
+          <text class="fixture-vs">vs</text>
+          <text class="fixture-time">{{item.kickoffLabel}}</text>
+        </view>
+        <view class="fixture-team away-team">
+          <text class="team-name">{{item.awayName}}</text>
+          <text wx:if="{{item.awayDifficulty}}" class="fdr fdr-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <block wx:if="{{entryError}}">
+        <app-error-state message="{{entryError}}" bind:retry="onRetry" />
+        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry">更换球队</view>
+      </block>
+      <block wx:else>
+        <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
+        <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
+      </block>
+    </view>
+
+    <view wx:if="{{noticeText}}" class="notice-strip section">
+      <text class="notice-icon">i</text>
+      <text class="notice-text">{{noticeText}}</text>
+      <view class="notice-close" catchtap="onCloseNotice">×</view>
     </view>
 
     <view wx:if="{{supplementLoading || priceError || priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
@@ -136,42 +176,6 @@
       </view>
     </view>
 
-    <view class="section card fixture-card">
-      <view class="fixture-head">
-        <view class="section-title">GW{{selectedFixtureGw || nextGw || '-'}} 赛程</view>
-        <view class="fixture-stepper">
-          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw">
-            <text decode="{{true}}">&lt;</text>
-          </view>
-          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw">
-            <text decode="{{true}}">&gt;</text>
-          </view>
-        </view>
-      </view>
-      <app-error-state wx:if="{{fixtureError}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
-      <app-loading wx:elif="{{fixtureLoading}}" text="加载赛程" />
-      <app-empty-state
-        wx:elif="{{fixtureRows.length === 0}}"
-        title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
-        description="官方赛程发布后会自动显示在这里"
-        actionText="重新加载"
-        bind:action="onRetryFixtures"
-      />
-      <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
-        <view class="fixture-team home-team">
-          <text class="team-name">{{item.homeName}}</text>
-          <text wx:if="{{item.homeDifficulty}}" class="fdr fdr-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
-        </view>
-        <view class="fixture-center">
-          <text class="fixture-vs">vs</text>
-          <text class="fixture-time">{{item.kickoffLabel}}</text>
-        </view>
-        <view class="fixture-team away-team">
-          <text class="team-name">{{item.awayName}}</text>
-          <text wx:if="{{item.awayDifficulty}}" class="fdr fdr-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
-        </view>
-      </view>
-    </view>
   </block>
   <bottomNavBar active="home" />
 </view>

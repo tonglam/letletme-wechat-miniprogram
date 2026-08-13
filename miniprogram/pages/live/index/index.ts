@@ -1,9 +1,12 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { ensureAppContext } from "../../../services/app-context.service";
 
-Page({
+PerformancePage({
   data: {
-    entryId: undefined as number | undefined,
+    contextResolved: false,
+    entryId: 0,
     event: 0,
     cards: [
       {
@@ -30,9 +33,47 @@ Page({
     ]
   },
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+
+  onLoad() {
+    this.pageVisible = true;
+    return this.loadContext("page-load");
+  },
+
   onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return undefined;
+    return this.loadContext("page-show");
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.lifecycleRevision += 1;
+  },
+
+  async loadContext(reason: "page-load" | "page-show") {
+    const lifecycleRevision = this.lifecycleRevision;
+    try {
+      await ensureAppContext({ reason });
+    } catch {
+      // Keep the landing page usable with the last normalized app state.
+    }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
-    this.setData({ entryId: app.globalData.entryId, event: app.globalData.gw });
+    this.setData({
+      contextResolved: true,
+      entryId: app.globalData.entryId ?? 0,
+      event: app.globalData.gw
+    });
   },
 
   onOpenEntryStrip() {

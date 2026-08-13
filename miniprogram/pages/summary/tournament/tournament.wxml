@@ -15,9 +15,9 @@
     </picker>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载联赛总结" />
-  <view wx:elif="{{emptyState}}" class="section empty-state-section">
+  <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section empty-state-section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
       title="{{emptyTitle}}"
@@ -35,7 +35,7 @@
       <view class="tab-item {{showMetrics ? 'tab-active' : ''}}" data-tab="metrics" catchtap="onTabTap">指标</view>
     </view>
 
-    <view wx:if="{{showOverview}}" class="section">
+    <view id="perf-primary-content" wx:if="{{showOverview}}" class="section">
       <app-empty-state
         wx:if="{{!hasOverview}}"
         title="GW{{event}} 总结还没准备好"
@@ -65,7 +65,7 @@
       </block>
     </view>
 
-    <view wx:if="{{showRankings}}" class="section">
+    <view id="perf-primary-content" wx:if="{{showRankings}}" class="section">
       <app-empty-state
         wx:if="{{!hasRankings}}"
         title="本轮排名还没生成"
@@ -90,7 +90,7 @@
       </view>
     </view>
 
-    <view wx:if="{{showMetrics}}" class="section">
+    <view id="perf-primary-content" wx:if="{{showMetrics}}" class="section">
       <app-empty-state
         wx:if="{{!hasMetrics}}"
         title="累计指标还没生成"

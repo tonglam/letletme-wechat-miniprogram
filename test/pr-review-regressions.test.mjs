@@ -59,7 +59,7 @@ test("failed event metadata is represented as unavailable, not offseason", () =>
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const template = source("miniprogram/pages/my-fpl/index/index.wxml");
   assert.match(service, /eventContextAvailable = false/);
-  assert.match(service, /eventContextAvailable = true/);
+  assert.match(service, /eventContextAvailable =\s*appContext\.phase !== "unresolved"/);
   assert.match(overview, /if \(!context\.eventContextAvailable\)/);
   assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
 });
@@ -100,7 +100,7 @@ test("Home commits Fixtures before starting secondary network reads", () => {
   assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
-    /if \(contextMissing \|\| deadlineExpired\) \{[\s\S]*await app\.initAppData\(true\)[\s\S]*await this\.loadPage\(true\)/
+    /const forceContextForUserRefresh = !deadlineTriggered[\s\S]*if \(forceContextForUserRefresh \|\| contextMissing \|\| deadlineExpired\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
   );
 });
 
@@ -109,11 +109,11 @@ test("empty fixture directories clear previously composed cards", () => {
   assert.match(fixtures, /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/);
 });
 
-test("Explore waits for shared launch context before syncing its context row", () => {
+test("Explore paints its route registry without a context network request", () => {
   const explore = source("miniprogram/pages/explore/index/index.ts");
-  assert.match(explore, /async onLoad\(\)/);
-  assert.match(explore, /await app\.initAppData\(false\)[\s\S]*this\.syncContext\(\)/);
-  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.refreshContext\(\)/);
+  assert.match(explore, /onLoad\(\)[\s\S]*this\.buildGroups\(\)[\s\S]*this\.syncContext\(\)/);
+  assert.doesNotMatch(explore, /initAppData\(/);
+  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.syncContext\(\)/);
 });
 
 test("player directory completion preserves edits made during the request", () => {
@@ -139,19 +139,19 @@ test("My FPL last-good views survive context and refresh failures", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(overview, /fallbackEvent[\s\S]*if \(cached\)[\s\S]*eventContextAvailable: true/);
-  assert.match(team, /await app\.initAppData\(false\)[\s\S]*wasCurrentEvent/);
+  assert.match(team, /await this\.ensureContext\("page-show"\)[\s\S]*wasCurrentEvent/);
   assert.match(team, /restartForPrincipalChange\(entryId\)/);
   assert.match(template, /error && !hasTeamData/);
   assert.match(template, /当前显示上次成功结果/);
   assert.match(overview, /cached\.season === season/);
-  assert.match(team, /retainTransferRowsAfterFailure/);
+  assert.match(team, /async loadTab[\s\S]*catch \(error\)[\s\S]*tabError: message/);
 });
 
 test("match rollover detaches same-status in-flight work", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /nextEventId !== this\.currentEventId[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null[\s\S]*this\.liveRequestKey = ""/
+    /nextCurrentEventId !== this\.currentEventId \|\| nextTargetEventId !== this\.targetEventId[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null[\s\S]*this\.liveRequestKey = ""/
   );
 });
 
@@ -186,12 +186,13 @@ test("tournament status reports only rows actually retained", () => {
 test("team summary requests discard older GW responses", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(team, /const requestId = \+\+this\.loadRequestId/);
-  assert.match(team, /if \(requestId !== this\.loadRequestId\) return/);
-  assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
+  assert.match(team, /if \(!this\.pageVisible \|\| requestId !== this\.loadRequestId\) return/);
+  assert.match(team, /if \(this\.pageVisible && requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
   assert.match(
     team,
-    /if \(!eventResult\) \{[\s\S]*const historySupport = mapHistorySupportRows[\s\S]*hasTeamData: hasHistory[\s\S]*emptyState: hasHistory \? "" : "event"/
+    /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/
   );
+  assert.match(team, /async loadTab[\s\S]*getEntryTeamStatsHistory[\s\S]*getEntryTeamStatsTransfers/);
   assert.match(team, /function mapHistorySupportRows[\s\S]*seasonHistoryRows: \[\.\.\.history\.history\]/);
   assert.match(team, /catch \(error\) \{[\s\S]*restartForPrincipalChange\(entryId\)/);
 });
@@ -214,12 +215,13 @@ test("unchanged live probes refresh the displayed check time", () => {
 test("fixture windows honor event and season cache identity on open and resume", () => {
   const app = source("miniprogram/app.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
-  assert.match(app, /getCurrentEventAndDeadline\(forceRefresh\)/);
+  assert.match(app, /await ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*reason:/);
   assert.match(app, /await this\._pendingInit;[\s\S]*return this\.initAppData\(true\)/);
-  assert.match(fixtures, /await this\.syncEventContext\(false\)/);
-  assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false\)/);
+  assert.match(fixtures, /await this\.syncEventContext\(false, lifecycleRevision\)/);
+  assert.match(fixtures, /async onShow\(\)[\s\S]*await this\.syncEventContext\(false, lifecycleRevision\)/);
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(fixtures, /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/);
+  assert.match(fixtures, /onRetry\(\)[\s\S]*runForcedRefresh\(\)[\s\S]*syncEventContext\(true, lifecycleRevision\)[\s\S]*load\(true, trace, lifecycleRevision\)/);
 });
 
 test("My FPL partial brief reads retain only fields from the failed source", () => {
@@ -266,11 +268,11 @@ test("website returns bypass competition cache and accepted handoffs await clipb
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
-  assert.match(competitions, /if \(resumed\)[\s\S]*this\.loadList\(true\)/);
+  assert.match(competitions, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadList\(forceRefresh, trace, lifecycleRevision\)/);
   assert.match(competitions, /cached\.season === season/);
   assert.match(
     competitions,
-    /if \(currentFollowEntryId\(\) !== entryId\) \{[\s\S]*this\.loadList\(true\)/,
+    /if \(currentFollowEntryId\(\) !== entryId\) \{[\s\S]*void this\.loadList\(true, trace\)/,
     "an authoritative principal change restarts rather than applying the old response"
   );
   assert.match(competitions, /if \(await openWebsiteAction\(action\)\)/);
@@ -281,7 +283,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false\)/);
+  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(forceRefresh, trace, lifecycleRevision\)/);
   assert.match(leagues, /cached\.season === season/);
 });
 
@@ -290,23 +292,25 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   const service = source("miniprogram/services/fixture.service.ts");
   const common = source("miniprogram/services/common.service.ts");
   const home = source("miniprogram/pages/home/index/index.ts");
-  assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false\)/);
-  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false\)/);
-  assert.match(fixtures, /await this\.load\(seasonChanged\)/);
-  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh\)/);
-  assert.match(fixtures, /getTeamList\(season, forceRefresh\)/);
+  assert.match(fixtures, /const seasonChanged = await this\.syncEventContext\(false, lifecycleRevision\)/);
+  assert.match(fixtures, /async onLoad\(\)[\s\S]*await this\.load\(false, trace, lifecycleRevision\)/);
+  assert.match(fixtures, /await this\.load\(seasonChanged, trace, lifecycleRevision\)/);
+  assert.match(fixtures, /getFixtureWindow\(startEvent, horizon, season, forceRefresh, trace\)/);
+  assert.match(fixtures, /getTeamList\(season, forceRefresh, trace\)/);
   assert.doesNotMatch(service, /fixtures\(limit:\s*500\)/);
   assert.match(service, /eventFixtures\(eventId:/);
   assert.match(service, /query CoreEventFixtureSchedule/);
   assert.doesNotMatch(common, /query EventFixtures/);
-  assert.match(home, /getCoreEventFixtureSchedule/);
+  assert.match(home, /readCoreEventFixtureSchedule/);
   assert.ok(
     home.indexOf("const fixtureResult = await fixtureTask") <
       home.indexOf("void this.loadSecondaryData"),
     "the fixture response releases the first screen before auxiliary Home data settles"
   );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
-  assert.match(service, /cacheVariant: season \? `season:\$\{season\}` : "season:unknown"/);
+  assert.match(service, /if \(!season\) throw new Error/);
+  assert.match(service, /cacheVariant: `season:\$\{season\}`/);
+  assert.doesNotMatch(service, /season:unknown/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
@@ -317,9 +321,11 @@ test("initial league and competition payloads use named session cache policies",
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const common = source("miniprogram/services/common.service.ts");
-  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false\)/);
-  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false\)/);
-  assert.match(common, /getTeamList[\s\S]*cacheVariant: _season \? `season:\$\{_season\}` : "season:unknown"/);
+  assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
+  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false, trace, lifecycleRevision\)/);
+  assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
+  assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
+  assert.doesNotMatch(common, /season:unknown/);
 });
 
 test("resident league and competition rows never cross a season", () => {
@@ -363,7 +369,7 @@ test("no-follow actions survive context failure and profile checks compare the r
 test("forced My FPL refresh reaches the cached team identity read", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const service = source("miniprogram/services/my-fpl.service.ts");
-  assert.match(overview, /getMyFplTeamBrief\(context\.entryId, event, forceRefresh\)/);
+  assert.match(overview, /loadOverviewSecondary\([\s\S]*context\.entryId,[\s\S]*forceRefresh[\s\S]*getMyFplTeamBrief\(entryId, event, forceRefresh\)/);
   assert.match(service, /getMyFplTeamBrief\([\s\S]*forceRefresh = false[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
 });
 
@@ -371,21 +377,22 @@ test("Home first show cannot race the initial page load", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
   assert.match(
     home,
-    /async onLoad\(\)[\s\S]*_initialLoadDone = false[\s\S]*await this\.loadPage\(\)[\s\S]*_initialLoadDone = true/
+    /onLoad\(\)[\s\S]*_initialLoadDone = false[\s\S]*startHomeLifecycle\("cold-launch", "page-load"\)/
   );
-  assert.match(home, /async onShow\(\)[\s\S]*if \(!this\._initialLoadDone\) return/);
+  assert.match(home, /async onShow\(\)[\s\S]*if \(this\._resumeStartupOnShow\)[\s\S]*startHomeLifecycle\("warm-enter", "page-show"\)[\s\S]*if \(!this\._initialLoadDone\) return/);
+  assert.match(home, /startHomeLifecycle\([\s\S]*const isActiveLifecycle = \(\) => \([\s\S]*await this\.loadPage\(false, tracker\)[\s\S]*_initialLoadDone = true/);
 });
 
 test("profile and tournament pull-to-refresh bypass reporting caches", () => {
   const profile = source("miniprogram/pages/entry/profile/profile.ts");
   const tournament = source("miniprogram/pages/summary/tournament/tournament.ts");
   const service = source("miniprogram/services/tournament.service.ts");
-  assert.match(profile, /onPullDownRefresh\(\)[\s\S]*loadEntry\(Number\(this\.data\.entryId\), true\)/);
-  assert.match(profile, /loadEntry\(entryId: number, forceRefresh = false\)[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
+  assert.match(profile, /onPullDownRefresh\(\)[\s\S]*loadAuthoritativeEntry\("refresh", this\.lifecycleRevision, true\)/);
+  assert.match(profile, /async loadEntry\([\s\S]*entryId: number,[\s\S]*forceRefresh = false,[\s\S]*getEntryInfo\(entryId, forceRefresh, trace\)/);
   assert.match(tournament, /async refreshData\(\)[\s\S]*loadTournaments\(true\)/);
-  assert.match(tournament, /loadTournaments\(forceRefresh = false\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh\)[\s\S]*loadSummary\(forceRefresh\)/);
-  assert.match(tournament, /loadSummary\(forceRefresh = false\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh\)/);
-  assert.match(service, /getEntrySummaryTournaments\(entry: number, forceRefresh = false\)[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
+  assert.match(tournament, /loadTournaments\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getEntrySummaryTournaments\(this\.data\.entryId, forceRefresh, trace\)[\s\S]*loadSummary\(forceRefresh, trace\)/);
+  assert.match(tournament, /loadSummary\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*getTournamentSummary\([\s\S]*forceRefresh,[\s\S]*trace/);
+  assert.match(service, /getEntrySummaryTournaments\([\s\S]*forceRefresh = false,[\s\S]*trace\?: PageRequestTrace[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
   assert.match(service, /getTournamentSummary\([\s\S]*forceRefresh = false[\s\S]*cachePolicy: "reporting"[\s\S]*forceRefresh/);
 });
 
@@ -415,9 +422,10 @@ test("historical Live selections reset when the season changes", () => {
 test("first personal paints honor season-aware event and reporting policies", () => {
   const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
-  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false\)/);
-  assert.match(overview, /if \(resumed\)[\s\S]*this\.loadOverview\(false\)/);
-  assert.match(team, /async onLoad\(\)[\s\S]*this\.loadData\(false\)/);
+  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false/);
+  assert.match(overview, /async resumeOverview\(\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadOverview\(forceRefresh, lifecycleRevision\)/);
+  assert.match(team, /async onLoad\(\)[\s\S]*capturePageRequestTrace[\s\S]*this\.initializeFromContext\(false, trace, tracker\)/);
+  assert.match(team, /async initializeFromContext\([\s\S]*forceRefresh: boolean,[\s\S]*trace\?: PageRequestTrace,[\s\S]*tracker\?: PagePerformanceTracker[\s\S]*this\.loadData\(forceRefresh, trace\)/);
   assert.match(overview, /event === undefined/);
 });
 
@@ -426,10 +434,10 @@ test("Match and Team retries bypass repeating-season caches", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
-  assert.match(team, /onRetry\(\)[\s\S]*this\.loadData\(true\)/);
+  assert.match(team, /onRetry\(\)[\s\S]*data\.error[\s\S]*runForcedRefresh\([\s\S]*activeTab === "squad"[\s\S]*runForcedRefresh\(/);
   assert.match(team, /onEmptyAction\(\)[\s\S]*this\.loadData\(true\)/);
   assert.match(team, /const contextChanged = seasonChanged \|\| \(eventChanged && wasCurrentEvent\)/);
-  assert.match(team, /if \(!eventResult\) \{[\s\S]*transferError,[\s\S]*hasTeamData: hasHistory/);
+  assert.match(team, /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/);
   assert.match(fixtures, /selectedWindowByUser[\s\S]*const startEvent = this\.selectedWindowByUser/);
 });
 
@@ -478,16 +486,17 @@ test("personal responses never cross an authoritative follow change", () => {
 });
 
 test("all Live surfaces refresh event context before resume polling", () => {
-  for (const path of [
-    "miniprogram/pages/live/entry/entry.ts",
-    "miniprogram/pages/live/match/match.ts",
-    "miniprogram/pages/live/tournament/tournament.ts"
-  ]) {
-    const page = source(path);
-    assert.match(page, /async onShow\(\)/, path);
-    assert.match(page, /if \(resumed\)[\s\S]*await app\.initAppData\(false\)/, path);
-    assert.match(page, /nextEventId[\s\S]*forceRefresh: true/, path);
-  }
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(entry, /async onShow\(\)/);
+  assert.match(entry, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(entry, /nextEventId[\s\S]*forceRefresh: true/);
+  const match = source("miniprogram/pages/live/match/match.ts");
+  assert.match(match, /async onShow\(\)/);
+  assert.match(match, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(match, /nextCurrentEventId[\s\S]*nextTargetEventId[\s\S]*forceRefresh: true/);
+  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  assert.match(tournament, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
+  assert.match(tournament, /nextEventId[\s\S]*forceRefresh: true/);
 });
 
 test("unknown fixture difficulty uses a neutral style", () => {

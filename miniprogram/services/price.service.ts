@@ -1,7 +1,9 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { DomainRead, ServiceReadOptions } from "./service-read";
 import type { PlayerValue, PlayerValueChange } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 import { formatDateKey } from "../utils/date";
+import { getAppContextSnapshot } from "./app-context.service";
 
 const PLAYER_VALUES = `
   query GetPlayerValues($changeDate: Date!) {
@@ -199,19 +201,39 @@ function priceCacheTtl(changeDate: string): number {
 }
 
 export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
+  return (await readPlayerValueByDate(changeDate, { forceRefresh })).data;
+}
+
+export async function readPlayerValueByDate(
+  changeDate: string,
+  options: ServiceReadOptions = {}
+): Promise<DomainRead<PlayerValueChange[]>> {
+  const result = await graphqlRead<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
     cachePolicy: "market",
     getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
-    forceRefresh
+    forceRefresh: options.forceRefresh,
+    trace: options.trace
   });
-  return (data.playerValues || [])
-    .filter((value) => value.value !== value.lastValue)
-    .map(mapPlayerValueChange);
+  if (result.errors.length > 0) {
+    throw new Error(
+      result.errors.map((error) => error.message).filter(Boolean).join("; ")
+      || "身价变化数据暂时不可用，请稍后重试"
+    );
+  }
+  return {
+    data: (result.data.playerValues || [])
+      .filter((value) => value.value !== value.lastValue)
+      .map(mapPlayerValueChange),
+    meta: result.meta
+  };
 }
 
 export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {
+  const season = getAppContextSnapshot()?.season;
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, {
     cachePolicy: "historical",
+    cacheVariant: `season:${season}`,
     forceRefresh
   });
   return (data.playerValueHistory || []).map((item) => enrichPriceChange({

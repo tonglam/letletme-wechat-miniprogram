@@ -1,4 +1,4 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRequest, type PageRequestTrace } from "./graphql.service";
 import type { PlayerDetail, PlayerFilterRow, PlayerOption } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 
@@ -158,6 +158,7 @@ export interface PlayerPickerPageOptions {
   limit?: number;
   cursor?: number | null;
   forceRefresh?: boolean;
+  trace?: PageRequestTrace;
 }
 
 export interface PlayerPickerPageResult {
@@ -180,8 +181,10 @@ function currentEventId(): number {
   return Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
 }
 
-function currentSeason(): string {
-  return String(getApp<IAppOption>().globalData.season || "unknown");
+function currentSeason(explicitSeason?: string): string {
+  const season = String(explicitSeason || getApp<IAppOption>().globalData.season || "").trim();
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
+  return season;
 }
 
 function mapPlayer(player: GraphQLPlayer): PlayerOption {
@@ -239,7 +242,8 @@ export async function getPlayersForPickerPage(
       authMode: "public",
       cachePolicy: "player-picker",
       cacheVariant: `season:${currentSeason()}`,
-      forceRefresh: options.forceRefresh === true
+      forceRefresh: options.forceRefresh === true,
+      trace: options.trace
     }
   );
   const page = data.playersForPicker;
@@ -254,7 +258,12 @@ export async function getPlayerInfoByElement(element: number): Promise<PlayerDet
   return getPlayerDetailByElement(element);
 }
 
-export async function getPlayerInfoByCode(code: number | string, _season?: string): Promise<PlayerDetail> {
+export async function getPlayerInfoByCode(
+  code: number | string,
+  season?: string,
+  forceRefresh = false,
+  trace?: import("./graphql.service").PageRequestTrace
+): Promise<PlayerDetail> {
   const playerId = Number(code);
   const data = await graphqlRequest<PlayerResponse>(
     PLAYER,
@@ -262,7 +271,9 @@ export async function getPlayerInfoByCode(code: number | string, _season?: strin
     {
       authMode: "public",
       cachePolicy: "reporting",
-      cacheVariant: `season:${currentSeason()}`
+      cacheVariant: `season:${currentSeason(season)}`,
+      forceRefresh,
+      trace
     }
   );
   if (!data.player) {

@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getPerf, clearPerf } from "../../../utils/perf";
 import type { StoredPerf, ApiRecord } from "../../../utils/perf";
 
@@ -29,8 +30,8 @@ interface PageData {
   totalApiCalls: number;
   networkApiCalls: number;
   cacheHitRate: number;
-  networkP50: number;
-  networkP95: number;
+  networkP50: string;
+  networkP95: string;
   failedOperations: string;
   networkType: string;
   system: string;
@@ -49,7 +50,7 @@ interface WxPerformance {
   getEntriesByType(type: string): WxPerfEntry[];
 }
 
-Page({
+PerformancePage({
   data: {
     score: 0,
     scoreGrade: "none",
@@ -59,8 +60,8 @@ Page({
     totalApiCalls: 0,
     networkApiCalls: 0,
     cacheHitRate: 0,
-    networkP50: 0,
-    networkP95: 0,
+    networkP50: "--",
+    networkP95: "--",
     failedOperations: "",
     networkType: "-",
     system: "-",
@@ -127,8 +128,8 @@ Page({
       totalApiCalls: records.length,
       networkApiCalls: networkRecords.length,
       cacheHitRate: records.length ? Math.round((cacheHits / records.length) * 100) : 0,
-      networkP50: percentile(networkRecords.map((record) => record.duration), 0.5),
-      networkP95: percentile(networkRecords.map((record) => record.duration), 0.95),
+      networkP50: formatDuration(percentile(networkRecords.map((record) => record.duration), 0.5)),
+      networkP95: formatDuration(percentile(networkRecords.map((record) => record.duration), 0.95, 10)),
       failedOperations: failures.join("、"),
       updatedAt: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
       hasData
@@ -167,11 +168,15 @@ function isNetworkRecord(record: ApiRecord): boolean {
   return record.networkAttempted === true || (!record.source && record.networkAttempted !== false) || record.source === "network";
 }
 
-function percentile(values: number[], quantile: number): number {
-  if (values.length === 0) return 0;
+function percentile(values: number[], quantile: number, minimumSamples = 1): number | null {
+  if (values.length < minimumSamples) return null;
   const ordered = values.slice().sort((left, right) => left - right);
   const index = Math.min(ordered.length - 1, Math.max(0, Math.ceil(ordered.length * quantile) - 1));
   return Math.round(ordered[index]);
+}
+
+function formatDuration(value: number | null): string {
+  return value === null ? "--" : `${value}ms`;
 }
 
 function rateMs(ms: number, goodThreshold: number, avgThreshold: number): Rating {
@@ -233,8 +238,8 @@ function buildMetrics(
   }
 
   const networkRecords = stored.apiRecords.filter(isNetworkRecord);
-  if (networkRecords.length > 0) {
-    const p95 = percentile(networkRecords.map((record) => record.duration), 0.95);
+  if (networkRecords.length >= 10) {
+    const p95 = percentile(networkRecords.map((record) => record.duration), 0.95, 10) as number;
     const rating = rateMs(p95, 500, 1500);
     rows.push({
       key: "networkP95",

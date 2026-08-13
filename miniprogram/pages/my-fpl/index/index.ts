@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getCurrentSnapshotState,
   getMyFplContext,
@@ -93,9 +94,10 @@ export function readOverviewCache(
   return null;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: true,
+    principalResolved: false,
     phase: "PRE_DEADLINE" as MyFplPhase,
     principalState: "NO_FOLLOW" as MyFplPrincipalState,
     deadlineText: "",
@@ -111,56 +113,106 @@ Page({
   context: null as MyFplContext | null,
   requestId: 0,
   hasShown: false,
+  pageVisible: false,
+  lifecycleRevision: 0,
   unsubscribeNetwork: undefined as (() => void) | undefined,
+  overviewRequestPending: false,
+  overviewRequestForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
     this.unsubscribeNetwork = subscribeNetworkStatus((online) => {
       this.setData({ offline: !online });
       this.syncPrincipalState();
     });
     await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     // Named cache policies and season-aware variants keep first paint current
     // without bypassing fresh entry/reporting data.
-    void this.loadOverview(false);
+    await this.loadOverview(false, lifecycleRevision);
   },
 
   onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
-      // Return from the website handoff or team search: re-read the follow
-      // pointer before any personal content (§9 return refresh).
-      void this.loadOverview(false);
+      return this.resumeOverview();
     }
+    return undefined;
+  },
+
+  async resumeOverview() {
+    const lifecycleRevision = this.lifecycleRevision;
+    const forceRefresh = this.resumeForceRefresh;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.resumeForceRefresh = false;
+    await this.loadOverview(forceRefresh, lifecycleRevision);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    if (this.overviewRequestPending && this.overviewRequestForceRefresh) {
+      this.resumeForceRefresh = true;
+    }
+    this.overviewRequestPending = false;
+    this.overviewRequestForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
   onUnload() {
+    this.pageVisible = false;
+    this.resumeForceRefresh = false;
+    this.overviewRequestPending = false;
+    this.overviewRequestForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
     this.unsubscribeNetwork?.();
   },
 
   onPullDownRefresh() {
-    this.loadOverview(true).finally(() => wx.stopPullDownRefresh());
+    return this.loadOverview(true).finally(() => wx.stopPullDownRefresh());
   },
 
-  isStale(requestId: number): boolean {
-    return requestId !== this.requestId;
+  isStale(requestId: number, lifecycleRevision: number): boolean {
+    return !this.pageVisible
+      || requestId !== this.requestId
+      || lifecycleRevision !== this.lifecycleRevision;
   },
 
-  async loadOverview(forceRefresh = false) {
+  async loadOverview(forceRefresh = false, lifecycleRevision?: number) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
+    this.overviewRequestPending = true;
+    this.overviewRequestForceRefresh = forceRefresh;
+    try {
+      await this.performLoadOverview(forceRefresh, ownerRevision);
+    } finally {
+      if (this.pageVisible && ownerRevision === this.lifecycleRevision) {
+        this.overviewRequestPending = false;
+        this.overviewRequestForceRefresh = false;
+      }
+    }
+  },
+
+  async performLoadOverview(forceRefresh: boolean, ownerRevision: number) {
     const requestId = ++this.requestId;
     const loadStart = Date.now();
     this.setData({ loading: true, error: "", leaguesUnavailable: false });
 
     const previousContext = this.context;
     const context = await getMyFplContext(forceRefresh);
-    if (this.isStale(requestId)) return;
+    if (this.isStale(requestId, ownerRevision)) return;
     const app = getApp<IAppOption>();
     const fallbackEvent = previousContext?.currentEvent
       ?? previousContext?.nextEvent
       ?? (Number(app.globalData.gw) || 0);
     const fallbackSeason = previousContext?.season
       ?? (String(app.globalData.season || "") || undefined);
-    const event = context.currentEvent ?? context.nextEvent ?? fallbackEvent;
+    const event = Number(context.currentEvent ?? context.nextEvent ?? fallbackEvent) || 0;
     const season = context.season ?? fallbackSeason;
     const effectiveContext = context.eventContextAvailable || !event
       ? context
@@ -197,7 +249,7 @@ Page({
           ...resolveOverviewLeagueState(null, cached.leagueCount),
           error: "赛季信息刷新失败，当前显示上次成功结果"
         });
-        this.syncPrincipalState();
+        this.syncPrincipalState(true);
         return;
       }
       this.setData({
@@ -206,7 +258,7 @@ Page({
         leaguesLoaded: true,
         error: "赛季信息暂时不可用，请稍后重试"
       });
-      this.syncPrincipalState();
+      this.syncPrincipalState(true);
       return;
     }
 
@@ -233,7 +285,7 @@ Page({
       cacheOutcome: cached ? "last-good" : "miss",
       durationBucket: durationBucket(Date.now() - loadStart)
     });
-    this.syncPrincipalState();
+    this.syncPrincipalState(true);
 
     if (!context.entryId) {
       this.setData({
@@ -245,16 +297,41 @@ Page({
       return;
     }
 
+    const secondaryTask = this.loadOverviewSecondary(
+      requestId,
+      ownerRevision,
+      context,
+      context.entryId,
+      event,
+      season,
+      cached,
+      forceRefresh
+    );
+    if (forceRefresh) await secondaryTask;
+    else void secondaryTask;
+  },
+
+  async loadOverviewSecondary(
+    requestId: number,
+    lifecycleRevision: number,
+    context: MyFplContext,
+    entryId: number,
+    event: number,
+    season: string | undefined,
+    cached: OverviewCache | null,
+    forceRefresh: boolean
+  ) {
+
     // Snapshot and bounded secondary summaries are independent and degrade
     // separately after the primary card is already visible.
     const [snapshotState, briefResult, leagues] = await Promise.all([
       context.currentEvent
         ? getCurrentSnapshotState(context.currentEvent)
         : Promise.resolve(undefined),
-      getMyFplTeamBrief(context.entryId, event, forceRefresh).catch(() => null),
-      getMyFplLeagues(context.entryId, forceRefresh).catch(() => null)
+      getMyFplTeamBrief(entryId, event, forceRefresh).catch(() => null),
+      getMyFplLeagues(entryId, forceRefresh).catch(() => null)
     ]);
-    if (this.isStale(requestId)) return;
+    if (this.isStale(requestId, lifecycleRevision)) return;
     if (currentFollowEntryId() !== context.entryId) {
       // A sub-read may recover a 401 and replace the authoritative follow.
       // Clear the old principal immediately, then restart under the new one.
@@ -313,7 +390,7 @@ Page({
     try {
       if (season) {
         wx.setStorageSync(OVERVIEW_CACHE_KEY, {
-          entryId: context.entryId,
+          entryId,
           season,
           event,
           teamBrief: nextBrief,
@@ -325,7 +402,7 @@ Page({
     this.syncPrincipalState();
   },
 
-  syncPrincipalState() {
+  syncPrincipalState(principalResolved = false) {
     const context = this.context;
     const event = context?.currentEvent ?? context?.nextEvent ?? 0;
     const hasCachedContent = Boolean(readOverviewCache(context?.entryId, event, context?.season));
@@ -343,7 +420,10 @@ Page({
         eventId: event || undefined
       });
     }
-    this.setData({ principalState: next });
+    this.setData({
+      principalState: next,
+      ...(principalResolved ? { principalResolved: true } : {})
+    });
   },
 
   onPhasePrimary(event: WechatMiniprogram.CustomEvent<{ phase: MyFplPhase }>) {

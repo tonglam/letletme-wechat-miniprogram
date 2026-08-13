@@ -1,6 +1,7 @@
 export interface TournamentOption {
   id: number | string;
   name: string;
+  participantCount?: number;
   startGw?: number;
   endGw?: number;
 }

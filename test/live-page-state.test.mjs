@@ -53,26 +53,32 @@ test("re-arms current-gameweek polling before loading the switched context", () 
   assert.deepEqual(calls, ["stop", "set:33", "sync:33", "load:33:true"]);
 });
 
-test("an overlapping manual refresh awaits its independent transfer refresh", async () => {
+test("an overlapping manual refresh queues one forced CalcLive and forced transfer refresh", async () => {
   let resolveScore;
-  let resolveTransfers;
   const scoreRequest = new Promise((resolve) => {
     resolveScore = resolve;
   });
-  const transfersRequest = new Promise((resolve) => {
-    resolveTransfers = resolve;
-  });
   const transferCalls = [];
+  const scoreCalls = [];
   const context = {
     data: { entryId: 123, event: 33 },
     liveRequest: scoreRequest,
     liveRequestKey: "123:33",
+    liveRequestForced: false,
+    liveRequestId: 1,
+    liveForcedFollowup: null,
+    pageVisible: true,
+    loadTransfersAfterLive: false,
     restartForPrincipalChange() {
       return false;
     },
     loadTransfers(entryId, eventId, forceRefresh) {
       transferCalls.push([entryId, eventId, forceRefresh]);
-      return transfersRequest;
+      return Promise.resolve();
+    },
+    loadData(options) {
+      scoreCalls.push(options);
+      return this.loadTransfers(this.data.entryId, this.data.event, options.forceRefresh === true);
     }
   };
 
@@ -85,26 +91,22 @@ test("an overlapping manual refresh awaits its independent transfer refresh", as
     settled = true;
   });
 
-  assert.deepEqual(transferCalls, [[123, 33, true]]);
+  assert.deepEqual(transferCalls, []);
+  assert.equal(context.loadTransfersAfterLive, false);
   resolveScore();
-  await Promise.resolve();
-  assert.equal(settled, false, "the pull refresh must remain active for transfers");
-  resolveTransfers();
   await result;
   assert.equal(settled, true);
+  assert.equal(scoreCalls.length, 1);
+  assert.equal(scoreCalls[0].forceRefresh, true);
+  assert.equal(scoreCalls[0].includeTransfers, true);
+  assert.deepEqual(transferCalls, [[123, 33, true]]);
 });
 
 test("match cold start waits for the current event before arming recovery", async () => {
   const calls = [];
-  let resolveAppData;
+  let resolveContext;
   const app = {
-    globalData: { gw: 0, currentGw: 0 },
-    initAppData() {
-      calls.push("init");
-      return new Promise((resolve) => {
-        resolveAppData = resolve;
-      });
-    }
+    globalData: { gw: 0, currentGw: 0 }
   };
   globalThis.getApp = () => app;
   globalThis.wx = {
@@ -116,6 +118,12 @@ test("match cold start waits for the current event before arming recovery", asyn
     data: { ...matchPage.data },
     currentEventId: 0,
     liveRefresh: null,
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return new Promise((resolve) => {
+        resolveContext = resolve;
+      });
+    },
     setData(update) {
       Object.assign(this.data, update);
       if (update.loading) calls.push("loading");
@@ -127,6 +135,7 @@ test("match cold start waits for the current event before arming recovery", asyn
         }
       };
     },
+    armContextDeadline() {},
     syncDisplayState() {},
     loadData() {
       calls.push(`load:${this.currentEventId}`);
@@ -135,14 +144,15 @@ test("match cold start waits for the current event before arming recovery", asyn
   };
 
   const loading = matchPage.onLoad.call(context);
-  assert.deepEqual(calls, ["loading", "init"]);
+  assert.deepEqual(calls, ["loading", "context:page-load"]);
   app.globalData.gw = 33;
   app.globalData.currentGw = 33;
-  resolveAppData();
+  resolveContext({ currentEvent: 33, displayEvent: 33, season: "2025-26" });
   await loading;
 
   assert.equal(context.currentEventId, 33);
-  assert.deepEqual(calls, ["loading", "init", "sync:33", "load:33"]);
+  assert.equal(context.targetEventId, 33);
+  assert.deepEqual(calls, ["loading", "context:page-load", "load:33"]);
 });
 
 test("match cold start selects the schema-backed not-started bucket during preseason", async () => {
@@ -156,6 +166,7 @@ test("match cold start selects the schema-backed not-started bucket during prese
     ...matchPage,
     data: { ...matchPage.data },
     currentEventId: 0,
+    ensureContext: async () => ({ currentEvent: null, displayEvent: 1, season: "2025-26" }),
     liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
@@ -169,12 +180,13 @@ test("match cold start selects the schema-backed not-started bucket during prese
 
   await matchPage.onLoad.call(context);
 
-  assert.equal(context.currentEventId, 1);
+  assert.equal(context.currentEventId, 0);
+  assert.equal(context.targetEventId, 1);
   assert.equal(context.data.status, "not_start");
   assert.equal(context.data.activeStatusLabel, "未开始");
 });
 
-test("match status changes re-arm polling before the first request", () => {
+test("match status changes filter the Core schedule without network work", () => {
   const calls = [];
   globalThis.wx = {
     setStorageSync(_key, value) {
@@ -183,6 +195,7 @@ test("match status changes re-arm polling before the first request", () => {
   };
   const context = {
     data: { ...matchPage.data, status: "finished" },
+    coreMatches: [{ matchId: 1, status: "playing", eventSummary: [] }],
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
     liveRefresh: null,
@@ -192,10 +205,7 @@ test("match status changes re-arm polling before the first request", () => {
         calls.push(`set:${this.data.status}`);
       }
     },
-    loadData() {
-      calls.push(`load:${this.data.status}`);
-      return Promise.resolve();
-    }
+    loadData() { calls.push("unexpected-load"); }
   };
   context.liveRefresh = {
     stop() {
@@ -211,13 +221,10 @@ test("match status changes re-arm polling before the first request", () => {
     currentTarget: { dataset: { status: "playing" } }
   });
 
-  assert.equal(context.liveSnapshot, null);
+  assert.deepEqual(context.data.matches.map((match) => match.matchId), [1]);
   assert.deepEqual(calls, [
     "store:playing",
-    "stop",
-    "set:playing",
-    "sync:playing",
-    "load:playing"
+    "set:playing"
   ]);
 });
 
@@ -232,7 +239,16 @@ test("match rollover invalidates an in-flight same-status request", async () => 
     data: { ...matchPage.data, status: "playing", hasData: true },
     pageVisible: false,
     hasShown: true,
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({
+        season: "2026",
+        currentEvent: 34,
+        displayEvent: 34
+      });
+    },
     currentEventId: 33,
+    targetEventId: 33,
     liveRequestId: 7,
     liveRequest: Promise.resolve(),
     liveRequestKey: "playing",
@@ -251,9 +267,10 @@ test("match rollover invalidates an in-flight same-status request", async () => 
   await matchPage.onShow.call(context);
 
   assert.equal(context.currentEventId, 34);
+  assert.equal(context.targetEventId, 34);
   assert.equal(context.liveRequestId, 8);
   assert.equal(context.liveRequest, null);
-  assert.deepEqual(calls, ["stop", "sync", "load:34:8:"]);
+  assert.deepEqual(calls, ["context:page-show", "stop", "sync", "load:34:8:"]);
 });
 
 test("entry resume revalidates current-gameweek transfers independently", async () => {
@@ -266,9 +283,14 @@ test("entry resume revalidates current-gameweek transfers independently", async 
     }
   });
   const context = {
+    ...entryPage,
     data: { ...entryPage.data, entryId: 123, event: 33, maxGw: 33 },
     pageVisible: false,
     hasShown: true,
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
     liveRefresh: {
       sync() {
         calls.push("sync");
@@ -291,7 +313,7 @@ test("entry resume revalidates current-gameweek transfers independently", async 
 
   await entryPage.onShow.call(context);
 
-  assert.deepEqual(calls, ["init:false", "sync", "transfers:123:33:false"]);
+  assert.deepEqual(calls, ["context:page-show", "sync", "transfers:123:33:false"]);
 });
 
 test("entry resume drops a historical selection after a season rollover", async () => {
@@ -305,6 +327,10 @@ test("entry resume drops a historical selection after a season rollover", async 
     pageVisible: false,
     hasShown: true,
     loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 1 });
+    },
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
     liveRequestId: 7,
@@ -335,7 +361,7 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
   assert.equal(context.liveRequestKey, "");
-  assert.deepEqual(calls, ["init:false", "stop", "sync:1", "load:1:true:true", "display"]);
+  assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 
 test("entry resume clears live data when a new season has no event yet", async () => {
@@ -349,6 +375,10 @@ test("entry resume clears live data when a new season has no event yet", async (
     pageVisible: false,
     hasShown: true,
     loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
     liveRequestId: 7,
@@ -375,7 +405,7 @@ test("entry resume clears live data when a new season has no event yet", async (
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
   assert.equal(context.liveRequestKey, "");
-  assert.deepEqual(calls, ["init:false", "stop", "sync:0", "display"]);
+  assert.deepEqual(calls, ["context:page-show", "stop", "sync:0", "display"]);
 });
 
 test("entry principal changes clear old live data and restart the followed team", () => {
@@ -458,6 +488,10 @@ test("tournament resume drops a historical selection after a season rollover", a
     cachedLiveStoredAt: 1,
     failedEntryCount: 2,
     retainedRowCount: 1,
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 1 });
+    },
     liveRefresh: {
       stop() { calls.push("stop"); },
       sync() { calls.push(`sync:${context.data.event}`); }
@@ -475,14 +509,14 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.event, 1);
   assert.equal(context.data.maxGw, 1);
   assert.deepEqual(context.data.rows, []);
-  assert.equal(context.data.selectedTournament, undefined);
+  assert.equal(context.data.selectedTournament, null);
   assert.deepEqual(context.data.selectedOwnershipPlayers, []);
   assert.deepEqual(context.data.ownershipAvailablePlayers, []);
   assert.equal(context.data.ownershipSummary, "未筛选");
   assert.equal(context.data.selectedOwnershipTeam, null);
   assert.equal(context.data.selectedTeamExposure, null);
   assert.equal(context.failedEntryCount, 0);
-  assert.deepEqual(calls, ["init:false", "stop", "sync:1", "tournaments:1:true", "display"]);
+  assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
 });
 
 test("tournament Website handoff reports clipboard failures", async () => {
@@ -639,6 +673,10 @@ test("team resume advances a current selection to the new gameweek", async () =>
     loadedSeason: "2025-26",
     _loadedAt: Date.now(),
     phaseBannerRequestId: 0,
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
     setData(update) { Object.assign(this.data, update); },
     loadData(forceRefresh) {
       calls.push(`load:${forceRefresh}`);
@@ -651,7 +689,7 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.equal(context.data.event, 34);
   assert.equal(context.data.maxGw, 34);
   assert.equal(context.data.hasTeamData, false);
-  assert.deepEqual(calls, ["init:false", "load:true"]);
+  assert.deepEqual(calls, ["context:page-show", "load:true"]);
 });
 
 test("team first load honors deadline-derived event context freshness", async () => {
@@ -686,6 +724,10 @@ test("team season rollover clears retained transfers before reloading", async ()
     hasShown: true,
     loadedSeason: "2025-26",
     loadedDataSeason: "2025-26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
     setData(update) { Object.assign(this.data, update); },
     loadData(forceRefresh) {
       calls.push(`load:${forceRefresh}`);
@@ -699,7 +741,7 @@ test("team season rollover clears retained transfers before reloading", async ()
   assert.equal(context.data.maxGw, 1);
   assert.deepEqual(context.data.transferRows, []);
   assert.equal(context.data.hasTransfers, false);
-  assert.deepEqual(calls, ["init:false", "load:true"]);
+  assert.deepEqual(calls, ["context:page-show", "load:true"]);
 });
 
 test("team principal changes clear the old view before restarting", () => {

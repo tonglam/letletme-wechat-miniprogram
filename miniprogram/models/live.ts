@@ -65,6 +65,7 @@ export interface LivePlayerRow {
 }
 
 export interface LiveEntryResult {
+  availability?: "READY" | "NO_PICKS";
   entry?: number;
   event?: number;
   total?: number;

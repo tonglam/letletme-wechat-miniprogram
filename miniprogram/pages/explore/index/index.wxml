@@ -8,7 +8,7 @@
     <filter-bar keyword="{{keyword}}" placeholder="搜索球员" actionText="查询" bind:search="onSearch" bind:submit="onSubmitSearch" bind:reset="onResetSearch" />
   </view>
 
-  <view wx:for="{{groups}}" wx:key="title" class="section">
+  <view id="{{index === 0 ? 'perf-primary-content' : ''}}" wx:for="{{groups}}" wx:key="title" class="section">
     <view class="group-title">{{item.title}}</view>
     <view class="route-grid">
       <view

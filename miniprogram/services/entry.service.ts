@@ -1,5 +1,6 @@
 import type { EntryHistory, EntryInfo, EntryLeague, EntrySearchResult, EntryTransfer } from "../models/entry";
 import { graphqlRequest } from "./graphql.service";
+import type { PageRequestTrace } from "./graphql.service";
 
 const GET_ENTRY = `
   query GetEntry($id: Int!) {
@@ -134,10 +135,15 @@ export async function searchEntries(keyword: string): Promise<EntrySearchResult[
   return entry ? [entry] : [];
 }
 
-export async function getEntryInfo(entry: number, forceRefresh = false): Promise<EntryInfo> {
+export async function getEntryInfo(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<EntryInfo> {
   const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
     cachePolicy: "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const result = mapGraphQLEntry(data.entry);
   if (!result) {
@@ -146,10 +152,15 @@ export async function getEntryInfo(entry: number, forceRefresh = false): Promise
   return result;
 }
 
-export async function getEntryLeagueInfo(entry: number, forceRefresh = false): Promise<EntryLeague[]> {
+export async function getEntryLeagueInfo(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryLeague[]> {
   const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
     cachePolicy: "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   return (data.entryLeagues || []).map((league) => ({
     id: league.id,
@@ -223,7 +234,12 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
-export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
+export async function getEntryEventTransfers(
+  entry: number,
+  event: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<EntryTransfer[]> {
   // The history payload covers the live gameweek too: while the deadline is
   // open the manager can still make moves, so current-GW views must churn
   // with the live data instead of pinning the payload for the full half hour.
@@ -239,7 +255,8 @@ export async function getEntryEventTransfers(entry: number, event: number, force
     // persisted stale entry.
     cacheVariant: isLiveEvent ? "live" : "history",
     cachePolicy: isLiveEvent ? "live" : "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);
   if (!gw) {

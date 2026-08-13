@@ -8,7 +8,7 @@
     <gw-picker value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载 GW 总结" />
 
   <block wx:else>
@@ -19,7 +19,7 @@
       <view class="tab-item {{showTransfers ? 'tab-active' : ''}}" data-tab="transfers" catchtap="onTabTap">转会</view>
     </view>
 
-    <view wx:if="{{showSummary}}" class="section card">
+    <view id="perf-primary-content" wx:if="{{showSummary}}" class="section card">
       <app-error-state wx:if="{{summaryError}}" message="{{summaryError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasSummary}}"
@@ -49,7 +49,7 @@
       </block>
     </view>
 
-    <view wx:if="{{showDreamTeam}}" class="section">
+    <view id="perf-primary-content" wx:if="{{showDreamTeam}}" class="section">
       <app-error-state wx:if="{{dreamTeamError}}" message="{{dreamTeamError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasDreamTeam}}"
@@ -73,7 +73,7 @@
       </block>
     </view>
 
-    <view wx:if="{{showElite}}" class="section card">
+    <view id="perf-primary-content" wx:if="{{showElite}}" class="section card">
       <app-error-state wx:if="{{eliteError}}" message="{{eliteError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasElite}}"
@@ -91,7 +91,7 @@
       </block>
     </view>
 
-    <view wx:if="{{showTransfers}}" class="section transfer-grid">
+    <view id="perf-primary-content" wx:if="{{showTransfers}}" class="section transfer-grid">
       <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
       <block wx:else>
       <view class="card transfer-card">

@@ -3,10 +3,20 @@ import {
   type PlayerPickerFilter
 } from "../../../services/player.service";
 import { getTeamList } from "../../../services/common.service";
-import { getPlayerValueByDate, getPlayerValueByElement } from "../../../services/price.service";
+import { getPlayerValueByElement, readPlayerValueByDate } from "../../../services/price.service";
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  nextRequestRevision,
+  isCurrentRevision,
+  observeSoftTimeout,
+  setDataAsync
+} from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
+type PriceResumeStage = "daily" | "player" | "history" | "search";
 
 interface FilterOption {
   label: string;
@@ -22,10 +32,12 @@ interface TeamDirectoryItem {
 interface PricePageData {
   activeMode: PriceMode;
   loading: boolean;
+  refreshing: boolean;
   playerLoading: boolean;
   loadingMore: boolean;
   historyLoading: boolean;
   error: string;
+  staleMessage: string;
   playersError: string;
   historyError: string;
   changeDate: string;
@@ -106,10 +118,12 @@ Page({
   data: {
     activeMode: "daily",
     loading: false,
+    refreshing: false,
     playerLoading: false,
     loadingMore: false,
     historyLoading: false,
     error: "",
+    staleMessage: "",
     playersError: "",
     historyError: "",
     changeDate: formatPickerDate(),
@@ -138,29 +152,181 @@ Page({
 
   playerRequestRevision: 0,
   playerSearchTimer: undefined as number | undefined,
+  dailyRequestOwner: {} as object,
+  perfTracker: undefined as PagePerformanceTracker | undefined,
+  pageActive: false,
+  hasShown: false,
+  startupPending: false,
+  resumeStage: null as PriceResumeStage | null,
+  resumeStageForceRefresh: false,
+  historyRequestRevision: 0,
+  dailyRequestForceRefresh: false,
+  paginationPending: false,
+  paginationCursor: null as number | null,
+  resumePaginationAfterShow: false,
+  resumePaginationCursor: null as number | null,
+  playerRefreshPending: false,
+  resumePlayerRefreshAfterShow: false,
 
-  onLoad() {
-    this.loadDailyChanges();
+  async onLoad() {
+    this.pageActive = true;
+    this.startupPending = true;
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "cold-launch");
+    const tracker = this.perfTracker;
+    // Today's public price read is not season-scoped. Context improves trace
+    // attribution but must not prevent an L1/L2 PlayerValues hit from
+    // rendering when CurrentEventInfo is temporarily unavailable.
+    try {
+      await ensureAppContext({ reason: "page-load" });
+    } catch {}
+    this.startupPending = false;
+    if (!this.pageActive || this.perfTracker !== tracker) return;
+    tracker.mark("contextReadyAt");
+    void this.loadDailyChanges();
+  },
+
+  onShow() {
+    this.pageActive = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed) return;
+    const resumePlayerRefresh = this.resumePlayerRefreshAfterShow;
+    this.resumePlayerRefreshAfterShow = false;
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/data/price/price",
+      resumePlayerRefresh ? "refresh" : "warm-enter"
+    );
+    const tracker = this.perfTracker;
+    const selector = this.primarySelector();
+    tracker.mark("contextReadyAt");
+    const resumeStage = this.resumeStage;
+    const resumeStageForceRefresh = this.resumeStageForceRefresh;
+    const resumePagination = this.resumePaginationAfterShow;
+    const resumePaginationCursor = this.resumePaginationCursor;
+    this.resumeStage = null;
+    this.resumeStageForceRefresh = false;
+    if (resumePlayerRefresh) {
+      this.setData({ playerLoading: false, loadingMore: false, historyLoading: false });
+      void this.runPlayerRefresh(tracker);
+      return;
+    }
+    if (resumePagination && resumePaginationCursor !== null) {
+      this.setData({ loadingMore: false });
+      this.paginationPending = false;
+      this.paginationCursor = null;
+      const task = this.loadMorePlayers(resumePaginationCursor);
+      if (this.paginationPending && this.paginationCursor === resumePaginationCursor) {
+        this.resumePaginationAfterShow = false;
+        this.resumePaginationCursor = null;
+      }
+      return task.finally(() => {
+        if (this.pageActive && !this.paginationPending && this.resumePaginationCursor === resumePaginationCursor) {
+          this.resumePaginationAfterShow = false;
+          this.resumePaginationCursor = null;
+        }
+      });
+    }
+    if (resumeStage === "daily") {
+      this.setData({ loading: false, refreshing: false });
+      void this.loadDailyChanges(resumeStageForceRefresh);
+      return;
+    }
+    if (resumeStage === "player") {
+      this.setData({ playerLoading: false, loadingMore: false });
+      void this.ensurePlayerModeReady();
+      return;
+    }
+    if (resumeStage === "search") {
+      this.setData({ playerLoading: false, loadingMore: false });
+      void this.startPlayerSearch(false);
+      return;
+    }
+    if (resumeStage === "history" && this.data.selectedPlayer?.element) {
+      this.setData({ historyLoading: false });
+      void this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
+      return;
+    }
+    wx.nextTick(() => tracker.observePrimary(selector));
+  },
+
+  onHide() {
+    const pendingSearch = this.playerSearchTimer !== undefined;
+    if (pendingSearch) {
+      clearTimeout(this.playerSearchTimer);
+      this.playerSearchTimer = undefined;
+    }
+    this.resumePlayerRefreshAfterShow = this.playerRefreshPending;
+    this.resumePaginationAfterShow = this.resumePaginationAfterShow || this.paginationPending;
+    if (this.paginationPending && this.paginationCursor !== null) {
+      this.resumePaginationCursor = this.paginationCursor;
+    }
+    this.resumeStageForceRefresh = this.resumeStageForceRefresh || this.dailyRequestForceRefresh;
+    this.resumeStage = this.resumePlayerRefreshAfterShow
+      ? null
+      : this.data.activeMode === "player"
+      ? this.data.historyLoading
+        ? "history"
+        : pendingSearch
+          ? "search"
+          : this.startupPending || this.data.playerLoading || this.data.loadingMore
+          ? "player"
+          : null
+      : this.startupPending || this.data.loading || this.data.refreshing
+        ? "daily"
+        : null;
+    this.pageActive = false;
+    this.playerRefreshPending = false;
+    nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.invalidatePlayerRequest();
+    this.historyRequestRevision += 1;
+    this.perfTracker?.disconnect();
   },
 
   onUnload() {
+    this.pageActive = false;
+    this.resumeStage = null;
+    this.resumeStageForceRefresh = false;
+    this.dailyRequestForceRefresh = false;
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
+    this.playerRefreshPending = false;
+    this.resumePlayerRefreshAfterShow = false;
+    nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.invalidatePlayerRequest();
+    this.historyRequestRevision += 1;
+    this.perfTracker?.disconnect();
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
     }
   },
 
   onPullDownRefresh() {
-    const task = this.data.activeMode === "player"
-      ? this.refreshPlayerMode()
-      : this.loadDailyChanges(true);
-    task.finally(() => wx.stopPullDownRefresh());
+    this.startDailyRefreshTrace();
+    const tracker = this.perfTracker;
+    if (this.data.activeMode === "player") {
+      tracker?.mark("primaryRequestStartAt");
+      const task = this.runPlayerRefresh(tracker).then(() => {
+        tracker?.mark("primaryResponseAt");
+        tracker?.mark("primarySetDataAt");
+        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player"));
+      });
+      return task.finally(() => wx.stopPullDownRefresh());
+    }
+    const task = this.loadDailyChanges(true);
+    return task.finally(() => wx.stopPullDownRefresh());
   },
 
   onRetry() {
     if (this.data.activeMode === "player") {
-      this.refreshPlayerMode();
+      this.startDailyRefreshTrace();
+      void this.runPlayerRefresh(this.perfTracker);
       return;
     }
+    this.startDailyRefreshTrace();
     this.loadDailyChanges();
   },
 
@@ -175,19 +341,88 @@ Page({
   },
 
   onDateChange(event: WechatMiniprogram.PickerChange) {
-    this.setData({ changeDate: String(event.detail.value) });
+    this.startDailyRefreshTrace();
+    this.setData({
+      changeDate: String(event.detail.value),
+      riseChanges: [],
+      fallChanges: [],
+      staleMessage: "",
+      error: ""
+    });
     this.loadDailyChanges();
   },
 
+  startDailyRefreshTrace() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "refresh");
+    this.perfTracker.mark("contextReadyAt");
+  },
+
+  primarySelector(): string {
+    return this.data.activeMode === "player"
+      ? "#perf-primary-player"
+      : "#perf-primary-content";
+  },
+
   async loadDailyChanges(forceRefresh = false): Promise<void> {
-    this.setData({ loading: true, error: "" });
+    const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.dailyRequestForceRefresh = forceRefresh;
+    const changeDate = this.data.changeDate;
+    const hasRows = this.data.riseChanges.length > 0 || this.data.fallChanges.length > 0;
+    const tracker = this.perfTracker;
+    this.setData({
+      loading: !hasRows,
+      refreshing: hasRows,
+      error: "",
+      staleMessage: ""
+    });
+    tracker?.mark("primaryRequestStartAt");
+    const context = getAppContextSnapshot();
+    const readTask = readPlayerValueByDate(changeDate, {
+      forceRefresh,
+      trace: tracker && context
+        ? {
+            navigationId: tracker.navigationId,
+            callerSurface: "price-daily",
+            trigger: forceRefresh ? "refresh" : "load",
+            forceReason: forceRefresh ? "user-refresh" : undefined,
+            contextRevision: context.contextRevision
+          }
+        : undefined
+    });
+    observeSoftTimeout(readTask, 2900, () => {
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      tracker?.mark("softFailureAt");
+      this.setData({
+        loading: false,
+        refreshing: false,
+        error: hasRows
+          ? "刷新时间较长，请稍后重试；当前继续显示已有数据"
+          : "加载时间较长，请稍后重试；当前请求仍在后台继续"
+      }, () => wx.nextTick(() => tracker?.observePrimary("#perf-primary-content")));
+    });
     try {
-      const changes = await getPlayerValueByDate(this.data.changeDate, forceRefresh);
-      this.setData(splitChanges(changes));
+      const read = await readTask;
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
+      tracker?.mark("primaryResponseAt");
+      await setDataAsync(this, {
+        ...splitChanges(read.data),
+        error: "",
+        staleMessage: read.meta.stale && read.meta.storedAt
+          ? `当前为上次成功数据 · ${new Date(read.meta.storedAt).toLocaleString()}`
+          : ""
+      });
+      tracker?.mark("primarySetDataAt");
+      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
     } catch (error) {
+      if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({ error: error instanceof Error ? error.message : "身价变化加载失败" });
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
     } finally {
-      this.setData({ loading: false });
+      if (this.pageActive && isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
+        this.setData({ loading: false, refreshing: false });
+        this.dailyRequestForceRefresh = false;
+      }
     }
   },
 
@@ -200,11 +435,19 @@ Page({
     }
   },
 
-  async loadTeamOptions(): Promise<void> {
+  async loadTeamOptions(forceRefresh = false): Promise<void> {
+    const tracker = this.perfTracker;
+    const trace = capturePageRequestTrace({
+      callerSurface: "price-team-directory",
+      trigger: "load"
+    });
     this.setData({ playerLoading: true, playersError: "" });
     try {
-      const season = String(getApp<IAppOption>().globalData.season || "unknown");
-      const teams = await getTeamList(season) as TeamDirectoryItem[];
+      const context = await ensureAppContext({ reason: "page-load", forceRefresh });
+      if (!this.pageActive || this.perfTracker !== tracker) return;
+      const season = context.season;
+      const teams = await getTeamList(season, forceRefresh, trace) as TeamDirectoryItem[];
+      if (!this.pageActive || this.perfTracker !== tracker) return;
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },
         ...teams
@@ -219,9 +462,12 @@ Page({
         teamOptionNames: teamOptions.map((option) => option.label)
       });
     } catch (error) {
+      if (!this.pageActive || this.perfTracker !== tracker) return;
       this.setData({ playersError: error instanceof Error ? error.message : "球队列表加载失败" });
     } finally {
-      this.setData({ playerLoading: false });
+      if (this.pageActive && this.perfTracker === tracker) {
+        this.setData({ playerLoading: false });
+      }
     }
   },
 
@@ -249,8 +495,19 @@ Page({
     return this.playerRequestRevision;
   },
 
+  clearPaginationOwnership() {
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
+  },
+
   startPlayerSearch(forceRefresh = false): Promise<void> {
     const revision = this.invalidatePlayerRequest();
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     const ready = this.isPlayerListReady();
     this.setData({
       players: [],
@@ -285,7 +542,7 @@ Page({
         cursor,
         forceRefresh
       });
-      if (revision !== this.playerRequestRevision) return;
+      if (!this.pageActive || revision !== this.playerRequestRevision) return;
 
       const players = append
         ? mergePlayers(this.data.players, page.items)
@@ -302,38 +559,48 @@ Page({
         playersError: ""
       });
     } catch (error) {
-      if (revision !== this.playerRequestRevision) return;
+      if (!this.pageActive || revision !== this.playerRequestRevision) return;
       this.setData({
         playersError: error instanceof Error ? error.message : "球员列表加载失败",
         ...(append ? {} : { playersLoaded: false })
       });
     } finally {
-      if (revision === this.playerRequestRevision) {
+      if (this.pageActive && revision === this.playerRequestRevision) {
         this.setData({ playerLoading: false, loadingMore: false });
       }
     }
   },
 
-  loadMorePlayers(): Promise<void> {
+  loadMorePlayers(cursorOverride?: number | null): Promise<void> {
+    const cursor = cursorOverride === undefined ? this.data.nextCursor : cursorOverride;
     if (
       this.data.playerLoading
       || this.data.loadingMore
-      || !this.data.hasMorePlayers
-      || this.data.nextCursor === null
+      || cursor === null
+      || (cursorOverride === undefined && !this.data.hasMorePlayers)
     ) {
       return Promise.resolve();
     }
-    return this.loadPlayerPage(
+    this.paginationPending = true;
+    this.paginationCursor = cursor;
+    const task = this.loadPlayerPage(
       this.playerRequestRevision,
-      this.data.nextCursor,
+      cursor,
       true,
       false
     );
+    return task.finally(() => {
+      if (this.pageActive && this.paginationPending && this.paginationCursor === cursor) {
+        this.paginationPending = false;
+        this.paginationCursor = null;
+      }
+    });
   },
 
   onPlayerKeywordInput(event: WechatMiniprogram.Input) {
     this.setData({ playerKeyword: event.detail.value });
     const revision = this.invalidatePlayerRequest();
+    this.clearPaginationOwnership();
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
     }
@@ -366,11 +633,7 @@ Page({
   },
 
   onRetryPlayers() {
-    if (this.data.teamOptions.length === 1) {
-      this.loadTeamOptions().then(() => this.startPlayerSearch(true));
-      return;
-    }
-    this.startPlayerSearch(true);
+    void this.runPlayerRefresh(this.perfTracker);
   },
 
   onClearPlayerFilters() {
@@ -379,6 +642,7 @@ Page({
       this.playerSearchTimer = undefined;
     }
     this.invalidatePlayerRequest();
+    this.clearPaginationOwnership();
     this.setData({
       playerKeyword: "",
       teamFilter: ALL_VALUE,
@@ -437,14 +701,19 @@ Page({
   },
 
   async loadSelectedPlayerHistory(playerId: number, forceRefresh = false): Promise<void> {
+    const revision = ++this.historyRequestRevision;
     this.setData({ historyLoading: true, historyError: "" });
     try {
       const historyRows = await getPlayerValueByElement(playerId, forceRefresh);
+      if (!this.pageActive || revision !== this.historyRequestRevision) return;
       this.setData({ historyRows: historyRows.sort(sortByChangeDateDesc) });
     } catch (error) {
+      if (!this.pageActive || revision !== this.historyRequestRevision) return;
       this.setData({ historyError: error instanceof Error ? error.message : "球员身价历史加载失败" });
     } finally {
-      this.setData({ historyLoading: false });
+      if (this.pageActive && revision === this.historyRequestRevision) {
+        this.setData({ historyLoading: false });
+      }
     }
   },
 
@@ -459,13 +728,26 @@ Page({
 
   async refreshPlayerMode(): Promise<void> {
     if (this.data.teamOptions.length === 1) {
-      await this.loadTeamOptions();
+      await this.loadTeamOptions(true);
     }
+    if (!this.pageActive) return;
     if (this.isPlayerListReady()) {
       await this.startPlayerSearch(true);
     }
+    if (!this.pageActive) return;
     if (this.data.selectedPlayer?.element) {
       await this.loadSelectedPlayerHistory(this.data.selectedPlayer.element, true);
+    }
+  },
+
+  async runPlayerRefresh(tracker?: PagePerformanceTracker): Promise<void> {
+    this.playerRefreshPending = true;
+    try {
+      await this.refreshPlayerMode();
+    } finally {
+      if (this.pageActive && (!tracker || this.perfTracker === tracker)) {
+        this.playerRefreshPending = false;
+      }
     }
   }
 });

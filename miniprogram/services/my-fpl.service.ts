@@ -1,10 +1,11 @@
-import { getCurrentEventAndDeadline } from "./common.service";
+import { ensureAppContext } from "./app-context.service";
 import { getEntryEventResult, getEntryInfo, getEntryLeagueInfo } from "./entry.service";
 import { getLiveSnapshot } from "./live.service";
 import { getApiSessionToken } from "./auth.service";
 import { storageKeys } from "../config/storage-keys";
 import type { MyFplContext, MyFplLeagueBrief, MyFplTeamBrief } from "../models/my-fpl";
 import type { LiveSnapshotState } from "../models/live";
+import type { PageRequestTrace } from "./graphql.service";
 
 /**
  * My FPL read composition (high-level design §4.3, plan §5). Everything here
@@ -80,12 +81,19 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
   let utcDeadline: string | undefined;
   let eventContextAvailable = false;
   try {
-    const eventInfo = await getCurrentEventAndDeadline(forceRefresh);
-    eventContextAvailable = true;
-    season = eventInfo.season;
-    currentEvent = eventInfo.currentEvent;
-    nextEvent = eventInfo.nextEvent;
-    utcDeadline = eventInfo.utcDeadline;
+    const appContext = await ensureAppContext({
+      reason: "page-load",
+      forceRefresh
+    });
+    eventContextAvailable =
+      appContext.phase !== "unresolved" &&
+      (appContext.displayEvent !== null || appContext.phase === "settled");
+    season = appContext.season || undefined;
+    currentEvent = appContext.currentEvent ?? undefined;
+    nextEvent = appContext.nextEvent ?? undefined;
+    utcDeadline = appContext.nextDeadlineAt
+      ? new Date(appContext.nextDeadlineAt).toISOString()
+      : undefined;
   } catch {
     // Degrade to principal-only context; the page shows a data state.
   }
@@ -149,8 +157,12 @@ export async function getMyFplTeamBrief(
  * fields (viewerRank, associationCount) arrive with plan §10 and stay absent
  * until then.
  */
-export async function getMyFplLeagues(entryId: number, forceRefresh = false): Promise<MyFplLeagueBrief[]> {
-  const leagues = await getEntryLeagueInfo(entryId, forceRefresh);
+export async function getMyFplLeagues(
+  entryId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<MyFplLeagueBrief[]> {
+  const leagues = await getEntryLeagueInfo(entryId, forceRefresh, trace ?? undefined);
   return leagues
     .map((league) => ({
       id: Number(league.id),

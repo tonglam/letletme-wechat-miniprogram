@@ -16,7 +16,7 @@
   </view>
 
   <app-loading wx:if="{{loading}}" text="加载赛事" />
-  <view wx:elif="{{!entryId}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{!entryId}}" class="section">
     <app-empty-state
       eyebrow="需要球队"
       title="先选择我的球队"
@@ -26,7 +26,7 @@
       bind:action="onEmptyAction"
     />
   </view>
-  <view wx:elif="{{items.length === 0 && !error}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{items.length === 0 && !error}}" class="section">
     <app-empty-state
       title="暂无已筹备赛事"
       description="赛事分两种：追踪官方 FPL 联赛的赛事，以及按自定义规则进行的赛事。创建和筹备请在网页版完成。"
@@ -35,7 +35,7 @@
       bind:action="onCreateCompetition"
     />
   </view>
-  <view wx:elif="{{displayItems.length === 0 && keyword && !error}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{displayItems.length === 0 && keyword && !error}}" class="section">
     <app-empty-state
       title="没有匹配的赛事"
       description="换个关键词试试。"
@@ -47,7 +47,7 @@
     <view wx:if="{{fromCache}}" class="section">
       <view class="cache-hint">当前显示上次成功结果</view>
     </view>
-    <view class="section competition-list">
+    <view id="perf-primary-content" class="section competition-list">
       <competition-card
         wx:for="{{displayItems}}"
         wx:key="competitionId"

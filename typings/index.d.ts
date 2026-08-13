@@ -11,6 +11,8 @@ interface IAppOption extends WechatMiniprogram.IAnyObject {
     deadline: string
     entryId?: number
     openid?: string
+    authRevision: number
+    contextRevision: number
   }
   _pendingInit: Promise<void> | null
   _pendingInitForced: boolean

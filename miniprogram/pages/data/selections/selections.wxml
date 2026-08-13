@@ -17,9 +17,9 @@
     </picker>
   </view>
 
-  <app-error-state wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loadingTournaments}}" text="加载联赛" />
-  <view wx:elif="{{emptyState}}" class="section">
+  <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
       title="{{emptyTitle}}"
@@ -38,7 +38,7 @@
     </view>
 
     <app-loading wx:if="{{loadingStats}}" text="加载阵容选择" />
-    <view wx:else class="section card stat-card">
+    <view id="perf-primary-content" wx:else class="section card stat-card">
       <app-empty-state
         wx:if="{{visibleRows.length === 0}}"
         title="{{statsEmptyTitle}}"

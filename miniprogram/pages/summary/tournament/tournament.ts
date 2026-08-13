@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntrySummaryTournaments,
   getTournamentSummary,
@@ -9,9 +10,13 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
+import { getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
 type TournamentEmptyState = "" | "entry" | "tournaments";
+type TournamentSummaryResumeStage = "initialize" | "tournaments" | "summary";
 
 interface MetricCard {
   label: string;
@@ -60,7 +65,7 @@ interface SummaryData {
   hasMetrics: boolean;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: false,
     error: "",
@@ -69,7 +74,7 @@ Page({
     emptyTitle: "",
     emptyDescription: "",
     emptyActionText: "",
-    entryId: undefined,
+    entryId: 0,
     event: 1,
     maxGw: 1,
     tournaments: [],
@@ -90,8 +95,31 @@ Page({
     hasMetrics: false
   } as SummaryData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
+  resumeStage: null as TournamentSummaryResumeStage | null,
+  activeLoadStage: null as Exclude<TournamentSummaryResumeStage, "initialize"> | null,
+  summaryRequestId: 0,
+  activeLoadForceRefresh: false,
+  resumeForceRefresh: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    const trace = capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: "load"
+    });
+    await this.initializePage(trace);
+  },
+
+  async initializePage(trace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -101,17 +129,68 @@ Page({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
-      entryId: app.globalData.entryId,
+      entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
-    await this.loadTournaments();
+    this.startupPending = false;
+    await this.loadTournaments(false, trace);
+  },
+
+  async onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return;
+    const resumeStage = this.resumeStage;
+    const resumeForceRefresh = this.resumeForceRefresh;
+    this.resumeOnShow = false;
+    this.resumeStage = null;
+    this.resumeForceRefresh = false;
+    const trace = capturePageRequestTrace({
+      callerSurface: resumeStage === "summary" ? "summary-tournament-results" : "summary-tournament",
+      trigger: "show"
+    });
+    if (resumeStage === "summary") {
+      this.setData({ loading: false });
+      await this.loadSummary(resumeForceRefresh, trace);
+      return;
+    }
+    if (resumeStage === "tournaments") {
+      this.setData({ loading: false });
+      await this.loadTournaments(resumeForceRefresh, trace);
+      return;
+    }
+    await this.initializePage(trace);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeStage = this.startupPending
+      ? "initialize"
+      : this.activeLoadStage;
+    this.resumeOnShow = this.resumeStage !== null;
+    this.resumeForceRefresh = this.resumeStage !== null && this.activeLoadForceRefresh;
+    this.lifecycleRevision += 1;
+    this.summaryRequestId += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.resumeStage = null;
+    this.activeLoadStage = null;
+    this.activeLoadForceRefresh = false;
+    this.resumeForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.summaryRequestId += 1;
   },
 
   onPullDownRefresh() {
-    this.refreshData().finally(() => wx.stopPullDownRefresh());
+    return this.refreshData().finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -121,7 +200,23 @@ Page({
     }
   },
 
-  async loadTournaments(forceRefresh = false) {
+  syncRecoveredEvent(eventBeforeDirectoryRead: number): void {
+    const context = getAppContextSnapshot();
+    const recoveredEvent = Number(context?.displayEvent || context?.currentEvent || 0);
+    if (!Number.isSafeInteger(recoveredEvent) || recoveredEvent <= 0) return;
+    this.setData({
+      event: this.data.event === eventBeforeDirectoryRead ? recoveredEvent : this.data.event,
+      maxGw: recoveredEvent
+    });
+  },
+
+  async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
     if (!this.data.entryId) {
       this.setData({
         loading: false,
@@ -147,8 +242,16 @@ Page({
       emptyDescription: "",
       emptyActionText: ""
     });
+    this.activeLoadStage = "tournaments";
+    this.activeLoadForceRefresh = forceRefresh;
+    const eventBeforeDirectoryRead = this.data.event;
+    const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
-      const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh);
+      const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh, trace);
+      if (!isActiveLifecycle()) return;
+      if (contextMissingBeforeDirectoryRead) {
+        this.syncRecoveredEvent(eventBeforeDirectoryRead);
+      }
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -173,30 +276,65 @@ Page({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadSummary(forceRefresh);
+      await this.loadSummary(forceRefresh, trace);
     } catch (error) {
+      if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveLifecycle() && this.activeLoadStage === "tournaments") {
+        this.activeLoadStage = null;
+        this.activeLoadForceRefresh = false;
+        this.setData({ loading: false });
+      }
     }
   },
 
-  async loadSummary(forceRefresh = false) {
+  async loadSummary(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    const requestId = ++this.summaryRequestId;
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "summary-tournament-results",
+      trigger: forceRefresh ? "refresh" : "tab"
+    });
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
-    if (!tournament || !this.data.entryId) {
+    const requestedEvent = this.data.event;
+    const requestedEntryId = this.data.entryId;
+    if (!tournament || !requestedEntryId) {
       return;
     }
+    const isActiveRequest = () => (
+      this.pageVisible
+      && lifecycleRevision === this.lifecycleRevision
+      && requestId === this.summaryRequestId
+      && String(this.data.tournaments[this.data.selectedTournamentIndex]?.id || "") === String(tournament.id)
+      && this.data.event === requestedEvent
+      && this.data.entryId === requestedEntryId
+    );
 
+    this.activeLoadStage = "summary";
+    this.activeLoadForceRefresh = forceRefresh;
     this.setData({ loading: true, error: "" });
     try {
-      const payload = await getTournamentSummary(tournament.id, this.data.event, this.data.entryId, forceRefresh);
+      const payload = await getTournamentSummary(
+        tournament.id,
+        requestedEvent,
+        requestedEntryId,
+        forceRefresh,
+        trace
+      );
+      if (!isActiveRequest()) return;
       wx.setStorageSync(storageKeys.selectedSummaryTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentName, tournament.name);
-      this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, this.data.entryId, this.data.event));
+      this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, requestedEntryId, requestedEvent));
     } catch (error) {
+      if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveRequest()) this.setData({ loading: false });
+      if (isActiveRequest() && this.activeLoadStage === "summary") {
+        this.activeLoadStage = null;
+        this.activeLoadForceRefresh = false;
+      }
     }
   },
 

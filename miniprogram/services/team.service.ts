@@ -1,4 +1,4 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRequest, type PageRequestTrace } from "./graphql.service";
 import type { TeamSummary } from "../models/team";
 
 const TEAM = `
@@ -21,9 +21,18 @@ interface TeamResponse {
   } | null;
 }
 
-export async function getTeamSummary(teamId: number | string, _season: string): Promise<TeamSummary> {
+export async function getTeamSummary(
+  teamId: number | string,
+  season: string,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<TeamSummary> {
+  if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<TeamResponse>(TEAM, { id: Number(teamId) }, {
-    cachePolicy: "team-directory"
+    cachePolicy: "team-directory",
+    season,
+    forceRefresh,
+    trace
   });
   if (!data.team) {
     throw new Error("没有找到这支球队，请返回后重试");

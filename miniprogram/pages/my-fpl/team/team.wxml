@@ -31,9 +31,9 @@
     <text class="phase-banner-text">本轮结果结算处理中，最终结果以官方确认为准</text>
   </view>
 
-  <app-error-state wx:if="{{error && !hasTeamData}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading && !hasTeamData}}" text="加载球队数据" />
-  <view wx:elif="{{emptyState && !hasTeamData}}" class="section">
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData && !supportAvailable}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasTeamData && !supportAvailable}}" text="加载球队数据" />
+  <view id="perf-primary-content" wx:elif="{{emptyState && !supportAvailable}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
       title="{{emptyTitle}}"
@@ -45,27 +45,36 @@
   </view>
 
   <block wx:else>
-    <view wx:if="{{error}}" class="section inline-error">
-      <text>{{error}} · 当前显示上次成功结果</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
+    <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData}}" class="section">
+      <app-empty-state
+        eyebrow="{{emptyEyebrow}}"
+        title="{{emptyTitle}}"
+        description="{{emptyDescription}}"
+        actionText="{{emptyActionText}}"
+        featured="{{true}}"
+        bind:action="onEmptyAction"
+      />
     </view>
-    <view class="section card summary-card">
-      <view class="metric-grid metric-grid-three">
-        <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
-          <text class="metric-label">{{item.label}}</text>
-          <text class="metric-value">{{item.value}}</text>
+    <block wx:else>
+      <view id="perf-primary-content" class="section card summary-card">
+        <view class="metric-grid metric-grid-three">
+          <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value">{{item.value}}</text>
+          </view>
         </view>
       </view>
-    </view>
 
-    <view class="section card summary-card">
-      <view class="metric-grid">
-        <view wx:for="{{eventStats}}" wx:key="label" class="metric-card">
-          <text class="metric-label">{{item.label}}</text>
-          <text class="metric-value metric-value-{{item.tone}}">{{item.value}}</text>
+      <view class="section card summary-card">
+        <view class="metric-grid">
+          <view wx:for="{{eventStats}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value metric-value-{{item.tone}}">{{item.value}}</text>
+          </view>
         </view>
       </view>
-    </view>
+    </block>
 
     <view class="section tab-strip">
       <view class="tab-item {{showSquad ? 'tab-active' : ''}}" data-tab="squad" catchtap="onTabTap">阵容</view>
@@ -73,8 +82,10 @@
       <view class="tab-item {{showChips ? 'tab-active' : ''}}" data-tab="chips" catchtap="onTabTap">开卡</view>
       <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap">历史</view>
     </view>
+    <app-loading wx:if="{{tabLoading}}" text="加载当前栏目" />
+    <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" showRetry="{{true}}" bind:retry="onRetry" />
 
-    <view wx:if="{{showSquad}}" class="section card">
+    <view wx:if="{{showSquad && hasTeamData}}" class="section card">
       <app-empty-state
         wx:if="{{!hasSquad}}"
         title="GW{{event}} 阵容还没公布"

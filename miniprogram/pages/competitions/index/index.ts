@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import { getMyCompetitionsCompat } from "../../../services/competition.service";
 import type { CompetitionListItem } from "../../../models/competition";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
@@ -6,6 +7,10 @@ import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils
 import { listCountBucket } from "../../../utils/competition-state";
 import { durationBucket, recordCompetitionVisit } from "../../../utils/perf";
 import { routes } from "../../../config/routes";
+import {
+  capturePageRequestTrace,
+  type PageRequestTrace
+} from "../../../services/graphql.service";
 
 interface CompetitionsCache {
   entryId: number;
@@ -45,11 +50,11 @@ export function readListCache(
   return null;
 }
 
-Page({
+PerformancePage({
   data: {
     loading: true,
     error: "",
-    entryId: undefined as number | undefined,
+    entryId: 0,
     items: [] as CompetitionListItem[],
     displayItems: [] as CompetitionListItem[],
     keyword: "",
@@ -59,37 +64,112 @@ Page({
   requestId: 0,
   hasShown: false,
   loadedSeason: undefined as string | undefined,
+  pageVisible: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
+  loadPending: false,
+  loadForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
+    this.pageVisible = true;
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
+    const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "load" });
     await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    void this.loadList(false);
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    this.startupPending = false;
+    await this.loadList(false, trace, lifecycleRevision);
   },
 
   async onShow() {
+    this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (resumed) {
+    if (resumed || this.resumeOnShow) {
+      const forceRefresh = this.resumeForceRefresh;
+      const lifecycleRevision = this.lifecycleRevision;
+      const trace = capturePageRequestTrace({
+        callerSurface: "competitions",
+        trigger: forceRefresh ? "refresh" : "show"
+      });
       // Website return / team switch: principal and list revalidate (§10.1).
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      void this.loadList(false);
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+      this.resumeOnShow = false;
+      this.resumeForceRefresh = false;
+      await this.loadList(forceRefresh, trace, lifecycleRevision);
     }
   },
 
-  async onPullDownRefresh() {
-    try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
-    await this.loadList(true).finally(() => wx.stopPullDownRefresh());
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.resumeOnShow
+      || this.startupPending
+      || this.data.loading
+      || this.loadPending;
+    if (this.loadPending) {
+      this.resumeForceRefresh = this.resumeForceRefresh || this.loadForceRefresh;
+    }
+    this.loadPending = false;
+    this.loadForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
   },
 
-  async loadList(forceRefresh = false) {
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.resumeForceRefresh = false;
+    this.loadPending = false;
+    this.loadForceRefresh = false;
+    this.lifecycleRevision += 1;
+    this.requestId += 1;
+  },
+
+  async onPullDownRefresh() {
+    const trace = capturePageRequestTrace({ callerSurface: "competitions", trigger: "refresh" });
+    this.loadPending = true;
+    this.loadForceRefresh = true;
+    const lifecycleRevision = this.lifecycleRevision;
+    try {
+      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+      await this.loadList(true, trace, lifecycleRevision);
+    } finally {
+      if (this.pageVisible && lifecycleRevision === this.lifecycleRevision) {
+        this.loadPending = false;
+        this.loadForceRefresh = false;
+      }
+      wx.stopPullDownRefresh();
+    }
+  },
+
+  async loadList(
+    forceRefresh = false,
+    trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
+      callerSurface: "competitions",
+      trigger: forceRefresh ? "refresh" : "load"
+    }),
+    lifecycleRevision?: number
+  ) {
+    const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
+    const isActiveRequest = () => this.pageVisible
+      && ownerRevision === this.lifecycleRevision
+      && requestId === this.requestId;
     const loadStart = Date.now();
     const entryId = currentFollowEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
       this.loadedSeason = undefined;
-      this.setData({ loading: false, error: "", entryId: undefined, items: [], displayItems: [], fromCache: false });
+      this.setData({ loading: false, error: "", entryId: 0, items: [], displayItems: [], fromCache: false });
       recordCompetitionVisit({
         surface: "list",
         principalState: "NO_FOLLOW",
@@ -99,7 +179,7 @@ Page({
       return;
     }
 
-    const principalChanged = this.data.entryId !== undefined && this.data.entryId !== entryId;
+    const principalChanged = this.data.entryId > 0 && this.data.entryId !== entryId;
     const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
     if (principalChanged || seasonChanged) {
       this.loadedSeason = undefined;
@@ -119,21 +199,23 @@ Page({
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
+    this.loadPending = true;
+    this.loadForceRefresh = forceRefresh;
 
     try {
-      const items = await getMyCompetitionsCompat(entryId, forceRefresh);
-      if (requestId !== this.requestId) return;
+      const items = await getMyCompetitionsCompat(entryId, forceRefresh, trace);
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         // A 401 recovery can authoritatively change the followed entry while
         // this request is in flight. Never paint/cache the old principal.
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       this.setData({ loading: false, items, fromCache: false });
@@ -158,16 +240,16 @@ Page({
         }
       } catch { /* cache is best effort */ }
     } catch (error) {
-      if (requestId !== this.requestId) return;
+      if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if (season !== currentSeason) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       if (currentFollowEntryId() !== entryId) {
         this.setData({ items: [], displayItems: [], fromCache: false });
-        void this.loadList(true);
+        void this.loadList(true, trace);
         return;
       }
       // No previous data plus failure renders unavailable/retry, not an
@@ -178,6 +260,11 @@ Page({
           ? "刷新失败，当前显示上次成功结果"
           : error instanceof Error ? error.message : "赛事加载失败"
       });
+    } finally {
+      if (isActiveRequest()) {
+        this.loadPending = false;
+        this.loadForceRefresh = false;
+      }
     }
   },
 
@@ -235,6 +322,6 @@ Page({
   },
 
   onRetry() {
-    void this.loadList(true);
+    void this.onPullDownRefresh();
   }
 });

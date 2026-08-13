@@ -1,6 +1,8 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRead, graphqlRequest } from "./graphql.service";
+import type { DomainRead, ServiceReadOptions } from "./service-read";
 import type { CurrentEventDeadline, TeamOption } from "../models/common";
 import { storageKeys } from "../config/storage-keys";
+import { getEntryLeagueInfo } from "./entry.service";
 
 const CURRENT_EVENT_INFO = `
   query CurrentEventInfo {
@@ -23,28 +25,43 @@ interface CurrentEventInfoResponse {
 }
 
 export async function getCurrentEventAndDeadline(forceRefresh = false): Promise<CurrentEventDeadline> {
-  const data = await graphqlRequest<CurrentEventInfoResponse>(CURRENT_EVENT_INFO, {}, {
+  return (await readCurrentEventAndDeadline({ forceRefresh })).data;
+}
+
+export async function readCurrentEventAndDeadline(
+  options: ServiceReadOptions = {}
+): Promise<DomainRead<CurrentEventDeadline>> {
+  const result = await graphqlRead<CurrentEventInfoResponse>(CURRENT_EVENT_INFO, {}, {
     cachePolicy: "deadline",
-    forceRefresh,
+    forceRefresh: options.forceRefresh,
+    trace: options.trace,
     getCacheExpiry: (res) => {
-      const deadline = (res as CurrentEventInfoResponse).currentEventInfo?.nextUtcDeadline;
+      const info = (res as CurrentEventInfoResponse).currentEventInfo;
+      const deadline = info?.nextUtcDeadline;
       if (deadline) {
         const expiresAt = new Date(deadline).getTime();
-        return expiresAt > Date.now() ? expiresAt : Date.now() + 3600_000;
+        if (expiresAt > Date.now()) return expiresAt;
       }
-      return Date.now() + 3600_000;
+      if (info?.currentEvent === 38 && !info.nextEvent) return Date.now() + 24 * 60 * 60 * 1000;
+      return Date.now();
     }
   });
-  const info = data.currentEventInfo;
+  if (result.errors.length > 0) {
+    throw new Error("比赛周信息暂时不可用，请稍后重试");
+  }
+  const info = result.data.currentEventInfo;
   const gw = info?.currentEvent ?? info?.nextEvent ?? undefined;
   return {
-    season: info?.season,
-    currentEvent: info?.currentEvent ?? undefined,
-    nextEvent: info?.nextEvent ?? undefined,
-    event: gw,
-    gw,
-    utcDeadline: info?.nextUtcDeadline ?? undefined,
-    deadline: info?.nextUtcDeadline ?? undefined
+    data: {
+      season: info?.season,
+      currentEvent: info?.currentEvent ?? undefined,
+      nextEvent: info?.nextEvent ?? undefined,
+      event: gw,
+      gw,
+      utcDeadline: info?.nextUtcDeadline ?? undefined,
+      deadline: info?.nextUtcDeadline ?? undefined
+    },
+    meta: result.meta
   };
 }
 
@@ -91,27 +108,17 @@ interface TeamsResponse {
   }>;
 }
 
-const ENTRY_LEAGUES = `
-  query EntryLeagues($entryId: Int!) {
-    entryLeagues(entryId: $entryId) {
-      id
-      name
-    }
-  }
-`;
-
-interface EntryLeaguesResponse {
-  entryLeagues: Array<{
-    id: number;
-    name: string;
-  }>;
-}
-
-export async function getTeamList(_season: string, forceRefresh = false): Promise<TeamOption[]> {
+export async function getTeamList(
+  _season: string,
+  forceRefresh = false,
+  trace?: ServiceReadOptions["trace"]
+): Promise<TeamOption[]> {
+  if (!_season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const data = await graphqlRequest<TeamsResponse>(TEAMS, {}, {
     cachePolicy: "team-directory",
-    cacheVariant: _season ? `season:${_season}` : "season:unknown",
-    forceRefresh
+    cacheVariant: `season:${_season}`,
+    forceRefresh,
+    trace
   });
   return (data.teams || []).map((team) => ({
     id: team.id,
@@ -136,8 +143,6 @@ export async function getAllLeagueName(_season: string): Promise<string[]> {
     return [];
   }
 
-  const data = await graphqlRequest<EntryLeaguesResponse>(ENTRY_LEAGUES, { entryId }, {
-    cachePolicy: "reporting"
-  });
-  return [...new Set((data.entryLeagues || []).map((league) => league.name).filter(Boolean))];
+  const leagues = await getEntryLeagueInfo(entryId);
+  return [...new Set(leagues.map((league) => league.name).filter(Boolean))];
 }

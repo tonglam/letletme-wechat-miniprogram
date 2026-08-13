@@ -1,3 +1,4 @@
+import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntryPointsRaceTournament,
   getTournamentSelectionStats
@@ -6,9 +7,13 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
+import { getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
 type SelectionsEmptyState = "" | "entry" | "tournaments";
+type SelectionsResumeStage = "initialize" | "tournaments" | "stats";
 
 interface SelectionRow {
   id: string;
@@ -65,7 +70,7 @@ const TABS: TabOption[] = [
   { key: "transfersOut", label: "转出" }
 ];
 
-Page({
+PerformancePage({
   data: {
     loadingTournaments: false,
     loadingStats: false,
@@ -77,7 +82,7 @@ Page({
     emptyActionText: "",
     statsEmptyTitle: "本轮还没有选择率数据",
     statsEmptyDescription: "GW 数据同步后会显示联赛内的阵容趋势",
-    entryId: undefined,
+    entryId: 0,
     event: 1,
     maxGw: 1,
     tournaments: [],
@@ -95,8 +100,31 @@ Page({
     visibleRows: []
   } as SelectionsData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
+  resumeStage: null as SelectionsResumeStage | null,
+  activeTournamentForceRefresh: false,
+  resumeTournamentForceRefresh: false,
+  activeStatsForceRefresh: false,
+  resumeStatsForceRefresh: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    const trace = capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: "load"
+    });
+    await this.initializePage(trace);
+  },
+
+  async initializePage(trace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -106,20 +134,79 @@ Page({
       this.setData({ loadingTournaments: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
-      entryId: app.globalData.entryId,
+      entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
-    await this.loadTournaments();
+    this.startupPending = false;
+    await this.loadTournaments(false, trace);
+  },
+
+  async onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return;
+    const resumeStage = this.resumeStage;
+    const resumeTournamentForceRefresh = this.resumeTournamentForceRefresh;
+    const resumeStatsForceRefresh = this.resumeStatsForceRefresh;
+    this.resumeOnShow = false;
+    this.resumeStage = null;
+    this.resumeTournamentForceRefresh = false;
+    this.resumeStatsForceRefresh = false;
+    const trace = capturePageRequestTrace({
+      callerSurface: resumeStage === "stats" ? "data-selections-stats" : "data-selections",
+      trigger: "show"
+    });
+    if (resumeStage === "stats") {
+      this.setData({ loadingTournaments: false, loadingStats: false });
+      await this.loadStats(resumeStatsForceRefresh, trace);
+      return;
+    }
+    if (resumeStage === "tournaments") {
+      this.setData({ loadingTournaments: false, loadingStats: false });
+      await this.loadTournaments(resumeTournamentForceRefresh, trace);
+      return;
+    }
+    await this.initializePage(trace);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeStage = this.startupPending
+      ? "initialize"
+      : this.data.loadingStats
+        ? "stats"
+        : this.data.loadingTournaments
+          ? "tournaments"
+          : null;
+    this.resumeOnShow = this.resumeStage !== null;
+    this.resumeTournamentForceRefresh = this.resumeStage === "tournaments"
+      && this.activeTournamentForceRefresh;
+    this.resumeStatsForceRefresh = this.resumeStage === "stats"
+      && this.activeStatsForceRefresh;
+    this.lifecycleRevision += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.resumeStage = null;
+    this.resumeTournamentForceRefresh = false;
+    this.resumeStatsForceRefresh = false;
+    this.activeTournamentForceRefresh = false;
+    this.activeStatsForceRefresh = false;
+    this.lifecycleRevision += 1;
   },
 
   onPullDownRefresh() {
     // Always re-pull the tournament list (it chains into loadStats when
     // populated): a cached list must not hide a league the user just joined.
     const task = this.loadTournaments(true);
-    task.finally(() => wx.stopPullDownRefresh());
+    return task.finally(() => wx.stopPullDownRefresh());
   },
 
   async ensureAppDataReady(): Promise<void> {
@@ -129,7 +216,24 @@ Page({
     }
   },
 
-  async loadTournaments(forceRefresh = false): Promise<void> {
+  syncRecoveredEvent(eventBeforeDirectoryRead: number): void {
+    const context = getAppContextSnapshot();
+    const recoveredEvent = Number(context?.displayEvent || context?.currentEvent || 0);
+    if (!Number.isSafeInteger(recoveredEvent) || recoveredEvent <= 0) return;
+    this.setData({
+      event: this.data.event === eventBeforeDirectoryRead ? recoveredEvent : this.data.event,
+      maxGw: recoveredEvent
+    });
+  },
+
+  async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: forceRefresh ? "refresh" : "load"
+    });
+    this.activeTournamentForceRefresh = forceRefresh;
     if (!this.data.entryId) {
       this.setData({
         loadingTournaments: false,
@@ -155,8 +259,14 @@ Page({
       emptyDescription: "",
       emptyActionText: ""
     });
+    const eventBeforeDirectoryRead = this.data.event;
+    const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
-      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh);
+      const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh, trace);
+      if (!isActiveLifecycle()) return;
+      if (contextMissingBeforeDirectoryRead) {
+        this.syncRecoveredEvent(eventBeforeDirectoryRead);
+      }
       if (tournaments.length === 0) {
         this.setData({
           tournaments: [],
@@ -184,15 +294,26 @@ Page({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadStats();
+      await this.loadStats(forceRefresh, trace);
     } catch (error) {
+      if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "阵容选择数据加载失败" });
     } finally {
-      this.setData({ loadingTournaments: false });
+      if (isActiveLifecycle()) {
+        this.activeTournamentForceRefresh = false;
+        this.setData({ loadingTournaments: false });
+      }
     }
   },
 
-  async loadStats(): Promise<void> {
+  async loadStats(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const trace = originatingTrace || capturePageRequestTrace({
+      callerSurface: "data-selections-stats",
+      trigger: "tab"
+    });
+    this.activeStatsForceRefresh = forceRefresh;
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
     if (!tournament) {
       return;
@@ -211,8 +332,8 @@ Page({
     );
     this.setData({ loadingStats: true, error: "" });
     try {
-      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT);
-      if (!isActiveContext()) {
+      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, forceRefresh, trace);
+      if (!isActiveLifecycle() || !isActiveContext()) {
         // Superseded by a tournament/GW change or a list refresh while in
         // flight: the newer load owns rows, header, and loading state.
         return;
@@ -221,7 +342,7 @@ Page({
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentName, tournament.name);
       this.setData(mapSelectionStats(tournament, requestedEvent, stats, this.data.activeTab));
     } catch (error) {
-      if (!isActiveContext()) {
+      if (!isActiveLifecycle() || !isActiveContext()) {
         return;
       }
       this.setData({
@@ -233,7 +354,8 @@ Page({
         visibleRows: []
       });
     } finally {
-      if (isActiveContext()) {
+      if (isActiveLifecycle() && isActiveContext()) {
+        this.activeStatsForceRefresh = false;
         this.setData({ loadingStats: false });
       }
     }

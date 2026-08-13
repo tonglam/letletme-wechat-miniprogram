@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="section card">
+  <view id="perf-primary-content" class="section card">
     <view class="title">关联你的 LetLetMe 账户</view>
     <view class="subtitle">可选。关联后自动同步网页端已验证的球队；不关联也可以在查找球队页手动选择。确认时使用当前微信登录凭据，成功后会创建此设备的 30 天会话。</view>
     <input class="input" type="text" placeholder="邮箱" value="{{email}}" bindinput="onEmailInput" />
