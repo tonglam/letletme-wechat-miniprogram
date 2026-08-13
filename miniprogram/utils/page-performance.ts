@@ -43,6 +43,7 @@ export class PagePerformanceTracker {
   readonly trigger: PagePerformanceRecord["trigger"];
   private observer?: WechatMiniprogram.IntersectionObserver;
   private visibleRecorded = false;
+  private disconnected = false;
   private pendingSetDataAt?: number;
   private record: Omit<PagePerformanceRecord, "ts">;
 
@@ -68,6 +69,7 @@ export class PagePerformanceTracker {
   }
 
   mark(field: "contextReadyAt" | "primaryRequestStartAt" | "primaryResponseAt" | "primarySetDataAt" | "secondaryCompleteAt" | "softFailureAt"): void {
+    if (this.disconnected) return;
     this.record[field] = monotonicNow();
     this.flush();
     if (field === "secondaryCompleteAt" || field === "softFailureAt") {
@@ -76,13 +78,14 @@ export class PagePerformanceTracker {
   }
 
   countOperation(network: boolean): void {
+    if (this.disconnected) return;
     this.record.operationCount += 1;
     if (network) this.record.networkOperationCount += 1;
     this.flush();
   }
 
   observePrimary(selector = "#perf-primary-content"): void {
-    if (this.visibleRecorded) return;
+    if (this.disconnected || this.visibleRecorded) return;
     this.pendingSetDataAt = monotonicNow();
     this.observer?.disconnect();
     const observer = this.page.createIntersectionObserver?.({});
@@ -91,7 +94,7 @@ export class PagePerformanceTracker {
     observer.relativeToViewport().observe(
       selector,
       (entry: WechatMiniprogram.IntersectionObserverObserveCallbackResult) => {
-        if (this.visibleRecorded || entry.intersectionRatio <= 0) return;
+        if (this.disconnected || this.visibleRecorded || entry.intersectionRatio <= 0) return;
         this.visibleRecorded = true;
         if (this.record.primarySetDataAt === undefined) {
           this.record.primarySetDataAt = this.pendingSetDataAt;
@@ -106,6 +109,7 @@ export class PagePerformanceTracker {
   }
 
   disconnect(): void {
+    this.disconnected = true;
     this.observer?.disconnect();
     this.observer = undefined;
     this.finishRequestAttribution();

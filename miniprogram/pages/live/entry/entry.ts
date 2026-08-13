@@ -24,6 +24,7 @@ import { normalizeTransfer, type TransferRow } from "./transfer";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
+import type { PageRequestTrace } from "../../../services/graphql.service";
 
 interface SummaryTile {
   label: string;
@@ -599,7 +600,12 @@ Page({
         this.liveRefresh?.sync();
         if (this.loadTransfersAfterLive) {
           this.loadTransfersAfterLive = false;
-          await this.loadTransfers(entryId, eventId, options.forceRefresh === true);
+          await this.loadTransfers(
+            entryId,
+            eventId,
+            options.forceRefresh === true,
+            requestTrace
+          );
         }
         this.syncDisplayState();
       } catch (error) {
@@ -607,7 +613,7 @@ Page({
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
         this.loadTransfersAfterLive = false;
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => navigationTracker?.observePrimary());
         this.syncDisplayState();
       } finally {
         if (requestId === this.liveRequestId) {
@@ -622,7 +628,7 @@ Page({
     this.liveRequestForced = options.forceRefresh === true;
     observeSoftTimeout(request, 3000, () => {
       if (requestId !== this.liveRequestId || !this.pageVisible) return;
-      this.perfTracker?.mark("softFailureAt");
+      navigationTracker?.mark("softFailureAt");
       this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
       this.syncDisplayState();
     });
@@ -638,12 +644,22 @@ Page({
     return request;
   },
 
-  async loadTransfers(entryId: number, eventId: number, forceRefresh: boolean): Promise<void> {
+  async loadTransfers(
+    entryId: number,
+    eventId: number,
+    forceRefresh: boolean,
+    trace?: PageRequestTrace | null
+  ): Promise<void> {
     const requestId = this.transfersRequestId + 1;
     this.transfersRequestId = requestId;
     this.setData({ transfersLoading: true, transfersError: "" });
     try {
-      const transfers: EntryTransfer[] = await getEntryEventTransfers(entryId, eventId, forceRefresh);
+      const transfers: EntryTransfer[] = await getEntryEventTransfers(
+        entryId,
+        eventId,
+        forceRefresh,
+        trace
+      );
       if (requestId !== this.transfersRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       if (

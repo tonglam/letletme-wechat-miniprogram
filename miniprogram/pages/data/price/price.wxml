@@ -112,16 +112,17 @@
         <view class="selected-price">当前 {{selectedPlayer.priceText || '-'}}</view>
       </view>
 
-      <app-error-state wx:if="{{playersError && players.length === 0}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
+      <app-error-state id="perf-primary-player" wx:if="{{playersError && players.length === 0}}" message="{{playersError}}" bind:retry="onRetryPlayers" />
       <app-loading wx:elif="{{playerLoading && players.length === 0}}" text="加载球员列表" />
       <app-empty-state
+        id="perf-primary-player"
         wx:elif="{{playersLoaded && players.length === 0}}"
         title="球员名单还没有同步"
         description="新赛季球员数据准备好后再回来查看"
         actionText="重新加载"
         bind:action="onRetryPlayers"
       />
-      <view wx:else>
+      <view id="perf-primary-player" wx:else>
         <view wx:if="{{!playerListReady}}" class="player-list-placeholder">请选择球队和位置后显示球员列表。</view>
         <view wx:elif="{{!playerListVisible}}" class="player-list-placeholder">已选择球员。调整筛选或清除当前球员后可重新选择。</view>
         <block wx:else>

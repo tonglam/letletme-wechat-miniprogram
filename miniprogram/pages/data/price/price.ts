@@ -175,8 +175,10 @@ Page({
     if (!resumed) return;
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "warm-enter");
-    this.perfTracker.mark("contextReadyAt");
-    wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content"));
+    const tracker = this.perfTracker;
+    const selector = this.primarySelector();
+    tracker.mark("contextReadyAt");
+    wx.nextTick(() => tracker.observePrimary(selector));
   },
 
   onHide() {
@@ -194,9 +196,17 @@ Page({
 
   onPullDownRefresh() {
     this.startDailyRefreshTrace();
-    const task = this.data.activeMode === "player"
-      ? this.refreshPlayerMode()
-      : this.loadDailyChanges(true);
+    const tracker = this.perfTracker;
+    if (this.data.activeMode === "player") {
+      tracker?.mark("primaryRequestStartAt");
+      const task = this.refreshPlayerMode().then(() => {
+        tracker?.mark("primaryResponseAt");
+        tracker?.mark("primarySetDataAt");
+        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player"));
+      });
+      return task.finally(() => wx.stopPullDownRefresh());
+    }
+    const task = this.loadDailyChanges(true);
     return task.finally(() => wx.stopPullDownRefresh());
   },
 
@@ -235,6 +245,12 @@ Page({
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/data/price/price", "refresh");
     this.perfTracker.mark("contextReadyAt");
+  },
+
+  primarySelector(): string {
+    return this.data.activeMode === "player"
+      ? "#perf-primary-player"
+      : "#perf-primary-content";
   },
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {

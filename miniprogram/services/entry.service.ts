@@ -234,7 +234,12 @@ export async function getEntryEventResult(entry: number, event: number): Promise
   return data.entryEventResult;
 }
 
-export async function getEntryEventTransfers(entry: number, event: number, forceRefresh = false): Promise<EntryTransfer[]> {
+export async function getEntryEventTransfers(
+  entry: number,
+  event: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null
+): Promise<EntryTransfer[]> {
   // The history payload covers the live gameweek too: while the deadline is
   // open the manager can still make moves, so current-GW views must churn
   // with the live data instead of pinning the payload for the full half hour.
@@ -250,7 +255,8 @@ export async function getEntryEventTransfers(entry: number, event: number, force
     // persisted stale entry.
     cacheVariant: isLiveEvent ? "live" : "history",
     cachePolicy: isLiveEvent ? "live" : "reporting",
-    forceRefresh
+    forceRefresh,
+    trace
   });
   const gw = data.entryTransferHistory.find((item) => item.eventId === event);
   if (!gw) {
