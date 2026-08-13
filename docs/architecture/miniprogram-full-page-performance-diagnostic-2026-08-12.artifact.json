@@ -100,7 +100,7 @@
       {
         "id": "summary",
         "type": "markdown",
-        "body": "## 技术结论\\n\\n状态：代码已实施，尚未验收。GraphQL 已部署、小程序已合并，DevTools 首页功能链路通过；严格性能样本和线上 Web/边缘长尾仍未闭环。"
+        "body": "## 技术结论\\n\\n状态：代码已实施，尚未验收。GraphQL 与小程序代码门禁通过，生产 Web public operation p95 达标；本地 Web runtime role 缺失，完整同 head DevTools 性能样本尚未闭环。"
       },
       {
         "id": "scope",
@@ -110,7 +110,7 @@
       {
         "id": "checks",
         "type": "markdown",
-        "body": "## 硬门槛当前状态\\n\\n代码合并、部署和 DevTools 功能链路通过；完整性能验收暂不通过。线上 Web/Cloudflare 端到端样本 0.255–3.603s 存在长尾，且尚未完成同一精确 head 的完整冷启动、暖进入、刷新和 25 页面采样，因此报告状态保持“代码已实施，尚未验收”。"
+        "body": "## 硬门槛当前状态\\n\\nGraphQL/小程序自动检查通过，生产 MiniHomeSupplement p95 385.450ms；本地 3000 因缺少 letletme_web_runtime 返回 500，完整 DevTools 性能门槛暂不通过。"
       },
       {
         "id": "p0",
@@ -177,7 +177,44 @@
         "type": "markdown",
         "body": "## 进一步问题\n\n当前没有阻塞合并的性能问题。下一轮最值得回答的是价格刷新 669ms 单点长尾是否来自网络抖动、Redis RTT 还是 resolver 阶段，以及真实调价日 positive enrichment 的端到端分布。"
       }
-    ]
+    ],
+    "currentPostMerge": {
+      "status": "代码已实施，尚未验收",
+      "miniProgramMainSha": "3aff7b25d8009a9387526724eba8b6cf677ca68d",
+      "pullRequest": 22,
+      "codexReview": "clean",
+      "ci": "2 verify passed",
+      "graphqlHealth": 200,
+      "webProxy": "http://127.0.0.1:3001/api/graphql",
+      "graphqlUpstream": "http://127.0.0.1:4000/graphql",
+      "miniHomeSupplement": {
+        "status": 200,
+        "firstMs": 629,
+        "subsequentRangeMs": [
+          213,
+          231
+        ]
+      },
+      "devtools": {
+        "version": "2.01.2510290",
+        "baseLibrary": "3.15.2",
+        "device": "iPhone 12/13 Pro",
+        "route": "pages/home/index/index",
+        "fixtureRows": 10,
+        "supplementReady": true,
+        "liveOperations": 0,
+        "exceptions": 0,
+        "primaryViewportVisibleMs": 309,
+        "secondaryCompleteMs": 1033
+      },
+      "automatedChecks": {
+        "tests": "347/347",
+        "typecheck": "passed",
+        "lint": "passed"
+      },
+      "strictPerformanceSamples": "incomplete",
+      "release": "blocked until required cold/warm/refresh/page samples are complete"
+    }
   },
   "snapshot": {
     "version": 1,
@@ -5023,8 +5060,39 @@
       "directGraphql4000Requests": 0
     },
     "strictAcceptanceGaps": [
-      "production Web/Cloudflare end-to-end samples 0.255-3.603s",
-      "same-head full cold/warm/refresh and 25-page sample set not rerun"
-    ]
+      "local Web runtime role unavailable",
+      "same-final-head full DevTools cold/warm/refresh/25-page evidence incomplete"
+    ],
+    "strictReviewDate": "2026-08-14",
+    "miniProgramMain": "ea2b9d53738f450663645c0dba818bf5ea6a31f1",
+    "graphqlOriginMain": "66f4948f6380159621ed2dbb1c1fe68edd4922f",
+    "miniProgramTests": {
+      "pass": 347,
+      "fail": 0
+    },
+    "graphqlTests": {
+      "pass": 394,
+      "skip": 5,
+      "fail": 0
+    },
+    "localGraphqlHealth": {
+      "http": 200,
+      "redis": "ok",
+      "postgres": "ok",
+      "season": "ok"
+    },
+    "localWebRuntime": {
+      "status": 500,
+      "reason": "DATABASE_URL must use letletme_web_runtime"
+    },
+    "productionMiniHomeSupplement": {
+      "n": 20,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 237.957,
+      "p95Ms": 385.45,
+      "maxMs": 736.956
+    }
   }
 }

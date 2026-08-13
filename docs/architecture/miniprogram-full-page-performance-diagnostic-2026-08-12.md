@@ -2,7 +2,7 @@
 
 ## 执行摘要
 
-> **2026-08-14 当前审查结论：** GraphQL 已部署、小程序 main 已合并；WeChat DevTools 首页功能链路已通过，但严格性能证据尚未闭环，报告状态保持“代码已实施，尚未验收”。
+> **2026-08-14 当前审查结论：** GraphQL 已部署、小程序 `main=3aff7b25` 已合并；标准本地验收链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`，首页功能链路已通过，但严格性能证据尚未闭环，报告状态保持“代码已实施，尚未验收”。
 
 **状态：代码已实施，尚未验收。**
 
@@ -288,3 +288,66 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 ### 结论
 
 代码合并、GraphQL 部署和 DevTools 首页功能链路已经通过；当前阻塞点是严格性能证据闭环，不是 4000 GraphQL 未启动，也不是 Fixture 渲染契约错误。
+## 2026-08-14 严格验收复核
+
+**状态：代码已实施，尚未验收。**
+
+### 当前证据
+
+- 小程序 `main` 与 `origin/main` 均为 `3aff7b25d8009a9387526724eba8b6cf677ca68d`；PR #22 已通过 CI 与精确 Codex review gate。
+- 小程序自动测试：`347 pass / 0 fail`；`typecheck`、`lint` 通过。GraphQL `origin/main=66f4948f6380159621ed2dbb1c1fe68edd4922f` 测试：`394 pass / 5 skip / 0 fail`。
+- GraphQL 本地标准进程监听 `127.0.0.1:4000`，`/health` 返回 `200`，Redis/Postgres/season 均为 `ok`。未签 ingress 的直接 GraphQL 请求返回预期 `401 UNTRUSTED_INGRESS`。
+- 本地 Web 使用隔离的 `letletme_web_runtime` 数据库角色启动于 `127.0.0.1:3001`；`/en=200`，经 `/api/graphql` 的 fixture 与首页 supplement 均可达 `4000`，未使用 `SKIP_WEB_DATABASE_CONTRACT=1` 或临时 trusted bypass。
+- 生产 Web `https://letletme.top/api/graphql` 的 `MiniHomeSupplement` 20 次样本全部 `200`：p50 `237.957ms`、p95 `385.450ms`、max `736.956ms`。生产 `CoreEventFixtureSchedule` 单次样本 `345.776ms`，返回正确 Fixture 数据。
+- WeChat DevTools Stable `2.01.2510290` / 基础库 `3.15.2` / iPhone 12/13 Pro：通过 `http://localhost:3001/api/graphql` 清除缓存后启动，显示 10 条 Fixture，`MiniHomeSupplement` ready，错误 `0`，异常 `0`，且无 Live operation；该单次样本证明链路正确，但不替代完整 p95 采样。
+
+### 尚未通过或缺失的证据
+
+- 本地标准链路 `DevTools -> 3001 -> 4000` 已完成无缓存单次真实请求，但尚未完成同一最终 head 的完整 5 次冷启动、20 次暖进入、20 次刷新、25 页面和错误态样本；历史报告中的旧样本不升级为当前最终 head 证据。
+- 批量采样器在当前 DevTools runtime 中无法稳定关联新增 navigation/performance 记录，超时等待已丢弃，未计入通过或失败。
+- 生产 Web 的 `MiniHomeSupplement` p95 已低于 `650ms`，但 max `736.956ms` 表明仍有边缘/冷请求长尾；完整页面 visible/complete 仍需 DevTools 真实 Network 或 production endpoint override 成功后重采样。
+- 因此不上传微信开发版 `1.0.2`，不把报告改为“已修复并验收”。下一阻塞是完整同 head DevTools 性能样本，不是 GraphQL 未启动、Web runtime role 缺失或 Fixture/MiniHomeSupplement 契约错误。
+
+## 2026-08-14 post-merge 复核
+
+**状态：代码已实施，尚未验收。**
+
+### 合并与当前链路
+
+| 项目 | 证据 |
+|---|---|
+| 小程序 PR | #22，Codex 精确 head clean，两个 CI `verify` 通过 |
+| 小程序合并 commit | `3aff7b25d8009a9387526724eba8b6cf677ca68d` |
+| 当前小程序 `main` | 与 `origin/main` 一致，`3aff7b25d8009a9387526724eba8b6cf677ca68d` |
+| GraphQL | `127.0.0.1:4000`，`/health=200` |
+| Web proxy | `127.0.0.1:3001/api/graphql`，当前使用隔离 `letletme_web_runtime` 数据库 |
+| DevTools | Stable `2.01.2510290`，基础库 `3.15.2`，iPhone 12/13 Pro 模拟器 |
+| 小程序 endpoint override | 临时设置为 `http://localhost:3001/api/graphql`，未写入代码 |
+
+### 本次发现与修复
+
+首页 `MiniHomeSupplement` 原 query 使用了 `eventOverallResult(eventId: $eventId)`，而当前 GraphQL schema 的 `eventOverallResult` 无参数，导致 `GRAPHQL_VALIDATION_FAILED/400`。该错误已在小程序 PR #22 修复：query 删除 `$eventId` 和字段参数；`eventId` 仍用于本地 summary 归一化和 cache variant。修复后经 `3001 -> 4000` 重放返回 `200`。
+
+### post-merge 真实证据
+
+| 检查项 | 结果 |
+|---|---|
+| GraphQL health | `200`，耗时约 `206ms` |
+| `MiniHomeSupplement` 经 `3001` | `200`，耗时约 `629ms`；之后连续样本 `213–231ms` |
+| DevTools 页面 | `pages/home/index/index` |
+| Fixture | `10` 条，`loading=false` |
+| Supplement | `supplementLoading=false`，summary/price error 为空 |
+| Live operation | `0` |
+| DevTools exception | `0` |
+| 小程序自动检查 | `347/347`，typecheck、lint 通过 |
+
+单次 post-merge DevTools trace：`CurrentEventInfo=217ms`、`CoreEventFixtureSchedule=171ms`、`MiniHomeSupplement=748ms`；primary viewport visible 约 `309ms`，secondary complete 约 `1033ms`。该样本证明当前链路和页面功能正确，但不满足 n≥10 的 p95 统计要求。
+
+### 未通过的严格门槛
+
+- 本次自动化冷/暖/刷新批量采样器未能稳定产生与当前 navigation 对应的完整记录，已停止；无效等待未计入样本。
+- 尚未取得当前 `main=3aff7b25` 的完整 `5` 次冷启动、`20` 次暖进入、`20` 次刷新、`25` 页面及错误态证据。
+- 旧报告中 `3000` 链路和旧 SHA 的样本仍只作为历史记录，不得升级为当前 `3001`/`3aff7b25` 的验收证据。
+- 因此不上传微信开发版 `1.0.2`，不把报告状态改为“已修复并验收”。
+
+当前阻塞是严格性能样本采集器与 DevTools runtime 的关联不稳定，不是 GraphQL `4000` 未启动，也不是 `MiniHomeSupplement` 契约错误。
