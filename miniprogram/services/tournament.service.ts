@@ -163,14 +163,16 @@ async function readDirectory(
   forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<EntryTournamentRow[]> {
+  const snapshot = getAppContextSnapshot();
   let season = currentSeason();
-  if (!season) {
+  const unresolvedEvent = !snapshot?.displayEvent;
+  if (forceRefresh || !season || unresolvedEvent) {
     const context = await ensureAppContext({
       reason: forceRefresh ? "pull-refresh" : "page-load",
-      // A missing season means the shared launch read failed. A direct page
-      // retry must bypass unresolved-context backoff so connectivity can
-      // recover without requiring an app hide/show cycle.
-      forceRefresh: true,
+      // Explicit directory refreshes must also refresh event context. A
+      // season-only unresolved snapshot otherwise keeps fallback GW1 reads
+      // behind AppContext's retry backoff after the backend has recovered.
+      forceRefresh: forceRefresh || !season,
       trace
     });
     season = context.season;

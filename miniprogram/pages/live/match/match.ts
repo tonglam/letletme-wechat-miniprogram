@@ -311,6 +311,7 @@ Page({
   perfTracker: undefined as PagePerformanceTracker | undefined,
   resumeLoadAfterShow: false,
   startupPending: false,
+  refreshContextPending: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -615,6 +616,7 @@ Page({
   onHide() {
     this.pageVisible = false;
     this.resumeLoadAfterShow = this.startupPending
+      || this.refreshContextPending
       || Boolean(this.liveRequest && !this.data.hasData);
     if (this.liveRequest) {
       this.liveRequestId += 1;
@@ -631,6 +633,7 @@ Page({
     this.pageVisible = false;
     this.resumeLoadAfterShow = false;
     this.startupPending = false;
+    this.refreshContextPending = false;
     this.liveRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";
@@ -643,18 +646,25 @@ Page({
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
+    const tracker = this.perfTracker;
+    this.refreshContextPending = true;
     try {
       // Pull-to-refresh is an explicit recovery action. It must bypass the
       // unresolved-context retry backoff after the backend becomes healthy.
       const context = await this.ensureContext("pull-refresh", true);
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
+      this.refreshContextPending = false;
       this.currentEventId = context.currentEvent || 0;
       this.targetEventId = context.displayEvent || 0;
       this.armContextDeadline(context.nextDeadlineAt);
       this.perfTracker.mark("contextReadyAt");
       await this.loadData({ background: true, forceRefresh: true, trackNavigation: true });
     } catch (error) {
-      this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker) {
+        this.showContextError(error);
+      }
     } finally {
+      if (this.perfTracker === tracker) this.refreshContextPending = false;
       wx.stopPullDownRefresh();
     }
   },

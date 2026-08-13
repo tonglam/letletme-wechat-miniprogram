@@ -610,14 +610,20 @@ PerformancePage({
   async retryWithContext() {
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
+      const recoveryGeneration = ++this.startupGeneration;
+      this.startupPending = true;
       let context;
       try {
         context = await this.ensureContext("pull-refresh", true);
       } catch (error) {
+        if (!this.pageVisible || this.startupGeneration !== recoveryGeneration) return;
+        this.startupPending = false;
         this.showContextError(error);
         return;
       }
+      if (!this.pageVisible || this.startupGeneration !== recoveryGeneration) return;
       const nextEventId = context.currentEvent || 0;
+      this.startupPending = false;
       if (nextEventId > 0) {
         this.loadedSeason = context.season || app.globalData.season || this.loadedSeason;
         this.setData({ event: nextEventId, maxGw: nextEventId, error: "" });
