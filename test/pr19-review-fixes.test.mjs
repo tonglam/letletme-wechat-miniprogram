@@ -76,7 +76,7 @@ test("tournament chains carry their originating trace through later reads", () =
   const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
   const live = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(service, /readDirectory\([\s\S]*trace\?: PageRequestTrace[\s\S]*readEntryTournamentDirectory\(entry, season, \{ forceRefresh, trace \}\)/);
-  assert.match(selections, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadStats\(trace\)/);
+  assert.match(selections, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadStats\(forceRefresh, trace\)/);
   assert.match(summary, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntrySummaryTournaments\([^;]*trace\)[\s\S]*this\.loadSummary\(forceRefresh, trace\)/);
   assert.match(live, /getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadRows\(\{[\s\S]*trace[\s\S]*\}\)/);
 });

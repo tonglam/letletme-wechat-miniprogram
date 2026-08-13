@@ -303,12 +303,13 @@ export async function getTournamentSelectionStats(
   tournamentId: number,
   eventId: number,
   limit = 10,
+  forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<TournamentSelectionStats | null> {
   const data = await graphqlRequest<TournamentSelectionStatsResponse>(GET_TOURNAMENT_SELECTION_STATS, {
     tournamentId,
     eventId,
     limit
-  }, { trace });
+  }, { cachePolicy: "reporting", forceRefresh, trace });
   return data.tournamentSelectionStats;
 }

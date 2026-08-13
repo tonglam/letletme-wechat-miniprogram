@@ -309,6 +309,8 @@ Page({
     );
     if (this.resumeContextRecovery) {
       this.resumeContextRecovery = false;
+      this.resumeRefreshAfterShow = false;
+      this.refreshPending = false;
       await this.recoverContext("page-show");
       return;
     }

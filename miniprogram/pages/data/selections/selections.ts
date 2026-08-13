@@ -159,7 +159,7 @@ PerformancePage({
     });
     if (resumeStage === "stats") {
       this.setData({ loadingTournaments: false, loadingStats: false });
-      await this.loadStats(trace);
+      await this.loadStats(false, trace);
       return;
     }
     if (resumeStage === "tournaments") {
@@ -286,7 +286,7 @@ PerformancePage({
         selectedTournamentName: selectedTournament.name,
         emptyState: ""
       });
-      await this.loadStats(trace);
+      await this.loadStats(forceRefresh, trace);
     } catch (error) {
       if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "阵容选择数据加载失败" });
@@ -298,7 +298,7 @@ PerformancePage({
     }
   },
 
-  async loadStats(originatingTrace?: PageRequestTrace): Promise<void> {
+  async loadStats(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
@@ -323,7 +323,7 @@ PerformancePage({
     );
     this.setData({ loadingStats: true, error: "" });
     try {
-      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, trace);
+      const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, forceRefresh, trace);
       if (!isActiveLifecycle() || !isActiveContext()) {
         // Superseded by a tournament/GW change or a list refresh while in
         // flight: the newer load owns rows, header, and loading state.
