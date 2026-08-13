@@ -5094,5 +5094,15 @@
       "p95Ms": 385.45,
       "maxMs": 736.956
     }
+  },
+  "postMergeLocalChain": {
+    "miniProgramSha": "835899447c2b5ead72340b57f50bf1108b2d33ac",
+    "pullRequest": 24,
+    "defaultDevelopGraphqlEndpoint": "http://localhost:3001/api/graphql",
+    "defaultDevelopApiBase": "http://localhost:3001/api/miniprogram",
+    "topology": "WeChat DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql",
+    "port3000InCurrentAcceptance": false,
+    "status": "代码已实施，尚未验收",
+    "networkP95Gate": "incomplete-sample-set"
   }
 }
