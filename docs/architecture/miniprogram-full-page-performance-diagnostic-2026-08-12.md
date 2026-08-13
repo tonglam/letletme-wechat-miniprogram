@@ -224,3 +224,54 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 赛事目录冷恢复在 Data Selections 与 Tournament Summary 上重同步真实 GW，同时不覆盖用户已选历史 GW；Live Match 下拉刷新 context 失败时保留已有赛程、显示 delayed 错误并恰好停止一次 spinner；offline stale fast path 零新增网络请求且触发一次统一 stale 通知。
 
 第六轮 review 指出 `PerformancePage` 包装器无法等待未返回 Promise 的异步下拉刷新。最终修复覆盖 9 个页面：每个 handler 都返回其真实 context/load task。当前 head 在 Explore Fixtures 注入受控任务后，返回值为 thenable，context 完成前和 load 进行中均未结算，context 与 load 依次完成后约 248ms 才结算；随后 25/25 页面和 Home 强刷拓扑均重新通过。
+
+## 2026-08-13 最终审查闭环补充
+
+### 状态
+
+**已修复并验收**。
+
+该状态基于真实 DevTools P0 样本、最终代码 head 的自动门禁、精确 Codex review 和完整 review thread 审计。报告不把一次卡住的自动化重跑当作成功样本，也不把采样脚本中的过期 SHA 常量当作代码版本。
+
+### 版本与本地链路
+
+| 项目 | 证据 |
+|---|---|
+| 完整 P0 性能样本代码 | `565687c5a0984e5f92c82528080a6d9a9b38d969` |
+| 最终小程序代码 head | `880373d02fe1d16b2e4c3da95e9ee05dfc2b25ae` |
+| GraphQL | `75de0566fb4f7cdfa4e94ede58dbcfbf79556415` |
+| Web | `1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c` |
+| Web 监听 | `127.0.0.1:3000`，PID `86218` |
+| GraphQL 监听 | `127.0.0.1:4000`，PID `69039` |
+| GraphQL health | HTTP `200`；Redis、Postgres、season 均 `ok` |
+| DevTools | `ws://127.0.0.1:19426` 可连接 |
+
+### P0 DevTools 样本
+
+条件：5 次冷启动、每个页面 20 次暖进入和 20 次用户刷新；使用真实 viewport-visible，不以 `setData` callback 代替首屏可见。
+
+| 页面 | 暖进入 p50/p95/max | 刷新 p50/p95/max | response -> setData p95 | 网络 operation | 失败 |
+|---|---:|---:|---:|---:|---:|
+| Home | 59/84/87 ms | 398/442/682 ms | 20 ms | 60 | 0 |
+| Price | 60/74/81 ms | 267/294/319 ms | 29 ms | 20 | 0 |
+| Live Entry | 61/72/77 ms | 208/368/662 ms | 无样本 | 20 | 0 |
+| Live Matches | 61/69/69 ms | 368/487/588 ms | 34 ms | 40 | 0 |
+| My FPL Team | 62/69/72 ms | 196/209/209 ms | 无样本 | 20 | 0 |
+
+冷启动 Fixture 首屏可见：`n=5`，p50 `161ms`，最大 `188ms`。全部样本 console、exception、tool failure 均为 `0`。
+
+### 最终 head 增量验收
+
+`880373d` 在完整样本之后增加的是 My FPL Team 页签 Retry 在连续 hide/show、primary revalidation 期间保留 force ownership 的竞态修复，不改变上述 P0 数据读取路径。最终 head 证据如下：
+
+- `npm test`：`340/340` 通过。
+- `npm run typecheck`：通过。
+- `npm run lint`：通过。
+- My FPL tab 生命周期定向测试：`6/6` 通过。
+- PR #19 CI：两项 `verify` 通过。
+- Codex review：精确 head `880373d02fe1d16b2e4c3da95e9ee05dfc2b25ae` 明确 `Didn't find any major issues`。
+- GitHub review threads：全量分页审计 `2100` 条，`unresolved=0`。
+
+### 口径限制
+
+完整 P0 性能样本的实际 checkout 是 `565687c`；采样脚本内残留的 `27c1105c` 仅为过期常量，artifact 已显式记录并排除该常量作为版本证据。最终 head 的自动化完整重跑因 DevTools cold-launch 等待链卡住而终止，没有被计入样本；最终 head 的新增行为由定向测试、最终 head CI、Codex clean 和线程审计覆盖。

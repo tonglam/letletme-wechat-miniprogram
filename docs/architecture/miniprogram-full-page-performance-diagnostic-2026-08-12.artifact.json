@@ -4883,5 +4883,35 @@
         ]
       }
     }
-  ]
+  ],
+  "commit": "565687c5a0984e5f92c82528080a6d9a9b38d969",
+  "evidence": {
+    "reportStatus": "已修复并验收",
+    "sampledCodeCommit": "565687c5a0984e5f92c82528080a6d9a9b38d969",
+    "finalCodeCommit": "880373d02fe1d16b2e4c3da95e9ee05dfc2b25ae",
+    "runnerEmbeddedCommit": "27c1105c7c20c5175f229c1054e5a114162c885f",
+    "sampledAt": "2026-08-13T10:08:08.356Z",
+    "graphqlCommit": "75de0566fb4f7cdfa4e94ede58dbcfbf79556415",
+    "webCommit": "1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c",
+    "devtoolsWs": "ws://127.0.0.1:19426",
+    "webPort": 3000,
+    "graphqlPort": 4000,
+    "graphqlHealth": {
+      "http": 200,
+      "redis": "ok",
+      "postgres": "ok",
+      "season": "ok"
+    },
+    "finalHeadTargetedEvidence": {
+      "tests": "340/340",
+      "typecheck": "pass",
+      "lint": "pass",
+      "codexReview": "clean",
+      "reviewThreads": {
+        "audited": 2100,
+        "unresolved": 0
+      }
+    },
+    "samplingNote": "完整 P0 样本在 sampledCodeCommit 采集；finalCodeCommit 仅增加 My FPL tab hide/show force ownership 修复，已由最终 head 定向 lifecycle 测试覆盖。runnerEmbeddedCommit 是采样脚本内过期常量，不作为实际采样 SHA。"
+  }
 }
