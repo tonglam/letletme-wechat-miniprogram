@@ -67,7 +67,7 @@
       </view>
       <app-error-state wx:if="{{fixtureError}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
       <app-loading wx:elif="{{fixtureLoading}}" text="加载赛程" />
-      <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
+      <data-status wx:elif="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
       <app-empty-state
         wx:elif="{{fixtureRows.length === 0}}"
         title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"

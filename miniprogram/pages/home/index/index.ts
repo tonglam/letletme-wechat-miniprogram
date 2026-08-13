@@ -333,10 +333,12 @@ Page({
 
       this._lastLoadAt = Date.now();
       void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);
+      return !fixtureResult.failed && !fixtureResult.stale;
     } catch (error) {
       if (requestId === this._loadRequestId) {
         this.setData({ error: error instanceof Error ? error.message : "首页加载失败" });
       }
+      return false;
     } finally {
       if (requestId === this._loadRequestId) {
         this.setData({ loading: false, fixtureLoading: false });
@@ -364,7 +366,7 @@ Page({
       } else {
         tracker?.mark("contextReadyAt");
       }
-      await this.loadPage(true, tracker);
+      const fixtureFresh = await this.loadPage(true, tracker);
       const refreshedDeadlineExpired = Boolean(this.data.utcDeadline)
         && getDeadlineDiffMs(this.data.utcDeadline) <= 0;
       if (deadlineTriggered && refreshedDeadlineExpired) {
@@ -372,7 +374,7 @@ Page({
       } else {
         this.startCountdown();
       }
-      if (!deadlineTriggered) {
+      if (!deadlineTriggered && fixtureFresh === true) {
         wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
       }
     } catch (error) {

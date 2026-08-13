@@ -536,6 +536,7 @@ Page({
       }
       this.initLiveRefresh();
     }
+    this.perfTracker?.mark("contextReadyAt");
     return this.loadData({ forceRefresh: true });
   },
 
@@ -664,7 +665,7 @@ Page({
           forceRefresh: options.forceRefresh,
           trace: requestTrace
         });
-        if (requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return;
         navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
         this.coreMatches = core;
@@ -701,7 +702,7 @@ Page({
             options.forceRefresh === true,
             requestTrace
           );
-          if (requestId !== this.liveRequestId) return;
+          if (!this.pageVisible || requestId !== this.liveRequestId) return;
           this.liveSnapshot = liveResult.snapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.coreMatches = mergeLiveOverlay(core, liveResult.data);
@@ -722,12 +723,12 @@ Page({
         }
         this.syncDisplayState();
       } catch (error) {
-        if (requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return;
         this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
         this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();
       } finally {
-        if (requestId === this.liveRequestId) {
+        if (this.pageVisible && requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
           this.syncDisplayState();
         }
@@ -819,6 +820,8 @@ Page({
   },
 
   onRetry() {
+    this.perfTracker?.disconnect();
+    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
     void this.retryWithContext();
   }
 });

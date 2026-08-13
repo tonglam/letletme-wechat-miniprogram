@@ -6,6 +6,7 @@ import { getTeamList } from "../../../services/common.service";
 import { getPlayerValueByElement, readPlayerValueByDate } from "../../../services/price.service";
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
+import { capturePageRequestTrace } from "../../../services/graphql.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import {
   nextRequestRevision,
@@ -325,11 +326,18 @@ Page({
   },
 
   async loadTeamOptions(): Promise<void> {
+    const tracker = this.perfTracker;
+    const trace = capturePageRequestTrace({
+      callerSurface: "price-team-directory",
+      trigger: "load"
+    });
     this.setData({ playerLoading: true, playersError: "" });
     try {
       const context = await ensureAppContext({ reason: "page-load" });
+      if (!this.pageActive || this.perfTracker !== tracker) return;
       const season = context.season;
-      const teams = await getTeamList(season) as TeamDirectoryItem[];
+      const teams = await getTeamList(season, false, trace) as TeamDirectoryItem[];
+      if (!this.pageActive || this.perfTracker !== tracker) return;
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },
         ...teams
@@ -344,9 +352,12 @@ Page({
         teamOptionNames: teamOptions.map((option) => option.label)
       });
     } catch (error) {
+      if (!this.pageActive || this.perfTracker !== tracker) return;
       this.setData({ playersError: error instanceof Error ? error.message : "球队列表加载失败" });
     } finally {
-      this.setData({ playerLoading: false });
+      if (this.pageActive && this.perfTracker === tracker) {
+        this.setData({ playerLoading: false });
+      }
     }
   },
 

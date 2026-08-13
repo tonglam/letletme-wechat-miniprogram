@@ -140,7 +140,9 @@ Page({
 
   async onLoad(options?: Record<string, string | undefined>) {
     const app = getApp<IAppOption>();
+    this.pageVisible = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "cold-launch");
+    const tracker = this.perfTracker;
     const routeEntry = Number(options?.entry);
     const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
     // Show the loading state while waiting for shared launch data so a cold
@@ -151,11 +153,14 @@ Page({
       context = await this.ensureContext("page-load");
     } catch (error) {
       if (!context) {
-        this.showContextError(error);
+        if (this.pageVisible && this.perfTracker === tracker) {
+          this.showContextError(error);
+        }
         return;
       }
     }
-    this.perfTracker.mark("contextReadyAt");
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
+    tracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
     if (!hasRouteEntry && !getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
@@ -164,6 +169,7 @@ Page({
       // may not even have started while the privacy callback is pending).
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     const followedEntry = app.globalData.entryId;
     this.setData({

@@ -672,7 +672,7 @@ PerformancePage({
     });
     try {
       const tournaments = await getEntryPointsRaceTournament(entryId, forceRefresh, trace);
-      if (requestId !== this.tournamentListRequestId) return;
+      if (!this.pageVisible || requestId !== this.tournamentListRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       if (tournaments.length === 0) {
         this.liveRefresh?.stop();
@@ -749,14 +749,14 @@ PerformancePage({
         trace
       });
     } catch (error) {
-      if (requestId !== this.tournamentListRequestId) return;
+      if (!this.pageVisible || requestId !== this.tournamentListRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       this.setData({
         tournamentListError: error instanceof Error ? error.message : "实时竞赛加载失败",
         tournamentListErrorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
       });
     } finally {
-      if (requestId === this.tournamentListRequestId) {
+      if (this.pageVisible && requestId === this.tournamentListRequestId) {
         this.setData({ loading: false });
       }
     }
