@@ -310,13 +310,17 @@ Page({
   contextDeadlineTimer: undefined as number | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
   resumeLoadAfterShow: false,
+  startupPending: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad() {
+    this.pageVisible = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "cold-launch");
+    const tracker = this.perfTracker;
+    this.startupPending = true;
     const rawStoredStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
     const storedStatus = rawStoredStatus === "next_event" ? "not_start" : rawStoredStatus;
     if (rawStoredStatus === "next_event") {
@@ -339,9 +343,12 @@ Page({
     } catch (error) {
       if (!context) {
         this.showContextError(error);
+        this.startupPending = false;
         return;
       }
     }
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
+    this.startupPending = false;
     this.perfTracker.mark("contextReadyAt");
     this.currentEventId = context.currentEvent || 0;
     this.targetEventId = context.displayEvent || 0;
@@ -545,6 +552,7 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    const resumeInterruptedLoad = resumed && this.resumeLoadAfterShow;
     let context = getAppContextSnapshot();
     if (resumed) {
       this.perfTracker?.disconnect();
@@ -554,6 +562,10 @@ Page({
         this.perfTracker.mark("contextReadyAt");
       } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
+    }
+    if (resumeInterruptedLoad) {
+      this.resumeLoadAfterShow = false;
+      this.startupPending = false;
     }
     const nextCurrentEventId = context?.currentEvent || 0;
     const nextTargetEventId = context?.displayEvent || 0;
@@ -582,8 +594,7 @@ Page({
         return;
       }
     }
-    if (resumed && this.resumeLoadAfterShow && !this.data.hasData) {
-      this.resumeLoadAfterShow = false;
+    if (resumeInterruptedLoad && !this.data.hasData) {
       await this.loadData({ forceRefresh: true });
       return;
     }
@@ -599,8 +610,9 @@ Page({
 
   onHide() {
     this.pageVisible = false;
+    this.resumeLoadAfterShow = this.startupPending
+      || Boolean(this.liveRequest && !this.data.hasData);
     if (this.liveRequest) {
-      this.resumeLoadAfterShow = !this.data.hasData;
       this.liveRequestId += 1;
       this.liveRequest = null;
       this.liveRequestKey = "";
@@ -614,6 +626,7 @@ Page({
   onUnload() {
     this.pageVisible = false;
     this.resumeLoadAfterShow = false;
+    this.startupPending = false;
     this.liveRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";

@@ -134,36 +134,54 @@ Page({
   perfTracker: undefined as PagePerformanceTracker | undefined,
   loadTransfersAfterLive: false,
   resumeLiveAfterShow: false,
+  resumeStartupAfterShow: false,
+  startupPending: false,
+  routeEntryId: 0,
+  hasRouteEntry: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad(options?: Record<string, string | undefined>) {
-    const app = getApp<IAppOption>();
     this.pageVisible = true;
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "cold-launch");
-    const tracker = this.perfTracker;
     const routeEntry = Number(options?.entry);
-    const hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
+    this.hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
+    this.routeEntryId = this.hasRouteEntry ? routeEntry : 0;
+    return this.initializeFromContext("page-load", this.perfTracker);
+  },
+
+  async initializeFromContext(
+    reason: "page-load" | "page-show",
+    tracker: PagePerformanceTracker
+  ) {
+    const app = getApp<IAppOption>();
+    this.startupPending = true;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });
     let context = getAppContextSnapshot();
     try {
-      context = await this.ensureContext("page-load");
+      context = await this.ensureContext(reason);
     } catch (error) {
       if (!context) {
         if (this.pageVisible && this.perfTracker === tracker) {
+          this.startupPending = false;
           this.showContextError(error);
         }
         return;
       }
     }
     if (!this.pageVisible || this.perfTracker !== tracker) return;
+    if (!context) {
+      this.startupPending = false;
+      this.showContextError(new Error("赛季和比赛轮信息加载失败"));
+      return;
+    }
     tracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
-    if (!hasRouteEntry && !getApiSessionToken()) {
+    if (!this.hasRouteEntry && !getApiSessionToken()) {
       // With no valid session the stored follow is only offline/display
       // fallback: the account may have been linked to a different entry
       // since, so wait for the refreshed profile to re-assert it (the login
@@ -171,15 +189,16 @@ Page({
       try { await app.authReady; } catch {}
     }
     if (!this.pageVisible || this.perfTracker !== tracker) return;
+    this.startupPending = false;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     const followedEntry = app.globalData.entryId;
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: hasRouteEntry ? routeEntry : (followedEntry ?? 0),
+      entryId: this.hasRouteEntry ? this.routeEntryId : (followedEntry ?? 0),
       // An explicit route entry that is not the followed team is read-only
       // view mode; it never changes the stored follow.
-      viewOnly: hasRouteEntry && routeEntry !== followedEntry
+      viewOnly: this.hasRouteEntry && this.routeEntryId !== followedEntry
     });
     this.initLiveRefresh();
     // onShow can run while initAppData is still pending. Re-arm here once the
@@ -245,6 +264,11 @@ Page({
     if (resumed) {
       this.perfTracker?.disconnect();
       this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "warm-enter");
+      if (this.resumeStartupAfterShow) {
+        this.resumeStartupAfterShow = false;
+        await this.initializeFromContext("page-show", this.perfTracker);
+        return;
+      }
       const app = getApp<IAppOption>();
       try {
         await this.ensureContext("page-show");
@@ -330,9 +354,10 @@ Page({
   },
 
   onHide() {
+    this.resumeStartupAfterShow = this.startupPending;
     this.pageVisible = false;
     this.liveRefresh?.stop();
-    this.resumeLiveAfterShow = this.liveRequest !== null;
+    this.resumeLiveAfterShow = !this.resumeStartupAfterShow && this.liveRequest !== null;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;
@@ -349,6 +374,8 @@ Page({
     this.pageVisible = false;
     this.liveRefresh?.dispose();
     this.resumeLiveAfterShow = false;
+    this.resumeStartupAfterShow = false;
+    this.startupPending = false;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;

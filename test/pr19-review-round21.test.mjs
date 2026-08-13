@@ -38,8 +38,8 @@ test("Players clears an interrupted pagination latch on resume", () => {
 test("Match and Tournament resume interrupted primary loads", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
-  assert.match(match, /onHide\(\)[\s\S]*resumeLoadAfterShow = !this\.data\.hasData[\s\S]*liveRequestId \+= 1/);
-  assert.match(match, /resumed && this\.resumeLoadAfterShow && !this\.data\.hasData[\s\S]*loadData\(\{ forceRefresh: true \}\)/);
+  assert.match(match, /onHide\(\)[\s\S]*resumeLoadAfterShow = this\.startupPending[\s\S]*Boolean\(this\.liveRequest && !this\.data\.hasData\)[\s\S]*liveRequestId \+= 1/);
+  assert.match(match, /resumeInterruptedLoad && !this\.data\.hasData[\s\S]*loadData\(\{ forceRefresh: true \}\)/);
   assert.match(tournament, /onHide\(\)[\s\S]*resumeDirectoryAfterShow = this\.data\.loading && !this\.data\.selectedTournament[\s\S]*tournamentListRequestId \+= 1/);
   assert.match(tournament, /resumed && this\.resumeDirectoryAfterShow && !this\.data\.selectedTournament[\s\S]*loadTournaments\(false\)/);
 });

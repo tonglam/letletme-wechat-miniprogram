@@ -24,10 +24,10 @@ test("Home fixture states remain one conditional chain and stale refresh is not 
 
 test("cold Live Entry startup stops after the originating page hides", () => {
   const entry = source("miniprogram/pages/live/entry/entry.ts");
-  assert.match(entry, /onLoad\([\s\S]*this\.pageVisible = true[\s\S]*const tracker = this\.perfTracker/);
+  assert.match(entry, /onLoad\([\s\S]*this\.pageVisible = true[\s\S]*initializeFromContext\("page-load", this\.perfTracker\)/);
   assert.match(
     entry,
-    /await this\.ensureContext\("page-load"\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return[\s\S]*await app\.authReady[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
+    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return[\s\S]*await app\.authReady[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
   );
 });
 
