@@ -5145,6 +5145,44 @@
       }
     },
     "strictPerformanceSamples": "incomplete",
-    "release": "blocked until cold and rich-state evidence is complete"
-  }
+    "release": "blocked until cold and rich-state evidence is complete",
+    "coldStartFinal": {
+      "samples": 5,
+      "visibleMs": [
+        825,
+        833,
+        886,
+        940,
+        997
+      ],
+      "p50Ms": 886,
+      "maxMs": 997,
+      "thresholdMs": 1500,
+      "passed": true,
+      "fixtureRows": [
+        10,
+        10,
+        10,
+        10,
+        10
+      ],
+      "fixtureNetworkOperations": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "liveAcquisition": 0,
+      "source": "network",
+      "graphqlHttpStatus": 200
+    },
+    "remainingHardGates": [
+      "真实登录 Entry/READY",
+      "My FPL Team rich-state",
+      "Entry History/Tournament rich-state"
+    ]
+  },
+  "status": "代码已实施，尚未验收",
+  "release": "blocked until authenticated rich-state evidence is complete"
 }
