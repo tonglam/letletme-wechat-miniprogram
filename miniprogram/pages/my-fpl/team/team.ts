@@ -807,7 +807,10 @@ Page({
   },
 
   onRetry() {
-    if (this.contextUnavailable) {
+    // A syntactically valid but unresolved AppContext leaves maxGw at zero
+    // without setting contextUnavailable. Explicit retry must force context
+    // recovery instead of replaying the GW0 empty state for the backoff window.
+    if (this.contextUnavailable || this.data.maxGw <= 0) {
       void this.recoverContext("pull-refresh");
       return;
     }

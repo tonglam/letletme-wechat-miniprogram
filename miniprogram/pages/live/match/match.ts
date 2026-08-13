@@ -644,7 +644,9 @@ Page({
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
     try {
-      const context = await this.ensureContext("pull-refresh");
+      // Pull-to-refresh is an explicit recovery action. It must bypass the
+      // unresolved-context retry backoff after the backend becomes healthy.
+      const context = await this.ensureContext("pull-refresh", true);
       this.currentEventId = context.currentEvent || 0;
       this.targetEventId = context.displayEvent || 0;
       this.armContextDeadline(context.nextDeadlineAt);

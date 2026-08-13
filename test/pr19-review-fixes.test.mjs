@@ -108,7 +108,7 @@ test("Live Match pull refresh surfaces context failures and always stops the spi
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /async onPullDownRefresh\(\)[\s\S]*await this\.ensureContext\("pull-refresh"\)[\s\S]*catch \(error\) \{\s*this\.showContextError\(error\);\s*\} finally \{\s*wx\.stopPullDownRefresh\(\)/
+    /async onPullDownRefresh\(\)[\s\S]*await this\.ensureContext\("pull-refresh", true\)[\s\S]*catch \(error\) \{\s*this\.showContextError\(error\);\s*\} finally \{\s*wx\.stopPullDownRefresh\(\)/
   );
 });
 
