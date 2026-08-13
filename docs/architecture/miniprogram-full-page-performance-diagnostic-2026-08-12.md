@@ -1,18 +1,18 @@
 # 小程序全页面性能整改最终验收报告
 
-> **当前生效结论（2026-08-14）：** 以本节及文末“当前主分支深度复核”为准，历史章节中的旧 SHA、旧端口和“全部性能门槛通过”结论不再代表当前验收状态。当前小程序 `main=92da7e4b6dfb18c9e2b87273ae1cd1833d11764f`，本地标准链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`；`3000` 当前未监听。代码 review/CI 已完成，但严格性能门槛仍有失败项，报告状态保持 **代码已实施，尚未验收**。
+> **当前生效结论（2026-08-14）：** 以本文最后的“最新 origin/main 复核结果”为准，历史章节中的旧 SHA、旧端口和旧性能样本不再代表当前验收状态。当前小程序 `main=db582edfc54da19f70ca5e01570d5ce91c00adba`，本地标准链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`；`3000` 当前未监听。最新后端基线下 Home/Price 刷新和 25/25 页面语义均通过，但冷启动完整样本和真实登录 rich-state 证据不足，报告状态保持 **代码已实施，尚未验收**。
 
 ## 执行摘要
 
-> **2026-08-14 当前审查结论：** GraphQL 已部署、小程序 `main=3aff7b25` 已合并；标准本地验收链路为 `DevTools -> 127.0.0.1:3001/api/graphql -> 127.0.0.1:4000/graphql`，首页功能链路已通过，但严格性能证据尚未闭环，报告状态保持“代码已实施，尚未验收”。
+> **摘要纠正：** 本段以下的旧版本数据保留为历史记录；当前结论以文末 `最新 origin/main 复核结果` 为准。
 
 **状态：代码已实施，尚未验收。**
 
 - 25/25 注册页面达到可见终态，无页面 timeout、console error 或 exception。
-- 首页 5 次冷启动 primary visible 最大 **188ms**；P0 暖进入 p95 最大 **84ms**；P0 刷新 p95 最大 **487ms**。
-- 首轮全页标准窗口产生 **10** 次网络 GraphQL operation，低于 ≤40；第二轮网络为 **0**，12 次逻辑调用缓存命中率 **100%**。
-- response 到 setData callback p95 为 **11ms**；preseason Live 请求、Fixture Live acquisition、NO_PICKS Live acquisition 均为 **0**。
-- 价格刷新有一次 **669ms** 最大值长尾，首页 optional secondary complete 最大 **2311ms**；两项均在残余风险中保留。
+- 最新后端基线下 Home refresh primary visible p95 为 **389ms**，Price refresh primary visible p95 为 **343ms**，均满足 `<=600ms`。
+- 当前 main 25/25 页面语义回归通过，console/automation exception 为 **0**；冷启动当前只有 2 个可关联样本，不能替代要求的 n=5。
+- Home 每次刷新恰好一次 Fixture operation 和一次 Supplement operation；Price 每次刷新恰好一次 `GetPlayerValues` operation。
+- 真实登录 Entry/READY rich-state 尚未取得；不上传开发版，不把报告标记为“已修复并验收”。
 
 ## 1. 精确版本与环境
 
