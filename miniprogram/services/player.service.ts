@@ -258,7 +258,11 @@ export async function getPlayerInfoByElement(element: number): Promise<PlayerDet
   return getPlayerDetailByElement(element);
 }
 
-export async function getPlayerInfoByCode(code: number | string, season?: string): Promise<PlayerDetail> {
+export async function getPlayerInfoByCode(
+  code: number | string,
+  season?: string,
+  trace?: import("./graphql.service").PageRequestTrace
+): Promise<PlayerDetail> {
   const playerId = Number(code);
   const data = await graphqlRequest<PlayerResponse>(
     PLAYER,
@@ -266,7 +270,8 @@ export async function getPlayerInfoByCode(code: number | string, season?: string
     {
       authMode: "public",
       cachePolicy: "reporting",
-      cacheVariant: `season:${currentSeason(season)}`
+      cacheVariant: `season:${currentSeason(season)}`,
+      trace
     }
   );
   if (!data.player) {

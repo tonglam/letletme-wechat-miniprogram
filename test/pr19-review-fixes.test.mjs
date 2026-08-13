@@ -56,7 +56,7 @@ test("player detail consumes an explicit route season when shared context is una
   const playerService = source("miniprogram/services/player.service.ts");
   assert.match(
     playerService,
-    /getPlayerInfoByCode\(code: number \| string, season\?: string\)[\s\S]*cacheVariant: `season:\$\{currentSeason\(season\)\}`/
+    /getPlayerInfoByCode\([\s\S]*code: number \| string,[\s\S]*season\?: string,[\s\S]*trace\?:[\s\S]*cacheVariant: `season:\$\{currentSeason\(season\)\}`,[\s\S]*trace/
   );
   assert.doesNotMatch(playerService, /getPlayerInfoByCode\([^)]*_season/);
 });
@@ -66,7 +66,7 @@ test("team detail consumes its route season and team cache identity includes it"
   const service = source("miniprogram/services/team.service.ts");
   assert.match(page, /this\.routeSeason = options\.season \|\| ""/);
   assert.match(page, /season = this\.routeSeason \|\| context\.season \|\| season/);
-  assert.match(service, /getTeamSummary\(teamId: number \| string, season: string\)[\s\S]*cachePolicy: "team-directory",\s*season/);
+  assert.match(service, /getTeamSummary\([\s\S]*teamId: number \| string,[\s\S]*season: string,[\s\S]*trace\?: PageRequestTrace[\s\S]*cachePolicy: "team-directory",\s*season,\s*trace/);
   assert.doesNotMatch(service, /_season/);
 });
 
