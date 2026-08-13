@@ -10,6 +10,8 @@ test("My FPL tab retries retain force refresh across hide/show", () => {
   assert.match(page, /this\.resumeTabForceRefresh = this\.resumeTab\n\s+\? this\.resumeTabForceRefresh \|\| this\.tabForceRefreshPending/);
   assert.match(page, /const resumeTabForceRefresh = this\.resumeTabForceRefresh/);
   assert.match(page, /loadTab\(resumeTab, resumeTabForceRefresh, trace\)/);
+  assert.match(page, /if \(activeTab\) this\.resumeTab = activeTab/);
+  assert.match(page, /loadData\(contextChanged \|\| resumeTabForceRefresh, trace\)/);
   assert.match(page, /this\.tabForceRefreshPending = forceRefresh/);
   assert.match(page, /this\.tabForceRefreshPending = false;\n\s+this\.setData\(\{ tabLoading: false \}\)/);
 });

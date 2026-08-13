@@ -401,7 +401,7 @@ Page({
       || primaryMissing
       || Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
     if (primaryReloaded) {
-      await this.loadData(contextChanged, trace);
+      await this.loadData(contextChanged || resumeTabForceRefresh, trace);
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
@@ -528,9 +528,10 @@ Page({
 
   onHide() {
     this.resumeContextRecovery = this.resumeContextRecovery || this.contextRecoveryPending;
-    this.resumeTab = this.data.tabLoading && this.data.activeTab !== "squad"
+    const activeTab = this.data.tabLoading && this.data.activeTab !== "squad"
       ? this.data.activeTab
       : null;
+    if (activeTab) this.resumeTab = activeTab;
     this.resumeTabForceRefresh = this.resumeTab
       ? this.resumeTabForceRefresh || this.tabForceRefreshPending
       : false;

@@ -17,7 +17,7 @@ test("Gameweek Summary resumes an interrupted historical event without cold rese
 test("My FPL Team resumes an interrupted lazy tab independently of fresh primary", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(page, /resumeTab: null as EntrySummaryTab \| null/);
-  assert.match(page, /onHide\(\)[\s\S]*this\.resumeTab = this\.data\.tabLoading[\s\S]*this\.data\.activeTab[\s\S]*tabRequestId \+= 1[\s\S]*tabLoading: false/);
-  assert.match(page, /const resumeTab = this\.resumeTab[\s\S]*const resumeTabForceRefresh = this\.resumeTabForceRefresh[\s\S]*const primaryReloaded[\s\S]*if \(!primaryReloaded && resumeTab[\s\S]*loadTab\(resumeTab, resumeTabForceRefresh, trace\)/);
+  assert.match(page, /const activeTab = this\.data\.tabLoading[\s\S]*if \(activeTab\) this\.resumeTab = activeTab[\s\S]*tabRequestId \+= 1[\s\S]*tabLoading: false/);
+  assert.match(page, /const resumeTab = this\.resumeTab[\s\S]*const resumeTabForceRefresh = this\.resumeTabForceRefresh[\s\S]*const primaryReloaded[\s\S]*if \(primaryReloaded\)[\s\S]*loadData\(contextChanged \|\| resumeTabForceRefresh, trace\)[\s\S]*if \(!primaryReloaded && resumeTab[\s\S]*loadTab\(resumeTab, resumeTabForceRefresh, trace\)/);
   assert.match(page, /onUnload\(\)[\s\S]*this\.resumeTab = null/);
 });
