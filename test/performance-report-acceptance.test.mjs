@@ -12,7 +12,7 @@ test("performance report evidence keeps sampled and final commits explicit", () 
   assert.equal(evidence.reportStatus, "代码已实施，尚未验收");
   assert.equal(evidence.sampledCodeCommit, "565687c5a0984e5f92c82528080a6d9a9b38d969");
   assert.equal(evidence.finalCodeCommit, "67faafdf9dd20a9e71ba691420c0f7404f8b23a0");
-  assert.equal(evidence.graphqlCommit, "75de0566fb4f7cdfa4e94ede58dbcfbf79556415");
+  assert.equal(evidence.graphqlCommit, "bf5bb0a60fa8c0e660525302893dbd19ebed8290");
   assert.equal(evidence.webCommit, "1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c");
   assert.equal(evidence.graphqlHealth.http, 200);
   assert.equal(evidence.finalHeadTargetedEvidence.reviewThreads.unresolved, "pending");
@@ -20,7 +20,7 @@ test("performance report evidence keeps sampled and final commits explicit", () 
     assert.match(document, /代码已实施，尚未验收/);
     assert.match(document, /565687c5a0984e5f92c82528080a6d9a9b38d969/);
     assert.match(document, /67faafdf9dd20a9e71ba691420c0f7404f8b23a0/);
-    assert.match(document, /75de0566fb4f7cdfa4e94ede58dbcfbf79556415/);
+    assert.match(document, /bf5bb0a60fa8c0e660525302893dbd19ebed8290/);
     assert.match(document, /1ffaf9801c3e679cce4b530ef3a57c0dfd8a147c/);
   }
 });

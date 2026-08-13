@@ -2,6 +2,8 @@
 
 ## 执行摘要
 
+> **2026-08-14 当前审查结论：** GraphQL 已部署、小程序 main 已合并；WeChat DevTools 首页功能链路已通过，但严格性能证据尚未闭环，报告状态保持“代码已实施，尚未验收”。
+
 **状态：代码已实施，尚未验收。**
 
 - 25/25 注册页面达到可见终态，无页面 timeout、console error 或 exception。
@@ -263,3 +265,26 @@ Player Detail 显式 season 深链在清空 `globalData.season` 后重试，仍�
 ### 口径限制
 
 完整 P0 性能样本的实际 checkout 是 `565687c`；采样脚本内残留的 `27c1105c` 仅为过期常量，artifact 已显式记录并排除该常量作为版本证据。最终 head 的自动化完整重跑尚未重新完成；新增行为已通过定向测试、本地门禁，Codex review 和 GitHub thread resolve 待完成。
+
+
+
+## 2026-08-14 DevTools 与线上部署复核
+
+**当前状态：代码已实施，尚未验收。**
+
+### 已确认
+
+- GraphQL PR #45 已合并并部署，生产精确目标为 `bf5bb0a60fa8c0e660525302893dbd19ebed8290`，运行镜像为 `sha256:930aa877e20cf2fcf0a5962a78928b6118c4b579db5a1462c33c1668fb661e2a`。健康检查、数据库 contract、smoke 和容器健康均通过。
+- 小程序 PR #20 已合并，`main` 当前为 `3a6269a2a45ab1c483513f1a6c55d5771f570073`。首页请求使用 `eventOverallResult(eventId)`，避免读取全量 event summary。
+- WeChat DevTools Stable `2.01.2510290`、基础库 `3.15.2`、iPhone 12/13 Pro 模拟器验收：页面为 `pages/home/index/index`，显示 `GW1 DEADLINE`、`GW1 赛程` 和 10 条 Fixture；DevTools 错误 `0`、警告 `0`。Endpoint override 为空，链路为 `127.0.0.1:3000/api/graphql -> 127.0.0.1:4000/graphql`，未直连 `4000`。
+- 生产 GraphQL 的 `MiniHomeSupplement` resolver 阶段约 `10–18ms`；生产容器内 PlayerValues SQL execution 约 `9.8ms`，当前证据不支持继续修改 Data SQL 或增加缓存。
+
+### 尚未通过的严格门槛
+
+- 线上 Web/Cloudflare 到 `/api/graphql` 的端到端样本为 `0.255–3.603s`，存在明显边缘长尾；这不是 GraphQL resolver 慢，但当前证据不足以宣称完整链路满足性能门槛。
+- 本轮 DevTools 是功能验收和链路确认，不等于已完成计划要求的 5 次冷启动、20 次暖进入、20 次刷新、25 页面全量同一精确 head 的重新采样。
+- 因此不上传微信开发版 `1.0.2`，不把报告状态改为“已修复并验收”。后续必须补齐同一部署版本的严格样本，并单独定位 Web/边缘长尾。
+
+### 结论
+
+代码合并、GraphQL 部署和 DevTools 首页功能链路已经通过；当前阻塞点是严格性能证据闭环，不是 4000 GraphQL 未启动，也不是 Fixture 渲染契约错误。
