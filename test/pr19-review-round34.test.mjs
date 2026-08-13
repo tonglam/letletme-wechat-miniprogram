@@ -22,6 +22,10 @@ test("Live Match hidden pull refresh is owned and resumed", () => {
     page,
     /onPullDownRefresh\(\)[\s\S]*const tracker = this\.perfTracker;[\s\S]*refreshContextPending = true[\s\S]*await this\.ensureContext\("pull-refresh", true\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
   );
+  assert.match(
+    page,
+    /if \(resumeInterruptedLoad\) \{[\s\S]*refreshContextPending = false[\s\S]*initLiveRefresh\(\)/
+  );
 });
 
 test("Live Tournament event-zero recovery uses startup generation ownership", () => {

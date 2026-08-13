@@ -28,6 +28,10 @@ test("Live Entry hidden refresh replays startup and reuses forced context", () =
   );
   assert.match(
     page,
+    /initializeFromContext\([\s\S]*this\.startupPending = true;[\s\S]*this\.refreshContextPending = false/
+  );
+  assert.match(
+    page,
     /retryWithContext\([\s\S]*refreshedContext\?: AppContextSnapshot[\s\S]*let context: AppContextSnapshot[\s\S]*context = refreshedContext \?\? await this\.ensureContext/
   );
 });

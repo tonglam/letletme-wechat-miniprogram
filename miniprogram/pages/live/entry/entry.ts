@@ -163,6 +163,9 @@ Page({
   ) {
     const app = getApp<IAppOption>();
     this.startupPending = true;
+    // A visible replacement lifecycle now owns recovery; do not let the
+    // abandoned pull-refresh keep forcing startup replays on later shows.
+    this.refreshContextPending = false;
     // Show the loading state while waiting for shared launch data so a cold
     // open never renders zero scores as if they were loaded content.
     this.setData({ loading: true });

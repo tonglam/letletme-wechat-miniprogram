@@ -568,6 +568,7 @@ Page({
     if (resumeInterruptedLoad) {
       this.resumeLoadAfterShow = false;
       this.startupPending = false;
+      this.refreshContextPending = false;
       // A cold startup can be abandoned before onLoad creates the controller.
       // The replacement lifecycle owns both the load and its recovery polling.
       this.initLiveRefresh();
