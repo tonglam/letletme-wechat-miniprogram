@@ -261,6 +261,7 @@ export async function getPlayerInfoByElement(element: number): Promise<PlayerDet
 export async function getPlayerInfoByCode(
   code: number | string,
   season?: string,
+  forceRefresh = false,
   trace?: import("./graphql.service").PageRequestTrace
 ): Promise<PlayerDetail> {
   const playerId = Number(code);
@@ -271,6 +272,7 @@ export async function getPlayerInfoByCode(
       authMode: "public",
       cachePolicy: "reporting",
       cacheVariant: `season:${currentSeason(season)}`,
+      forceRefresh,
       trace
     }
   );

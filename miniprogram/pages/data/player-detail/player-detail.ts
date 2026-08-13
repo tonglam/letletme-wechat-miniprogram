@@ -24,6 +24,8 @@ PerformancePage({
   lifecycleRevision: 0,
   loadRequestId: 0,
   resumeOnShow: false,
+  forceRefreshPending: false,
+  resumeForceRefresh: false,
 
   onLoad(options: Record<string, string | undefined>) {
     this.pageVisible = true;
@@ -40,13 +42,18 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return;
+    const forceRefresh = this.resumeForceRefresh;
     this.resumeOnShow = false;
-    await this.loadData("show");
+    this.resumeForceRefresh = false;
+    await this.loadData("show", forceRefresh);
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.data.loading && !this.data.player;
+    const queuedResume = this.resumeOnShow;
+    this.resumeOnShow = this.forceRefreshPending || (this.data.loading && !this.data.player);
+    this.resumeOnShow = this.resumeOnShow || queuedResume;
+    this.resumeForceRefresh = this.resumeForceRefresh || this.forceRefreshPending;
     this.lifecycleRevision += 1;
     this.loadRequestId += 1;
   },
@@ -54,6 +61,8 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeOnShow = false;
+    this.resumeForceRefresh = false;
+    this.forceRefreshPending = false;
     this.lifecycleRevision += 1;
     this.loadRequestId += 1;
   },
@@ -66,6 +75,7 @@ PerformancePage({
 
     const lifecycleRevision = this.lifecycleRevision;
     const requestId = ++this.loadRequestId;
+    this.forceRefreshPending = forceRefresh;
     const isActiveRequest = () => (
       this.pageVisible
       && lifecycleRevision === this.lifecycleRevision
@@ -73,7 +83,8 @@ PerformancePage({
     );
     const trace = capturePageRequestTrace({
       callerSurface: "data-player-detail",
-      trigger
+      trigger,
+      forceReason: forceRefresh ? "user-refresh" : undefined
     });
     this.setData({ loading: true, error: "", emptyState: false });
     try {
@@ -89,14 +100,17 @@ PerformancePage({
       }
       if (!isActiveRequest()) return;
       this.setData({ season });
-      const player = await getPlayerInfoByCode(this.data.code, season, trace);
+      const player = await getPlayerInfoByCode(this.data.code, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
       this.setData({ player });
     } catch (error) {
       if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "球员详情加载失败" });
     } finally {
-      if (isActiveRequest()) this.setData({ loading: false });
+      if (isActiveRequest()) {
+        this.forceRefreshPending = false;
+        this.setData({ loading: false });
+      }
     }
   },
 
