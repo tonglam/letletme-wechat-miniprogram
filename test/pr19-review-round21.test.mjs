@@ -48,6 +48,6 @@ test("My FPL primary errors and Teams retries use primary recovery", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
   assert.match(team, /onRetry\(\)[\s\S]*if \(this\.data\.error\)[\s\S]*loadData\(true\)[\s\S]*activeTab === "squad"/);
-  assert.match(teams, /loadData\(forceRefresh = false\)[\s\S]*ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*getTeamList\(context\.season, forceRefresh\)/);
+  assert.match(teams, /loadData\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*getTeamList\(context\.season, forceRefresh, trace\)/);
   assert.match(teams, /onRetry\(\)[\s\S]*loadData\(true\)/);
 });

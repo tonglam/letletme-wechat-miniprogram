@@ -13,6 +13,7 @@ import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
 type SelectionsEmptyState = "" | "entry" | "tournaments";
+type SelectionsResumeStage = "initialize" | "tournaments" | "stats";
 
 interface SelectionRow {
   id: string;
@@ -104,6 +105,7 @@ PerformancePage({
   lifecycleRevision: 0,
   startupPending: false,
   resumeOnShow: false,
+  resumeStage: null as SelectionsResumeStage | null,
 
   async onLoad() {
     this.pageVisible = true;
@@ -144,25 +146,43 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed || !this.resumeOnShow) return;
+    const resumeStage = this.resumeStage;
     this.resumeOnShow = false;
+    this.resumeStage = null;
     const trace = capturePageRequestTrace({
-      callerSurface: "data-selections",
+      callerSurface: resumeStage === "stats" ? "data-selections-stats" : "data-selections",
       trigger: "show"
     });
+    if (resumeStage === "stats") {
+      this.setData({ loadingTournaments: false, loadingStats: false });
+      await this.loadStats(trace);
+      return;
+    }
+    if (resumeStage === "tournaments") {
+      this.setData({ loadingTournaments: false, loadingStats: false });
+      await this.loadTournaments(false, trace);
+      return;
+    }
     await this.initializePage(trace);
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.startupPending
-      || this.data.loadingTournaments
-      || this.data.loadingStats;
+    this.resumeStage = this.startupPending
+      ? "initialize"
+      : this.data.loadingStats
+        ? "stats"
+        : this.data.loadingTournaments
+          ? "tournaments"
+          : null;
+    this.resumeOnShow = this.resumeStage !== null;
     this.lifecycleRevision += 1;
   },
 
   onUnload() {
     this.pageVisible = false;
     this.resumeOnShow = false;
+    this.resumeStage = null;
     this.lifecycleRevision += 1;
   },
 
