@@ -142,6 +142,11 @@ Page({
   _resumeSecondaryOnShow: false,
   _startupPending: false,
   _resumeStartupOnShow: false,
+  _refreshPending: false,
+  _resumeRefreshOnShow: false,
+  _activeRefreshDeadlineTriggered: false,
+  _resumeRefreshDeadlineTriggered: false,
+  _refreshRequestId: 0,
   _hasShown: false,
   _lifecycleRevision: 0,
 
@@ -156,6 +161,16 @@ Page({
     const resumed = this._hasShown;
     this._hasShown = true;
     if (!resumed) return;
+    if (this._resumeRefreshOnShow) {
+      const deadlineTriggered = this._resumeRefreshDeadlineTriggered;
+      this._resumeRefreshOnShow = false;
+      this._resumeRefreshDeadlineTriggered = false;
+      this._perfTracker = deadlineTriggered
+        ? undefined
+        : new PagePerformanceTracker(this, "pages/home/index/index", "refresh");
+      await this.refreshHome(deadlineTriggered);
+      return;
+    }
     if (this._resumeStartupOnShow) {
       this._resumeStartupOnShow = false;
       await this.startHomeLifecycle("warm-enter", "page-show");
@@ -238,8 +253,12 @@ Page({
     this._pageVisible = false;
     this._resumeSecondaryOnShow = false;
     this._resumeStartupOnShow = false;
+    this._resumeRefreshOnShow = false;
+    this._resumeRefreshDeadlineTriggered = false;
+    this._refreshPending = false;
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
+    this._refreshRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
   },
@@ -248,8 +267,11 @@ Page({
     this._pageVisible = false;
     this._resumeStartupOnShow = this._startupPending;
     this._resumeSecondaryOnShow = this._secondaryPending;
+    this._resumeRefreshOnShow = this._refreshPending;
+    this._resumeRefreshDeadlineTriggered = this._activeRefreshDeadlineTriggered;
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
+    this._refreshRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
   },
@@ -401,6 +423,16 @@ Page({
 
   async refreshHome(deadlineTriggered = false) {
     const tracker = deadlineTriggered ? null : this._perfTracker ?? null;
+    const lifecycleRevision = this._lifecycleRevision;
+    const refreshRequestId = ++this._refreshRequestId;
+    const isActiveRefresh = () => (
+      this._pageVisible
+      && lifecycleRevision === this._lifecycleRevision
+      && refreshRequestId === this._refreshRequestId
+      && (tracker === null || tracker === this._perfTracker)
+    );
+    this._refreshPending = true;
+    this._activeRefreshDeadlineTriggered = deadlineTriggered;
     this.setData({ error: "" });
     try {
       const app = getApp<IAppOption>();
@@ -413,13 +445,16 @@ Page({
           reason: "pull-refresh",
           trace: deadlineTriggered ? null : undefined
         });
+        if (!isActiveRefresh()) return;
         this._loadedContextRevision = context.contextRevision;
         tracker?.mark("contextReadyAt");
         await this.syncAppState();
+        if (!isActiveRefresh()) return;
       } else {
         tracker?.mark("contextReadyAt");
       }
       const fixtureFresh = await this.loadPage(true, tracker);
+      if (!isActiveRefresh()) return;
       const refreshedDeadlineExpired = Boolean(this.data.utcDeadline)
         && getDeadlineDiffMs(this.data.utcDeadline) <= 0;
       if (deadlineTriggered && refreshedDeadlineExpired) {
@@ -431,12 +466,17 @@ Page({
         wx.showToast({ title: "刷新成功", icon: "success", duration: 1000 });
       }
     } catch (error) {
+      if (!isActiveRefresh()) return;
       this.showContextError(error, tracker);
       if (deadlineTriggered) {
         this.scheduleDeadlineRetry();
       }
     } finally {
-      this.setData({ loading: false });
+      if (isActiveRefresh()) {
+        this._refreshPending = false;
+        this._activeRefreshDeadlineTriggered = false;
+        this.setData({ loading: false });
+      }
     }
   },
 

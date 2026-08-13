@@ -348,6 +348,7 @@ PerformancePage({
   retainedRowCount: 0,
   resumeDirectoryAfterShow: false,
   resumeStartupAfterShow: false,
+  resumeRowsAfterShow: false,
   startupPending: false,
   startupGeneration: 0,
 
@@ -572,6 +573,11 @@ PerformancePage({
       await this.loadTournaments(false);
       return;
     }
+    if (resumed && this.resumeRowsAfterShow && this.data.selectedTournament) {
+      this.resumeRowsAfterShow = false;
+      await this.loadRows({ background: this.data.hasData, forceRefresh: true });
+      return;
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
@@ -581,12 +587,16 @@ PerformancePage({
   onHide() {
     this.pageVisible = false;
     this.resumeDirectoryAfterShow = this.data.loading && !this.data.selectedTournament;
+    this.resumeRowsAfterShow = Boolean(this.rowsRequest && this.data.selectedTournament);
     if (this.startupPending) {
       this.resumeStartupAfterShow = true;
       this.resumeDirectoryAfterShow = false;
     }
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
+    this.rowsRequestId += 1;
+    this.rowsRequest = null;
+    this.rowsRequestKey = "";
     this.liveRefresh?.stop();
   },
 
@@ -594,9 +604,13 @@ PerformancePage({
     this.pageVisible = false;
     this.resumeDirectoryAfterShow = false;
     this.resumeStartupAfterShow = false;
+    this.resumeRowsAfterShow = false;
     this.startupPending = false;
     this.startupGeneration += 1;
     this.tournamentListRequestId += 1;
+    this.rowsRequestId += 1;
+    this.rowsRequest = null;
+    this.rowsRequestKey = "";
     this.liveRefresh?.dispose();
   },
 
@@ -886,7 +900,7 @@ PerformancePage({
               options.forceRefresh === true,
               trace
             );
-        if (requestId !== this.rowsRequestId) return;
+        if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);
         const failedEntryIds = new Set(liveResult.failedEntryIds || []);
@@ -921,7 +935,7 @@ PerformancePage({
         this.liveRefresh?.sync();
         this.syncDisplayState();
       } catch (error) {
-        if (requestId !== this.rowsRequestId) return;
+        if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({
           error: error instanceof Error ? error.message : "实时竞赛加载失败",

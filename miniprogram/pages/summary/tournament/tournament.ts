@@ -102,6 +102,7 @@ PerformancePage({
   resumeOnShow: false,
   resumeStage: null as TournamentSummaryResumeStage | null,
   activeLoadStage: null as Exclude<TournamentSummaryResumeStage, "initialize"> | null,
+  summaryRequestId: 0,
 
   async onLoad() {
     this.pageVisible = true;
@@ -169,6 +170,7 @@ PerformancePage({
       : this.activeLoadStage;
     this.resumeOnShow = this.resumeStage !== null;
     this.lifecycleRevision += 1;
+    this.summaryRequestId += 1;
   },
 
   onUnload() {
@@ -177,6 +179,7 @@ PerformancePage({
     this.resumeStage = null;
     this.activeLoadStage = null;
     this.lifecycleRevision += 1;
+    this.summaryRequestId += 1;
   },
 
   onPullDownRefresh() {
@@ -279,36 +282,46 @@ PerformancePage({
 
   async loadSummary(forceRefresh = false, originatingTrace?: PageRequestTrace) {
     const lifecycleRevision = this.lifecycleRevision;
-    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const requestId = ++this.summaryRequestId;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "summary-tournament-results",
       trigger: forceRefresh ? "refresh" : "tab"
     });
     const tournament = this.data.tournaments[this.data.selectedTournamentIndex];
-    if (!tournament || !this.data.entryId) {
+    const requestedEvent = this.data.event;
+    const requestedEntryId = this.data.entryId;
+    if (!tournament || !requestedEntryId) {
       return;
     }
+    const isActiveRequest = () => (
+      this.pageVisible
+      && lifecycleRevision === this.lifecycleRevision
+      && requestId === this.summaryRequestId
+      && String(this.data.tournaments[this.data.selectedTournamentIndex]?.id || "") === String(tournament.id)
+      && this.data.event === requestedEvent
+      && this.data.entryId === requestedEntryId
+    );
 
     this.activeLoadStage = "summary";
     this.setData({ loading: true, error: "" });
     try {
       const payload = await getTournamentSummary(
         tournament.id,
-        this.data.event,
-        this.data.entryId,
+        requestedEvent,
+        requestedEntryId,
         forceRefresh,
         trace
       );
-      if (!isActiveLifecycle()) return;
+      if (!isActiveRequest()) return;
       wx.setStorageSync(storageKeys.selectedSummaryTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentName, tournament.name);
-      this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, this.data.entryId, this.data.event));
+      this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, requestedEntryId, requestedEvent));
     } catch (error) {
-      if (!isActiveLifecycle()) return;
+      if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      if (isActiveLifecycle()) this.setData({ loading: false });
-      if (isActiveLifecycle() && this.activeLoadStage === "summary") {
+      if (isActiveRequest()) this.setData({ loading: false });
+      if (isActiveRequest() && this.activeLoadStage === "summary") {
         this.activeLoadStage = null;
       }
     }
