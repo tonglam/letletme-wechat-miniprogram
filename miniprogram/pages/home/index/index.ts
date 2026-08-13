@@ -258,6 +258,7 @@ Page({
     this._refreshPending = false;
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
+    this._fixtureGwRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
     this._perfTracker?.disconnect();
@@ -652,18 +653,9 @@ Page({
     return false;
   },
 
-  async onRetry() {
+  onRetry() {
     this.setData({ error: "" });
-    try {
-      const context = await ensureAppContext({ forceRefresh: true, reason: "page-load" });
-      this._loadedContextRevision = context.contextRevision;
-      this._perfTracker?.mark("contextReadyAt");
-      await this.loadPage(true);
-    } catch (error) {
-      this.showContextError(error);
-    } finally {
-      this.startCountdown();
-    }
+    void this.refreshHome().finally(() => this.startCountdown());
   },
 
   onCloseNotice() {
