@@ -6,13 +6,13 @@ const GRAPHQL_ENDPOINT_OVERRIDE_KEY = "letletme_graphql_endpoint_override";
 const MINIPROGRAM_API_BASE_OVERRIDE_KEY = "letletme_web_miniprogram_api_override";
 
 const GRAPHQL_ENDPOINTS: Record<MiniProgramEnv, string> = {
-  develop: "http://localhost:3000/api/graphql",
+  develop: "http://localhost:3001/api/graphql",
   trial: "https://www.letletme.top/api/graphql",
   release: "https://www.letletme.top/api/graphql"
 };
 
 const MINIPROGRAM_API_BASES: Record<MiniProgramEnv, string> = {
-  develop: "http://localhost:3000/api/miniprogram",
+  develop: "http://localhost:3001/api/miniprogram",
   trial: "https://www.letletme.top/api/miniprogram",
   release: "https://www.letletme.top/api/miniprogram"
 };
