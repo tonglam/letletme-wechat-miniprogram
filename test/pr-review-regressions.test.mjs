@@ -186,8 +186,8 @@ test("tournament status reports only rows actually retained", () => {
 test("team summary requests discard older GW responses", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   assert.match(team, /const requestId = \+\+this\.loadRequestId/);
-  assert.match(team, /if \(requestId !== this\.loadRequestId\) return/);
-  assert.match(team, /if \(requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
+  assert.match(team, /if \(!this\.pageVisible \|\| requestId !== this\.loadRequestId\) return/);
+  assert.match(team, /if \(this\.pageVisible && requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
   assert.match(
     team,
     /if \(!eventResult\) \{[\s\S]*hasTeamData: false[\s\S]*emptyState: "event"/

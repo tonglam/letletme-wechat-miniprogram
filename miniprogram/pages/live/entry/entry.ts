@@ -133,6 +133,7 @@ Page({
   loadedSeason: undefined as string | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
   loadTransfersAfterLive: false,
+  resumeLiveAfterShow: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -305,6 +306,11 @@ Page({
     if (resumed && (this.data.hasData || this.data.noPicks || this.data.emptyState)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
+    if (resumed && this.resumeLiveAfterShow && this.data.entryId && this.data.event > 0) {
+      this.resumeLiveAfterShow = false;
+      await this.loadData({ includeTransfers: true });
+      return;
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
@@ -326,12 +332,26 @@ Page({
   onHide() {
     this.pageVisible = false;
     this.liveRefresh?.stop();
+    this.resumeLiveAfterShow = this.liveRequest !== null;
+    this.liveRequestId += 1;
+    this.transfersRequestId += 1;
+    this.liveRequest = null;
+    this.liveRequestKey = "";
+    this.liveRequestForced = false;
+    this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
     this.liveRefresh?.dispose();
+    this.resumeLiveAfterShow = false;
+    this.liveRequestId += 1;
+    this.transfersRequestId += 1;
+    this.liveRequest = null;
+    this.liveRequestKey = "";
+    this.liveRequestForced = false;
+    this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
   },
 
@@ -533,7 +553,7 @@ Page({
           options.forceRefresh === true,
           requestTrace
         );
-        if (requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
@@ -604,7 +624,7 @@ Page({
           wx.nextTick(() => navigationTracker?.observePrimary());
         });
         this.liveRefresh?.sync();
-        if (this.loadTransfersAfterLive) {
+        if (this.pageVisible && requestId === this.liveRequestId && this.loadTransfersAfterLive) {
           this.loadTransfersAfterLive = false;
           await this.loadTransfers(
             entryId,
@@ -615,14 +635,14 @@ Page({
         }
         this.syncDisplayState();
       } catch (error) {
-        if (requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
         this.loadTransfersAfterLive = false;
         wx.nextTick(() => navigationTracker?.observePrimary());
         this.syncDisplayState();
       } finally {
-        if (requestId === this.liveRequestId) {
+        if (this.pageVisible && requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
           this.syncDisplayState();
         }

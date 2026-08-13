@@ -625,7 +625,8 @@ Page({
   },
 
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
-    const requestKey = `${this.targetEventId}:${options.forceRefresh === true}`;
+    const tracksNavigation = options.background !== true || options.trackNavigation === true;
+    const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       return this.liveRequest;
     }
@@ -633,9 +634,7 @@ Page({
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const preserveData = options.background === true && this.data.hasData;
-    const navigationTracker = options.background === true && options.trackNavigation !== true
-      ? undefined
-      : this.perfTracker;
+    const navigationTracker = tracksNavigation ? this.perfTracker : undefined;
     this.setData(preserveData
       ? { refreshing: true, error: "" }
       : { loading: true, error: "" });

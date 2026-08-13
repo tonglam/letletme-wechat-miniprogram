@@ -28,7 +28,7 @@ test("Match automatic background work does not mutate a completed navigation tra
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /navigationTracker = options\.background === true && options\.trackNavigation !== true[\s\S]*undefined[\s\S]*this\.perfTracker/
+    /const tracksNavigation = options\.background !== true \|\| options\.trackNavigation === true[\s\S]*navigationTracker = tracksNavigation \? this\.perfTracker : undefined/
   );
   assert.match(match, /navigationTracker\?\.mark\("primaryRequestStartAt"\)/);
   assert.match(match, /trace: requestTrace/);

@@ -1,4 +1,4 @@
-import { graphqlRequest } from "./graphql.service";
+import { graphqlRequest, type PageRequestTrace } from "./graphql.service";
 import type { PlayerDetail, PlayerFilterRow, PlayerOption } from "../models/player";
 import { formatPrice } from "../utils/fpl";
 
@@ -158,6 +158,7 @@ export interface PlayerPickerPageOptions {
   limit?: number;
   cursor?: number | null;
   forceRefresh?: boolean;
+  trace?: PageRequestTrace;
 }
 
 export interface PlayerPickerPageResult {
@@ -241,7 +242,8 @@ export async function getPlayersForPickerPage(
       authMode: "public",
       cachePolicy: "player-picker",
       cacheVariant: `season:${currentSeason()}`,
-      forceRefresh: options.forceRefresh === true
+      forceRefresh: options.forceRefresh === true,
+      trace: options.trace
     }
   );
   const page = data.playersForPicker;

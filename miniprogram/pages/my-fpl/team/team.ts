@@ -339,7 +339,10 @@ Page({
       this.setData({ maxGw: nextGw });
     }
     // Summary data moves slowly, but an advancing current GW reloads now.
-    if (contextChanged || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
+    const primaryMissing = !this.data.hasTeamData
+      && !this.data.emptyState
+      && !this.data.error;
+    if (contextChanged || primaryMissing || (this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000)) {
       await this.loadData(contextChanged, trace);
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
@@ -440,11 +443,17 @@ Page({
 
   onHide() {
     this.pageVisible = false;
+    this.loadRequestId += 1;
+    this.tabRequestId += 1;
+    this.phaseBannerRequestId += 1;
     this.perfTracker?.disconnect();
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.loadRequestId += 1;
+    this.tabRequestId += 1;
+    this.phaseBannerRequestId += 1;
     this.perfTracker?.disconnect();
   },
 
@@ -542,7 +551,7 @@ Page({
       const eventResult = selectedEvent > 0
         ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh, trace)
         : undefined;
-      if (requestId !== this.loadRequestId) return;
+      if (!this.pageVisible || requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       this.perfTracker?.mark("primaryResponseAt");
 
@@ -607,13 +616,13 @@ Page({
         else void tabTask;
       }
     } catch (error) {
-      if (requestId === this.loadRequestId) {
+      if (this.pageVisible && requestId === this.loadRequestId) {
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
         wx.nextTick(() => this.perfTracker?.observePrimary());
       }
     } finally {
-      if (requestId === this.loadRequestId) {
+      if (this.pageVisible && requestId === this.loadRequestId) {
         this.setData({ loading: false });
         void this.syncPhaseBanner();
       }

@@ -49,8 +49,14 @@ App<IAppOption>({
       this._authReadyResolve = resolve;
     });
     this.requirePrivacyAndLogin();
-    void this.initAppData();
-    recordLaunch(Date.now() - launchStart);
+    const initialization = this.initAppData();
+    // AppContext initialization stays detached from the shell, but the
+    // fallback launch metric must end when initialization settles rather than
+    // when it is merely scheduled.
+    void initialization.then(
+      () => recordLaunch(Date.now() - launchStart),
+      () => recordLaunch(Date.now() - launchStart)
+    );
     this.purgeExpiredGraphQLCache();
   },
 
