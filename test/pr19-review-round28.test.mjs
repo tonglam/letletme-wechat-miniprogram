@@ -24,7 +24,7 @@ for (const [label, path, loadMethod] of [
     if (label === "Competitions") {
       assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow[\s\S]*startupPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
     } else {
-      assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.startupPending \|\| this\.data\.loading[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
+      assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
     }
   });
 }

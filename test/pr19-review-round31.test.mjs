@@ -8,7 +8,7 @@ test("Live Entry replays interrupted context and authority startup on show", () 
   const page = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(page, /onLoad\([\s\S]*this\.hasRouteEntry[\s\S]*initializeFromContext\("page-load", this\.perfTracker\)/);
   assert.match(page, /async initializeFromContext\([\s\S]*startupPending = true[\s\S]*await this\.ensureContext\(reason\)[\s\S]*await app\.authReady[\s\S]*startupPending = false/);
-  assert.match(page, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeStartupAfterShow = !this\.resumeForcedRefreshAfterShow[\s\S]*resumeLiveAfterShow = !this\.resumeStartupAfterShow/);
+  assert.match(page, /onHide\(\)[\s\S]*const queuedLiveResume = this\.resumeLiveAfterShow[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeStartupAfterShow = !this\.resumeForcedRefreshAfterShow[\s\S]*resumeLiveAfterShow = queuedLiveResume/);
   assert.match(page, /onShow\(\)[\s\S]*resumeStartupAfterShow[\s\S]*initializeFromContext\("page-show", this\.perfTracker\)/);
 });
 

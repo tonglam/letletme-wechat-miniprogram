@@ -84,6 +84,8 @@ PerformancePage({
   requestId: 0,
   startupPending: false,
   resumeStage: null as GameweekResumeStage | null,
+  activeLoadForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -96,18 +98,21 @@ PerformancePage({
     this.hasShown = true;
     if (!resumed || !this.resumeStage) return undefined;
     const resumeStage = this.resumeStage;
+    const resumeForceRefresh = this.resumeForceRefresh || resumeStage === "refresh";
     this.resumeStage = null;
+    this.resumeForceRefresh = false;
     if (resumeStage === "startup") return this.startPageLoad("show");
     this.setData({ loading: false, refreshing: false });
     const trace = capturePageRequestTrace({ callerSurface: "gameweek-summary", trigger: "show" });
-    return this.loadData(resumeStage === "refresh", trace, this.lifecycleRevision);
+    return this.loadData(resumeForceRefresh, trace, this.lifecycleRevision);
   },
 
   onHide() {
     this.pageVisible = false;
+    this.resumeForceRefresh = this.resumeForceRefresh || this.activeLoadForceRefresh;
     this.resumeStage = this.startupPending
       ? "startup"
-      : this.data.refreshing
+      : this.data.refreshing || this.activeLoadForceRefresh
         ? "refresh"
         : this.data.loading
           ? "data"
@@ -119,6 +124,8 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeStage = null;
+    this.activeLoadForceRefresh = false;
+    this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
@@ -157,6 +164,7 @@ PerformancePage({
     });
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
+    this.activeLoadForceRefresh = forceRefresh;
     const isActiveRequest = () => this.pageVisible
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId;
@@ -195,7 +203,10 @@ PerformancePage({
       if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "GW 总结加载失败" });
     } finally {
-      if (isActiveRequest()) this.setData({ loading: false });
+      if (isActiveRequest()) {
+        this.setData({ loading: false });
+        this.activeLoadForceRefresh = false;
+      }
     }
   },
 

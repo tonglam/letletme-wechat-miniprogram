@@ -41,7 +41,7 @@ test("price warm resume only refetches an interrupted stage", () => {
   const page = source("miniprogram/pages/data/price/price.ts");
   const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
   assert.match(onShow, /warm-enter/);
-  assert.match(onShow, /if \(resumeStage === "daily"\)[\s\S]*loadDailyChanges\(\)/);
+  assert.match(onShow, /if \(resumeStage === "daily"\)[\s\S]*loadDailyChanges\(resumeStageForceRefresh\)/);
   assert.match(onShow, /if \(resumeStage === "player"\)[\s\S]*ensurePlayerModeReady\(\)/);
   assert.match(onShow, /if \(resumeStage === "history"[\s\S]*loadSelectedPlayerHistory/);
   assert.match(onShow, /wx\.nextTick\(\(\) => tracker\.observePrimary\(selector\)\)/);

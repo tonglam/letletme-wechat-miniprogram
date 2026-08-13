@@ -158,7 +158,13 @@ Page({
   hasShown: false,
   startupPending: false,
   resumeStage: null as PriceResumeStage | null,
+  resumeStageForceRefresh: false,
   historyRequestRevision: 0,
+  dailyRequestForceRefresh: false,
+  paginationPending: false,
+  paginationCursor: null as number | null,
+  resumePaginationAfterShow: false,
+  resumePaginationCursor: null as number | null,
   playerRefreshPending: false,
   resumePlayerRefreshAfterShow: false,
 
@@ -196,15 +202,28 @@ Page({
     const selector = this.primarySelector();
     tracker.mark("contextReadyAt");
     const resumeStage = this.resumeStage;
+    const resumeStageForceRefresh = this.resumeStageForceRefresh;
+    const resumePagination = this.resumePaginationAfterShow;
+    const resumePaginationCursor = this.resumePaginationCursor;
     this.resumeStage = null;
+    this.resumeStageForceRefresh = false;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     if (resumePlayerRefresh) {
       this.setData({ playerLoading: false, loadingMore: false, historyLoading: false });
       void this.runPlayerRefresh(tracker);
       return;
     }
+    if (resumePagination && resumePaginationCursor !== null) {
+      this.setData({ loadingMore: false });
+      this.paginationPending = false;
+      this.paginationCursor = null;
+      void this.loadMorePlayers(resumePaginationCursor);
+      return;
+    }
     if (resumeStage === "daily") {
       this.setData({ loading: false, refreshing: false });
-      void this.loadDailyChanges();
+      void this.loadDailyChanges(resumeStageForceRefresh);
       return;
     }
     if (resumeStage === "player") {
@@ -232,6 +251,11 @@ Page({
       this.playerSearchTimer = undefined;
     }
     this.resumePlayerRefreshAfterShow = this.playerRefreshPending;
+    this.resumePaginationAfterShow = this.resumePaginationAfterShow || this.paginationPending;
+    if (this.paginationPending && this.paginationCursor !== null) {
+      this.resumePaginationCursor = this.paginationCursor;
+    }
+    this.resumeStageForceRefresh = this.resumeStageForceRefresh || this.dailyRequestForceRefresh;
     this.resumeStage = this.resumePlayerRefreshAfterShow
       ? null
       : this.data.activeMode === "player"
@@ -256,6 +280,12 @@ Page({
   onUnload() {
     this.pageActive = false;
     this.resumeStage = null;
+    this.resumeStageForceRefresh = false;
+    this.dailyRequestForceRefresh = false;
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     this.playerRefreshPending = false;
     this.resumePlayerRefreshAfterShow = false;
     nextRequestRevision(this.dailyRequestOwner, "daily");
@@ -329,6 +359,7 @@ Page({
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
+    this.dailyRequestForceRefresh = forceRefresh;
     const changeDate = this.data.changeDate;
     const hasRows = this.data.riseChanges.length > 0 || this.data.fallChanges.length > 0;
     const tracker = this.perfTracker;
@@ -383,6 +414,7 @@ Page({
     } finally {
       if (this.pageActive && isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
         this.setData({ loading: false, refreshing: false });
+        this.dailyRequestForceRefresh = false;
       }
     }
   },
@@ -458,6 +490,10 @@ Page({
 
   startPlayerSearch(forceRefresh = false): Promise<void> {
     const revision = this.invalidatePlayerRequest();
+    this.paginationPending = false;
+    this.paginationCursor = null;
+    this.resumePaginationAfterShow = false;
+    this.resumePaginationCursor = null;
     const ready = this.isPlayerListReady();
     this.setData({
       players: [],
@@ -521,21 +557,30 @@ Page({
     }
   },
 
-  loadMorePlayers(): Promise<void> {
+  loadMorePlayers(cursorOverride?: number | null): Promise<void> {
+    const cursor = cursorOverride === undefined ? this.data.nextCursor : cursorOverride;
     if (
       this.data.playerLoading
       || this.data.loadingMore
-      || !this.data.hasMorePlayers
-      || this.data.nextCursor === null
+      || cursor === null
+      || (cursorOverride === undefined && !this.data.hasMorePlayers)
     ) {
       return Promise.resolve();
     }
-    return this.loadPlayerPage(
+    this.paginationPending = true;
+    this.paginationCursor = cursor;
+    const task = this.loadPlayerPage(
       this.playerRequestRevision,
-      this.data.nextCursor,
+      cursor,
       true,
       false
     );
+    return task.finally(() => {
+      if (this.pageActive && this.paginationPending && this.paginationCursor === cursor) {
+        this.paginationPending = false;
+        this.paginationCursor = null;
+      }
+    });
   },
 
   onPlayerKeywordInput(event: WechatMiniprogram.Input) {

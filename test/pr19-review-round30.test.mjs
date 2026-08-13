@@ -8,7 +8,7 @@ test("Gameweek Summary resumes an interrupted historical event without cold rese
   const page = source("miniprogram/pages/summary/gameweek/gameweek.ts");
   assert.match(page, /type GameweekResumeStage = "startup" \| "data" \| "refresh"/);
   assert.match(page, /onHide\(\)[\s\S]*this\.resumeStage = this\.startupPending[\s\S]*this\.data\.refreshing[\s\S]*this\.data\.loading/);
-  assert.match(page, /onShow\(\)[\s\S]*resumeStage === "startup"[\s\S]*startPageLoad\("show"\)[\s\S]*loadData\(resumeStage === "refresh", trace, this\.lifecycleRevision\)/);
+  assert.match(page, /onShow\(\)[\s\S]*resumeStage === "startup"[\s\S]*startPageLoad\("show"\)[\s\S]*loadData\(resumeForceRefresh, trace, this\.lifecycleRevision\)/);
   const resumeStart = page.indexOf("onShow()");
   const coldStart = page.indexOf("async startPageLoad");
   assert.doesNotMatch(page.slice(resumeStart, coldStart), /setData\(\{ event: currentGw/);

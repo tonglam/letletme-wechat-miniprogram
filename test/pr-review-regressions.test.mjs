@@ -283,7 +283,7 @@ test("website returns bypass competition cache and accepted handoffs await clipb
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
+  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(forceRefresh, trace, lifecycleRevision\)/);
   assert.match(leagues, /cached\.season === season/);
 });
 

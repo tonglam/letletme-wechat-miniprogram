@@ -42,6 +42,6 @@ test("Players forces AppContext recovery when retrying", () => {
 test("Price resumes interrupted primary stages and invalidates hidden responses", () => {
   const price = source("miniprogram/pages/data/price/price.ts");
   assert.match(price, /resumeStage: null as PriceResumeStage \| null/);
-  assert.match(price, /resumeStage === "daily"[\s\S]*loadDailyChanges\(\)[\s\S]*resumeStage === "player"[\s\S]*ensurePlayerModeReady\(\)[\s\S]*resumeStage === "history"/);
+  assert.match(price, /resumeStage === "daily"[\s\S]*loadDailyChanges\(resumeStageForceRefresh\)[\s\S]*resumeStage === "player"[\s\S]*ensurePlayerModeReady\(\)[\s\S]*resumeStage === "history"/);
   assert.match(price, /onHide\(\)[\s\S]*activeMode === "player"[\s\S]*nextRequestRevision\(this\.dailyRequestOwner, "daily"\)[\s\S]*invalidatePlayerRequest\(\)[\s\S]*historyRequestRevision \+= 1/);
 });

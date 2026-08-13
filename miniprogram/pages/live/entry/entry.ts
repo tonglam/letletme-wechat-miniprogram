@@ -374,13 +374,16 @@ Page({
   },
 
   onHide() {
+    const queuedLiveResume = this.resumeLiveAfterShow;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
     this.resumeStartupAfterShow = !this.resumeForcedRefreshAfterShow && this.startupPending;
     this.pageVisible = false;
     this.liveRefresh?.stop();
-    this.resumeLiveAfterShow = !this.resumeStartupAfterShow
+    this.resumeLiveAfterShow = queuedLiveResume || (
+      !this.resumeStartupAfterShow
       && !this.resumeForcedRefreshAfterShow
-      && this.liveRequest !== null;
+      && this.liveRequest !== null
+    );
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;

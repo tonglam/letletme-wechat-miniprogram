@@ -65,6 +65,9 @@ PerformancePage({
   lifecycleRevision: 0,
   startupPending: false,
   resumeOnShow: false,
+  loadPending: false,
+  loadForceRefresh: false,
+  resumeForceRefresh: false,
 
   async onLoad() {
     this.pageVisible = true;
@@ -84,7 +87,7 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed || this.resumeOnShow) {
-      this.resumeOnShow = false;
+      const forceRefresh = this.resumeForceRefresh;
       const lifecycleRevision = this.lifecycleRevision;
       const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "show" });
       // Re-read the follow pointer after a handoff or team switch (§9).
@@ -92,13 +95,18 @@ PerformancePage({
       if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
       if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-      await this.loadLeagues(false, trace, lifecycleRevision);
+      this.resumeOnShow = false;
+      this.resumeForceRefresh = false;
+      await this.loadLeagues(forceRefresh, trace, lifecycleRevision);
     }
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.startupPending || this.data.loading;
+    this.resumeOnShow = this.resumeOnShow || this.startupPending || this.data.loading || this.loadPending;
+    if (this.loadPending) {
+      this.resumeForceRefresh = this.resumeForceRefresh || this.loadForceRefresh;
+    }
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
@@ -106,13 +114,19 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.resumeOnShow = false;
+    this.resumeForceRefresh = false;
+    this.loadPending = false;
+    this.loadForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
   },
 
   async onPullDownRefresh() {
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "refresh" });
+    this.loadPending = true;
+    this.loadForceRefresh = true;
     try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+    if (!this.pageVisible) return;
     await this.loadLeagues(true, trace).finally(() => wx.stopPullDownRefresh());
   },
 
@@ -157,6 +171,8 @@ PerformancePage({
       this.syncDisplay();
     }
     this.setData({ loading: !cached, error: "", entryId });
+    this.loadPending = true;
+    this.loadForceRefresh = forceRefresh;
 
     try {
       const leagues = await getMyFplLeagues(entryId, forceRefresh, trace);
@@ -204,6 +220,11 @@ PerformancePage({
           ? "刷新失败，当前显示上次成功结果"
           : error instanceof Error ? error.message : "联赛加载失败"
       });
+    } finally {
+      if (isActiveRequest()) {
+        this.loadPending = false;
+        this.loadForceRefresh = false;
+      }
     }
   },
 

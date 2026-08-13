@@ -29,7 +29,7 @@ test("hidden Live Entry reads are invalidated before deferred transfers", () => 
   );
   assert.match(
     entry,
-    /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeStartupAfterShow = !this\.resumeForcedRefreshAfterShow[\s\S]*resumeLiveAfterShow = !this\.resumeStartupAfterShow/
+    /onHide\(\)[\s\S]*const queuedLiveResume = this\.resumeLiveAfterShow[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeStartupAfterShow = !this\.resumeForcedRefreshAfterShow[\s\S]*resumeLiveAfterShow = queuedLiveResume/
   );
   assert.match(
     entry,
