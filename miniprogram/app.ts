@@ -104,12 +104,7 @@ App<IAppOption>({
       this.revalidateSessionProfile();
       return;
     }
-    refreshWechatApiSession().then((session) => {
-      if (session.profile.fplEntryId && session.profile.fplEntryVerifiedAt) {
-        this.globalData.entryId = session.profile.fplEntryId;
-        commitEntryBinding(session.profile.fplEntryId, "login");
-      }
-    }).catch(() => {
+    refreshWechatApiSession().catch(() => {
       // Account linking is optional and sync is best-effort: link-required
       // and network failures alike leave the locally followed team alone.
       // Pages render their own no-entry state instead of being redirected.

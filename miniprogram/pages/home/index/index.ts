@@ -140,15 +140,17 @@ Page({
   _pageVisible: false,
 
   async onLoad() {
+    this._pageVisible = true;
     this._initialLoadDone = false;
     this._perfTracker = new PagePerformanceTracker(this, "pages/home/index/index", "cold-launch");
     try {
       const context = await ensureAppContext({ reason: "page-load" });
+      if (!this._pageVisible) return;
       this._perfTracker.mark("contextReadyAt");
       this._loadedContextRevision = context.contextRevision;
       await this.loadPage();
     } catch (error) {
-      this.showContextError(error);
+      if (this._pageVisible) this.showContextError(error);
     } finally {
       this._initialLoadDone = true;
       this.startCountdown();

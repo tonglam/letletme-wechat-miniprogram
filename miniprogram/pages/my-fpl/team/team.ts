@@ -434,7 +434,7 @@ Page({
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
-    await this.loadData(true, trace);
+    await this.loadData(true, trace, true);
     wx.stopPullDownRefresh();
   },
 
@@ -493,7 +493,11 @@ Page({
     return true;
   },
 
-  async loadData(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+  async loadData(
+    forceRefresh = false,
+    originatingTrace?: PageRequestTrace,
+    awaitActiveTab = false
+  ) {
     const requestId = ++this.loadRequestId;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
@@ -565,7 +569,11 @@ Page({
           emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
           emptyActionText: "重新加载"
         });
-        if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh, trace);
+        if (this.data.activeTab !== "squad") {
+          const tabTask = this.loadTab(this.data.activeTab, forceRefresh, trace);
+          if (awaitActiveTab) await tabTask;
+          else void tabTask;
+        }
         return;
       }
 
@@ -593,7 +601,11 @@ Page({
       });
       this.loadedDataSeason = requestSeason;
       this._loadedAt = Date.now();
-      if (this.data.activeTab !== "squad") void this.loadTab(this.data.activeTab, forceRefresh, trace);
+      if (this.data.activeTab !== "squad") {
+        const tabTask = this.loadTab(this.data.activeTab, forceRefresh, trace);
+        if (awaitActiveTab) await tabTask;
+        else void tabTask;
+      }
     } catch (error) {
       if (requestId === this.loadRequestId) {
         if (this.restartForPrincipalChange(entryId)) return;
