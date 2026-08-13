@@ -99,8 +99,26 @@ PerformancePage({
     visibleRows: []
   } as SelectionsData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    const trace = capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: "load"
+    });
+    await this.initializePage(trace);
+  },
+
+  async initializePage(trace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -110,13 +128,42 @@ PerformancePage({
       this.setData({ loadingTournaments: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
-    await this.loadTournaments();
+    this.startupPending = false;
+    await this.loadTournaments(false, trace);
+  },
+
+  async onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return;
+    this.resumeOnShow = false;
+    const trace = capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: "show"
+    });
+    await this.initializePage(trace);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.startupPending
+      || this.data.loadingTournaments
+      || this.data.loadingStats;
+    this.lifecycleRevision += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
   },
 
   onPullDownRefresh() {
@@ -144,6 +191,8 @@ PerformancePage({
   },
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "data-selections",
       trigger: forceRefresh ? "refresh" : "load"
@@ -177,6 +226,7 @@ PerformancePage({
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
       const tournaments = await getEntryPointsRaceTournament(this.data.entryId, forceRefresh, trace);
+      if (!isActiveLifecycle()) return;
       if (contextMissingBeforeDirectoryRead) {
         this.syncRecoveredEvent(eventBeforeDirectoryRead);
       }
@@ -209,13 +259,16 @@ PerformancePage({
       });
       await this.loadStats(trace);
     } catch (error) {
+      if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "阵容选择数据加载失败" });
     } finally {
-      this.setData({ loadingTournaments: false });
+      if (isActiveLifecycle()) this.setData({ loadingTournaments: false });
     }
   },
 
   async loadStats(originatingTrace?: PageRequestTrace): Promise<void> {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "data-selections-stats",
       trigger: "tab"
@@ -239,7 +292,7 @@ PerformancePage({
     this.setData({ loadingStats: true, error: "" });
     try {
       const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, trace);
-      if (!isActiveContext()) {
+      if (!isActiveLifecycle() || !isActiveContext()) {
         // Superseded by a tournament/GW change or a list refresh while in
         // flight: the newer load owns rows, header, and loading state.
         return;
@@ -248,7 +301,7 @@ PerformancePage({
       wx.setStorageSync(storageKeys.selectedDataSelectionsTournamentName, tournament.name);
       this.setData(mapSelectionStats(tournament, requestedEvent, stats, this.data.activeTab));
     } catch (error) {
-      if (!isActiveContext()) {
+      if (!isActiveLifecycle() || !isActiveContext()) {
         return;
       }
       this.setData({
@@ -260,7 +313,7 @@ PerformancePage({
         visibleRows: []
       });
     } finally {
-      if (isActiveContext()) {
+      if (isActiveLifecycle() && isActiveContext()) {
         this.setData({ loadingStats: false });
       }
     }

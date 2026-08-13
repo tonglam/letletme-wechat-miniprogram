@@ -94,8 +94,26 @@ PerformancePage({
     hasMetrics: false
   } as SummaryData,
 
+  pageVisible: false,
+  hasShown: false,
+  lifecycleRevision: 0,
+  startupPending: false,
+  resumeOnShow: false,
+
   async onLoad() {
+    this.pageVisible = true;
+    const trace = capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: "load"
+    });
+    await this.initializePage(trace);
+  },
+
+  async initializePage(trace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    this.startupPending = true;
     await this.ensureAppDataReady();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     if (!getApiSessionToken()) {
       // With no valid session the stored binding is only offline/display
@@ -105,13 +123,40 @@ PerformancePage({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
-    await this.loadTournaments();
+    this.startupPending = false;
+    await this.loadTournaments(false, trace);
+  },
+
+  async onShow() {
+    this.pageVisible = true;
+    const resumed = this.hasShown;
+    this.hasShown = true;
+    if (!resumed || !this.resumeOnShow) return;
+    this.resumeOnShow = false;
+    const trace = capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: "show"
+    });
+    await this.initializePage(trace);
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.resumeOnShow = this.startupPending || this.data.loading;
+    this.lifecycleRevision += 1;
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.resumeOnShow = false;
+    this.lifecycleRevision += 1;
   },
 
   onPullDownRefresh() {
@@ -136,6 +181,8 @@ PerformancePage({
   },
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "summary-tournament",
       trigger: forceRefresh ? "refresh" : "load"
@@ -169,6 +216,7 @@ PerformancePage({
     const contextMissingBeforeDirectoryRead = !getAppContextSnapshot()?.season;
     try {
       const tournaments = await getEntrySummaryTournaments(this.data.entryId, forceRefresh, trace);
+      if (!isActiveLifecycle()) return;
       if (contextMissingBeforeDirectoryRead) {
         this.syncRecoveredEvent(eventBeforeDirectoryRead);
       }
@@ -198,13 +246,16 @@ PerformancePage({
       });
       await this.loadSummary(forceRefresh, trace);
     } catch (error) {
+      if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveLifecycle()) this.setData({ loading: false });
     }
   },
 
   async loadSummary(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    const lifecycleRevision = this.lifecycleRevision;
+    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "summary-tournament-results",
       trigger: forceRefresh ? "refresh" : "tab"
@@ -223,13 +274,15 @@ PerformancePage({
         forceRefresh,
         trace
       );
+      if (!isActiveLifecycle()) return;
       wx.setStorageSync(storageKeys.selectedSummaryTournamentId, tournament.id);
       wx.setStorageSync(storageKeys.selectedSummaryTournamentName, tournament.name);
       this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, this.data.entryId, this.data.event));
     } catch (error) {
+      if (!isActiveLifecycle()) return;
       this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
     } finally {
-      this.setData({ loading: false });
+      if (isActiveLifecycle()) this.setData({ loading: false });
     }
   },
 

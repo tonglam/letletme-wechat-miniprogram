@@ -309,6 +309,7 @@ Page({
   kickoffTransitionTimer: undefined as number | undefined,
   contextDeadlineTimer: undefined as number | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
+  resumeLoadAfterShow: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -581,6 +582,11 @@ Page({
         return;
       }
     }
+    if (resumed && this.resumeLoadAfterShow && !this.data.hasData) {
+      this.resumeLoadAfterShow = false;
+      await this.loadData({ forceRefresh: true });
+      return;
+    }
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
@@ -593,6 +599,12 @@ Page({
 
   onHide() {
     this.pageVisible = false;
+    if (this.liveRequest) {
+      this.resumeLoadAfterShow = !this.data.hasData;
+      this.liveRequestId += 1;
+      this.liveRequest = null;
+      this.liveRequestKey = "";
+    }
     this.liveRefresh?.stop();
     this.clearKickoffTransition();
     this.clearContextDeadline();
@@ -601,6 +613,10 @@ Page({
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeLoadAfterShow = false;
+    this.liveRequestId += 1;
+    this.liveRequest = null;
+    this.liveRequestKey = "";
     this.liveRefresh?.dispose();
     this.clearKickoffTransition();
     this.clearContextDeadline();

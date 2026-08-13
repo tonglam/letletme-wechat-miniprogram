@@ -65,7 +65,9 @@ test("an overlapping manual refresh queues one forced CalcLive and forced transf
     liveRequest: scoreRequest,
     liveRequestKey: "123:33",
     liveRequestForced: false,
+    liveRequestId: 1,
     liveForcedFollowup: null,
+    pageVisible: true,
     loadTransfersAfterLive: false,
     restartForPrincipalChange() {
       return false;

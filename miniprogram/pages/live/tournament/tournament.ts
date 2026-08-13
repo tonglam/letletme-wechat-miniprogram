@@ -346,6 +346,7 @@ PerformancePage({
   loadedSeason: undefined as string | undefined,
   failedEntryCount: 0,
   retainedRowCount: 0,
+  resumeDirectoryAfterShow: false,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -541,6 +542,11 @@ PerformancePage({
         this.setData({ maxGw: nextEventId });
       }
     }
+    if (resumed && this.resumeDirectoryAfterShow && !this.data.selectedTournament) {
+      this.resumeDirectoryAfterShow = false;
+      await this.loadTournaments(false);
+      return;
+    }
     this.liveRefresh?.sync();
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
@@ -549,11 +555,15 @@ PerformancePage({
 
   onHide() {
     this.pageVisible = false;
+    this.resumeDirectoryAfterShow = this.data.loading && !this.data.selectedTournament;
+    this.tournamentListRequestId += 1;
     this.liveRefresh?.stop();
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeDirectoryAfterShow = false;
+    this.tournamentListRequestId += 1;
     this.liveRefresh?.dispose();
   },
 

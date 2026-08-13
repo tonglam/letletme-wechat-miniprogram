@@ -15,11 +15,14 @@ PerformancePage({
     await this.loadData();
   },
 
-  async loadData() {
+  async loadData(forceRefresh = false) {
     this.setData({ loading: true, error: "" });
     try {
-      const context = await ensureAppContext({ reason: "page-load" });
-      const teams = await getTeamList(context.season);
+      const context = await ensureAppContext({
+        reason: forceRefresh ? "pull-refresh" : "page-load",
+        forceRefresh
+      });
+      const teams = await getTeamList(context.season, forceRefresh);
       this.setData({ teams });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : "球队列表加载失败" });
@@ -33,6 +36,6 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadData();
+    this.loadData(true);
   }
 });

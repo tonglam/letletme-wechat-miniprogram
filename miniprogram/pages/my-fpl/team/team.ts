@@ -764,6 +764,10 @@ Page({
       void this.recoverContext("pull-refresh");
       return;
     }
+    if (this.data.error) {
+      void this.loadData(true);
+      return;
+    }
     if (this.data.activeTab === "squad") {
       void this.loadData(true);
       return;

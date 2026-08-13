@@ -67,6 +67,9 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (this.data.loadingMore) {
+      this.setData({ loadingMore: false });
+    }
     if (resumed && this.data.loading) {
       return this.startSearch(this.data.keyword);
     }

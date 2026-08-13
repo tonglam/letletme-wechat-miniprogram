@@ -338,6 +338,9 @@ Page({
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
+    this.liveForcedFollowup = null;
+    this.liveForcedFollowupIncludeTransfers = false;
+    this.liveForcedFollowupTrackNavigation = false;
     this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
   },
@@ -351,6 +354,9 @@ Page({
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
+    this.liveForcedFollowup = null;
+    this.liveForcedFollowupIncludeTransfers = false;
+    this.liveForcedFollowupTrackNavigation = false;
     this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
   },
@@ -485,10 +491,16 @@ Page({
           return this.liveForcedFollowup;
         }
         const activeRequest = this.liveRequest;
+        const followupOwnerId = this.liveRequestId;
         this.liveForcedFollowupIncludeTransfers = options.includeTransfers === true;
         this.liveForcedFollowupTrackNavigation = options.trackNavigation === true;
         const startForcedFollowup = () => {
-          if (entryId !== this.data.entryId || eventId !== this.data.event) return;
+          if (
+            !this.pageVisible
+            || followupOwnerId !== this.liveRequestId
+            || entryId !== this.data.entryId
+            || eventId !== this.data.event
+          ) return;
           const includeTransfers = this.liveForcedFollowupIncludeTransfers;
           const trackNavigation = this.liveForcedFollowupTrackNavigation;
           this.liveForcedFollowupIncludeTransfers = false;

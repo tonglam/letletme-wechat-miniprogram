@@ -40,7 +40,7 @@ test("price context is optional while season-scoped deep links await it", () => 
   const playerDetail = source("miniprogram/pages/data/player-detail/player-detail.ts");
   const teamDetail = source("miniprogram/pages/data/team-detail/team-detail.ts");
   assert.match(price, /try \{[\s\S]*await ensureAppContext\(\{ reason: "page-load" \}\);[\s\S]*\} catch \{\}[\s\S]*loadDailyChanges/);
-  assert.match(teams, /const context = await ensureAppContext[\s\S]*getTeamList\(context\.season\)/);
+  assert.match(teams, /const context = await ensureAppContext[\s\S]*getTeamList\(context\.season, forceRefresh\)/);
   assert.match(players, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*await this\.fetchPage/);
   assert.match(playerDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getPlayerInfoByCode/);
   assert.match(teamDetail, /await ensureAppContext\(\{ reason: "page-load" \}\)[\s\S]*getTeamSummary/);
@@ -180,7 +180,9 @@ test("manual Live Entry force refresh runs once after an ordinary in-flight read
     liveRequest: current,
     liveRequestKey: "123:33",
     liveRequestForced: false,
+    liveRequestId: 1,
     liveForcedFollowup: null,
+    pageVisible: true,
     loadTransfersAfterLive: false,
     restartForPrincipalChange: () => false,
     loadData(options) {
@@ -211,7 +213,9 @@ test("manual Live Entry force refresh survives failure of the ordinary in-flight
     liveRequest: current,
     liveRequestKey: "123:33",
     liveRequestForced: false,
+    liveRequestId: 1,
     liveForcedFollowup: null,
+    pageVisible: true,
     loadTransfersAfterLive: false,
     restartForPrincipalChange: () => false,
     loadData(options) {
@@ -236,8 +240,10 @@ test("a later transfer caller upgrades an already queued Live Entry forced follo
     liveRequest: current,
     liveRequestKey: "123:33",
     liveRequestForced: false,
+    liveRequestId: 1,
     liveForcedFollowup: null,
     liveForcedFollowupIncludeTransfers: false,
+    pageVisible: true,
     loadTransfersAfterLive: false,
     restartForPrincipalChange: () => false,
     loadData(options) {
