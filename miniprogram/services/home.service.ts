@@ -4,9 +4,9 @@ import type { PlayerValue } from "../models/player";
 import type { GameweekOverallSummary } from "../models/summary";
 
 export const MINI_HOME_SUPPLEMENT_QUERY = `
-  query MiniHomeSupplement($changeDate: Date!) {
+  query MiniHomeSupplement($eventId: Int!, $changeDate: Date!) {
     miniProgramNotice
-    eventOverallResult {
+    eventOverallResult(eventId: $eventId) {
       event
       averageScore
       highestScore
@@ -84,7 +84,7 @@ export async function getMiniHomeSupplement(
 ): Promise<MiniHomeSupplementResult> {
   const result = await graphqlRead<MiniHomeSupplementResponse>(
     MINI_HOME_SUPPLEMENT_QUERY,
-    { changeDate: normalizeChangeDate(changeDate) },
+    { eventId, changeDate: normalizeChangeDate(changeDate) },
     {
       authMode: "public",
       cachePolicy: "market",
