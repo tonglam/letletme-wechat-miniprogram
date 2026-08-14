@@ -41,6 +41,11 @@ page {
   --warning-tint: #f6ead9;
   --info-tint: #f0e3f2;
 
+  /* Bright semantic variants — for text/bars on dark fascia surfaces
+     (base --warning/--danger are too dark to read on --fascia) */
+  --warning-bright: #fbbf24;
+  --danger-bright: #f87171;
+
   /* Position-badge palette (official FPL position colours) */
   --pos-gkp: #fcd34d;
   --pos-gkp-ink: #451a03;
