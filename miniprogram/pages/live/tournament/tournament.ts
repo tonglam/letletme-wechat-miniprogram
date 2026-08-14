@@ -919,13 +919,15 @@ PerformancePage({
               eventId,
               keyword,
               options.forceRefresh === true,
-              trace
+              trace,
+              entryId
             )
           : await getLivePointsByTournamentSnapshot(
               selected.id,
               eventId,
               options.forceRefresh === true,
-              trace
+              trace,
+              entryId
             );
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
