@@ -15,6 +15,7 @@
 | PR4 / My FPL Overview | 本地独立提交 `abca808` |
 | PR5 / build/package Gate | 本地独立提交 `dfaaae2` |
 | 运行时组合 head | `dfaaae2`，tracked clean |
+| PR1 latest + PR2-PR5 集成验证 head | 临时本地 `29604e0`，tracked clean；不推送、不改变独立 PR 顺序 |
 | 测试平台 | 微信 DevTools simulator；iPhone 12/13 Pro profile；`390 x 753`；DPR 3；SDK `3.15.2` |
 | 身份 | 已绑定 rich-state；证据不记录 token |
 | 当前业务上下文 | season `2627`；当前比赛周尚未开始，display event 为 1 |
@@ -36,13 +37,13 @@
 
 ## 3. 自动化 Gate
 
-在运行时组合 head `dfaaae2` 上重新执行：
+运行时组合 head `dfaaae2` 的测试为 379/379。随后将 PR1 复审修正 head `2ea60f1` 与 PR2-PR5 四个独立提交无冲突叠加到临时验证 head `29604e0`，从干净 `npm ci` 重新执行全部 Gate：
 
 | Gate | 结果 |
 |---|---|
 | `npm run lint` | 🟢 |
 | `npm run typecheck` | 🟢 |
-| `npm test` | 🟢 379/379，0 fail/skip/cancel |
+| `npm test` | 🟢 最终集成 380/380，0 fail/skip/cancel |
 | `npm run check:style` | 🟢 `style-drift: clean` |
 | 25 注册页静态覆盖 | 🟢 25/25，loading placeholder 不作为完成边界 |
 | `npm run package:check` | 🟢；仅为 repository `npm pack --dry-run`，不冒充微信包体 Gate |
