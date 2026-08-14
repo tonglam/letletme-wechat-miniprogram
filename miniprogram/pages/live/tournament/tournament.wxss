@@ -1,8 +1,7 @@
+/* Flush-inner cards — extend global .card, inner rows own the padding */
 .picker-card {
   overflow: hidden;
-  border: 1rpx solid var(--line);
-  border-radius: 16rpx;
-  background: var(--card);
+  padding: 0;
 }
 
 .picker-inner {
@@ -57,9 +56,7 @@
 
 .filter-panel {
   overflow: hidden;
-  border: 1rpx solid var(--line);
-  border-radius: 16rpx;
-  background: var(--card);
+  padding: 0;
 }
 
 .filter-header {
@@ -187,7 +184,6 @@
   gap: 18rpx;
   align-items: center;
   margin-bottom: 16rpx;
-  border: 1rpx solid var(--line);
 }
 
 .tournament-rank {

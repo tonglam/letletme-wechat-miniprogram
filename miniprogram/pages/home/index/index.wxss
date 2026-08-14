@@ -39,8 +39,9 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 32rpx;
-  height: 32rpx;
+  min-width: 64rpx;
+  min-height: 64rpx;
+  margin: -16rpx -16rpx -16rpx 0;
   color: var(--green-ink);
   font-size: 30rpx;
   line-height: 30rpx;
@@ -145,8 +146,14 @@
   font-size: 22rpx;
 }
 
+/* Error variant — same shape as global .live-refresh-error */
 .section-status-error {
+  padding: 18rpx 22rpx;
+  border: 1rpx solid var(--danger-a30);
+  border-radius: 12rpx;
+  background: var(--danger-tint);
   color: var(--danger);
+  line-height: 1.45;
 }
 
 /* Price changes */
@@ -348,8 +355,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32rpx;
-  height: 40rpx;
+  min-width: 64rpx;
+  min-height: 64rpx;
   padding: 0;
   margin: 0;
   border: 0;

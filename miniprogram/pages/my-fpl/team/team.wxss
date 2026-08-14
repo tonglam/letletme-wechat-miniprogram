@@ -36,98 +36,6 @@
   margin-bottom: 18rpx;
 }
 
-.inline-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  padding: 20rpx 24rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  background: var(--card);
-  color: var(--warning);
-  font-size: 24rpx;
-}
-
-.inline-error-retry {
-  flex-shrink: 0;
-  min-width: 88rpx;
-  min-height: 56rpx;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
-  background: var(--track);
-  color: var(--green-ink);
-  font-weight: 700;
-  line-height: 56rpx;
-  text-align: center;
-}
-
-/* Tab strip — web Tabs pattern */
-.tab-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8rpx;
-  padding: 8rpx;
-  border-radius: 12rpx;
-  background: var(--track);
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 58rpx;
-  border-radius: 8rpx;
-  color: var(--muted-ink);
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.tab-active {
-  background: var(--card);
-  color: var(--ink);
-  box-shadow: 0 2rpx 6rpx var(--plum-a8);
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12rpx;
-}
-
-.metric-grid-three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.metric-card {
-  min-width: 0;
-  padding: 18rpx;
-  border-radius: 12rpx;
-  background: var(--track);
-}
-
-.metric-label,
-.row-meta {
-  color: var(--muted-ink);
-  font-size: 22rpx;
-}
-
-.metric-value {
-  display: block;
-  margin-top: 8rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink);
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.metric-value-bad,
-.cost-bad {
-  color: var(--danger);
-}
-
 .section-title-small {
   margin-bottom: 14rpx;
   color: var(--ink);
@@ -160,6 +68,15 @@
   flex: 1;
 }
 
+.row-meta {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.cost-bad {
+  color: var(--danger);
+}
+
 .row-title,
 .history-title {
   overflow: hidden;
@@ -186,8 +103,7 @@
   text-align: center;
 }
 
-/* Layout-only badge shells; colours come from global position and role classes. */
-.position-badge,
+/* Layout-only badge shell; colours come from global .pos-badge / role classes. */
 .role-badge {
   display: inline-flex;
   align-items: center;
@@ -246,12 +162,10 @@
   font-size: 24rpx;
 }
 
+/* Nested move card — extends global .card with tighter padding */
 .move-card {
   margin-top: 14rpx;
   padding: 16rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  background: var(--card);
 }
 
 .move-text {

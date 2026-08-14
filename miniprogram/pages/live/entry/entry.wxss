@@ -4,8 +4,8 @@
   gap: 16rpx;
 }
 
+/* Extends global .scoreboard (border/radius/colors live there) */
 .score-card {
-  border-radius: 20rpx;
   padding: 28rpx;
   box-sizing: border-box;
 }

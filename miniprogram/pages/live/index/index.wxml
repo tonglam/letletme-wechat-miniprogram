@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page page-tabbar">
   <view class="section live-hero">
     <view>
       <view class="chyron">LIVE CENTRE</view>
@@ -8,7 +8,7 @@
     <view class="gw-pill-dark">GW {{event || '-'}}</view>
   </view>
 
-  <view id="{{contextResolved ? 'perf-primary-content' : ''}}" wx:if="{{contextResolved}}" class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip">
+  <view id="{{contextResolved ? 'perf-primary-content' : ''}}" wx:if="{{contextResolved}}" class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip" hover-class="hover-dim">
     <view>
       <view class="strip-label">{{entryId ? '当前球队' : '还没有我的球队'}}</view>
       <view wx:if="{{entryId}}" class="strip-value">Entry #{{entryId}}</view>
@@ -17,7 +17,7 @@
     <text class="strip-action">{{entryId ? '查看' : '选择'}}</text>
   </view>
 
-  <view wx:for="{{cards}}" wx:key="url" class="card live-card" data-url="{{item.url}}" bindtap="onOpenCard">
+  <view wx:for="{{cards}}" wx:key="url" class="card live-card" data-url="{{item.url}}" bindtap="onOpenCard" hover-class="hover-dim">
     <view>
       <view class="card-meta">{{item.meta}}</view>
       <view class="card-title">{{item.title}}</view>

@@ -1,16 +1,10 @@
-.card { padding: 32rpx; margin: 32rpx; }
-.title { font-size: 38rpx; font-weight: 600; margin-bottom: 16rpx; }
-.subtitle { color: var(--muted-ink); line-height: 1.6; margin-bottom: 24rpx; }
+/* Page uses global .card/.title/.subtitle/.inline-error primitives. */
 
+/* Extends global .input — taller field with vertical rhythm */
 .input {
   height: 88rpx;
   padding: 0 24rpx;
   margin: 18rpx 0;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  background: var(--card);
-  color: var(--ink);
-  box-sizing: border-box;
   display: flex;
   align-items: center;
 }
@@ -50,4 +44,3 @@
 
 .text-button { margin-top: 24rpx; color: var(--muted-ink); background: transparent; font-size: 28rpx; }
 .text-button::after { border: 0; }
-.inline-error { color: var(--danger); margin-top: 16rpx; }

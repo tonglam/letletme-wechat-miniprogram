@@ -79,16 +79,12 @@
   letter-spacing: 2rpx;
 }
 
+/* Extends global .card — keeps the status edge + tighter padding */
 .match-card {
   position: relative;
   margin-bottom: 18rpx;
   padding: 22rpx;
-  border: 1rpx solid var(--line);
   border-left: 8rpx solid var(--muted-ink);
-  border-radius: 16rpx;
-  background: var(--card);
-  box-shadow: 0 2rpx 8rpx var(--plum-a4);
-  box-sizing: border-box;
 }
 
 /* Status edge colours — aligned to web semantics */

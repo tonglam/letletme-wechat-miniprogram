@@ -5,62 +5,10 @@
   gap: 20rpx;
 }
 
-/* Tab strip — web Tabs pattern */
-.tab-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8rpx;
-  padding: 8rpx;
-  border-radius: 12rpx;
-  background: var(--track);
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 58rpx;
-  border-radius: 8rpx;
-  color: var(--muted-ink);
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.tab-active {
-  background: var(--card);
-  color: var(--ink);
-  box-shadow: 0 2rpx 6rpx var(--plum-a8);
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12rpx;
-}
-
-.metric-card {
-  min-width: 0;
-  padding: 18rpx;
-  border-radius: 12rpx;
-  background: var(--track);
-}
-
-.metric-label,
 .row-meta,
 .list-empty {
   color: var(--muted-ink);
   font-size: 22rpx;
-}
-
-.metric-value {
-  display: block;
-  margin-top: 8rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink);
-  font-size: 30rpx;
-  font-weight: 800;
 }
 
 .metric-meta {

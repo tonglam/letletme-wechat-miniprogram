@@ -1,3 +1,3 @@
 <view class="page">
-  <view id="perf-primary-content" class="redirect-hint">正在打开我的球队…</view>
+  <view id="perf-primary-content" class="redirect-hint muted">正在打开我的球队…</view>
 </view>
