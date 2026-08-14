@@ -43,6 +43,14 @@ test("My FPL Team resumed startup waits for current entry authority", () => {
     /onShow\(\)[\s\S]*if \(this\.resumeStartupAfterShow\)[\s\S]*initializeFromContext\(false, trace, this\.perfTracker\)/
   );
   assert.match(page, /onHide\(\)[\s\S]*resumeStartupAfterShow = this\.startupPending/);
+  assert.match(
+    page,
+    /if \(!eventResult\) \{[\s\S]*emptyState: "event"[\s\S]*this\.markPrimaryCommit\(tracker\)/
+  );
+  assert.match(
+    page,
+    /markPrimaryCommit\(tracker\?: PagePerformanceTracker\)[\s\S]*primarySetDataAt[\s\S]*observePrimary/
+  );
 });
 
 test("ordinary page metrics ignore intermediate setData until lifecycle settlement", () => {

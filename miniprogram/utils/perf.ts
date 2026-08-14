@@ -50,6 +50,8 @@ export interface PagePerformanceRecord {
   primarySetDataAt?: number;
   primaryViewportVisibleAt?: number;
   secondaryCompleteAt?: number;
+  /** Final user-visible completion boundary. Never precedes primary visible. */
+  completeAt?: number;
   softFailureAt?: number;
   operationCount: number;
   networkOperationCount: number;

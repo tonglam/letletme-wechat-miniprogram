@@ -266,8 +266,7 @@ Page({
       hasTeamData: false,
       supportAvailable: false
     }, () => {
-      this.perfTracker?.mark("primarySetDataAt");
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      this.markPrimaryCommit(this.perfTracker);
     });
   },
 
@@ -442,6 +441,16 @@ Page({
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
+  },
+
+  markPrimaryCommit(tracker?: PagePerformanceTracker) {
+    if (!tracker || !this.pageVisible || tracker !== this.perfTracker) return;
+    tracker.mark("primarySetDataAt");
+    wx.nextTick(() => {
+      if (this.pageVisible && tracker === this.perfTracker) {
+        tracker.observePrimary();
+      }
+    });
   },
 
   invalidateSeasonSupport() {
@@ -625,6 +634,7 @@ Page({
     awaitActiveTab = false
   ) {
     const requestId = ++this.loadRequestId;
+    const tracker = this.perfTracker;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
       trigger: forceRefresh ? "refresh" : "load"
@@ -639,7 +649,7 @@ Page({
         emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
         emptyActionText: "去选择球队"
       }, () => {
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        this.markPrimaryCommit(tracker);
       });
       return;
     }
@@ -694,6 +704,8 @@ Page({
           emptyTitle: `GW${selectedEvent} 球队总结还没生成`,
           emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
           emptyActionText: "重新加载"
+        }, () => {
+          this.markPrimaryCommit(tracker);
         });
         if (this.data.activeTab !== "squad") {
           const tabTask = this.loadTab(this.data.activeTab, forceRefresh, trace);
@@ -722,8 +734,7 @@ Page({
         hasTeamData: true,
         supportAvailable: true
       }, () => {
-        this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        this.markPrimaryCommit(tracker);
       });
       this.loadedDataSeason = requestSeason;
       this._loadedAt = Date.now();
@@ -735,8 +746,11 @@ Page({
     } catch (error) {
       if (this.pageVisible && requestId === this.loadRequestId) {
         if (this.restartForPrincipalChange(entryId)) return;
-        this.setData({ error: error instanceof Error ? error.message : "球队数据加载失败" });
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        this.setData({
+          error: error instanceof Error ? error.message : "球队数据加载失败"
+        }, () => {
+          this.markPrimaryCommit(tracker);
+        });
       }
     } finally {
       if (this.pageVisible && requestId === this.loadRequestId) {
