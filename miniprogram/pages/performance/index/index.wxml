@@ -8,8 +8,8 @@
         <view class="subtitle">应用运行性能分析</view>
       </view>
       <view class="perf-actions">
-        <view class="perf-btn" catchtap="onRefresh">刷新</view>
-        <view class="perf-btn perf-btn-danger" catchtap="onClear">清除</view>
+        <view class="perf-btn" hover-class="hover-dim" catchtap="onRefresh">刷新</view>
+        <view class="perf-btn perf-btn-danger" hover-class="hover-dim" catchtap="onClear">清除</view>
       </view>
     </view>
   </view>

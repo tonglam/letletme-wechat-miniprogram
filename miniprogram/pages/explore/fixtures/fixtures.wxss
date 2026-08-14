@@ -1,26 +1,3 @@
-.page {
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: 24rpx 24rpx 40rpx;
-  background: var(--bg);
-}
-
-.section {
-  margin-bottom: 24rpx;
-}
-
-.title {
-  color: var(--ink);
-  font-size: 34rpx;
-  font-weight: 800;
-}
-
-.subtitle {
-  margin-top: 8rpx;
-  color: var(--muted-ink);
-  font-size: 24rpx;
-}
-
 .controls {
   display: flex;
   align-items: center;
@@ -56,38 +33,8 @@
   box-shadow: 0 2rpx 6rpx var(--plum-a8);
 }
 
-.inline-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 24rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  color: var(--warning);
-  font-size: 24rpx;
-}
-
-.inline-error-retry {
-  flex-shrink: 0;
-  min-width: 88rpx;
-  min-height: 56rpx;
-  line-height: 56rpx;
-  margin-left: 16rpx;
-  padding: 0 24rpx;
-  box-sizing: border-box;
-  border-radius: 999rpx;
-  background: var(--track);
-  color: var(--green-ink);
-  font-weight: 700;
-  text-align: center;
-}
-
 .team-card {
   padding: 20rpx 24rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
 }
 
 .team-card + .team-card {
@@ -123,6 +70,5 @@
 }
 
 .chip-empty {
-  color: var(--muted-ink);
   font-size: 24rpx;
 }

@@ -4,7 +4,7 @@
     <view class="subtitle">输入 Entry ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
   </view>
 
-  <view id="perf-primary-content" class="lookup-card section">
+  <view id="perf-primary-content" class="card lookup-card section">
     <view class="field-label">FPL Entry ID</view>
     <view class="input-shell">
       <input
@@ -33,9 +33,9 @@
     </button>
   </view>
 
-  <view wx:if="{{error}}" class="inline-error section">{{error}}</view>
+  <view wx:if="{{error}}" class="live-refresh-error section">{{error}}</view>
 
-  <view wx:if="{{hasPreview}}" class="preview-card section">
+  <view wx:if="{{hasPreview}}" class="card preview-card section">
     <view class="preview-title">{{previewTitle}}</view>
     <view class="preview-subtitle">{{previewSubtitle}}</view>
     <view class="preview-stats">
@@ -52,6 +52,6 @@
     <view wx:else class="current-entry-hint">这已经是我的球队</view>
   </view>
 
-  <view class="sync-hint section" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
+  <view class="sync-hint section" hover-class="hover-dim" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
 
 </view>

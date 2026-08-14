@@ -414,3 +414,17 @@ page {
 .fdr-3 { background: var(--warning); }
 .fdr-4 { background: var(--warning-a80); }
 .fdr-5 { background: var(--danger); }
+
+/* ---------- Form fields ---------- */
+
+.field-label {
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.field-help {
+  margin-top: 6rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}

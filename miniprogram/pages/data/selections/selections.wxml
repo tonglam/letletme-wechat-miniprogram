@@ -1,4 +1,4 @@
-<view class="page selections-page">
+<view class="page page-tabbar selections-page">
   <view class="section selections-header">
     <view class="header-copy">
       <view class="title">阵容选择</view>
@@ -32,7 +32,7 @@
 
   <block wx:else>
     <view class="section tab-strip">
-      <view wx:for="{{tabs}}" wx:key="key" class="tab-item {{activeTab === item.key ? 'tab-active' : ''}}" data-tab="{{item.key}}" catchtap="onTabTap">
+      <view wx:for="{{tabs}}" wx:key="key" class="tab-item {{activeTab === item.key ? 'tab-active' : ''}}" data-tab="{{item.key}}" hover-class="hover-dim" catchtap="onTabTap">
         {{item.label}}
       </view>
     </view>
