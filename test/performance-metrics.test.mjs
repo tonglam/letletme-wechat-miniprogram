@@ -16,6 +16,12 @@ const {
   getActivePagePerformanceTrace
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
+const {
+  finiteDuration,
+  firstContentVisibleDuration,
+  formatDuration,
+  nearestRankDuration
+} = await import("../miniprogram/utils/performance-summary.ts");
 
 test("performance buffers remain bounded and page operation counts are separate", () => {
   clearPerf();
@@ -65,13 +71,95 @@ test("soft timeout is UI-only and late completion remains possible", async () =>
   await task;
 });
 
+test("page session classifies only the first load as cold and completion cannot precede primary visible", () => {
+  clearPerf();
+  let now = 100;
+  globalThis.wx.getPerformance = () => ({ now: () => {
+    now += 10;
+    return now;
+  } });
+
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const first = new PagePerformanceTracker(
+    { createIntersectionObserver: () => observer },
+    "pages/test/cold",
+    "cold-launch"
+  );
+  first.mark("secondaryCompleteAt");
+  let record = getPerf().pagePerformance.find((item) => item.navigationId === first.navigationId);
+  assert.equal(record.trigger, "cold-launch");
+  assert.equal(record.completeAt, undefined);
+
+  first.observePrimary();
+  callback({ intersectionRatio: 1 });
+  record = getPerf().pagePerformance.find((item) => item.navigationId === first.navigationId);
+  assert.ok(record.primaryViewportVisibleAt >= record.secondaryCompleteAt);
+  assert.equal(record.completeAt, record.primaryViewportVisibleAt);
+
+  first.mark("secondaryCompleteAt");
+  record = getPerf().pagePerformance.find((item) => item.navigationId === first.navigationId);
+  assert.equal(record.completeAt, record.secondaryCompleteAt);
+  assert.ok(record.completeAt >= record.primaryViewportVisibleAt);
+
+  const second = new PagePerformanceTracker({}, "pages/test/relaunch", "cold-launch");
+  const secondRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === second.navigationId
+  );
+  assert.equal(second.trigger, "warm-enter");
+  assert.equal(secondRecord.trigger, "warm-enter");
+  second.disconnect();
+  clearPerf();
+});
+
+test("summary rejects invalid durations and resolves the first cold primary boundary", () => {
+  assert.equal(finiteDuration(Number.NaN), null);
+  assert.equal(finiteDuration(Number.POSITIVE_INFINITY), null);
+  assert.equal(finiteDuration(-1), null);
+  assert.equal(finiteDuration(12.4), 12);
+  assert.equal(formatDuration(Number.NaN), "--");
+  assert.equal(nearestRankDuration([100, Number.NaN, 300, 200], 0.95, 3), 300);
+  assert.equal(nearestRankDuration([100, Number.NaN], 0.95, 2), null);
+  assert.equal(firstContentVisibleDuration([
+    {
+      navigationId: "warm",
+      route: "pages/test/warm",
+      trigger: "warm-enter",
+      routeStartedAt: 1,
+      primaryViewportVisibleAt: 10,
+      operationCount: 0,
+      networkOperationCount: 0,
+      ts: 10
+    },
+    {
+      navigationId: "cold",
+      route: "pages/test/cold",
+      trigger: "cold-launch",
+      routeStartedAt: 20,
+      primaryViewportVisibleAt: 145,
+      operationCount: 0,
+      networkOperationCount: 0,
+      ts: 145
+    }
+  ]), 125);
+});
+
 test("performance page uses nearest-rank p95 only at ten samples and renders missing values as dashes", () => {
   const page = readFileSync(
     new URL("../miniprogram/pages/performance/index/index.ts", import.meta.url),
     "utf8"
   );
-  assert.match(page, /networkP95: formatDuration\(percentile\(networkRecords\.map\(\(record\) => record\.duration\), 0\.95, 10\)\)/);
-  assert.match(page, /values\.length < minimumSamples/);
-  assert.match(page, /value === null \? "--"/);
+  const summary = readFileSync(
+    new URL("../miniprogram/utils/performance-summary.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(page, /networkP95: formatDuration\(nearestRankDuration\(/);
+  assert.match(summary, /ordered\.length < minimumSamples/);
+  assert.match(summary, /duration === null \? "--"/);
+  assert.match(page, /metric\.rating !== "none"/);
   assert.doesNotMatch(page, /Infinity/);
 });

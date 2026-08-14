@@ -1,6 +1,12 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getPerf, clearPerf } from "../../../utils/perf";
 import type { StoredPerf, ApiRecord } from "../../../utils/perf";
+import {
+  finiteDuration,
+  firstContentVisibleDuration,
+  formatDuration,
+  nearestRankDuration
+} from "../../../utils/performance-summary";
 
 type Rating = "good" | "avg" | "poor" | "none";
 
@@ -89,11 +95,11 @@ PerformancePage({
       const perf = (wx as unknown as { getPerformance?(): WxPerformance }).getPerformance?.();
       if (perf) {
         const launchEntry = perf.getEntriesByType("navigation").find((entry) => entry.name === "appLaunch");
-        if (launchEntry) wxLaunchMs = Math.round(launchEntry.duration);
+        if (launchEntry) wxLaunchMs = finiteDuration(launchEntry.duration) ?? undefined;
         const renderEntry = perf.getEntriesByType("render").find((entry) =>
           entry.name === "firstRender" || entry.name === "firstPaint"
         );
-        if (renderEntry) wxFirstRenderMs = Math.round(renderEntry.duration);
+        if (renderEntry) wxFirstRenderMs = finiteDuration(renderEntry.duration) ?? undefined;
       }
     } catch {}
 
@@ -104,10 +110,24 @@ PerformancePage({
       || record.source === "storage"
       || record.source === "in-flight"
     ).length;
-    const launchMs = wxLaunchMs ?? stored.launchDuration;
-    const metrics = buildMetrics(stored, launchMs, wxFirstRenderMs);
+    const launchMs = wxLaunchMs ?? finiteDuration(stored.launchDuration) ?? undefined;
+    const trackedFirstContentMs = firstContentVisibleDuration(
+      stored.pagePerformance ?? []
+    );
+    const firstContentMs = trackedFirstContentMs ?? wxFirstRenderMs;
+    const firstContentLabel = trackedFirstContentMs === null
+      ? "微信首次渲染"
+      : "首屏主内容";
+    const metrics = buildMetrics(
+      stored,
+      launchMs,
+      firstContentMs,
+      firstContentLabel
+    );
     const apiGroups = buildApiGroups(records);
-    const hasData = records.length > 0 || launchMs !== undefined;
+    const hasData = records.length > 0
+      || launchMs !== undefined
+      || firstContentMs !== undefined;
     const score = hasData ? calcScore(metrics) : 0;
     const scoreGrade: Rating = !hasData ? "none" : score >= 80 ? "good" : score >= 60 ? "avg" : "poor";
     const scoreLabel = !hasData ? "使用应用后显示" : score >= 80 ? "优秀" : score >= 60 ? "良好" : "需优化";
@@ -128,8 +148,15 @@ PerformancePage({
       totalApiCalls: records.length,
       networkApiCalls: networkRecords.length,
       cacheHitRate: records.length ? Math.round((cacheHits / records.length) * 100) : 0,
-      networkP50: formatDuration(percentile(networkRecords.map((record) => record.duration), 0.5)),
-      networkP95: formatDuration(percentile(networkRecords.map((record) => record.duration), 0.95, 10)),
+      networkP50: formatDuration(nearestRankDuration(
+        networkRecords.map((record) => record.duration),
+        0.5
+      )),
+      networkP95: formatDuration(nearestRankDuration(
+        networkRecords.map((record) => record.duration),
+        0.95,
+        10
+      )),
       failedOperations: failures.join("、"),
       updatedAt: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
       hasData
@@ -168,17 +195,6 @@ function isNetworkRecord(record: ApiRecord): boolean {
   return record.networkAttempted === true || (!record.source && record.networkAttempted !== false) || record.source === "network";
 }
 
-function percentile(values: number[], quantile: number, minimumSamples = 1): number | null {
-  if (values.length < minimumSamples) return null;
-  const ordered = values.slice().sort((left, right) => left - right);
-  const index = Math.min(ordered.length - 1, Math.max(0, Math.ceil(ordered.length * quantile) - 1));
-  return Math.round(ordered[index]);
-}
-
-function formatDuration(value: number | null): string {
-  return value === null ? "--" : `${value}ms`;
-}
-
 function rateMs(ms: number, goodThreshold: number, avgThreshold: number): Rating {
   if (ms < goodThreshold) return "good";
   if (ms < avgThreshold) return "avg";
@@ -209,7 +225,8 @@ const RATING_SCORES: Record<Rating, number> = {
 function buildMetrics(
   stored: StoredPerf,
   launchMs: number | undefined,
-  firstRenderMs: number | undefined
+  firstRenderMs: number | undefined,
+  firstRenderLabel: string
 ): MetricRow[] {
   const rows: MetricRow[] = [];
 
@@ -229,26 +246,41 @@ function buildMetrics(
     const rating = rateMs(firstRenderMs, 300, 600);
     rows.push({
       key: "firstRender",
-      label: "首次渲染",
+      label: firstRenderLabel,
       displayValue: `${firstRenderMs}ms`,
       rating,
       ratingLabel: RATING_LABELS[rating],
       barWidth: RATING_WIDTHS[rating]
     });
+  } else {
+    rows.push({
+      key: "firstRender",
+      label: "首屏主内容",
+      displayValue: "--",
+      rating: "none",
+      ratingLabel: RATING_LABELS.none,
+      barWidth: RATING_WIDTHS.none
+    });
   }
 
   const networkRecords = stored.apiRecords.filter(isNetworkRecord);
   if (networkRecords.length >= 10) {
-    const p95 = percentile(networkRecords.map((record) => record.duration), 0.95, 10) as number;
-    const rating = rateMs(p95, 500, 1500);
-    rows.push({
-      key: "networkP95",
-      label: "网络 API p95",
-      displayValue: `${p95}ms`,
-      rating,
-      ratingLabel: RATING_LABELS[rating],
-      barWidth: RATING_WIDTHS[rating]
-    });
+    const p95 = nearestRankDuration(
+      networkRecords.map((record) => record.duration),
+      0.95,
+      10
+    );
+    if (p95 !== null) {
+      const rating = rateMs(p95, 500, 1500);
+      rows.push({
+        key: "networkP95",
+        label: "网络 API p95",
+        displayValue: `${p95}ms`,
+        rating,
+        ratingLabel: RATING_LABELS[rating],
+        barWidth: RATING_WIDTHS[rating]
+      });
+    }
   }
 
   if (stored.apiRecords.length > 0) {
@@ -293,9 +325,13 @@ function buildApiGroups(records: ApiRecord[]): ApiGroup[] {
 }
 
 function calcScore(metrics: MetricRow[]): number {
-  if (metrics.length === 0) return 0;
+  const ratedMetrics = metrics.filter((metric) => metric.rating !== "none");
+  if (ratedMetrics.length === 0) return 0;
   return Math.round(
-    metrics.reduce((sum, metric) => sum + RATING_SCORES[metric.rating], 0) / metrics.length
+    ratedMetrics.reduce(
+      (sum, metric) => sum + RATING_SCORES[metric.rating],
+      0
+    ) / ratedMetrics.length
   );
 }
 

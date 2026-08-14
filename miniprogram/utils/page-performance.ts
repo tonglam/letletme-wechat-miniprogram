@@ -9,7 +9,8 @@ type PageOwner = {
 function monotonicNow(): number {
   try {
     const performance = wx.getPerformance() as unknown as { now?: () => number };
-    return performance.now?.() ?? Date.now();
+    const now = performance.now?.();
+    return typeof now === "number" && Number.isFinite(now) ? now : Date.now();
   } catch {
     return Date.now();
   }
@@ -17,6 +18,16 @@ function monotonicNow(): number {
 
 let sequence = 0;
 let activeTracker: PagePerformanceTracker | undefined;
+let coldLaunchClaimed = false;
+
+function resolveTrigger(
+  requested: PagePerformanceRecord["trigger"]
+): PagePerformanceRecord["trigger"] {
+  if (requested !== "cold-launch") return requested;
+  if (coldLaunchClaimed) return "warm-enter";
+  coldLaunchClaimed = true;
+  return requested;
+}
 
 function setActiveTracker(tracker: PagePerformanceTracker | undefined): void {
   activeTracker = tracker;
@@ -54,12 +65,12 @@ export class PagePerformanceTracker {
   ) {
     sequence += 1;
     this.route = route;
-    this.trigger = trigger;
+    this.trigger = resolveTrigger(trigger);
     this.navigationId = `${route}:${Date.now().toString(36)}:${sequence.toString(36)}`;
     this.record = {
       navigationId: this.navigationId,
       route,
-      trigger,
+      trigger: this.trigger,
       routeStartedAt: monotonicNow(),
       operationCount: 0,
       networkOperationCount: 0
@@ -68,9 +79,18 @@ export class PagePerformanceTracker {
     this.flush();
   }
 
-  mark(field: "contextReadyAt" | "primaryRequestStartAt" | "primaryResponseAt" | "primarySetDataAt" | "secondaryCompleteAt" | "softFailureAt"): void {
+  mark(
+    field:
+      | "contextReadyAt"
+      | "primaryRequestStartAt"
+      | "primaryResponseAt"
+      | "primarySetDataAt"
+      | "secondaryCompleteAt"
+      | "softFailureAt"
+  ): void {
     if (this.disconnected) return;
     this.record[field] = monotonicNow();
+    this.updateCompleteAt();
     this.flush();
     if (field === "secondaryCompleteAt" || field === "softFailureAt") {
       this.finishRequestAttribution();
@@ -100,6 +120,7 @@ export class PagePerformanceTracker {
           this.record.primarySetDataAt = this.pendingSetDataAt;
         }
         this.record.primaryViewportVisibleAt = monotonicNow();
+        this.updateCompleteAt();
         this.flush();
         observer.disconnect();
         if (this.observer === observer) this.observer = undefined;
@@ -117,6 +138,15 @@ export class PagePerformanceTracker {
 
   private finishRequestAttribution(): void {
     if (activeTracker === this) setActiveTracker(undefined);
+  }
+
+  private updateCompleteAt(): void {
+    const primaryVisibleAt = this.record.primaryViewportVisibleAt;
+    if (primaryVisibleAt === undefined) return;
+    this.record.completeAt = Math.max(
+      primaryVisibleAt,
+      this.record.secondaryCompleteAt ?? primaryVisibleAt
+    );
   }
 
   private flush(): void {

@@ -7,7 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 test("My FPL Team loads the selected event before lazy support tabs", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
   const primary = page.indexOf("await getEntryTeamStatsEventResult");
-  const primaryCommit = page.indexOf("primarySetDataAt", primary);
+  const primaryCommit = page.indexOf("this.markPrimaryCommit(tracker)", primary);
   const lazy = page.indexOf("async loadTab");
   assert.ok(primary >= 0 && primaryCommit > primary && lazy > primaryCommit);
   assert.match(page, /if \(tab === "squad" \|\| !this\.data\.entryId\) return/);
@@ -25,7 +25,8 @@ test("My FPL Team owns independent primary and tab status surfaces", () => {
 
 test("My FPL no-entry state observes primary after its terminal commit", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.ts");
-  assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
+  assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*this\.markPrimaryCommit\(tracker\)/);
+  assert.match(page, /markPrimaryCommit\(tracker\?: PagePerformanceTracker\)[\s\S]*tracker\.mark\("primarySetDataAt"\)[\s\S]*tracker\.observePrimary\(\)/);
 });
 
 test("My FPL warm resume observes retained terminal state without refetching", () => {
