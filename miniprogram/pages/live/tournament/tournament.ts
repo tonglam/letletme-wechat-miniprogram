@@ -39,7 +39,7 @@ import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
 
 type SortKey = "livePoints" | "liveNetPoints" | "transferCost" | "played" | "totalPoints" | "overallRank" | "entryName";
-type LiveTournamentEmptyState = "" | "entry" | "tournaments";
+type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
@@ -52,6 +52,27 @@ export function partialTournamentErrorSuffix(retainedRowCount: number): string {
 
 export function shouldClearTournamentRowsError(failedEntryCount: number): boolean {
   return failedEntryCount === 0;
+}
+
+export function noLiveEventState() {
+  return {
+    loading: false,
+    refreshing: false,
+    hasData: false,
+    error: "",
+    errorSuffix: "",
+    tournamentListError: "",
+    tournamentListErrorSuffix: "",
+    emptyState: "preseason" as const,
+    emptyEyebrow: "赛季准备中",
+    emptyTitle: "当前赛季暂无实时比赛周",
+    emptyDescription: "比赛周开始后，这里会显示竞赛实时得分和排名",
+    emptyActionText: "",
+    rows: [] as DisplayTournamentRow[],
+    displayedRows: [] as DisplayTournamentRow[],
+    filteredCount: 0,
+    lastUpdated: ""
+  };
 }
 
 interface SortOption {
@@ -411,7 +432,8 @@ PerformancePage({
     if (!this.data.entryId || currentGw > 0) {
       await this.loadTournaments(forceRefresh, trace);
     } else {
-      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+      this.liveRefresh?.stop();
+      this.setData(noLiveEventState());
     }
     this.syncDisplayState();
   },
@@ -477,7 +499,14 @@ PerformancePage({
       loading: false,
       refreshing: false,
       error: message,
-      errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
+      errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
+      ...(this.data.emptyState === "preseason" ? {
+        emptyState: "",
+        emptyEyebrow: "",
+        emptyTitle: "",
+        emptyDescription: "",
+        emptyActionText: ""
+      } : {})
     });
     this.syncDisplayState();
   },
@@ -507,6 +536,7 @@ PerformancePage({
       if (nextSeason) this.loadedSeason = nextSeason;
       const nextEventId = context?.currentEvent || 0;
       const wasCurrentEvent = this.data.event === this.data.maxGw;
+      const leavingPreseason = nextEventId > 0 && this.data.emptyState === "preseason";
       const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
@@ -518,6 +548,23 @@ PerformancePage({
         this.cachedLiveStoredAt = undefined;
         this.failedEntryCount = 0;
         this.retainedRowCount = 0;
+        const eventState = nextEventId === 0 ? noLiveEventState() : {
+          rows: [] as DisplayTournamentRow[],
+          displayedRows: [] as DisplayTournamentRow[],
+          hasData: false,
+          lastUpdated: "",
+          ...(leavingPreseason ? {
+            error: "",
+            errorSuffix: "",
+            tournamentListError: "",
+            tournamentListErrorSuffix: "",
+            emptyState: "" as const,
+            emptyEyebrow: "",
+            emptyTitle: "",
+            emptyDescription: "",
+            emptyActionText: ""
+          } : {})
+        };
         this.setData({
           event: nextEventId,
           maxGw: nextEventId,
@@ -545,27 +592,14 @@ PerformancePage({
               teamExposureCount: 1,
               teamExposureScope: "any"
           } : {}),
-          rows: [],
-          displayedRows: [],
-          hasData: false,
-          lastUpdated: "",
-          ...(nextEventId === 0 ? {
-            error: "当前赛季暂无实时比赛周",
-            tournamentListError: "",
-            tournamentListErrorSuffix: "",
-            emptyState: "",
-            emptyEyebrow: "",
-            emptyTitle: "",
-            emptyDescription: "",
-            emptyActionText: ""
-          } : {})
+          ...eventState
         });
         this.liveRefresh?.sync();
         if (nextEventId === 0) {
           this.syncDisplayState();
           return;
         }
-        if (seasonChanged) {
+        if (seasonChanged || leavingPreseason || !this.data.selectedTournament) {
           await this.loadTournaments(true);
         } else {
           await this.loadRows({ forceRefresh: true });
@@ -667,7 +701,8 @@ PerformancePage({
         this.initLiveRefresh();
         return this.loadTournaments(true);
       }
-      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
+      this.liveRefresh?.stop();
+      this.setData(noLiveEventState());
       return;
     }
     return this.loadTournaments(true);
@@ -1356,6 +1391,9 @@ PerformancePage({
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
       goToEntrySearch();
+      return;
+    }
+    if (this.data.emptyState === "preseason") {
       return;
     }
     this.loadTournaments(true);
