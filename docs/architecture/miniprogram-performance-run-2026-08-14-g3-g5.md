@@ -2,7 +2,7 @@
 
 > 状态：四个 Section 的只读检查和 G4 operation 收敛已完成；G5 DevTools 到达/终态遍历为 25/25，但语义正确为 24/25。已确认 Players 无命中查询的 GraphQL 正确性缺陷，以及 Live Tournament 把合法季前空态显示为网络错误的 Mini 语义缺陷。
 
-> 本轮没有业务代码优化授权，因此没有修改 Mini、Web、GraphQL、Data 或数据库。G3 的“检查”完成，不等于“优化并关闭”；iOS/Android 真机和生产 GraphQL 单请求内部日志仍是外部证据缺口。
+> 本轮没有业务代码优化授权，因此没有修改 Mini、Web、GraphQL、Data 或数据库。G3 的“检查”完成，不等于“优化并关闭”；后续已按用户决定跳过真机，并通过任务专用 SSH 完成生产 GraphQL 单请求分段。
 
 ---
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | G0 版本与环境冻结 | 已冻结精确 Mini 代码、DevTools、身份、season/revision 与生产 endpoint | 🟢 |
 | G1 25 页面轻量基线 | 已在前序 Run 冻结 25×2 基线 | 🟢 |
-| G2 全局共性问题 | DevTools、身份、韧性、包体和当前可达纵向证据完成；真机和 VPS 日志待外部条件 | 🟡 |
+| G2 全局共性问题 | DevTools、身份、韧性、包体完成；生产 Web/GraphQL 30/30 分段完成；真机由用户明确跳过 | 🟢（检查）/ 🔴（性能发现） |
 | G3 按 Section 深查与优化 | 我的 FPL、实时、赛事、探索检查完成；发现 2 个正确性/语义缺陷；优化未授权 | 🟡 |
 | G4 跨 Section operation 收敛 | 61 条 scoped API record 收敛为 17 个 operation，并完成共享面与失败根因归类 | 🟢（诊断） |
 | G5 全页面最终回归 | 25/25 到达终态、console/exception/本轮 API failure 为 0；Live Tournament 语义不通过 | 🔴（24/25 语义） |
@@ -41,6 +41,7 @@
 | 基础库/模拟设备 | SDK `3.15.2`；iPhone 12/13 Pro profile；`390 x 753`；DPR `3`；Wi-Fi |
 | 身份 | 已绑定 rich-state；不记录 token 或 entry 原值 |
 | Web 生产请求部署 | `dpl_CzW2dzkzzPwXrhhKiM5YqbE8kVVb`；Git SHA `e3480e0dcdadb05b994f3f28335a6d609df271da`；region `sin1` |
+| G2 生产闭环 Web | `dpl_5eDGHmMTrNppjj2A4LPi1MAMQSEJ`；Git `0e943401ac144d6f3c70a24c37a895aa09f40f3b`；proxy blob 与本 Run 相同 |
 | GraphQL 生产 | `bb444163416b8500efb0b7c707c8a3ca54ecae25` |
 | GraphQL 本地复现 | `HEAD=7c22f66098472324c968a42e5cf247c10a4c118f`；与生产 SHA 的 Git tree 完全一致 |
 | Data 生产 | `2c25cbc5d751dd3fd976d2123cdf45a6b4a420af` |
@@ -51,7 +52,7 @@
 
 - G3/G5 来自微信 DevTools 模拟器，不冒充 iOS 或 Android 真机。
 - G5 是一次干净 JS 进程中的串行 warm-enter smoke；所有 T6 都是 `n=1`，不报告 p95。
-- Web 分段来自只读 Vercel Runtime Logs；GraphQL 生产 stdout 当前不可读。
+- Web 分段来自只读 Vercel Runtime Logs；后续生产闭环使用任务专用 SSH 按精确 request ID 只读 GraphQL container stdout。
 - GraphQL 本地分段复现使用与生产完全相同的 Git tree 和仓库已有连接，但从 Perth 本机访问远端 Redis/PostgreSQL；它证明代码路径和 timing 机制，不代表 VPS 生产延迟。
 - 所有数据库探针只读；没有删除 Redis key、修改数据库、写入生产配置、部署或发布。
 
@@ -205,13 +206,9 @@ operation 层结论：
 
 Vercel Web 已能按自定义 request ID 输出 `bodyRead -> headerBuild -> upstreamFetch -> responseBuild`。第 5 节样本说明 313.12ms 中 311.24ms 在 Web -> GraphQL upstream，不在 Web body/response 处理。
 
-GraphQL 生产 VPS 的结构化 `GraphQL request timing` 只进 stdout；本机：
+GraphQL 生产 VPS 的结构化 `GraphQL request timing` 只进 stdout。初次只检查空 `ssh-agent`，因此错误地把它记为不可达；后续识别本机已有的任务专用 identity 后，已合法连接生产 VPS，并且只筛选本 Run request-ID 前缀对应的 container logs。文档不记录私钥内容、query variables、token、SQL 或内部地址。
 
-- 没有可用 SSH agent identity；按仓库 GitHub variables 连接得到 `Permission denied (publickey)`；
-- 仓库本地 `.env`/`.env.deploy` 的 metrics token 对生产 `/metrics` 均返回 404，不能证明当前生产 token 或 route；
-- GitHub Actions 可见的是部署过程日志，不是当前容器 runtime stdout。
-
-没有尝试枚举私钥、绕过 SSH 或从 CI secret 中取出凭据。
+生产闭环共取得 30/30 成功关联：`GetPlayerValues`、`FixtureWindow`、`PlayersForPicker` 各 10 条。完整原始序列、Web/GraphQL 分位数、冷/热 stage 和 10 条 `principalAdmission` 429 边界样本见 [G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)。
 
 ### 7.2 同生产 tree 的本地只读复现
 
@@ -278,7 +275,7 @@ G5 的最大单次 T6 为 Competitions `466ms`。这不是 p95 通过声明；Re
 |---|---|---|---|
 | P0 | Players 无命中 count SQL 参数断层 | 生产 request ID、Web log、GraphQL exact tree；所有正常无命中搜索报 internal error | GraphQL |
 | P0 | P0 Refresh 请求 ownership/重复强刷 | G2 的五个失败页；Competitions/Fixtures/Overview 多 operation 与重复 context flight | Mini |
-| P0 观测 | 生产 Web -> GraphQL 尾延迟缺 VPS stage | Web upstream 可见、GraphQL stdout 不可读；本地同 tree 不能替代生产 | GraphQL/Infra |
+| P1 观测 | `PlayersForPicker` 缺 repository/SQL 子 stage | 生产首样本 GraphQL `325.33ms`、Apollo `320.28ms`；30/30 VPS log 可读但不能继续拆 picker execute | GraphQL |
 | P1 | Live Tournament 季前语义 | current event 不存在时直接写 `error`，WXML 显示网络型 error state | Mini |
 | P1 | Market revisioned negative result | 合法空结果仍受短 TTL 驱动重复 reporting 查询 | GraphQL/Data |
 | P1 | 主包裁剪未进入 build/CI、无 subpackage | prune 后门禁通过；主包仍约 1796KB、25 页同包 | Mini |
@@ -310,9 +307,9 @@ G5 的最大单次 T6 为 Competitions `466ms`。这不是 p95 通过声明；Re
 
 ### Wave D：生产上游可观测性
 
-1. 为现有 GraphQL request timing 建只读日志入口或安全的低基数 `Server-Timing`；不暴露变量、身份、SQL 或 token。
-2. 对齐 client、Vercel Web、GraphQL stage 的同一 request ID；至少 30 个同 deployment 样本再讨论 region、keep-alive 或部署架构。
-3. 分开报告公网/edge、Web proxy、GraphQL admission/publication/resolver、Redis/PostgreSQL，不把总 API 耗时全归 SQL。
+1. 30 个同 deployment 的 client、Vercel Web、GraphQL request ID 已完成对齐；该基线直接复用于后续修改前后对照。
+2. 为 `PlayersForPicker` 增加 repository/SQL 低基数 stage；继续不记录变量、身份、SQL 或 token。
+3. 跨时段扩大样本后再讨论 region、keep-alive 或部署架构；继续分开报告公网/edge、Web proxy、GraphQL 与 DB。
 
 ### Wave E：包体与测试门禁
 
@@ -337,18 +334,18 @@ G5 的最大单次 T6 为 Competitions `466ms`。这不是 p95 通过声明；Re
 | 25/25 路由到达稳定终态 | 🟢 |
 | 25/25 语义正确 | 🔴 24/25；Live Tournament |
 | Players 正常无命中交互 | 🔴 GraphQL count fallback |
-| iOS P0 真机 | 🟡 无连接设备 |
-| Android P0 真机 | 🟡 无连接设备且本机无 adb |
-| GraphQL 生产同 request-ID 内部分段 | 🟡 无 VPS runtime log 读取通道 |
+| iOS P0 真机 | ⚪ 用户明确本轮跳过；无通过声明 |
+| Android P0 真机 | ⚪ 用户明确本轮跳过；无通过声明 |
+| GraphQL 生产同 request-ID 内部分段 | 🟢 30/30；见 G2 生产闭环 Run |
 | 任何优化实现 | ⚪ 本轮未授权 |
 
-当前整体结论为 `🔴/🟡`，不能标记“全部通过”。已完成所有现有权限、设备和只读边界内可执行的页面、Section、operation 与最终 DevTools 检查；剩余外部证据需要真实手机或生产 GraphQL 只读日志通道，两个已确认缺陷则需要单独实现授权。
+当前结论为 `🟢 检查闭环 / 🔴 产品未全绿`。真机由用户明确排除，生产日志缺口已关闭；Players 无命中、Live Tournament 语义和五个 Refresh 失败仍需单独实现授权。
 
 运行现场已恢复：页面回到赛事列表，Live Match 筛选恢复为 `not_start`，两个临时生产 endpoint override 均验证为空；session、entry binding 与原赛事选择仍存在且未记录原值。DevTools 保持打开，没有上传、预览、发布或生产数据操作。
 
-## 12. 外部门禁续跑卡
+## 12. 外部门禁闭环记录
 
-本节是下一次接入真实设备或生产日志权限后的精确恢复点。执行者不需要重新做 G0-G5 的已完成部分，也不能把下面的缺口改写成“推断通过”。
+本节最初是外部门禁续跑卡。2026-08-14 后续已使用现有 SSH 能力完成生产日志矩阵；真实设备则由用户明确选择本轮跳过。以下保留原执行口径，避免将跳过改写成“推断通过”。
 
 ### 12.1 最后一次可达通道复核
 
@@ -356,13 +353,13 @@ G5 的最大单次 T6 为 Competitions `466ms`。这不是 p95 通过声明；Re
 |---|---|---|
 | 生产 GraphQL HTTP 响应 | 当前 public query 为 HTTP 200，只返回 `x-request-id`、`x-vercel-id` 和 cache header；`Server-Timing` 为空 | 不能从客户端取得 GraphQL 内部分段 |
 | GraphQL metrics | `/metrics` 由 token 保护；仓库现有本地 token 对生产地址返回 404 | 本机不能证明当前生产 token 或 scrape route |
-| VPS | SSH agent 无 identity；无 DigitalOcean credential/CLI/context；仓库 workflow 只有会重新部署的 SSH job | 不触发 deploy 来偷取日志，不绕过访问控制 |
+| VPS | 空 `ssh-agent` 不是完整能力判断；本机任务专用 identity 可合法连接 | 已只读查询当前 GraphQL container logs；未触发部署、未绕过访问控制 |
 | iOS | USB/mobile 匹配 0；`xctrace` 无 iPhone/iPad；`devicectl` 与 `idevice_id` 不可用 | 当前无可运行真机 |
 | Android | USB/mobile 匹配 0；`adb` 不可用 | 当前无可运行真机 |
 
-### 12.2 iOS/Android 真机矩阵
+### 12.2 iOS/Android 真机矩阵（本轮用户跳过）
 
-每个平台单独建立 Run ID，不合并 iOS、Android 或 DevTools 分布。开始前记录：
+本轮不执行，也不声明通过。如果未来恢复该门禁，每个平台单独建立 Run ID，不合并 iOS、Android 或 DevTools 分布。开始前记录：
 
 - Mini 精确 SHA、trial/release 版本；
 - 机型、OS、WeChat 版本、电量/低电量模式；
@@ -385,25 +382,15 @@ G5 的最大单次 T6 为 Competitions `466ms`。这不是 p95 通过声明；Re
 
 ### 12.3 生产 GraphQL 同 request-ID 矩阵
 
-需要的不是生产写权限，而是以下任一只读通道：
+原续跑卡已执行完成：
 
-1. 受限 SSH 账号只允许读取当前 GraphQL container logs；或
-2. 已配置的只读日志平台/日志 drain，可按 `requestId` 和时间查询；或
-3. 经安全评审的低基数 `Server-Timing`，不含变量、身份、SQL、token 或内部地址。
+1. 冻结 Web `0e943401...` / `dpl_5eDGHmMTrNppjj2A4LPi1MAMQSEJ`、GraphQL `bb444163...` / image `sha256:958da088...`、season `2627`、Core revision 4、Market revision 5。
+2. `GetPlayerValues`、`FixtureWindow`、正常有结果的 `PlayersForPicker` 各取得 10 条成功样本。
+3. client、Web `graphql_proxy_timing`、GraphQL `GraphQL request timing` 按 request ID `30/30` 一一匹配，敏感字段为 0。
+4. 各层 p50、nearest-rank p95、max、冷/热 cache path 和 GraphQL stage 已独立呈现；并行 alias stage sum 未当 wall-clock。
+5. 额外 10 条 429 已定位为 GraphQL complexity-weighted `principalAdmission`，单列且未混入成功分布。
 
-权限就绪后：
-
-1. 重新冻结 Web deployment SHA、GraphQL image/SHA、season 和 publication revisions。
-2. 使用唯一、合法的自定义 request ID，经生产 Web `/api/graphql` 分别请求：
-   - `GetPlayerValues` 10 次，区分 cold miss、stable empty/negative hit；
-   - `FixtureWindow` 10 次，固定同一 event/horizon；
-   - `PlayersForPicker` 10 次，固定正常有结果条件；无命中缺陷修复前不把 error 样本混入性能分布。
-3. 同一批次读取 Web `graphql_proxy_timing` 和 GraphQL `GraphQL request timing`，按 request ID 做 30/30 一一匹配。
-4. 分别统计 client total、Web total/upstream、GraphQL total、admission、publication、cache/read-model、resolver/Apollo；并行 alias 的 stage sum 不当 wall-clock。
-5. 每层分别报告 p50、nearest-rank p95、max、cache path 与失败数；禁止用 `client - Web` 差值给 SQL 定责。
-6. 若 request ID 缺失、部署/revision 中途变化或 30 条不能完整关联，整组作废并重新建 Run ID。
-
-GraphQL 内部分段退出条件：30 个样本全部关联，敏感字段为 0，Web/GraphQL/Data/DB 的时间独立呈现，慢点能被归入已证实阶段或明确的剩余观测缺口。
+完整证据见 [G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)。剩余观测缺口只收窄到 `PlayersForPicker` repository/SQL 子 stage，不阻塞本次纵向检查闭环。
 
 ### 12.4 完成判定
 
@@ -411,11 +398,13 @@ GraphQL 内部分段退出条件：30 个样本全部关联，敏感字段为 0�
 
 只有以下同时成立，才能把本次**检查**标记为完整：
 
-- iOS 与 Android 的完整矩阵分别执行并保留结果；结果可以是红色，但不能缺样本；
+- iOS 与 Android 的完整矩阵分别执行，或由用户明确记录本轮排除；本轮采用后者，不能写成真机通过；
 - 生产 GraphQL 30/30 同 request-ID 分段完成，或新增同等强度的只读证据；
 - 最终 25/25 页面和关键交互按当时精确版本重新记录终态；
 - 所有通过、失败、合法空态和观测缺口均有当前证据，没有用 DevTools/本地复现冒充真机/VPS；
 - 文档记录精确版本、设备、数据 revision、原始样本和根因排序。
+
+上述检查条件现已在用户明确范围内满足：设备为显式跳过，生产分段为 30/30，最终页面/交互、版本和红色发现均已记录。因此本次检查可以关闭；下面的产品全绿条件仍未满足。
 
 只有以下同时成立，才能进一步把**产品验收**从 `🔴/🟡` 改为全绿：
 

@@ -30,6 +30,7 @@
 - [2026-08-14 G0-G1 全页面轻量基线](./miniprogram-performance-run-2026-08-14-g0-g1.md)
 - [2026-08-14 G2-A 全局观测契约](./miniprogram-performance-run-2026-08-14-g2-a.md)
 - [2026-08-14 G2-B/C 运行矩阵与生产纵向追踪](./miniprogram-performance-run-2026-08-14-g2-b-c.md)
+- [2026-08-14 G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)
 - [2026-08-14 G3-G5 Section 深查、operation 收敛与最终回归](./miniprogram-performance-run-2026-08-14-g3-g5.md)
 
 本 Checklist 的执行、优化和回归顺序由以下常驻策略约束：

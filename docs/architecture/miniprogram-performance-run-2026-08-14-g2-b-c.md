@@ -1,8 +1,8 @@
 # 小程序性能 Run：2026-08-14 G2-B/C 运行矩阵与生产纵向追踪
 
-> 状态：G2-B 的 DevTools 运行矩阵已完成，G2-C 已沿 Mini -> Web GraphQL 代理 -> GraphQL resolver -> Redis/Data publication/PostgreSQL 追到当前可观测边界。
+> 状态：G2-B 的 DevTools 运行矩阵已完成，iOS/Android 由用户明确跳过；G2-C 已完成 30/30 生产同 request-ID 分段。
 >
-> Gate 2 尚未整体关闭：iOS、Android 真机样本需要真实设备；GraphQL 单请求内部 timing 已写日志但本机没有生产 VPS 日志读取权限。两项都明确保留，不能用模拟器或推断冒充。
+> Gate 2 已在本轮授权范围内完成检查闭环，但产品性能没有全绿。SSH 纠正、生产分段原始样本与最终状态见 [G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)。
 >
 > 本轮只读诊断，不修改业务代码，不清生产 Redis，不修改生产数据，不调整 TTL，不 push、不 merge。
 
@@ -12,12 +12,12 @@
 - 同一 Mini 提交完成了 DevTools 25/25 路由、P0 冷启动/暖进入/刷新/短后台、三种身份、离线/stale、错误/重试、快速切换、缺参和 401 single-flight/replay 验证。
 - Home 在 DevTools 内结束并重新启动 5 个独立小程序 JS 进程，T6 为 `92 / 91 / 112 / 118 / 117ms`，p50 `112ms`、最大 `118ms`，通过 `<=1500ms` 目标；这组保留普通 storage，属于 `C-App`，不冒充 `C-Data` 或真机冷启动。
 - 9 个 P0 页面自然 `W-Enter` 均通过 `p95 <=550ms`。Refresh 只有 3 个通过、5 个失败、1 个不适用：My FPL Overview、Live Entry、Competitions、Fixtures、Market 超过 `600ms`。
-- 生产 request ID 证明 Web 代理自身通常约 `1–2ms`，慢样本主要落在 `upstreamFetch`；但“上游”仍包含 Vercel 到 GraphQL VPS 的连接和 GraphQL 内部执行，不能直接等同 SQL。
+- 生产 30/30 request ID 已把 `upstreamFetch` 继续拆到 GraphQL stage：`GetPlayerValues` 冷首样本同时包含 `databaseChanges=424.61ms` 和约 `293ms` 的 Web/VPS 非 GraphQL wall-clock 段；暖态 GraphQL p95 为 `11.43ms`，不能把端到端慢全归 SQL。
 - Market 当前无涨跌是合法空态：生产 PostgreSQL 当天只有 3 条 season-baseline 行，实际 changed rows 为 0；不是接口坏了，也不应通过伪造 mock 数据“修复”。
 - Market 冷负缓存复现实验中，第一次 Web `upstreamFetch=536.71ms`，随后四次为 `26.04–29.61ms`；生产 Redis 随后出现 5 分钟 negative-cache。数据库同口径只读计划约 `8.77ms`，说明周期性慢首个请求不是单纯 SQL 扫描。
-- GraphQL 与 Data 的最新成功部署分别固定在 `bb444163...` 与 `2c25cbc5...`，部署日志的 contract、migration、publication、health 均通过。Web 在本轮中连续部署，最终生产为 `ecea1a3f...`；所用 `/api/graphql` 代理文件从最初冻结的 `bf9d481d...` 到最终提交 blob 完全相同，但不同 deployment 的冷启动样本仍不得混成一个服务端分布。
+- GraphQL 与 Data 的成功部署分别固定在 `bb444163...` 与 `2c25cbc5...`。生产闭环批次使用 Web `0e943401...` / deployment `dpl_5eDGHmMTrNppjj2A4LPi1MAMQSEJ`；采样后生产滚动到 `33674993...`，但 `/api/graphql` blob 仍完全相同。30 条成功样本只在采样 deployment 和 GraphQL image `sha256:958da088...` 内统计，不跨 deployment 合并。
 - 依赖裁剪后的 DevTools 构建仍为 25/25：`miniprogram_npm` 从约 `1968KB / 72` 个 Vant 目录降到约 `364KB / 13` 个目录；主包约 `1796KB`。风险是 `prune:vant` 仍是独立手工步骤，没有纳入 build/CI。
-- 优化顺序应是：先修 Refresh 请求图和 Market revisioned negative path，再固化包裁剪和主包拆分，然后修 Live Tournament 季前语义，最后补齐跨层 timing。当前没有获得实现授权，因此只形成根因包，不改代码。
+- 优化顺序应是：先修 Refresh 请求图、Players 无命中与 Live Tournament 语义，再处理 Market revisioned negative path、包裁剪/分包和 picker repository 子 stage。跨层 timing 大缺口已关闭；当前没有获得实现授权，因此只形成根因包，不改代码。
 
 ## 2. 阶段口径：总共六个 Gate，G2 内含三个子阶段
 
@@ -37,10 +37,10 @@ G2 为避免变成一个无边界大包，固定拆成：
 | 子阶段 | 内容 | 当前状态 |
 |---|---|---|
 | G2-A | 观测契约：T6、冷热归因、有限值、complete 语义 | 🟢 已完成，见独立 Run |
-| G2-B | Mini 运行矩阵：启动、暖进、刷新、后台、身份、离线、错误、竞态、401、包体 | 🟡 DevTools 已完成；iOS/Android 真机待设备 |
-| G2-C | 纵向归因：request ID、Web proxy、resolver、Redis/Data publication、PostgreSQL | 🟡 当前可观测边界已完成；GraphQL 单请求日志访问是已确认缺口 |
+| G2-B | Mini 运行矩阵：启动、暖进、刷新、后台、身份、离线、错误、竞态、401、包体 | 🟢 本轮范围完成；iOS/Android 为 `⚪ 用户跳过` |
+| G2-C | 纵向归因：request ID、Web proxy、resolver、Redis/Data publication、PostgreSQL | 🟢 30/30 生产 request ID 与 GraphQL stage 已闭合 |
 
-因此，下一步不是继续围绕 `mock-mode.ts`，也不是立刻逐页乱改。先把 G2 的两个黄色缺口按外部条件管理；可执行的优化应按第 10 节根因包进入实现授权。
+因此，下一步不是继续围绕 `mock-mode.ts`，也不是重新执行已完成检查。可执行优化应按第 10 节和生产闭环 Run 的根因排序单独授权。
 
 ## 3. Run 元数据与证据边界
 
@@ -57,7 +57,7 @@ G2 为避免变成一个无边界大包，固定拆成：
 | 网络 | DevTools Wi-Fi；生产直连复现由 Perth 本机发起 |
 | 身份 | 已绑定 rich-state；另在运行时验证游客+本地关注、登录未绑定 |
 | Mini endpoint | 采样时临时指向生产；结束后两个 override 均删除并验证为空 |
-| Web 生产 | 最初冻结 `bf9d481d...`；本轮滚动到最终 `ecea1a3f...` |
+| Web 生产 | 初始 Run 多次滚动；生产闭环固定 `0e943401...` / `dpl_5eDGHmMTrNppjj2A4LPi1MAMQSEJ` |
 | GraphQL 生产 | `bb444163416b8500efb0b7c707c8a3ca54ecae25` |
 | Data 生产 | `2c25cbc5d751dd3fd976d2123cdf45a6b4a420af` |
 | Core publication | season `2627`，revision `4` |
@@ -68,7 +68,7 @@ G2 为避免变成一个无边界大包，固定拆成：
 
 - Web runtime log 通过只读 Vercel Observability 查询获得。
 - GraphQL/Data 部署 SHA 与部署成功状态通过 GitHub Actions 只读日志确认。
-- 本机没有 VPS SSH 私钥，`deploy@VPS` 返回 `Permission denied (publickey)`；没有尝试获取或绕过密钥。
+- 初次只检查空 `ssh-agent` 得出无权限结论；后续识别本机已有任务专用 identity 并成功只读连接生产 VPS。该纠正和命令边界见生产闭环 Run。
 - PostgreSQL 探针使用仓库现有本机连接，显式 `BEGIN READ ONLY` 和 `statement_timeout=3s`。该本机凭据不是生产 GraphQL runtime role 的证明；生产 deploy preflight 独立强制 `letletme_graphql_runtime`/reader contract。
 - Redis 只读使用精确 key，未使用 `KEYS`、`SCAN`、`FLUSH*` 或删除。正常 GraphQL 读取按产品契约写入 query cache，不属于人工改缓存。
 - Web 本轮发生多次部署。Mini 页面每个 n=10 批次在短窗口内完成，但跨批次的 Web proxy 样本不合并计算统一 p95。
@@ -91,8 +91,8 @@ G2 为避免变成一个无边界大包，固定拆成：
 | 快速切换/迟到响应 | Fixtures、Live Match、Market、My FPL Team 最终状态均归最新选择 | 🟢 |
 | 缺参 | Player Detail、Team Detail 均进入 empty 引导态且 operation=0 | 🟢 |
 | 401 single-flight | 3 个并发 operation：3 次初始 401、login 1、Web login 1、replay 3、最终 3/3 成功 | 🟢 |
-| iOS 真机 | 无当前物理设备证据 | 🟡 外部设备缺口 |
-| Android 真机 | 无当前物理设备证据 | 🟡 外部设备缺口 |
+| iOS 真机 | 无当前物理设备证据；用户明确本轮跳过 | ⚪ 用户豁免；不声明通过 |
+| Android 真机 | 无当前物理设备证据；用户明确本轮跳过 | ⚪ 用户豁免；不声明通过 |
 
 所有运行时 mock、网络状态、request descriptor、身份 token 与 entry binding 均在测试后恢复；只保留脱敏布尔验证，不记录 token 或原始 entry ID。
 
@@ -205,7 +205,7 @@ letletme_data（异步生产者）
 | `EntryLeagues` | `a72cc4ef-2641-49c5-92bb-5794843f0064` | 57.67ms | 52.23ms | 5.44ms | 上游占主导 |
 | `GetPlayerValues` | `dd1a1487-b927-49f2-92a6-d41ef639cb2f` | 145.16ms | 143.57ms | 1.59ms | Web 代理不是 Market 根因 |
 
-`/api/graphql` 会回传相同 `X-Request-Id`，但不会回传 GraphQL 内部 stage timing 或 `Server-Timing`。GraphQL 已在 VPS stdout 记录 `GraphQL request timing` 与 resolver-specific stage；没有生产日志读取通道时，Web 的 `upstreamFetch` 不能继续无损拆成网络、admission、Redis、SQL、transform。
+`/api/graphql` 不直接回传 GraphQL stage 或 `Server-Timing`，但任务专用 SSH 已能按精确 request ID 只读查询 VPS stdout。生产闭环 Run 已对 30 条成功样本完成 Web/GraphQL 一一匹配；客户端仍不能自行看到内部 stage。
 
 ## 8. Market 合法空态与冷/热复现
 
@@ -239,7 +239,7 @@ letletme_data（异步生产者）
 1. 冷 miss 后的 DB/read-model/cache-write 路径会放大首次刷新；
 2. 即使 Web+GraphQL 暖至约 28–30ms，Perth client 到 Web 的端到端仍约 222–291ms，必须把公网/edge 段和应用段分开看。
 
-第一次 `536.71ms` 不能仅凭现有证据归因于 SQL：SQL 约 9ms，剩余可能包括 Vercel 到 VPS 建连、GraphQL admission/publication、Redis 与运行时抖动。缺 GraphQL 同 request-ID 日志时保持为待分段，不猜。
+原始 `536.71ms` 样本本身仍没有对应 VPS 日志，不能被后续样本倒填。但同版本的新冷首样本已证明慢同时存在于 reporting DB path 和 Web/VPS 非 GraphQL wall-clock 段；详细数值见生产闭环 Run。
 
 ## 9. 已确认的根因与观测缺口
 
@@ -247,12 +247,12 @@ letletme_data（异步生产者）
 |---|---|---|---|
 | P0 | Refresh 请求图重复/过度强刷 | Competitions、Fixtures、Overview 每次 3 network ops；两个 `CurrentEventInfo` 可在同一 Competitions 刷新窗口出现 | 先做 Mini 层 ownership/dedupe 设计 |
 | P0 | Market 负结果只按 Core revision 缓存 5 分钟 | Market publication revision 已存在；每 5 分钟仍可重新走 reporting view | 评估按 Market revision 的稳定 negative cache |
-| P0 | Web -> GraphQL 上游尾延迟 | FixtureWindow 998ms、GetPlayerValues 多个 280–780ms；Web 自身多为 1–3ms | 先补分段，再决定网络/运行时优化 |
+| P0 | Web -> GraphQL 上游尾延迟 | 30/30 生产分段：Market 冷样本 DB `424.61ms`，另有约 `293ms` 跨服务段；三类暖 GraphQL p95 `11.43–17.95ms` | DB 冷 path 与网络/edge 分开优化，先扩大跨时段样本 |
 | P1 | 强刷静态 Core 数据 | Fixtures 的 `Teams` 在 10 次 refresh 发 10 次网络；Core revision 未变 | revision 不变时复用 Teams |
 | P1 | 主包裁剪依赖手工命令 | prune 后 25/25 通过且幂等，但 build/CI 未调用 | 固化流水线并检查闭包 |
 | P1 | 主包余量有限 | 主包约 1796KB，25 页且无 subpackage | 规划非 tab 详情/数据工具分包 |
 | P1 | Live Tournament 季前语义错误 | 页面可见但把合法季前空态映射成 error 文案 | 独立语义根因包，不混性能包 |
-| P1 | GraphQL timing 不可由客户端/Web读取 | stage 只进 VPS stdout；无本机 SSH/log drain | 建立只读日志或安全 timing header |
+| P1 | Picker repository/SQL 子 stage 缺失 | 生产首样本 Apollo `320.28ms`，但现有 log 无法再拆 repository/SQL | 增加低基数 stage；复用现有 SSH/Vercel 对齐流程 |
 
 ## 10. 分阶段优化方案
 
@@ -304,12 +304,12 @@ letletme_data（异步生产者）
 | 生产 request-ID 到 Web proxy | 🟢 |
 | resolver -> Redis/Data/PostgreSQL 静态路径 | 🟢 |
 | Market 当前生产 DB/cache 实证 | 🟢 |
-| GraphQL 同 request-ID 内部分段 | 🟡 日志访问缺口 |
-| iOS P0 真机 | 🟡 待设备 |
-| Android P0 真机 | 🟡 待设备 |
+| GraphQL 同 request-ID 内部分段 | 🟢 30/30，见生产闭环 Run |
+| iOS P0 真机 | ⚪ 用户明确本轮跳过；无通过声明 |
+| Android P0 真机 | ⚪ 用户明确本轮跳过；无通过声明 |
 | 任何优化实现 | ⚪ 本轮未授权 |
 
-Gate 2 当前结论为 `🟡`，不是失败，也不是“全部通过”。所有在现有权限和设备范围内能完成的验证已经执行；剩余项需要真实设备或生产日志读取通道。
+Gate 2 当前结论为 `🟢 检查闭环 / 🔴 性能发现保留`。真机是用户明确排除项，生产日志缺口已关闭；五个 Refresh 失败页仍使产品性能不能标记“全部通过”。
 
 ## 12. 收尾状态
 
@@ -323,7 +323,7 @@ Gate 2 当前结论为 `🟡`，不是失败，也不是“全部通过”。所
 
 ## 13. 后续 completion audit 补充
 
-本节记录 G3-G5 执行前对两个黄色缺口的再次核验，不改变第 11 节结论。
+本节前半记录 G3-G5 执行前的历史核验；其中 SSH 结论已由 13.4 和生产闭环 Run 纠正。
 
 ### 13.1 真实设备
 
@@ -334,14 +334,14 @@ Gate 2 当前结论为 `🟡`，不是失败，也不是“全部通过”。所
 
 因此真实设备缺口是已验证的外部条件，不是遗漏执行；不能用 iPhone 12/13 Pro 模拟 profile 代替。
 
-### 13.2 GraphQL 生产日志与 metrics 边界
+### 13.2 GraphQL 生产日志与 metrics 的历史边界
 
 - GraphQL 仓库已有结构化 `GraphQL request timing` 和 request-ID stage log。
 - 仓库本地 `.env`/`.env.deploy` 中现有 metrics token 对生产 `/metrics` 均返回 404；未输出 token，也不推断其仍是生产值。
 - GitHub repository variables 能确认 VPS host/user/workdir，但 SSH agent identity 为 0，连接返回 `Permission denied (publickey)`。
 - GitHub Actions secrets 只在 workflow 内可用，部署日志不能读取当前容器 stdout。
 
-没有枚举本机私钥、提取 CI secret 或绕过访问控制。GraphQL 生产同 request-ID 内部分段继续保持 `🟡`。
+这段是当时只检查 `ssh-agent` 后的历史结论，不再代表最终状态；后续使用本机已有任务专用 identity 合法完成只读日志查询。
 
 ### 13.3 同生产 tree 的本地只读复现
 
@@ -353,3 +353,10 @@ GraphQL 本地 `HEAD=7c22f66098472324c968a42e5cf247c10a4c118f`，Git tree 与生
 - 进程已 SIGINT，端口释放；GraphQL 仓库 tracked clean。
 
 完整 Section、生产缺陷、operation 收敛和 G5 结果见 [G3-G5 Run](./miniprogram-performance-run-2026-08-14-g3-g5.md)。
+
+### 13.4 最终生产闭环
+
+- 生产 Web/GraphQL 30 条成功样本已按 request ID 30/30 对齐；另有 10 条 GraphQL `principalAdmission` 429 边界样本单列。
+- GraphQL image、deploy SHA、Web deployment/proxy blob、Core revision 4 和 Market revision 5 均已冻结。
+- iOS/Android 由用户明确标记为本轮跳过，不声明真机通过。
+- 完整原始样本、nearest-rank 分位数和根因修正见 [G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)。

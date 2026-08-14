@@ -144,6 +144,7 @@ G2-A/B/C 是一个 Gate 的证据分工，不会增加顶层阶段数量；顶�
 
 - [G2-A 全局观测契约](./miniprogram-performance-run-2026-08-14-g2-a.md)
 - [G2-B/C 运行矩阵与生产纵向追踪](./miniprogram-performance-run-2026-08-14-g2-b-c.md)
+- [G2 生产分段闭环](./miniprogram-performance-run-2026-08-14-g2-production-closure.md)
 - [G3-G5 Section 深查、operation 收敛与最终回归](./miniprogram-performance-run-2026-08-14-g3-g5.md)
 
 ## 7. Gate 3：按 Section 完成闭环
