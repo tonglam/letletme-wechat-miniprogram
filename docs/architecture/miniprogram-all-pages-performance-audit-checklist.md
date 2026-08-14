@@ -25,6 +25,10 @@
 - [小程序 UX 与性能严格验收报告](./miniprogram-ux-performance-acceptance-2026-08-11.md)
 - [接口调用、Data Fetch 与缓存深度诊断](./data-fetch-interface-cache-diagnostic-2026-08-11.md)
 
+按本 Checklist 生成的独立 Run 记录：
+
+- [2026-08-14 G0-G1 全页面轻量基线](./miniprogram-performance-run-2026-08-14-g0-g1.md)
+
 本 Checklist 的执行、优化和回归顺序由以下常驻策略约束：
 
 - [小程序性能排查与优化执行策略](./miniprogram-performance-audit-section-execution-strategy.md)
