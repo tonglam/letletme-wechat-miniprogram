@@ -85,7 +85,7 @@ test("Home entry errors retain a team-switch escape", () => {
   const template = source("miniprogram/pages/home/index/index.wxml");
   assert.match(
     template,
-    /wx:if="\{\{entryError\}\}"[\s\S]*bindtap="onChangeEntry">更换球队/
+    /wx:if="\{\{entryError\}\}"[\s\S]*bindtap="onChangeEntry"[^>]*>更换球队/
   );
 });
 

@@ -85,14 +85,6 @@
   font-weight: 800;
 }
 
-.warning-strip {
-  padding: 18rpx 22rpx;
-  border-radius: 12rpx;
-  background: var(--warning-tint);
-  color: var(--warning);
-  font-size: 24rpx;
-}
-
 .transfer-row {
   display: flex;
   align-items: center;

@@ -17,21 +17,6 @@
   flex-shrink: 0;
 }
 
-.header-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  min-height: 64rpx;
-  padding: 0 22rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 10rpx;
-  background: var(--card);
-  color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
 .summary-card {
   margin-bottom: 18rpx;
 }
