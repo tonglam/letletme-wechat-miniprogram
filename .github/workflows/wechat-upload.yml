@@ -28,7 +28,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint && npm run typecheck && npm test && npm run package:check
+      - run: npm run lint && npm run typecheck && npm test && npm run check:style && npm run package:check
       - name: Install upload tooling
         run: npm install --no-save --no-package-lock miniprogram-ci@2.1.5 less@4.2.2
       - name: Build Mini Program npm packages

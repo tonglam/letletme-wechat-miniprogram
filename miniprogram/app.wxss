@@ -410,9 +410,9 @@ page {
 }
 
 .fdr-1 { background: var(--green-ink); }
-.fdr-2 { background: var(--green-ink-a70); }
+.fdr-2 { background: var(--green-ink-a70); color: var(--cta-ink); }
 .fdr-3 { background: var(--warning); }
-.fdr-4 { background: var(--warning-a80); }
+.fdr-4 { background: var(--warning-a80); color: var(--cta-ink); }
 .fdr-5 { background: var(--danger); }
 
 /* ---------- Form fields ---------- */

@@ -1,5 +1,3 @@
-import { getDifficultyClass } from "../../utils/fpl";
-
 Component({
   properties: {
     opponent: {
@@ -17,16 +15,6 @@ Component({
     homeAway: {
       type: String,
       value: ""
-    }
-  },
-
-  data: {
-    difficultyClass: "difficulty-unknown"
-  },
-
-  observers: {
-    "difficulty, difficultyKnown"(value: number, known: boolean) {
-      this.setData({ difficultyClass: getDifficultyClass(known ? value : undefined) });
     }
   }
 });
