@@ -128,6 +128,23 @@ Gate 1 完成后才允许进入结构性优化。后续修改不能覆盖这份�
 
 如果 Gate 2 只是观测缺口，先完成最小埋点补齐，再重新冻结基线；不能在证据不足时猜测优化。
 
+### 6.1 Gate 2 固定拆分
+
+Gate 2 内部固定为三个子阶段，避免把观测、运行矩阵和后端归因混成一个无限扩张的任务：
+
+| 子阶段 | 目标 | 退出条件 |
+|---|---|---|
+| G2-A | 建立可信观测契约 | T6、冷热、有限值、complete 语义和 25-page smoke 可解释 |
+| G2-B | 完成跨页面运行矩阵 | C-App、W-Enter、Refresh、BG-Short、身份、离线、错误、竞态、401、包体；真机单列 |
+| G2-C | 完成共享 operation 纵向归因 | request ID 对齐 Web、GraphQL、Redis/Data publication 与 PostgreSQL；缺口显式记录 |
+
+G2-A/B/C 是一个 Gate 的证据分工，不会增加顶层阶段数量；顶层仍为 G0 到 G5 共六个 Gate。
+
+当前执行记录：
+
+- [G2-A 全局观测契约](./miniprogram-performance-run-2026-08-14-g2-a.md)
+- [G2-B/C 运行矩阵与生产纵向追踪](./miniprogram-performance-run-2026-08-14-g2-b-c.md)
+
 ## 7. Gate 3：按 Section 完成闭环
 
 当前底部导航顺序：
