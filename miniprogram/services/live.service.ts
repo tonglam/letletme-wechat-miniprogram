@@ -17,24 +17,43 @@ import { filterTournamentLiveRows, mapTournamentLiveRows, type TournamentLiveGra
 // revision is observed.
 
 export const LIVE_SNAPSHOT_QUERY = `
-  query GetLiveSnapshot($eventId: Int!) {
-    liveSnapshot(eventId: $eventId) {
-      eventId
-      revision
+  query GetLiveContext {
+    liveContext {
+      season
+      currentEventId
+      liveRevision
       state
       publishedAt
-      checkedAt
+      sourceCheckedAt
     }
   }
 `;
 
 interface LiveSnapshotResponse {
-  liveSnapshot: LiveSnapshotStatus | null;
+  liveContext: {
+    season: string;
+    currentEventId: number | null;
+    liveRevision: string | null;
+    state: LiveSnapshotStatus["state"];
+    publishedAt: string | null;
+    sourceCheckedAt: string | null;
+  };
 }
 
 export async function getLiveSnapshot(eventId: number): Promise<LiveSnapshotStatus | null> {
-  const data = await graphqlRequest<LiveSnapshotResponse>(LIVE_SNAPSHOT_QUERY, { eventId });
-  return data.liveSnapshot;
+  const data = await graphqlRequest<LiveSnapshotResponse>(LIVE_SNAPSHOT_QUERY, {});
+  const context = data.liveContext;
+  if (!context?.currentEventId || context.currentEventId !== eventId || !context.liveRevision) return null;
+  const checkedAt = context.sourceCheckedAt ?? context.publishedAt;
+  if (!context.publishedAt || !checkedAt) return null;
+  return {
+    eventId: context.currentEventId,
+    revision: context.liveRevision,
+    state: context.state,
+    publishedAt: context.publishedAt,
+    checkedAt,
+    season: context.season
+  };
 }
 
 const CALC_LIVE_POINTS_BY_ENTRY = `
@@ -203,117 +222,80 @@ export async function getLivePointsByEntry(entry: number, event: number, forceRe
 }
 
 export const LIVE_MATCHES_QUERY = `
-  query LiveMatches {
-    liveSnapshot {
+  query LiveMatchdayDesk {
+    liveMatchdayDesk {
+      season
       eventId
       revision
       state
       publishedAt
-      checkedAt
+      matches {
+        fixtureId
+        eventId
+        homeTeamId
+        homeTeamName
+        awayTeamId
+        awayTeamName
+        homeScore
+        awayScore
+        kickoffTime
+        started
+        finished
+      }
+		nextFixtures {
+			fixtureId
+			eventId
+			homeTeamId
+			homeTeamName
+			awayTeamId
+			awayTeamName
+			homeScore
+			awayScore
+			kickoffTime
+			started
+			finished
+		}
     }
-    liveMatches {
-      notStarted {
-        ...LiveMatchFields
-      }
-      playing {
-        ...LiveMatchFields
-        homeTeamDataList {
-          ...LiveMatchPlayerFields
-        }
-        awayTeamDataList {
-          ...LiveMatchPlayerFields
-        }
-      }
-      finished {
-        ...LiveMatchFields
-        homeTeamDataList {
-          ...LiveMatchPlayerFields
-        }
-        awayTeamDataList {
-          ...LiveMatchPlayerFields
-        }
-      }
-    }
-  }
-
-  fragment LiveMatchFields on LiveMatchData {
-    matchId
-    minutes
-    homeTeamName
-    homeTeamShortName
-    homeScore
-    awayTeamName
-    awayTeamShortName
-    awayScore
-    kickoffTime
-    playStatus
-  }
-
-  fragment LiveMatchPlayerFields on ElementEventResultData {
-    webName
-    teamShortName
-    goalsScored
-    assists
-    redCards
-    yellowCards
-    penaltiesSaved
-    penaltiesMissed
-    saves
-    bonus
   }
 `;
 
-interface GraphQLMatchPlayer {
-  webName: string;
-  teamShortName: string;
-  goalsScored: number;
-  assists: number;
-  redCards: number;
-  yellowCards: number;
-  penaltiesSaved: number;
-  penaltiesMissed: number;
-  saves: number;
-  bonus: number;
-}
-
 interface GraphQLMatchData {
-  matchId: number;
-  minutes: number;
+  fixtureId: number;
+  eventId: number;
   homeTeamName: string;
-  homeTeamShortName: string;
-  homeScore: number;
   awayTeamName: string;
-  awayTeamShortName: string;
-  awayScore: number;
-  kickoffTime: string;
-  playStatus: string;
-  homeTeamDataList: GraphQLMatchPlayer[];
-  awayTeamDataList: GraphQLMatchPlayer[];
+  homeScore: number | null;
+  awayScore: number | null;
+  kickoffTime: string | null;
+  started: boolean;
+  finished: boolean;
 }
 
 interface LiveMatchesResponse {
-  liveSnapshot: LiveSnapshotStatus | null;
-  liveMatches: {
-    notStarted: GraphQLMatchData[];
-    playing: GraphQLMatchData[];
-    finished: GraphQLMatchData[];
+  liveMatchdayDesk: {
+    season: string;
+    eventId: number;
+    revision: string;
+    state: LiveSnapshotStatus["state"];
+    publishedAt: string;
+    matches: GraphQLMatchData[];
+		nextFixtures: GraphQLMatchData[];
   };
 }
 
 function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
   return {
-    matchId: match.matchId,
-    minutes: match.minutes,
+    matchId: match.fixtureId,
     homeTeamName: match.homeTeamName,
-    homeTeamShortName: match.homeTeamShortName,
-    homeScore: match.homeScore,
+    homeTeamShortName: match.homeTeamName.slice(0, 3).toUpperCase(),
+    homeScore: match.homeScore ?? 0,
     awayTeamName: match.awayTeamName,
-    awayTeamShortName: match.awayTeamShortName,
-    awayScore: match.awayScore,
-    kickoffTime: match.kickoffTime,
-    playStatus: match.playStatus.toLowerCase(),
-    homeTeamDataList: match.homeTeamDataList || [],
-    awayTeamDataList: match.awayTeamDataList || []
+    awayTeamShortName: match.awayTeamName.slice(0, 3).toUpperCase(),
+    awayScore: match.awayScore ?? 0,
+    kickoffTime: match.kickoffTime ?? "",
+    playStatus: match.finished ? "finished" : match.started ? "playing" : "not_started",
+    homeTeamDataList: [],
+    awayTeamDataList: []
   };
 }
 
@@ -328,30 +310,37 @@ export async function getLiveMatchByStatusSnapshot(
     forceRefresh,
     trace
   });
-  const result = data.liveMatches;
+  const result = data.liveMatchdayDesk;
+
+  const mapped = [...result.matches, ...result.nextFixtures].map(mapGraphQLMatch);
   let matches: LiveMatch[];
   switch (status) {
     case "playing":
-      matches = result.playing.map(mapGraphQLMatch);
+      matches = mapped.filter((match) => match.playStatus === "playing");
       break;
     case "finished":
-      matches = result.finished.map(mapGraphQLMatch);
+      matches = mapped.filter((match) => match.playStatus === "finished");
       break;
     case "not_start":
-      matches = result.notStarted.map(mapGraphQLMatch);
+      matches = mapped.filter((match) => match.playStatus === "not_started");
       break;
     case "all":
     default:
-      matches = [
-        ...result.notStarted.map(mapGraphQLMatch),
-        ...result.playing.map(mapGraphQLMatch),
-        ...result.finished.map(mapGraphQLMatch)
-      ];
+      matches = mapped;
       break;
   }
   return {
     data: matches,
-    snapshot: data.liveSnapshot,
+    snapshot: data.liveMatchdayDesk.revision
+      ? {
+          eventId: data.liveMatchdayDesk.eventId,
+          revision: data.liveMatchdayDesk.revision,
+          state: data.liveMatchdayDesk.state,
+          publishedAt: data.liveMatchdayDesk.publishedAt,
+          checkedAt: data.liveMatchdayDesk.publishedAt,
+          season: data.liveMatchdayDesk.season
+        }
+      : null,
     servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
   };
 }
@@ -361,22 +350,22 @@ export async function getLiveMatchByStatus(status: string, forceRefresh = false)
 }
 
 const TOURNAMENT_LIVE_POINTS = `
-  query GetTournamentLivePoints($eventId: Int!, $tournamentId: Int!) {
-    liveSnapshot(eventId: $eventId) {
+  query GetEntryLiveCompetitionsDesk($entryId: Int!, $selectedTournamentId: Int, $ref: LiveRevisionRefInput) {
+    entryLiveCompetitionsDesk(entryId: $entryId, selectedTournamentId: $selectedTournamentId, ref: $ref) {
       eventId
       revision
       state
-      publishedAt
-      checkedAt
-    }
-    calcLivePointsForTournament(eventId: $eventId, tournamentId: $tournamentId) {
-      results {
+      partial
+      failedEntryIds
+      totalEntries
+      board {
         entry
         entryName
         playerName
         rank
         overallRank
         chip
+        provisional
         livePoints
         transferCost
         liveNetPoints
@@ -393,25 +382,22 @@ const TOURNAMENT_LIVE_POINTS = `
           position
           isCaptain
           isViceCaptain
+          totalPoints
         }
-      }
-      errors {
-        entryId
-      }
-      meta {
-        failedCount
-        totalEntries
       }
     }
   }
 `;
 
 interface TournamentLivePointsResponse {
-  liveSnapshot: LiveSnapshotStatus | null;
-  calcLivePointsForTournament: {
-    results: TournamentLiveGraphQLRow[];
-    errors: Array<{ entryId: number }>;
-    meta: { failedCount: number; totalEntries: number };
+  entryLiveCompetitionsDesk: {
+    eventId: number;
+    revision: string | null;
+    state: LiveSnapshotStatus["state"];
+    board: TournamentLiveGraphQLRow[];
+    partial: boolean;
+    failedEntryIds: number[];
+    totalEntries: number;
   };
 }
 
@@ -425,13 +411,16 @@ function numericId(value: number | string): number {
 
 export async function getLivePointsByTournamentSnapshot(
   tournamentId: number | string,
-  event: number,
+  _event: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
+  entryId = 0
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
+  const principalEntryId = numericId(entryId);
   const variables = {
-    tournamentId: numericId(tournamentId),
-    eventId: numericId(event)
+    entryId: principalEntryId,
+    selectedTournamentId: numericId(tournamentId),
+    ref: null
   };
   const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
     cachePolicy: "live",
@@ -440,12 +429,20 @@ export async function getLivePointsByTournamentSnapshot(
   });
   const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);
   return {
-    data: mapTournamentLiveRows(data.calcLivePointsForTournament.results),
-    snapshot: data.liveSnapshot,
+    data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
+    snapshot: data.entryLiveCompetitionsDesk.revision
+      ? {
+          eventId: data.entryLiveCompetitionsDesk.eventId,
+          revision: data.entryLiveCompetitionsDesk.revision,
+          state: data.entryLiveCompetitionsDesk.state,
+          publishedAt: new Date().toISOString(),
+          checkedAt: new Date().toISOString()
+        }
+      : null,
     servedStoredAt,
-    failedEntryIds: data.calcLivePointsForTournament.errors.map((error) => error.entryId),
-    partialError: data.calcLivePointsForTournament.meta.failedCount > 0
-      ? `部分结果不可用：${data.calcLivePointsForTournament.meta.failedCount}/${data.calcLivePointsForTournament.meta.totalEntries} 支参赛球队计算失败`
+    failedEntryIds: data.entryLiveCompetitionsDesk.failedEntryIds,
+    partialError: data.entryLiveCompetitionsDesk.partial
+      ? `部分结果不可用：${data.entryLiveCompetitionsDesk.failedEntryIds.length}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
       : undefined
   };
 }
@@ -454,9 +451,10 @@ export async function getLivePointsByTournament(
   tournamentId: number | string,
   event: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
+  entryId = 0
 ): Promise<LiveTournamentRowsResult> {
-  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace);
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace, entryId);
   return { rows: result.data, servedStoredAt: result.servedStoredAt };
 }
 
@@ -465,9 +463,10 @@ export async function searchLivePointsByTournament(
   event: number,
   keyword: string,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
+  entryId = 0
 ): Promise<LiveTournamentRowsResult> {
-  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh, trace);
+  const { rows, servedStoredAt } = await getLivePointsByTournament(tournamentId, event, forceRefresh, trace, entryId);
   return { rows: filterTournamentLiveRows(rows, keyword), servedStoredAt };
 }
 
@@ -476,9 +475,10 @@ export async function searchLivePointsByTournamentSnapshot(
   event: number,
   keyword: string,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
+  entryId = 0
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
-  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace);
+  const result = await getLivePointsByTournamentSnapshot(tournamentId, event, forceRefresh, trace, entryId);
   return {
     data: filterTournamentLiveRows(result.data, keyword),
     snapshot: result.snapshot,

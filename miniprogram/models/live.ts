@@ -1,4 +1,16 @@
-export type LiveSnapshotState = "SCHEDULED" | "LIVE" | "SETTLED";
+export type LiveSnapshotState =
+  | "SCHEDULED"
+  | "LIVE"
+  | "SETTLED"
+  | "PRE_DEADLINE"
+  | "PICKS_WAIT"
+  | "PICKS_PROBE"
+  | "PICKS_SYNC"
+  | "LIVE_ACTIVE"
+  | "BETWEEN_FIXTURES"
+  | "DAY_SETTLING"
+  | "GW_REVIEW"
+  | "FINALIZED";
 
 export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
 

@@ -64,8 +64,8 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   EventOverallTransfers: { authMode: "public", cachePolicy: "historical" },
   MiniGameweekSummary: { authMode: "public", cachePolicy: "historical" },
   SummaryPlayerTeams: { authMode: "public", cachePolicy: "historical" },
-  GetLiveSnapshot: { authMode: "public", cachePolicy: "network-only" },
-  LiveMatches: { authMode: "public", cachePolicy: "live" },
+  GetLiveContext: { authMode: "public", cachePolicy: "live" },
+  LiveMatchdayDesk: { authMode: "public", cachePolicy: "live" },
   GetEntry: { authMode: "session", cachePolicy: "reporting" },
   OwnEntry: { authMode: "session", cachePolicy: "reporting" },
   EntryLeagues: { authMode: "session", cachePolicy: "reporting" },
@@ -77,7 +77,7 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   TournamentSummary: { authMode: "session", cachePolicy: "reporting" },
   TournamentSelectionStats: { authMode: "session", cachePolicy: "reporting" },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
-  GetTournamentLivePoints: { authMode: "session", cachePolicy: "live" }
+  GetEntryLiveCompetitionsDesk: { authMode: "session", cachePolicy: "live" }
 };
 
 export function getGraphQLCachePolicy(name: GraphQLCachePolicyName): GraphQLCachePolicy {

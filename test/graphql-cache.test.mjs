@@ -71,18 +71,17 @@ test("does not expose raw HTTP status codes to users", () => {
   assert.equal(authApiErrorMessage(400, "Verification code expired"), "验证码无效或已过期，请重新获取");
 });
 
-test("keeps the live matches query compact with shared fragments", () => {
-  assert.match(LIVE_MATCHES_QUERY, /fragment LiveMatchFields on LiveMatchData/);
-  assert.match(LIVE_MATCHES_QUERY, /fragment LiveMatchPlayerFields on ElementEventResultData/);
-  assert.equal((LIVE_MATCHES_QUERY.match(/\bmatchId\b/g) || []).length, 1);
-  assert.ok(LIVE_MATCHES_QUERY.length < 2_000);
+test("keeps the live matchday desk query compact", () => {
+  assert.match(LIVE_MATCHES_QUERY, /liveMatchdayDesk/);
+  assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 2);
+  assert.ok(LIVE_MATCHES_QUERY.length < 1_000);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /upcoming\s*:/);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEvent\b/);
 });
 
 test("uses a metadata-only query for automatic live freshness checks", () => {
-  assert.match(LIVE_SNAPSHOT_QUERY, /liveSnapshot\(eventId: \$eventId\)/);
-  assert.doesNotMatch(LIVE_SNAPSHOT_QUERY, /liveMatches|calcLivePoints/);
+  assert.match(LIVE_SNAPSHOT_QUERY, /liveContext/);
+  assert.doesNotMatch(LIVE_SNAPSHOT_QUERY, /liveSnapshot|liveMatches|calcLivePoints/);
   assert.ok(LIVE_SNAPSHOT_QUERY.length < 300);
 });
 
