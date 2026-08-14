@@ -8,5 +8,5 @@
   <view class="error-eyebrow">{{eyebrow || '加载未完成'}}</view>
   <view class="error-message">{{message}}</view>
   <view class="error-description">{{description || '请稍后重试，当前页面不会丢失已有内容。'}}</view>
-  <button class="error-action" hover-class="error-action-hover" bindtap="onRetry">{{retryText}}</button>
+  <button class="error-action btn-primary" hover-class="hover-dim" bindtap="onRetry">{{retryText}}</button>
 </view>

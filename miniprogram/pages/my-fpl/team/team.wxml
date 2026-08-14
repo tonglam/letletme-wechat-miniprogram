@@ -12,7 +12,7 @@
   }
   module.exports = { cls: cls };
 </wxs>
-<view class="page">
+<view class="page page-tabbar">
   <view class="section summary-header">
     <view class="header-text">
       <view class="title">{{headerTitle}}</view>
@@ -23,7 +23,7 @@
     </view>
   </view>
 
-  <view wx:if="{{phaseBanner === 'live'}}" class="section phase-banner" bindtap="onOpenLiveEntry">
+  <view wx:if="{{phaseBanner === 'live'}}" class="section phase-banner" bindtap="onOpenLiveEntry" hover-class="hover-dim">
     <text class="phase-banner-text">本轮比赛进行中，详细实时得分请前往实时球队</text>
     <text class="phase-banner-action">去看实时</text>
   </view>
@@ -77,10 +77,10 @@
     </block>
 
     <view class="section tab-strip">
-      <view class="tab-item {{showSquad ? 'tab-active' : ''}}" data-tab="squad" catchtap="onTabTap">阵容</view>
-      <view class="tab-item {{showTransfer ? 'tab-active' : ''}}" data-tab="transfer" catchtap="onTabTap">转会</view>
-      <view class="tab-item {{showChips ? 'tab-active' : ''}}" data-tab="chips" catchtap="onTabTap">开卡</view>
-      <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap">历史</view>
+      <view class="tab-item {{showSquad ? 'tab-active' : ''}}" data-tab="squad" catchtap="onTabTap" hover-class="hover-dim">阵容</view>
+      <view class="tab-item {{showTransfer ? 'tab-active' : ''}}" data-tab="transfer" catchtap="onTabTap" hover-class="hover-dim">转会</view>
+      <view class="tab-item {{showChips ? 'tab-active' : ''}}" data-tab="chips" catchtap="onTabTap" hover-class="hover-dim">开卡</view>
+      <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap" hover-class="hover-dim">历史</view>
     </view>
     <app-loading wx:if="{{tabLoading}}" text="加载当前栏目" />
     <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" showRetry="{{true}}" bind:retry="onRetry" />
@@ -100,7 +100,7 @@
             <view class="row-meta">{{item.teamName}}</view>
           </view>
           <view class="squad-meta">
-            <text class="position-badge pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+            <text class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
             <text class="mini-stat">{{item.minutes}}'</text>
             <text class="points-stat">{{item.points}}</text>
             <text class="role-badge {{item.bench ? 'role-bench' : 'role-starter'}}">{{item.role}}</text>
@@ -112,7 +112,7 @@
     <view wx:if="{{showTransfer}}" class="section">
       <view wx:if="{{transferError && hasTransfers}}" class="inline-error">
         <text>{{transferError}} · 当前显示上次成功结果</text>
-        <view class="inline-error-retry" bindtap="onRetry">重试</view>
+        <view class="inline-error-retry" bindtap="onRetry" hover-class="hover-dim">重试</view>
       </view>
       <app-error-state wx:if="{{transferError && !hasTransfers}}" message="{{transferError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{!hasTransfers}}" title="还没有转会记录" description="产生转会后会按比赛周显示在这里" />
@@ -124,7 +124,7 @@
             <text class="transfer-cost {{item.hasCost ? 'cost-bad' : ''}}">扣分 {{item.cost}}</text>
           </view>
           <view wx:if="{{item.moves.length === 0}}" class="empty-line">{{item.emptyText}}</view>
-          <view wx:for="{{item.moves}}" wx:for-item="move" wx:key="id" class="move-card">
+          <view wx:for="{{item.moves}}" wx:for-item="move" wx:key="id" class="card move-card">
             <view class="move-text">{{move.text}}</view>
             <view class="row-meta">{{move.costText}}</view>
           </view>

@@ -1,32 +1,20 @@
 .result-summary {
   margin-bottom: 16rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 24rpx;
 }
 
 .load-more-error {
-  display: flex;
-  gap: 16rpx;
-  align-items: center;
-  justify-content: space-between;
   margin-top: 18rpx;
-  padding: 16rpx;
-  border-radius: 12rpx;
-  background: var(--warning-tint, #f6ead9);
-  color: var(--warning, #924a07);
-  font-size: 24rpx;
 }
 
 .load-more-button {
   margin: 20rpx auto 0;
-  border-color: var(--line, #ddd4de);
-  background: var(--card, #fff);
-  color: var(--ink, #301333);
 }
 
 .list-end {
   padding: 24rpx 0 8rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
   text-align: center;
 }

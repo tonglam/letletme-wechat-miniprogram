@@ -3,10 +3,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg, #f9f8f4);
+  background: var(--bg);
 }
 
 .redirect-hint {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 26rpx;
 }

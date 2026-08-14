@@ -1,8 +1,7 @@
+/* Flush-inner cards — extend global .card, inner rows own the padding */
 .picker-card {
   overflow: hidden;
-  border: 1rpx solid var(--line, #ddd4de);
-  border-radius: 16rpx;
-  background: var(--card, #ffffff);
+  padding: 0;
 }
 
 .picker-inner {
@@ -13,20 +12,20 @@
 }
 
 .picker-label {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
 }
 
 .picker-value {
   margin-top: 6rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
 
 .picker-arrow {
   flex-shrink: 0;
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -41,25 +40,23 @@
 .sort-tab {
   flex-shrink: 0;
   padding: 12rpx 18rpx;
-  border: 1rpx solid var(--line, #ddd4de);
+  border: 1rpx solid var(--line);
   border-radius: 10rpx;
-  background: var(--card, #ffffff);
-  color: var(--muted-ink, #6e5a72);
-  font-size: 23rpx;
+  background: var(--card);
+  color: var(--muted-ink);
+  font-size: 22rpx;
   font-weight: 700;
 }
 
 .sort-tab.active {
-  border-color: var(--plum, #38003c);
-  background: var(--plum, #38003c);
-  color: var(--chalk, #f9f7f2);
+  border-color: var(--plum);
+  background: var(--plum);
+  color: var(--chalk);
 }
 
 .filter-panel {
   overflow: hidden;
-  border: 1rpx solid var(--line, #ddd4de);
-  border-radius: 16rpx;
-  background: var(--card, #ffffff);
+  padding: 0;
 }
 
 .filter-header {
@@ -71,8 +68,8 @@
 }
 
 .filter-title {
-  color: var(--ink, #301333);
-  font-size: 27rpx;
+  color: var(--ink);
+  font-size: 26rpx;
   font-weight: 900;
 }
 
@@ -80,7 +77,7 @@
   max-width: 520rpx;
   margin-top: 6rpx;
   overflow: hidden;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -88,29 +85,29 @@
 
 .filter-toggle {
   flex-shrink: 0;
-  color: var(--green-ink, #008545);
-  font-size: 23rpx;
+  color: var(--green-ink);
+  font-size: 22rpx;
   font-weight: 800;
 }
 
 .filter-body {
   padding: 0 24rpx 22rpx;
-  border-top: 1rpx solid var(--line, #ddd4de);
+  border-top: 1rpx solid var(--line);
 }
 
 .filter-picker {
   margin-top: 18rpx;
   padding: 18rpx 20rpx;
-  border: 1rpx solid var(--line, #ddd4de);
+  border: 1rpx solid var(--line);
   border-radius: 12rpx;
-  background: var(--track, #f1efe9);
-  color: var(--ink, #301333);
+  background: var(--track);
+  color: var(--ink);
   font-size: 24rpx;
   font-weight: 800;
 }
 
 .filter-picker.disabled {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
 }
 
 .ownership-picker-grid {
@@ -131,8 +128,8 @@
   padding: 10rpx 14rpx;
   overflow: hidden;
   border-radius: 8rpx;
-  background: var(--accent-tint, #dcf6ea);
-  color: var(--green-ink, #008545);
+  background: var(--accent-tint);
+  color: var(--green-ink);
   font-size: 22rpx;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -147,28 +144,28 @@
   margin-top: 16rpx;
   padding: 6rpx;
   border-radius: 12rpx;
-  background: var(--track, #f1efe9);
+  background: var(--track);
 }
 
 .segment {
   min-width: 0;
   padding: 12rpx 8rpx;
   border-radius: 8rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
   font-weight: 800;
   text-align: center;
 }
 
 .segment.active {
-  background: var(--card, #ffffff);
-  color: var(--ink, #301333);
-  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2rpx 6rpx var(--plum-a8);
 }
 
 .filter-clear {
   margin-top: 16rpx;
-  color: var(--danger, #c9183f);
+  color: var(--danger);
   font-size: 22rpx;
   font-weight: 800;
   text-align: right;
@@ -176,7 +173,7 @@
 
 .result-count {
   margin-bottom: 14rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -187,11 +184,10 @@
   gap: 18rpx;
   align-items: center;
   margin-bottom: 16rpx;
-  border: 1rpx solid var(--line, #ddd4de);
 }
 
 .tournament-rank {
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 26rpx;
   font-weight: 900;
 }
@@ -209,21 +205,21 @@
 }
 
 .tournament-title {
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
 
 .tournament-subtitle {
   margin-top: 4rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 22rpx;
 }
 
 .tournament-meta {
   margin-top: 8rpx;
-  color: var(--muted-ink, #6e5a72);
-  font-size: 21rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
 }
 
 .tournament-score {
@@ -231,20 +227,20 @@
 }
 
 .score-main {
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 34rpx;
   font-weight: 900;
 }
 
 .score-sub {
   margin-top: 4rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 20rpx;
 }
 
 .load-more {
   padding: 22rpx;
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 800;
   text-align: center;
@@ -253,7 +249,7 @@
 .manage-hint {
   margin-top: 8rpx;
   text-align: center;
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 700;
 }

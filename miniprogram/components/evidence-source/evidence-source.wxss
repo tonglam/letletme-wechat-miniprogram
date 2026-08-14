@@ -15,9 +15,9 @@
 }
 
 .tone-muted {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
 }
 
 .tone-warning {
-  color: #b25e09;
+  color: var(--warning);
 }

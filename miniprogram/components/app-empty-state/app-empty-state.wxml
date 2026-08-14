@@ -1,4 +1,4 @@
-<view class="empty {{featured ? 'empty-featured' : ''}}">
+<view class="empty {{featured ? 'card empty-featured' : ''}}">
   <view class="empty-visual">
     <view class="visual-head">
       <view class="visual-live"></view>
@@ -16,8 +16,8 @@
   <view wx:if="{{description}}" class="empty-description">{{description}}</view>
   <button
     wx:if="{{actionText}}"
-    class="empty-action"
-    hover-class="empty-action-hover"
+    class="empty-action btn-primary"
+    hover-class="hover-dim"
     bindtap="onAction"
   >{{actionText}}</button>
 </view>

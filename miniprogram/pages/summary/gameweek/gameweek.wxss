@@ -5,62 +5,10 @@
   gap: 20rpx;
 }
 
-/* Tab strip — web Tabs pattern */
-.tab-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8rpx;
-  padding: 8rpx;
-  border-radius: 12rpx;
-  background: var(--track, #f1efe9);
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 58rpx;
-  border-radius: 8rpx;
-  color: var(--muted-ink, #6e5a72);
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.tab-active {
-  background: var(--card, #ffffff);
-  color: var(--ink, #301333);
-  box-shadow: 0 2rpx 6rpx rgba(56, 0, 60, 0.08);
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12rpx;
-}
-
-.metric-card {
-  min-width: 0;
-  padding: 18rpx;
-  border-radius: 12rpx;
-  background: var(--track, #f1efe9);
-}
-
-.metric-label,
 .row-meta,
 .list-empty {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
-}
-
-.metric-value {
-  display: block;
-  margin-top: 8rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink, #301333);
-  font-size: 30rpx;
-  font-weight: 800;
 }
 
 .metric-meta {
@@ -69,8 +17,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted-ink, #6e5a72);
-  font-size: 21rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
 }
 
 .subsection {
@@ -83,7 +31,7 @@
 
 .section-title-small {
   margin-bottom: 14rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -95,7 +43,7 @@
   gap: 18rpx;
   min-height: 72rpx;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid var(--line, #ddd4de);
+  border-bottom: 1rpx solid var(--line);
 }
 
 .summary-row:last-child {
@@ -111,24 +59,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink, #301333);
-  font-size: 25rpx;
+  color: var(--ink);
+  font-size: 24rpx;
   font-weight: 700;
 }
 
 .row-value {
   flex-shrink: 0;
-  color: var(--ink, #301333);
-  font-size: 25rpx;
+  color: var(--ink);
+  font-size: 24rpx;
   font-weight: 800;
 }
 
 .row-value-good {
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
 }
 
 .row-value-bad {
-  color: var(--danger, #c9183f);
+  color: var(--danger);
 }
 
 .list-empty {
@@ -148,9 +96,9 @@
 .last-good-notice {
   margin: 16rpx 24rpx 0;
   padding: 14rpx 18rpx;
-  border: 1rpx solid var(--warning, #924a07);
+  border: 1rpx solid var(--warning);
   border-radius: 12rpx;
-  background: var(--warning-tint, #f6ead9);
-  color: var(--warning, #924a07);
+  background: var(--warning-tint);
+  color: var(--warning);
   font-size: 24rpx;
 }

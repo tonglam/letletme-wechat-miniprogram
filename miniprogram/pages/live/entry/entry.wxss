@@ -4,31 +4,31 @@
   gap: 16rpx;
 }
 
+/* Extends global .scoreboard (border/radius/colors live there) */
 .score-card {
-  border-radius: 20rpx;
   padding: 28rpx;
   box-sizing: border-box;
 }
 
 .score-label {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 24rpx;
 }
 
 .score-card .score-label {
-  color: rgba(249, 247, 242, 0.6);
+  color: var(--chalk-a60);
 }
 
 .score {
   margin-top: 8rpx;
-  color: var(--electric, #00ff85);
+  color: var(--electric);
   font-size: 56rpx;
   font-weight: 800;
 }
 
 .score-sub {
   margin-top: 8rpx;
-  color: rgba(249, 247, 242, 0.6);
+  color: var(--chalk-a60);
   font-size: 22rpx;
 }
 
@@ -42,18 +42,18 @@
   min-width: 0;
   padding: 18rpx 10rpx;
   border-radius: 12rpx;
-  background: var(--track, #f1efe9);
+  background: var(--track);
   text-align: center;
 }
 
 .tile-label {
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 20rpx;
 }
 
 .tile-value {
   margin-top: 8rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -73,24 +73,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
 
 .section-heading {
   margin-bottom: 8rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
-}
-
-.warning-strip {
-  padding: 18rpx 22rpx;
-  border-radius: 12rpx;
-  background: var(--warning-tint, #f6ead9);
-  color: var(--warning, #924a07);
-  font-size: 24rpx;
 }
 
 .transfer-row {
@@ -98,25 +90,25 @@
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid var(--line, #ddd4de);
+  border-bottom: 1rpx solid var(--line);
 }
 
 .transfer-in {
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 26rpx;
   font-weight: 700;
 }
 
 .transfer-out {
   margin-top: 6rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
 }
 
 .transfer-price {
   flex-shrink: 0;
   margin-left: 16rpx;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 24rpx;
   font-weight: 800;
 }

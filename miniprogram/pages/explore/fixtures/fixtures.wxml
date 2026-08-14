@@ -1,28 +1,28 @@
-<view class="page">
+<view class="page page-tabbar">
   <view class="section">
-    <view class="title">赛程</view>
+    <view class="section-title">赛程</view>
     <view class="subtitle">20 支球队的未来赛程 · 主客场与难度</view>
   </view>
 
   <view class="section controls">
     <gw-picker value="{{startEvent}}" min="{{1}}" max="{{maxEvent}}" bind:change="onGwChange" />
     <view class="mode-tabs">
-      <view class="mode-tab {{horizon === 3 ? 'active' : ''}}" data-horizon="3" bindtap="onHorizonChange">3 轮</view>
-      <view class="mode-tab {{horizon === 5 ? 'active' : ''}}" data-horizon="5" bindtap="onHorizonChange">5 轮</view>
+      <view class="mode-tab {{horizon === 3 ? 'active' : ''}}" data-horizon="3" hover-class="hover-dim" bindtap="onHorizonChange">3 轮</view>
+      <view class="mode-tab {{horizon === 5 ? 'active' : ''}}" data-horizon="5" hover-class="hover-dim" bindtap="onHorizonChange">5 轮</view>
     </view>
   </view>
 
   <view wx:if="{{error}}" class="section">
     <view class="inline-error">
       <text>{{error}}</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+      <view class="inline-error-retry" hover-class="hover-dim" bindtap="onRetry">重试</view>
     </view>
   </view>
 
   <app-loading wx:if="{{loading}}" text="加载赛程" />
   <block wx:else>
     <view id="perf-primary-content" class="section team-list">
-      <view wx:for="{{runs}}" wx:key="teamId" class="team-card">
+      <view wx:for="{{runs}}" wx:key="teamId" class="card team-card">
         <view class="team-name">{{item.teamName}}</view>
         <view class="chip-row">
           <view
@@ -40,7 +40,7 @@
               homeAway="{{chip.home ? '主' : '客'}}"
             />
           </view>
-          <text wx:if="{{item.chips.length === 0}}" class="chip-empty">本窗口无赛程</text>
+          <text wx:if="{{item.chips.length === 0}}" class="muted chip-empty">本窗口无赛程</text>
         </view>
       </view>
     </view>

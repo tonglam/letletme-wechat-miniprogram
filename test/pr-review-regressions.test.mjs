@@ -85,7 +85,7 @@ test("Home entry errors retain a team-switch escape", () => {
   const template = source("miniprogram/pages/home/index/index.wxml");
   assert.match(
     template,
-    /wx:if="\{\{entryError\}\}"[\s\S]*bindtap="onChangeEntry">更换球队/
+    /wx:if="\{\{entryError\}\}"[\s\S]*bindtap="onChangeEntry"[^>]*>更换球队/
   );
 });
 
@@ -500,12 +500,15 @@ test("all Live surfaces refresh event context before resume polling", () => {
   assert.match(tournament, /nextEventId[\s\S]*forceRefresh: true/);
 });
 
-test("unknown fixture difficulty uses a neutral style", () => {
+test("fixture difficulty renders the WXS FDR mapping and neutral unknown style", () => {
   const template = source("miniprogram/pages/explore/fixtures/fixtures.wxml");
-  const component = source("miniprogram/components/fixture-chip/fixture-chip.ts");
-  const utility = source("miniprogram/utils/fpl.ts");
+  const componentTemplate = source("miniprogram/components/fixture-chip/fixture-chip.wxml");
+  const componentStyle = source("miniprogram/components/fixture-chip/fixture-chip.wxss");
+  const appStyle = source("miniprogram/app.wxss");
   assert.doesNotMatch(template, /difficulty="\{\{chip\.difficulty \|\| 0\}\}"/);
   assert.match(template, /difficultyKnown="\{\{chip\.difficulty != null\}\}"/);
-  assert.match(component, /difficultyClass: "difficulty-unknown"/);
-  assert.match(utility, /return "difficulty-unknown"/);
+  assert.match(componentTemplate, /class="fixture-chip fdr \{\{fdr\.cls\(difficultyKnown, difficulty\)\}\}"/);
+  assert.match(componentStyle, /\.fdr-unknown[\s\S]*background: var\(--track\)[\s\S]*color: var\(--muted-ink\)/);
+  assert.match(appStyle, /\.fdr-2 \{ background: var\(--green-ink-a70\); color: var\(--cta-ink\); \}/);
+  assert.match(appStyle, /\.fdr-4 \{ background: var\(--warning-a80\); color: var\(--cta-ink\); \}/);
 });

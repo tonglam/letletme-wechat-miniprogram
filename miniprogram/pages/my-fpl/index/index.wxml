@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page page-tabbar">
   <view id="{{!error ? 'perf-primary-content' : ''}}" wx:if="{{principalResolved && (eventContextAvailable || principalState === 'NO_FOLLOW')}}" class="section">
     <my-fpl-phase-card
       phase="{{phase}}"
@@ -14,12 +14,12 @@
   <view id="perf-primary-content" wx:if="{{error}}" class="section">
     <view class="inline-error">
       <text>{{error}}</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+      <view class="inline-error-retry" bindtap="onRetry" hover-class="hover-dim">重试</view>
     </view>
   </view>
 
   <view wx:if="{{eventContextAvailable && principalState !== 'NO_FOLLOW'}}" class="section">
-    <view class="module" bindtap="onOpenLeagues">
+    <view class="card module" bindtap="onOpenLeagues" hover-class="hover-dim">
       <view>
         <view class="module-title">我的联赛</view>
         <view class="module-subtitle">{{leaguesUnavailable ? '暂时无法读取' : (leaguesLoaded ? (leagueCount > 0 ? leagueCount + ' 个官方联赛' : '暂无官方联赛') : '加载中')}}</view>

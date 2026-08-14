@@ -12,7 +12,7 @@
   }
   module.exports = { cls: cls };
 </wxs>
-<view class="page">
+<view class="page page-tabbar">
   <view class="home-header section">
     <view class="title">{{entry.entryName || entry.teamName || 'LetLetMe'}}</view>
     <view class="subtitle">{{entry.playerName || '选择球队后开始'}}</view>
@@ -57,10 +57,10 @@
       <view class="fixture-head">
         <view class="section-title">GW{{selectedFixtureGw || nextGw || '-'}} 赛程</view>
         <view class="fixture-stepper">
-          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw">
+          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">
             <text decode="{{true}}">&lt;</text>
           </view>
-          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw">
+          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw" hover-class="hover-dim">
             <text decode="{{true}}">&gt;</text>
           </view>
         </view>
@@ -94,18 +94,18 @@
     <view class="section">
       <block wx:if="{{entryError}}">
         <app-error-state message="{{entryError}}" bind:retry="onRetry" />
-        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry">更换球队</view>
+        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
       </block>
       <block wx:else>
         <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
-        <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
+        <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink" hover-class="hover-dim">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
       </block>
     </view>
 
     <view wx:if="{{noticeText}}" class="notice-strip section">
       <text class="notice-icon">i</text>
       <text class="notice-text">{{noticeText}}</text>
-      <view class="notice-close" catchtap="onCloseNotice">×</view>
+      <view class="notice-close" catchtap="onCloseNotice" hover-class="hover-dim">×</view>
     </view>
 
     <view wx:if="{{supplementLoading || priceError || priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
@@ -114,7 +114,7 @@
           <view class="section-title">身价变化</view>
           <view class="section-subtitle">今日上涨 / 下跌</view>
         </view>
-        <view class="section-link" catchtap="onOpenPriceChanges">更多</view>
+        <view class="section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">更多</view>
       </view>
       <view wx:if="{{priceError}}" class="section-status section-status-error">{{priceError}}，已保留上次成功数据</view>
       <view wx:if="{{supplementLoading && priceRises.length === 0 && priceFalls.length === 0}}" class="section-status">身价数据加载中</view>

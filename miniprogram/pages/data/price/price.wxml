@@ -1,12 +1,12 @@
-<view class="page">
+<view class="page page-tabbar">
   <view class="section">
     <view class="title">身价变化</view>
     <view class="subtitle">查看每日涨跌，或选择球员查看身价历史。</view>
   </view>
 
   <view class="section mode-tabs">
-    <view class="mode-tab {{activeMode === 'daily' ? 'active' : ''}}" data-mode="daily" bindtap="onModeChange">每日变化</view>
-    <view class="mode-tab {{activeMode === 'player' ? 'active' : ''}}" data-mode="player" bindtap="onModeChange">球员历史</view>
+    <view class="mode-tab {{activeMode === 'daily' ? 'active' : ''}}" data-mode="daily" hover-class="hover-dim" bindtap="onModeChange">每日变化</view>
+    <view class="mode-tab {{activeMode === 'player' ? 'active' : ''}}" data-mode="player" hover-class="hover-dim" bindtap="onModeChange">球员历史</view>
   </view>
 
   <block wx:if="{{activeMode === 'daily'}}">
@@ -29,7 +29,7 @@
     <app-error-state wx:if="{{error && riseChanges.length === 0 && fallChanges.length === 0}}" message="{{error}}" bind:retry="onRetry" />
     <app-loading wx:elif="{{loading}}" text="加载身价变化" />
     <block wx:else>
-    <view wx:if="{{error}}" class="section-status section-status-error">{{error}}，当前保留已有数据</view>
+    <view wx:if="{{error}}" class="inline-error">{{error}}，当前保留已有数据</view>
     <view wx:if="{{riseChanges.length === 0 && fallChanges.length === 0}}" class="section card">
       <app-empty-state
         eyebrow="当日无变动"
@@ -101,7 +101,7 @@
 
       <view class="search-box">
         <input class="search-input" placeholder="搜索球员、球队或位置" value="{{playerKeyword}}" bindinput="onPlayerKeywordInput" />
-        <view wx:if="{{playerKeyword}}" class="search-clear" catchtap="onClearPlayerKeyword">×</view>
+        <view wx:if="{{playerKeyword}}" class="search-clear" hover-class="hover-dim" catchtap="onClearPlayerKeyword">×</view>
       </view>
 
       <view wx:if="{{selectedPlayer}}" class="selected-player">
@@ -134,16 +134,16 @@
             actionText="清除筛选"
             bind:action="onClearPlayerFilters"
           />
-          <view wx:for="{{filteredPlayers}}" wx:key="element" class="player-option {{selectedPlayer && selectedPlayer.element === item.element ? 'selected' : ''}}" data-index="{{index}}" bindtap="onSelectPlayer">
+          <view wx:for="{{filteredPlayers}}" wx:key="element" class="player-option {{selectedPlayer && selectedPlayer.element === item.element ? 'selected' : ''}}" data-index="{{index}}" hover-class="hover-dim" bindtap="onSelectPlayer">
             <view class="player-option-main">
               <view class="player-option-name">{{item.name}}</view>
               <view class="player-option-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
             </view>
             <view class="player-option-side">{{item.priceText}}</view>
           </view>
-          <view wx:if="{{playersError}}" class="load-more-error">{{playersError}}</view>
+          <view wx:if="{{playersError}}" class="inline-error load-more-error">{{playersError}}</view>
           <app-loading wx:if="{{loadingMore}}" text="加载更多球员" />
-          <button wx:elif="{{hasMorePlayers}}" class="load-more-button" bindtap="loadMorePlayers">加载更多</button>
+          <button wx:elif="{{hasMorePlayers}}" class="btn-secondary load-more-button" bindtap="loadMorePlayers">加载更多</button>
         </block>
       </view>
     </view>

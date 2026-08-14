@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page page-tabbar">
   <view class="section">
     <view class="title">我的联赛</view>
     <view class="subtitle">官方 FPL 联赛 · 竞赛筹备与管理在网页版进行</view>
@@ -11,7 +11,7 @@
   <view wx:if="{{error}}" class="section">
     <view class="inline-error">
       <text>{{error}}</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+      <view class="inline-error-retry" bindtap="onRetry" hover-class="hover-dim">重试</view>
     </view>
   </view>
 
@@ -35,7 +35,7 @@
     />
   </view>
   <block wx:else>
-    <view id="perf-primary-content" class="section league-list">
+    <view id="perf-primary-content" class="section card league-list">
       <view
         wx:for="{{displayLeagues}}"
         wx:key="id"
@@ -48,7 +48,7 @@
             <text>{{item.associationCount !== undefined ? (item.associationCount + ' 个关联竞赛') : '竞赛关联信息未就绪'}}</text>
           </view>
         </view>
-        <view class="league-action" data-id="{{item.id}}" bindtap="onOpenWebsite">网页查看</view>
+        <view class="league-action" data-id="{{item.id}}" bindtap="onOpenWebsite" hover-class="hover-dim">网页查看</view>
       </view>
     </view>
     <view class="section">

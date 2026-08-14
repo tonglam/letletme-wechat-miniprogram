@@ -1,6 +1,6 @@
-<view class="page">
+<view class="page page-tabbar">
   <view class="section">
-    <view class="title">我的赛事</view>
+    <view class="section-title">我的赛事</view>
     <view class="subtitle">你参与的已筹备赛事 · 创建与管理在网页版进行</view>
   </view>
 
@@ -11,7 +11,7 @@
   <view wx:if="{{error}}" class="section">
     <view class="inline-error">
       <text>{{error}}</text>
-      <view class="inline-error-retry" bindtap="onRetry">重试</view>
+      <view class="inline-error-retry" hover-class="hover-dim" bindtap="onRetry">重试</view>
     </view>
   </view>
 

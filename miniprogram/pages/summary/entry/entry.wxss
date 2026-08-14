@@ -1,12 +1,10 @@
+/* Centered redirect splash — min-height/padding come from global .page */
 .page {
-  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg, #f9f8f4);
 }
 
 .redirect-hint {
-  color: var(--muted-ink, #6e5a72);
   font-size: 26rpx;
 }

@@ -6,7 +6,7 @@
   border-radius: 20rpx;
   background:
     radial-gradient(circle at 88% 12%, rgba(255, 40, 130, 0.08), rgba(255, 40, 130, 0) 34%),
-    #ffffff;
+    var(--card);
   box-shadow: 0 10rpx 30rpx rgba(56, 0, 60, 0.06);
   text-align: center;
 }
@@ -18,7 +18,7 @@
   margin: 0 auto 24rpx;
   overflow: hidden;
   border-radius: 14rpx;
-  background: linear-gradient(145deg, var(--fascia-hi, #2b0a33), var(--fascia, #1d0520));
+  background: linear-gradient(145deg, var(--fascia-hi), var(--fascia));
   box-shadow: 0 10rpx 24rpx rgba(56, 0, 60, 0.14);
 }
 
@@ -28,7 +28,7 @@
   bottom: 0;
   left: 0;
   height: 4rpx;
-  background: var(--pink, #ff2882);
+  background: var(--pink);
   content: "";
 }
 
@@ -59,7 +59,7 @@
   position: absolute;
   right: 18rpx;
   bottom: 10rpx;
-  color: var(--pink, #ff2882);
+  color: var(--pink);
   font-size: 38rpx;
   font-weight: 900;
   line-height: 1;
@@ -67,15 +67,15 @@
 
 .error-eyebrow {
   margin-bottom: 10rpx;
-  color: var(--danger, #c9183f);
+  color: var(--danger);
   font-size: 20rpx;
   font-weight: 800;
   letter-spacing: 4rpx;
 }
 
 .error-message {
-  color: var(--ink, #301333);
-  font-size: 29rpx;
+  color: var(--ink);
+  font-size: 28rpx;
   font-weight: 800;
   line-height: 1.45;
 }
@@ -83,31 +83,12 @@
 .error-description {
   max-width: 540rpx;
   margin: 12rpx auto 0;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 24rpx;
   line-height: 1.65;
 }
 
+/* Layout-only; visuals come from the global .btn-primary primitive */
 .error-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 220rpx;
-  height: 76rpx;
   margin: 28rpx auto 0;
-  padding: 0 32rpx;
-  border-radius: 12rpx;
-  background: var(--cta, #00d16d);
-  color: var(--cta-ink, #1a001e);
-  font-size: 25rpx;
-  font-weight: 800;
-  line-height: 76rpx;
-}
-
-.error-action::after {
-  border: 0;
-}
-
-.error-action-hover {
-  opacity: 0.82;
 }

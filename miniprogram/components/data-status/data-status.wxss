@@ -5,26 +5,26 @@
   box-sizing: border-box;
   margin: 16rpx 0;
   padding: 18rpx 20rpx;
-  border: 1rpx solid rgba(48, 19, 51, 0.12);
+  border: 1rpx solid var(--ink-a12);
   border-radius: 14rpx;
-  background: #f8f5ef;
-  color: #5f4d62;
-  font-size: 23rpx;
+  background: var(--bg);
+  color: var(--muted-ink);
+  font-size: 22rpx;
   line-height: 1.45;
 }
 
 .data-status-stale,
 .data-status-offline {
-  border-color: rgba(179, 117, 0, 0.22);
-  background: #fff8e7;
-  color: #785400;
+  border-color: var(--warning-a25);
+  background: var(--warning-tint);
+  color: var(--warning);
 }
 
 .data-status-error,
 .data-status-partial {
-  border-color: rgba(201, 24, 63, 0.2);
-  background: #fff3f5;
-  color: #8f1735;
+  border-color: var(--danger-a20);
+  background: var(--danger-tint);
+  color: var(--danger);
 }
 
 .data-status-dot {
@@ -55,6 +55,6 @@
 
 .data-status-action {
   flex: 0 0 auto;
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-weight: 800;
 }

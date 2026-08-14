@@ -1,4 +1,4 @@
-<view class="competition-card">
+<view class="card">
   <view class="card-header">
     <view class="card-name">{{name}}</view>
     <view class="card-badge {{lifecycleTone}}">{{lifecycleLabel}}</view>
@@ -8,7 +8,7 @@
     <text wx:if="{{metaText}}" class="card-meta">{{metaText}}</text>
   </view>
   <view class="card-actions">
-    <view class="card-primary" hover-class="card-primary-hover" bindtap="onOpen">查看实时</view>
-    <view class="card-secondary" hover-class="card-secondary-hover" bindtap="onManage">网页管理</view>
+    <view class="btn-primary card-primary" hover-class="hover-dim" bindtap="onOpen">查看实时</view>
+    <view class="btn-secondary card-secondary" hover-class="hover-dim" bindtap="onManage">网页管理</view>
   </view>
 </view>
