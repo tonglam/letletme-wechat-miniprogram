@@ -1,37 +1,20 @@
+/* Layout modifiers on the global .fdr primitive
+   (background levels come from .fdr-1..5 via apply-shared) */
 .fixture-chip {
-  display: inline-flex;
-  align-items: center;
   gap: 8rpx;
   min-width: 96rpx;
   padding: 8rpx 12rpx;
-  border-radius: 8rpx;
-  color: var(--card);
   font-size: 22rpx;
   font-weight: 600;
   box-sizing: border-box;
 }
 
+/* Unknown/unrated — muted chip instead of a difficulty colour */
+.fdr-unknown {
+  background: var(--track);
+  color: var(--muted-ink);
+}
+
 .home-away {
   opacity: 0.8;
-}
-
-/* FDR-aligned difficulty scale (green → amber → red → dark red) */
-.difficulty-unknown {
-  background: var(--muted-ink);
-}
-
-.difficulty-easy {
-  background: var(--green-ink);
-}
-
-.difficulty-medium {
-  background: var(--warning);
-}
-
-.difficulty-hard {
-  background: var(--danger);
-}
-
-.difficulty-very-hard {
-  background: var(--danger);
 }

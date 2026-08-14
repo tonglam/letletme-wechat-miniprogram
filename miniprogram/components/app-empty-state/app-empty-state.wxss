@@ -110,36 +110,17 @@
   line-height: 1.65;
 }
 
+/* Layout-only; visuals come from the global .btn-primary primitive */
 .empty-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 220rpx;
-  height: 76rpx;
   margin: 28rpx auto 0;
-  padding: 0 32rpx;
-  border-radius: 12rpx;
-  background: var(--cta);
-  color: var(--cta-ink);
-  font-size: 24rpx;
-  font-weight: 800;
-  line-height: 76rpx;
 }
 
-.empty-action::after {
-  border: 0;
-}
-
-.empty-action-hover {
-  opacity: 0.82;
-}
-
+/* Featured shell — global .card base + feature modifiers */
 .empty-featured {
   position: relative;
   min-height: 430rpx;
   padding: 54rpx 42rpx 58rpx;
   overflow: hidden;
-  border: 1rpx solid var(--line);
   border-radius: 20rpx;
   background:
     radial-gradient(circle at 88% 12%, rgba(0, 255, 133, 0.12), rgba(0, 255, 133, 0) 30%),
@@ -207,7 +188,7 @@
 .empty-featured .visual-zero {
   right: 22rpx;
   bottom: 17rpx;
-  font-size: 54rpx;
+  font-size: 56rpx;
 }
 
 .empty-featured .empty-title {

@@ -6,6 +6,7 @@
     "lint": "eslint miniprogram/",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/**/*.test.mjs tests/**/*.test.ts",
+    "check:style": "node scripts/check-style-drift.mjs",
     "package:check": "npm pack --dry-run",
     "prune:vant": "node scripts/prune-vant.mjs"
   },

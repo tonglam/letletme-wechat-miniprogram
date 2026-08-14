@@ -75,8 +75,8 @@
 .status-refresh {
   flex-shrink: 0;
   min-width: 88rpx;
-  height: 56rpx;
-  line-height: 56rpx;
+  min-height: 64rpx;
+  line-height: 64rpx;
   margin-left: 16rpx;
   padding: 0 20rpx;
   box-sizing: border-box;

@@ -1,9 +1,5 @@
 .phase-card {
-  box-sizing: border-box;
   padding: 32rpx 28rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 16rpx;
 }
 
 .phase-title {
@@ -34,38 +30,13 @@
   margin-top: 24rpx;
 }
 
+/* Size modifiers on the global .btn-primary / .btn-secondary primitives */
 .phase-primary {
   min-width: 200rpx;
   min-height: 88rpx;
-  line-height: 88rpx;
-  padding: 0 40rpx;
-  box-sizing: border-box;
-  border-radius: 999rpx;
-  background: var(--green-ink);
-  color: var(--card);
-  font-size: 28rpx;
-  font-weight: 700;
-  text-align: center;
-}
-
-.phase-primary-hover {
-  opacity: 0.85;
 }
 
 .phase-secondary {
   min-height: 88rpx;
-  line-height: 88rpx;
   margin-left: 20rpx;
-  padding: 0 32rpx;
-  box-sizing: border-box;
-  border-radius: 999rpx;
-  background: var(--track);
-  color: var(--green-ink);
-  font-size: 26rpx;
-  font-weight: 700;
-  text-align: center;
-}
-
-.phase-secondary-hover {
-  background: var(--accent-tint);
 }

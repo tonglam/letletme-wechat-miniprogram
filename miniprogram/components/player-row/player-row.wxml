@@ -12,7 +12,7 @@
   }
   module.exports = { cls: cls };
 </wxs>
-<view class="player-row {{player.statusClass || ''}}" bindtap="onOpen">
+<view class="player-row {{player.statusClass || ''}}" hover-class="hover-dim" bindtap="onOpen">
   <view class="player-main">
     <view class="player-title-line">
       <view class="player-name">{{player.name || player.webName || '-'}}</view>

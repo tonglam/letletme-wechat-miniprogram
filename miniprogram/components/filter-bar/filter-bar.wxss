@@ -4,15 +4,9 @@
   gap: 16rpx;
 }
 
+/* Layout-only; visuals come from the global .input primitive */
 .filter-input {
   flex: 1;
-  height: 80rpx;
-  padding: 0 24rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  color: var(--ink);
-  box-sizing: border-box;
 }
 
 .filter-button {

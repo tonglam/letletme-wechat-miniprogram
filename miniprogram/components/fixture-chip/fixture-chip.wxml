@@ -1,4 +1,15 @@
-<view class="fixture-chip {{difficultyClass}}">
+<wxs module="fdr">
+  /* Map FPL difficulty (1-5) onto the global .fdr-1..5 scale;
+     unknown/unrated falls back to a muted .fdr-unknown modifier. */
+  function cls(known, d) {
+    if (!known || typeof d !== 'number' || d !== d || d < 1) return 'fdr-unknown';
+    var level = Math.floor(d);
+    if (level > 5) level = 5;
+    return 'fdr-' + level;
+  }
+  module.exports = { cls: cls };
+</wxs>
+<view class="fixture-chip fdr {{fdr.cls(difficultyKnown, difficulty)}}">
   <text>{{opponent || '-'}}</text>
   <text wx:if="{{homeAway}}" class="home-away">{{homeAway}}</text>
 </view>

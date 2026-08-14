@@ -1,12 +1,3 @@
-.entry-card {
-  position: relative;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 2rpx 8rpx var(--plum-a4);
-}
-
 .entry-content,
 .entry-empty {
   display: flex;
@@ -109,8 +100,8 @@
   flex-shrink: 0;
   padding: 0 24rpx;
   min-width: 104rpx;
-  height: 56rpx;
-  line-height: 54rpx;
+  min-height: 64rpx;
+  line-height: 64rpx;
   border-radius: 999rpx;
   color: var(--cta-ink);
   background: var(--cta);

@@ -1,5 +1,5 @@
-<view class="entry-card">
-  <view wx:if="{{entry && (entry.entry || entry.entryId || entry.entryName || entry.teamName)}}" class="{{rich ? 'entry-content entry-content-rich' : 'entry-content'}}" bindtap="onOpen">
+<view class="card">
+  <view wx:if="{{entry && (entry.entry || entry.entryId || entry.entryName || entry.teamName)}}" class="{{rich ? 'entry-content entry-content-rich' : 'entry-content'}}" hover-class="hover-dim" bindtap="onOpen">
     <view class="entry-main">
       <view class="entry-head">
         <view class="entry-name-block">
@@ -25,7 +25,7 @@
     </view>
   </view>
 
-  <view wx:else class="entry-empty" bindtap="onChange">
+  <view wx:else class="entry-empty" hover-class="hover-dim" bindtap="onChange">
     <view>
       <view class="entry-title">还没有我的球队</view>
       <view class="entry-subtitle">查找球队并设为我的球队后开始</view>

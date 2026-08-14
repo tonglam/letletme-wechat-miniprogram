@@ -88,26 +88,7 @@
   line-height: 1.65;
 }
 
+/* Layout-only; visuals come from the global .btn-primary primitive */
 .error-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 220rpx;
-  height: 76rpx;
   margin: 28rpx auto 0;
-  padding: 0 32rpx;
-  border-radius: 12rpx;
-  background: var(--cta);
-  color: var(--cta-ink);
-  font-size: 24rpx;
-  font-weight: 800;
-  line-height: 76rpx;
-}
-
-.error-action::after {
-  border: 0;
-}
-
-.error-action-hover {
-  opacity: 0.82;
 }
