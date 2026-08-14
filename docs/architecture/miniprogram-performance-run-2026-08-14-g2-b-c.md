@@ -320,3 +320,36 @@ Gate 2 当前结论为 `🟡`，不是失败，也不是“全部通过”。所
 - 会话 token 仍存在且未过期，entry binding 仍存在；文档未记录原值。
 - 离线 mock、401 mock 和 request descriptor 均已恢复。
 - 无 push、merge、PR 或生产数据操作。
+
+## 13. 后续 completion audit 补充
+
+本节记录 G3-G5 执行前对两个黄色缺口的再次核验，不改变第 11 节结论。
+
+### 13.1 真实设备
+
+- `system_profiler SPUSBDataType -json` 的 iPhone/iPad/Android 常见设备名匹配数为 `0`。
+- `xcrun xctrace list devices` 没有 iPhone/iPad。
+- 本机没有 `adb`。
+- DevTools 有“真机调试”入口，但没有已连接手机可生成 iOS/Android 样本。
+
+因此真实设备缺口是已验证的外部条件，不是遗漏执行；不能用 iPhone 12/13 Pro 模拟 profile 代替。
+
+### 13.2 GraphQL 生产日志与 metrics 边界
+
+- GraphQL 仓库已有结构化 `GraphQL request timing` 和 request-ID stage log。
+- 仓库本地 `.env`/`.env.deploy` 中现有 metrics token 对生产 `/metrics` 均返回 404；未输出 token，也不推断其仍是生产值。
+- GitHub repository variables 能确认 VPS host/user/workdir，但 SSH agent identity 为 0，连接返回 `Permission denied (publickey)`。
+- GitHub Actions secrets 只在 workflow 内可用，部署日志不能读取当前容器 stdout。
+
+没有枚举本机私钥、提取 CI secret 或绕过访问控制。GraphQL 生产同 request-ID 内部分段继续保持 `🟡`。
+
+### 13.3 同生产 tree 的本地只读复现
+
+GraphQL 本地 `HEAD=7c22f66098472324c968a42e5cf247c10a4c118f`，Git tree 与生产 `bb444163416b8500efb0b7c707c8a3ca54ecae25` 完全一致。使用仓库已有合法连接启动隔离端口 `14000`，只执行 5 次 `GetPlayerValues` 和 5 次 `FixtureWindow`：
+
+- `GetPlayerValues` client total：`2863, 1005, 605, 1079, 1035ms`；cold timing 可见 admission、publication、cache、DB 与 Apollo 分段。
+- `FixtureWindow` client total：`710, 1194, 805, 801, 804ms`；并行 alias 的 stage sum 不能当 wall-clock。
+- Perth 本地到远端 Redis/PostgreSQL 的 round trip 明显放大 stage；生产 Web 暖 upstream 约 28-30ms，不能用本地结果替代 VPS latency。
+- 进程已 SIGINT，端口释放；GraphQL 仓库 tracked clean。
+
+完整 Section、生产缺陷、operation 收敛和 G5 结果见 [G3-G5 Run](./miniprogram-performance-run-2026-08-14-g3-g5.md)。
