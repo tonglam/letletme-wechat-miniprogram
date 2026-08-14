@@ -609,6 +609,43 @@ test("tournament rollover to a season without a live event commits preseason", a
   assert.deepEqual(calls, ["stop", "sync:0", "display"]);
 });
 
+test("tournament leaves preseason and reloads its directory when GW1 appears", async () => {
+  globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 1 } });
+  const calls = [];
+  const context = {
+    ...tournamentPage,
+    data: {
+      ...tournamentPage.data,
+      event: 0,
+      maxGw: 0,
+      emptyState: "preseason",
+      emptyTitle: "当前赛季暂无实时比赛周"
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2026/27",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 1 }),
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) {
+      calls.push(`tournaments:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    },
+    loadRows() { calls.push("rows"); },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.emptyState, "");
+  assert.equal(context.data.emptyTitle, "");
+  assert.deepEqual(calls, ["stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
 test("tournament recovery keeps preseason distinct from a context failure", async () => {
   globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 0 } });
   const calls = [];
@@ -629,7 +666,12 @@ test("tournament recovery keeps preseason distinct from a context failure", asyn
 
   const failed = {
     ...tournamentPage,
-    data: { ...tournamentPage.data, event: 0 },
+    data: {
+      ...tournamentPage.data,
+      event: 0,
+      emptyState: "preseason",
+      emptyTitle: "当前赛季暂无实时比赛周"
+    },
     pageVisible: true,
     startupGeneration: 0,
     ensureContext: async () => { throw new Error("赛季上下文刷新失败"); },
@@ -639,6 +681,7 @@ test("tournament recovery keeps preseason distinct from a context failure", asyn
 
   await tournamentPage.retryWithContext.call(failed);
   assert.equal(failed.data.emptyState, "");
+  assert.equal(failed.data.emptyTitle, "");
   assert.equal(failed.data.error, "赛季上下文刷新失败");
 });
 
