@@ -22,6 +22,56 @@ capturedPage = undefined;
 const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
 const teamPage = capturedPage;
 
+test("tournament preseason is a stable business empty state", () => {
+  assert.deepEqual(tournamentModule.noLiveEventState(), {
+    loading: false,
+    refreshing: false,
+    hasData: false,
+    error: "",
+    errorSuffix: "",
+    tournamentListError: "",
+    tournamentListErrorSuffix: "",
+    emptyState: "preseason",
+    emptyEyebrow: "赛季准备中",
+    emptyTitle: "当前赛季暂无实时比赛周",
+    emptyDescription: "比赛周开始后，这里会显示竞赛实时得分和排名",
+    emptyActionText: "",
+    rows: [],
+    displayedRows: [],
+    filteredCount: 0,
+    lastUpdated: ""
+  });
+});
+
+test("tournament cold start commits preseason instead of an error", async () => {
+  globalThis.wx = { getStorageSync: () => "" };
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123 },
+    authReady: Promise.resolve()
+  });
+  const calls = [];
+  const context = {
+    ...tournamentPage,
+    data: { ...tournamentPage.data, error: "old error", rows: [{ entry: 1 }] },
+    pageVisible: true,
+    startupGeneration: 0,
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 0 }),
+    setData(update) { Object.assign(this.data, update); },
+    initLiveRefresh() { calls.push("init"); },
+    liveRefresh: { stop() { calls.push("stop"); } },
+    syncDisplayState() { calls.push("display"); },
+    loadTournaments() { calls.push("load"); }
+  };
+
+  await tournamentPage.initializeFromContext.call(context, "page-load");
+
+  assert.equal(context.data.event, 0);
+  assert.equal(context.data.emptyState, "preseason");
+  assert.equal(context.data.error, "");
+  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(calls, ["init", "stop", "display"]);
+});
+
 test("re-arms current-gameweek polling before loading the switched context", () => {
   const calls = [];
   const context = {
@@ -517,6 +567,79 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.selectedTeamExposure, null);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
+test("tournament rollover to a season without a live event commits preseason", async () => {
+  globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 0 } });
+  const calls = [];
+  const context = {
+    ...tournamentPage,
+    data: {
+      ...tournamentPage.data,
+      event: 30,
+      maxGw: 38,
+      hasData: true,
+      error: "old error",
+      rows: [{ entry: 1 }],
+      displayedRows: [{ entry: 1 }]
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    rowsRequestId: 2,
+    tournamentListRequestId: 3,
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 0 }),
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.event, 0);
+  assert.equal(context.data.maxGw, 0);
+  assert.equal(context.data.emptyState, "preseason");
+  assert.equal(context.data.error, "");
+  assert.deepEqual(context.data.rows, []);
+  assert.equal(context.rowsRequestId, 3);
+  assert.equal(context.tournamentListRequestId, 4);
+  assert.deepEqual(calls, ["stop", "sync:0", "display"]);
+});
+
+test("tournament recovery keeps preseason distinct from a context failure", async () => {
+  globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 0 } });
+  const calls = [];
+  const preseason = {
+    ...tournamentPage,
+    data: { ...tournamentPage.data, event: 0, error: "old error" },
+    pageVisible: true,
+    startupGeneration: 0,
+    liveRefresh: { stop() { calls.push("stop"); } },
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 0 }),
+    setData(update) { Object.assign(this.data, update); }
+  };
+
+  await tournamentPage.retryWithContext.call(preseason);
+  assert.equal(preseason.data.emptyState, "preseason");
+  assert.equal(preseason.data.error, "");
+  assert.deepEqual(calls, ["stop"]);
+
+  const failed = {
+    ...tournamentPage,
+    data: { ...tournamentPage.data, event: 0 },
+    pageVisible: true,
+    startupGeneration: 0,
+    ensureContext: async () => { throw new Error("赛季上下文刷新失败"); },
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() {}
+  };
+
+  await tournamentPage.retryWithContext.call(failed);
+  assert.equal(failed.data.emptyState, "");
+  assert.equal(failed.data.error, "赛季上下文刷新失败");
 });
 
 test("tournament Website handoff reports clipboard failures", async () => {
