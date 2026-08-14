@@ -2,7 +2,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: 24rpx 24rpx 40rpx;
-  background: var(--bg, #f9f8f4);
+  background: var(--bg);
 }
 
 .section {
@@ -14,10 +14,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 24rpx;
-  background: var(--card, #ffffff);
-  border: 1rpx solid var(--line, #ddd4de);
+  background: var(--card);
+  border: 1rpx solid var(--line);
   border-radius: 12rpx;
-  color: #b25e09;
+  color: var(--warning);
   font-size: 24rpx;
 }
 
@@ -30,8 +30,8 @@
   padding: 0 24rpx;
   box-sizing: border-box;
   border-radius: 999rpx;
-  background: var(--track, #f1efe9);
-  color: var(--green-ink, #008545);
+  background: var(--track);
+  color: var(--green-ink);
   font-weight: 700;
   text-align: center;
 }
@@ -43,26 +43,26 @@
   min-height: 88rpx;
   padding: 24rpx;
   box-sizing: border-box;
-  background: var(--card, #ffffff);
-  border: 1rpx solid var(--line, #ddd4de);
+  background: var(--card);
+  border: 1rpx solid var(--line);
   border-radius: 12rpx;
 }
 
 .module-title {
-  color: var(--ink, #301333);
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 700;
 }
 
 .module-subtitle {
   margin-top: 6rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 24rpx;
 }
 
 .module-arrow {
   flex-shrink: 0;
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 700;
 }

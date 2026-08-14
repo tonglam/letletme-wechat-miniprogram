@@ -1,6 +1,6 @@
 .group-title {
   margin-bottom: 12rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -32,18 +32,18 @@
 
 .card-title {
   min-width: 0;
-  font-size: 27rpx;
+  font-size: 26rpx;
   font-weight: 700;
 }
 
 .card-desc {
   margin-top: 10rpx;
-  color: var(--muted-ink, #6e5a72);
-  font-size: 21rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
   line-height: 1.35;
 }
 
 .route-card .action {
   flex-shrink: 0;
-  font-size: 21rpx;
+  font-size: 20rpx;
 }

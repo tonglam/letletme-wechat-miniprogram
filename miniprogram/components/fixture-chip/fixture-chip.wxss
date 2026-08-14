@@ -5,7 +5,7 @@
   min-width: 96rpx;
   padding: 8rpx 12rpx;
   border-radius: 8rpx;
-  color: #ffffff;
+  color: var(--card);
   font-size: 22rpx;
   font-weight: 600;
   box-sizing: border-box;
@@ -17,21 +17,21 @@
 
 /* FDR-aligned difficulty scale (green → amber → red → dark red) */
 .difficulty-unknown {
-  background: var(--text-tertiary, #6b7280);
+  background: var(--muted-ink);
 }
 
 .difficulty-easy {
-  background: var(--green-ink, #008545);
+  background: var(--green-ink);
 }
 
 .difficulty-medium {
-  background: var(--warning, #924a07);
+  background: var(--warning);
 }
 
 .difficulty-hard {
-  background: var(--danger, #c9183f);
+  background: var(--danger);
 }
 
 .difficulty-very-hard {
-  background: #7a0b28;
+  background: var(--danger);
 }

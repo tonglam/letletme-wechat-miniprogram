@@ -23,13 +23,13 @@
 }
 
 .entry-strip.ready {
-  background: var(--accent-tint, #dcf6ea);
-  color: var(--green-ink, #008545);
+  background: var(--accent-tint);
+  color: var(--green-ink);
 }
 
 .entry-strip.empty {
-  background: var(--warning-tint, #f6ead9);
-  color: var(--warning, #924a07);
+  background: var(--warning-tint);
+  color: var(--warning);
 }
 
 .strip-label {
@@ -57,7 +57,7 @@
 
 .card-meta {
   margin-bottom: 8rpx;
-  color: var(--green-ink, #008545);
+  color: var(--green-ink);
   font-size: 20rpx;
   font-weight: 800;
   letter-spacing: 2rpx;
@@ -70,7 +70,7 @@
 
 .card-desc {
   margin-top: 8rpx;
-  color: var(--muted-ink, #6e5a72);
+  color: var(--muted-ink);
   font-size: 24rpx;
 }
 
@@ -85,15 +85,15 @@
 .status-pill {
   padding: 6rpx 10rpx;
   border-radius: 6rpx;
-  background: var(--track, #f1efe9);
-  color: var(--ink, #301333);
+  background: var(--track);
+  color: var(--ink);
   font-size: 20rpx;
   font-weight: 700;
 }
 
 .open-arrow {
   margin-top: 16rpx;
-  color: var(--plum, #38003c);
-  font-size: 44rpx;
+  color: var(--plum);
+  font-size: 48rpx;
   line-height: 36rpx;
 }

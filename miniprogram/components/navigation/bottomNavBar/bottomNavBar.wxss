@@ -5,7 +5,7 @@
   right: 0;
   bottom: calc(50px + env(safe-area-inset-bottom));
   height: 4rpx;
-  background: var(--electric, #00ff85);
+  background: var(--electric);
   z-index: 2;
   pointer-events: none;
 }
