@@ -1,24 +1,30 @@
 <view class="page page-tabbar selections-page">
-  <view class="section selections-header">
-    <view class="header-copy">
-      <view class="title">阵容选择</view>
-      <view class="subtitle">{{headerSubtitle || '联赛选择率、队长和转会趋势'}}</view>
+  <view class="section">
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">{{selectedTournamentName || '阵容选择'}}</view>
+          <view class="score-manager">GW{{event}}{{totalEntriesText ? ' · ' + totalEntriesText : ''}}</view>
+        </view>
+        <gw-picker wx:if="{{tournaments.length}}" compact="{{true}}" dark="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+      </view>
     </view>
-    <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
   </view>
 
-  <view wx:if="{{tournaments.length}}" class="section card control-card">
-    <view>
-      <view class="field-label">联赛</view>
-      <view class="field-help">{{totalEntriesText || '选择联赛查看数据'}}</view>
-    </view>
+  <view wx:if="{{tournaments.length}}" class="section">
     <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
-      <view class="picker-value">{{selectedTournamentName || '请选择联赛'}}</view>
+      <view class="sel-strip" hover-class="hover-dim">
+        <view class="sel-strip-main">
+          <view class="sel-strip-kicker">赛事{{totalEntriesText ? ' · ' + totalEntriesText : ''}}</view>
+          <view class="sel-strip-title">{{selectedTournamentName || '请选择赛事'}}</view>
+        </view>
+        <text class="action">切换 ›</text>
+      </view>
     </picker>
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loadingTournaments}}" text="加载联赛" />
+  <app-loading wx:elif="{{loadingTournaments}}" text="加载赛事" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
@@ -31,14 +37,23 @@
   </view>
 
   <block wx:else>
-    <view class="section tab-strip">
+    <view class="section tab-strip accent-{{activeTab}}">
       <view wx:for="{{tabs}}" wx:key="key" class="tab-item {{activeTab === item.key ? 'tab-active' : ''}}" data-tab="{{item.key}}" hover-class="hover-dim" catchtap="onTabTap">
         {{item.label}}
       </view>
     </view>
 
     <app-loading wx:if="{{loadingStats}}" text="加载阵容选择" />
-    <view id="perf-primary-content" wx:else class="section card stat-card">
+    <block wx:else>
+      <view wx:if="{{visibleRows.length}}" class="section result-row">
+        <view class="result-count">{{activeTabLabel}} · 前 {{visibleRows.length}} 名</view>
+        <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+          <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+          <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+          <text class="tool-label">{{shareCopied ? '已复制' : '分享'}}</text>
+        </view>
+      </view>
+      <view id="perf-primary-content" class="section card stat-card">
       <app-empty-state
         wx:if="{{visibleRows.length === 0}}"
         title="{{statsEmptyTitle}}"
@@ -59,19 +74,18 @@
             </view>
           </view>
           <view class="stat-side">
-            <text class="primary-value">{{item.primaryValue}}</text>
-            <text class="side-label">{{item.primaryLabel}}</text>
-            <text class="secondary-value">{{item.secondaryValue}}</text>
-            <text class="side-label">{{item.secondaryLabel}}</text>
+            <text class="primary-value tab-text-{{activeTab}}">{{item.primaryValue}}</text>
           </view>
         </view>
       </view>
-    </view>
+      </view>
+    </block>
 
     <view class="section">
       <evidence-source text="范围:本赛事全部成员 · 精确 · LetLetMe 计算" />
     </view>
   </block>
 
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="explore" />
 </view>

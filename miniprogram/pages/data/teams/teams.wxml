@@ -1,12 +1,11 @@
 <view class="page page-tabbar">
   <view class="section">
-    <view class="title">球队数据</view>
-    <view class="subtitle">选择球队查看详情。</view>
+    <view class="subtitle">20 支球队的阵容、赛程和定位球。</view>
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队" />
-  <view id="perf-primary-content" wx:else class="section card">
+  <view id="perf-primary-content" wx:else class="section card team-list">
     <app-empty-state
       wx:if="{{teams.length === 0}}"
       eyebrow="名单待就绪"
@@ -16,8 +15,8 @@
       bind:action="onRetry"
     />
     <view wx:for="{{teams}}" wx:key="id" class="team-row" data-team="{{item.id}}" hover-class="hover-dim" bindtap="onOpenTeam">
-      <text>{{item.name}}</text>
-      <text class="muted">{{item.shortName || ''}}</text>
+      <view class="team-badge">{{item.shortName || ''}}</view>
+      <view class="team-name">{{item.name}}</view>
     </view>
   </view>
   <bottomNavBar />

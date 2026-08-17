@@ -8,6 +8,9 @@
     "data-status": "../../../components/data-status/data-status",
     "gw-picker": "../../../components/gw-picker/gw-picker",
     "player-row": "../../../components/player-row/player-row",
-    "live-status-bar": "../../../components/live-status-bar/live-status-bar"
+    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet",
+    "squad-pitch": "../../../components/squad-pitch/squad-pitch",
+    "live-status-bar": "../../../components/live-status-bar/live-status-bar",
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
   }
 }

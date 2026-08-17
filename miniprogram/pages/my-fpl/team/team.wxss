@@ -1,123 +1,413 @@
-.summary-header {
+/* 我的球队 — 与实时球队同语言:工具条 + 暗色 hero + summary tiles + info card */
+
+.team-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
+  justify-content: flex-end;
 }
 
-.header-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  flex-shrink: 0;
-}
-
-.summary-card {
+.season-chart-card {
   margin-bottom: 18rpx;
 }
 
-.section-title-small {
-  margin-bottom: 14rpx;
+.chart-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.chart-mode {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.chart-mode-on {
+  background: var(--ink);
+  color: var(--card);
+}
+
+.chart-summary,
+.chart-hint {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  line-height: 1.45;
+}
+
+.chart-summary {
+  min-height: 56rpx;
+  margin-bottom: 10rpx;
+}
+
+.chart-hint {
+  margin-top: 10rpx;
+}
+
+/* Season overview tiles — same as live entry's summary-grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.summary-tile {
+  min-width: 0;
+  padding: 18rpx 10rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  text-align: center;
+}
+
+.tile-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.tile-value {
+  margin-top: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
 }
 
-.summary-row,
-.squad-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  min-height: 72rpx;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid var(--line);
+/* Event info strip — same as live entry's info-card */
+.info-card {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  padding-top: 16rpx;
+  padding-bottom: 16rpx;
 }
 
-.summary-row:last-child,
-.squad-row:last-child {
-  border-bottom: 0;
-}
-
-.squad-row-bench {
-  opacity: 0.72;
-}
-
-.row-main {
+.info-item {
   min-width: 0;
-  flex: 1;
+  text-align: center;
 }
 
-.row-meta {
-  color: var(--muted-ink);
-  font-size: 22rpx;
+.info-item .score-label,
+.info-value {
+  text-align: center;
 }
 
-.cost-bad {
-  color: var(--danger);
-}
-
-.row-title,
-.history-title {
+.info-value {
+  margin-top: 4rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
   font-size: 24rpx;
-  font-weight: 700;
-}
-
-.row-value {
-  flex-shrink: 0;
-  color: var(--ink);
-  font-size: 24rpx;
   font-weight: 800;
 }
 
-.squad-meta {
-  display: grid;
-  grid-template-columns: 72rpx 58rpx 58rpx 72rpx;
+/* 阵容 — 球场图在上,明细列表在下;替补标题与首发用既有 hairline 分隔 */
+.lineup-head {
+  display: flex;
   align-items: center;
-  gap: 8rpx;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.lineup-head .section-heading {
+  margin-bottom: 0;
+}
+
+.team-pitch-section {
+  margin: 8rpx 0 20rpx;
+}
+
+.team-pitch-section squad-pitch {
+  display: block;
+  width: 100%;
+}
+
+.lineup-card .bench-heading {
+  margin-top: 14rpx;
+}
+
+/* 开卡 — 紧凑表格:小程序载体不堆大卡片,与网页版 TeamChipsTab 同结构 */
+.chip-hint {
+  margin: 4rpx 0 16rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  line-height: 1.5;
+}
+
+.chip-tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120rpx 120rpx;
+  align-items: center;
+  column-gap: 12rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.chip-tr:last-child {
+  border-bottom: 0;
+}
+
+.chip-tr-head {
+  min-height: 40rpx;
+  padding: 0 0 10rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.chip-td-name {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.chip-code {
   flex-shrink: 0;
+  padding: 2rpx 12rpx;
+  border: 1rpx solid var(--electric-a35);
+  border-radius: 8rpx;
+  background: var(--plum);
+  color: var(--electric);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.chip-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.chip-td-half {
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-/* Layout-only badge shell; colours come from global .pos-badge / role classes. */
-.role-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36rpx;
-  border-radius: 6rpx;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-
-.role-starter {
-  background: var(--accent-tint);
-  color: var(--green-ink);
-}
-
-.role-bench {
-  background: var(--track);
+.chip-tr-head .chip-td-half {
   color: var(--muted-ink);
 }
 
-.mini-stat,
-.points-stat {
+.chip-td-half.chip-out {
+  color: var(--muted-ink);
+  font-weight: 700;
+}
+
+/* 使用记录 — GW pill + 卡 code + 当轮结果,单行不换行 */
+.chip-log-card {
+  margin-top: 16rpx;
+}
+
+.chip-log-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.chip-log-row:last-child {
+  border-bottom: 0;
+}
+
+.chip-log-code {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.chip-log-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: right;
+}
+
+/* 历史 — GW 表:轮次 / 得分 / 队长 / 扣分 / 总排名(对齐网页版 TeamGameweekHistory) */
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 14rpx;
+}
+
+.history-head .section-heading {
+  margin-bottom: 0;
+}
+
+.history-total {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.hist-tr {
+  display: grid;
+  grid-template-columns: 84rpx 72rpx minmax(0, 1fr) 76rpx 104rpx;
+  align-items: center;
+  column-gap: 12rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.hist-tr:last-child {
+  border-bottom: 0;
+}
+
+.hist-tr-head {
+  padding: 0 0 10rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.hist-td-points {
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-td-captain {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.hist-captain-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink);
   font-size: 22rpx;
   font-weight: 700;
 }
 
-.points-stat {
-  font-weight: 900;
+.hist-captain-points {
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-td-cost {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.hist-cost-bad {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.hist-td-rank {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.hist-tr-head .hist-td-points,
+.hist-tr-head .hist-td-cost,
+.hist-tr-head .hist-td-rank,
+.hist-tr-head .hist-td-captain {
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+/* 赛季历史 — 赛季 / 积分 / 总排名,当前赛季高亮(网页版同款) */
+.season-card {
+  margin-top: 16rpx;
+}
+
+.season-tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120rpx 120rpx;
+  align-items: center;
+  column-gap: 12rpx;
+  padding: 12rpx 8rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.season-tr:last-child {
+  border-bottom: 0;
+}
+
+.season-current {
+  background: var(--plum-a4);
+  border-radius: 8rpx;
+}
+
+.season-tr-head {
+  padding: 0 8rpx 10rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.season-td-name {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.season-name {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.season-badge {
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+  background: var(--accent-tint);
+  color: var(--green-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+.season-td-points {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.season-td-rank {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .transfer-card {
@@ -125,20 +415,108 @@
 }
 
 .transfer-head {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10rpx;
+  display: flex;
   align-items: center;
+  gap: 16rpx;
   padding-bottom: 14rpx;
   border-bottom: 1rpx solid var(--line);
-  color: var(--ink);
-  font-size: 24rpx;
+}
+
+.transfer-count {
+  flex: 1;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+  text-align: right;
+}
+
+.transfer-cost {
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.transfer-cost-bad {
+  color: var(--danger);
+}
+
+/* 转会 tab 顶部:总统计 3 格 + 筛选条(对齐网页版 TeamTransfersTab) */
+.transfer-summary-grid {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 16rpx;
+}
+
+.tile-bad {
+  color: var(--danger);
+}
+
+.transfer-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 2rpx 0 16rpx;
+}
+
+.transfer-filter-note {
+  min-width: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.transfer-filter-tabs {
+  flex-shrink: 0;
+  grid-auto-columns: auto;
+  gap: 6rpx;
+  padding: 6rpx;
+}
+
+.transfer-filter-tabs .tab-item {
+  min-height: 48rpx;
+  padding: 0 20rpx;
+  font-size: 22rpx;
+}
+
+/* WC/FH(无限转会)与大批量周默认折叠,点头部展开 — 网页版 Sheet 的小程序等价 */
+.transfer-chip {
+  flex-shrink: 0;
+}
+
+.transfer-toggle {
+  flex-shrink: 0;
+  color: var(--green-ink);
+  font-size: 20rpx;
   font-weight: 800;
 }
 
-.transfer-count,
-.transfer-cost {
-  text-align: right;
+/* 无转会周:单行安静展示 */
+.quiet-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 12rpx 4rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.quiet-row:last-child {
+  border-bottom: 0;
+}
+
+.quiet-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+/* 长列表分页 — 与联赛榜的 load-more 同款 */
+.load-more {
+  padding: 16rpx;
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: center;
 }
 
 .empty-line {
@@ -147,36 +525,113 @@
   font-size: 24rpx;
 }
 
-/* Nested move card — extends global .card with tighter padding */
-.move-card {
-  margin-top: 14rpx;
-  padding: 16rpx;
-}
-
-.move-text {
-  color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.history-card {
-  padding: 18rpx 0;
+/* Swap rows — 单行紧凑:出/入 单字 + 名字 + 队 + 当轮得分,中间箭头与价格 */
+.swap-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 14rpx 0;
   border-bottom: 1rpx solid var(--line);
 }
 
-.history-card:last-child {
+.swap-row:last-child {
   border-bottom: 0;
+  padding-bottom: 0;
 }
 
-.history-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.swap-side {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
   gap: 10rpx;
-  margin-top: 12rpx;
+  min-width: 0;
+}
+
+.swap-in {
+  justify-content: flex-end;
+}
+
+.swap-kicker {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+
+.swap-kicker-out {
+  color: var(--danger);
+}
+
+.swap-kicker-in {
+  color: var(--green-ink);
+}
+
+.swap-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.swap-in .swap-name {
+  color: var(--green-ink);
+}
+
+.swap-team {
+  flex-shrink: 0;
   color: var(--muted-ink);
-  font-size: 22rpx;
-  line-height: 1.4;
+  font-size: 20rpx;
+}
+
+/* 当轮得分 — the transfer verdict at a glance */
+.swap-points {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.swap-in .swap-points {
+  color: var(--green-ink);
+}
+
+.swap-mid {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* History rows carry both legs of the price: "£10.4m → £9.8m" */
+  width: 208rpx;
+}
+
+.swap-mark {
+  width: 36rpx;
+  height: 2rpx;
+  background: var(--line);
+  position: relative;
+}
+
+.swap-mark::after {
+  content: "";
+  position: absolute;
+  top: -5rpx;
+  right: 0;
+  width: 10rpx;
+  height: 10rpx;
+  border-top: 2rpx solid var(--line);
+  border-right: 2rpx solid var(--line);
+  transform: rotate(45deg);
+}
+
+.swap-price {
+  margin-top: 10rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .phase-banner {
@@ -203,13 +658,7 @@
   line-height: 1.5;
 }
 
-.phase-banner-action {
+.phase-banner-cue {
   flex-shrink: 0;
   margin-left: 16rpx;
-  padding: 8rpx 24rpx;
-  border-radius: 999rpx;
-  background: var(--green-ink);
-  color: var(--card);
-  font-size: 24rpx;
-  font-weight: 700;
 }

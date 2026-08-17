@@ -116,7 +116,6 @@ test("wrapped asynchronous pull refresh handlers return their actual work", () =
     "miniprogram/pages/entry/profile/profile.ts",
     "miniprogram/pages/summary/gameweek/gameweek.ts",
     "miniprogram/pages/summary/tournament/tournament.ts",
-    "miniprogram/pages/my-fpl/index/index.ts",
     "miniprogram/pages/live/tournament/tournament.ts",
     "miniprogram/pages/data/players/players.ts",
     "miniprogram/pages/data/selections/selections.ts",
@@ -142,12 +141,6 @@ test("cold context failures settle Home and all Live page loading states", () =>
     assert.match(page, /let context = getAppContextSnapshot\(\)[\s\S]*catch \(error\)[\s\S]*if \(!context\)[\s\S]*this\.showContextError\(error\)/);
     assert.match(page, /showContextError\(error: unknown\)[\s\S]*loading: false/);
   }
-});
-
-test("Explore paints locally then resynchronizes the shared cold context", () => {
-  const explore = source("miniprogram/pages/explore/index/index.ts");
-  assert.match(explore, /this\.buildGroups\(\)[\s\S]*this\.syncContext\(\)[\s\S]*void this\.refreshContext\("page-load"\)/);
-  assert.match(explore, /await ensureAppContext\(\{ reason \}\)[\s\S]*this\.syncContext\(\)/);
 });
 
 test("local entry selection commits the canonical binding revision", () => {
@@ -314,7 +307,7 @@ test("Live Tournament rejects event zero before any row request", async () => {
   context.data.rows = [{ entry: 123 }];
   await tournamentPage.loadRows.call(context);
   assert.deepEqual(context.data.rows, []);
-  assert.equal(context.data.resultsEmptyTitle, "当前竞赛还没有参赛球队");
+  assert.equal(context.data.resultsEmptyTitle, "当前赛事还没有参赛球队");
 });
 
 test("My FPL support payload stays local until principal validation and updates chip totals", () => {
@@ -323,11 +316,54 @@ test("My FPL support payload stays local until principal validation and updates 
   assert.match(loadTab, /let historyPayload = this\.historyPayload/);
   assert.match(loadTab, /historyPayload = await getEntryTeamStatsHistory[\s\S]*restartForPrincipalChange\(entryId\)[\s\S]*getEntryTeamStatsTransfers/);
   assert.match(loadTab, /restartForPrincipalChange\(entryId\)[\s\S]*this\.historyPayload = historyPayload/);
-  assert.match(loadTab, /chipSummaryStats: buildChipSummaryStats/);
-  assert.deepEqual(teamModule.buildChipSummaryStats("Wildcard", 3), [
-    { label: "本轮开卡", value: "Wildcard" },
-    { label: "开卡次数", value: "3" }
+  assert.match(loadTab, /chipInventoryRows: support\.chipInventoryRows/);
+  assert.deepEqual(
+    teamModule.buildChipInventory([
+      { eventId: 2, chip: "WILDCARD" },
+      { eventId: 25, chip: "TRIPLE_CAPTAIN" }
+    ]),
+    [
+      { id: "chip-inv-WC", code: "WC", name: "Wildcard", firstText: "1 / 0", secondText: "0 / 1", firstOut: true, secondOut: false },
+      { id: "chip-inv-FH", code: "FH", name: "Free Hit", firstText: "0 / 1", secondText: "0 / 1", firstOut: false, secondOut: false },
+      { id: "chip-inv-BB", code: "BB", name: "Bench Boost", firstText: "0 / 1", secondText: "0 / 1", firstOut: false, secondOut: false },
+      { id: "chip-inv-TC", code: "TC", name: "Triple Captain", firstText: "0 / 1", secondText: "1 / 0", firstOut: false, secondOut: true }
+    ]
+  );
+});
+
+test("My FPL transfer tab summarizes and filters like the web TeamTransfersTab", () => {
+  const rows = [
+    { id: "t4", transferCount: 0, cost: "0" },
+    { id: "t3", transferCount: 2, cost: "4" },
+    { id: "t2", transferCount: 12, cost: "0" },
+    { id: "t1", transferCount: 1, cost: "0" }
+  ];
+  const withView = teamModule.buildTransferView(rows, "with");
+  assert.deepEqual(withView.transferSummary, [
+    { label: "总转会", value: "15" },
+    { label: "转会扣分", value: "-4", tone: "bad" },
+    { label: "有转会轮数", value: "3" }
   ]);
+  assert.deepEqual(withView.visibleTransferRows.map((row) => row.id), ["t3", "t2", "t1"]);
+  assert.equal(withView.transferFilterNote, "有转会 3 轮 · 共 4 轮");
+
+  const allView = teamModule.buildTransferView(rows, "all");
+  assert.deepEqual(allView.visibleTransferRows.map((row) => row.id), ["t4", "t3", "t2", "t1"]);
+  assert.equal(allView.transferFilterNote, "全部 4 轮");
+
+  const noneView = teamModule.buildTransferView(rows, "none");
+  assert.deepEqual(noneView.visibleTransferRows.map((row) => row.id), ["t4"]);
+  assert.equal(noneView.transferFilterNote, "无转会 1 轮 · 共 4 轮");
+  assert.equal(noneView.transferHasMore, false);
+
+  // Long lists page lazily: first page + hasMore, then the rest.
+  const many = Array.from({ length: 10 }, (_, i) => ({ id: `m${i}`, transferCount: 1, cost: "0" }));
+  const paged = teamModule.buildTransferView(many, "with");
+  assert.equal(paged.visibleTransferRows.length, teamModule.TRANSFER_PAGE_SIZE);
+  assert.equal(paged.transferHasMore, true);
+  const all = teamModule.buildTransferView(many, "with", 10);
+  assert.equal(all.visibleTransferRows.length, 10);
+  assert.equal(all.transferHasMore, false);
 });
 
 test("My FPL keeps support tabs available without an event summary", () => {

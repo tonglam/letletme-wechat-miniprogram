@@ -20,14 +20,3 @@ test("Home invalidates a hidden cold lifecycle and resumes with a warm tracker",
   assert.match(home, /onHide\(\)[\s\S]*_resumeStartupOnShow = this\._startupPending[\s\S]*_lifecycleRevision \+= 1/);
 });
 
-test("My FPL exposes its primary selector only after authoritative principal resolution", () => {
-  const page = source("miniprogram/pages/my-fpl/index/index.ts");
-  const template = source("miniprogram/pages/my-fpl/index/index.wxml");
-  assert.match(page, /principalResolved: false/);
-  assert.match(page, /syncPrincipalState\(principalResolved = false\)[\s\S]*principalResolved \? \{ principalResolved: true \}/);
-  assert.match(page, /if \(!this\.pageVisible \|\| lifecycleRevision !== this\.lifecycleRevision\) return[\s\S]*await this\.loadOverview\(forceRefresh, lifecycleRevision\)/);
-  assert.match(page, /isStale\(requestId: number, lifecycleRevision: number\)[\s\S]*!this\.pageVisible[\s\S]*lifecycleRevision !== this\.lifecycleRevision/);
-  assert.match(page, /syncPrincipalState\(true\)[\s\S]*const secondaryTask = this\.loadOverviewSecondary\(/);
-  assert.match(page, /async loadOverviewSecondary\([\s\S]*Promise\.all\(/);
-  assert.match(template, /principalResolved && \(eventContextAvailable \|\| principalState === 'NO_FOLLOW'\)/);
-});

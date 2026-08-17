@@ -22,6 +22,67 @@ capturedPage = undefined;
 const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
 const teamPage = capturedPage;
 
+test("live match mock fills coreMatches so every status tab has fixtures", () => {
+  const storage = {};
+  globalThis.wx = {
+    ...(globalThis.wx || {}),
+    setStorageSync(key, value) {
+      storage[key] = value;
+    }
+  };
+  const context = {
+    ...matchPage,
+    data: { ...matchPage.data, status: "playing" },
+    coreMatches: [],
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    syncDisplayState() {}
+  };
+
+  matchPage.applyMockData.call(context);
+  assert.equal(context.coreMatches.length, 10);
+  assert.equal(context.data.matches.length, 3);
+  assert.equal(context.data.groups.length > 0, true);
+  assert.ok(context.data.matches.every((match) => match.status === "playing"));
+
+  matchPage.onStatusTap.call(context, { currentTarget: { dataset: { status: "finished" } } });
+  assert.equal(context.data.status, "finished");
+  assert.equal(context.data.matches.length, 4);
+
+  matchPage.onStatusTap.call(context, { currentTarget: { dataset: { status: "not_start" } } });
+  assert.equal(context.data.matches.length, 3);
+  assert.ok(context.data.matches.every((match) => match.scoreText === "VS"));
+});
+
+test("live tournament defaults to GW sort; mock apply keeps the page sort", async () => {
+  const { liveTournamentMockData } = await import("../miniprogram/mocks/live-tournament.mock.ts");
+  assert.equal(tournamentPage.data.sortKey, "livePoints");
+  assert.equal(tournamentPage.data.sortDesc, true);
+  assert.equal(tournamentPage.data.sortOptions[0].key, "livePoints");
+  assert.equal(liveTournamentMockData.sortKey, "livePoints");
+
+  const applied = [];
+  const context = {
+    ...tournamentPage,
+    data: {
+      ...tournamentPage.data,
+      sortKey: "livePoints",
+      sortDesc: true,
+      sortOptions: tournamentPage.data.sortOptions
+    },
+    setData(update) {
+      Object.assign(this.data, update);
+      applied.push(update.sortKey);
+    },
+    applyRows() {},
+    syncDisplayState() {}
+  };
+  tournamentPage.applyMockData.call(context);
+  assert.equal(context.data.sortKey, "livePoints");
+  assert.equal(applied.at(-1) ?? context.data.sortKey, "livePoints");
+});
+
 test("tournament preseason is a stable business empty state", () => {
   assert.deepEqual(tournamentModule.noLiveEventState(), {
     loading: false,
@@ -34,7 +95,7 @@ test("tournament preseason is a stable business empty state", () => {
     emptyState: "preseason",
     emptyEyebrow: "赛季准备中",
     emptyTitle: "当前赛季暂无实时比赛周",
-    emptyDescription: "比赛周开始后，这里会显示竞赛实时得分和排名",
+    emptyDescription: "比赛周开始后，这里会显示赛事实时得分和排名",
     emptyActionText: "",
     rows: [],
     displayedRows: [],
@@ -529,7 +590,8 @@ test("tournament resume drops a historical selection after a season rollover", a
       ownershipSummary: "Old player",
       selectedOwnershipTeam: { id: 1, name: "Old team" },
       ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
-      selectedTeamExposure: { id: 1, name: "Old team" }
+      teamExposureRules: [{ teamShortName: "ARS", name: "Old team", count: 2 }],
+      pendingExposureTeam: { shortName: "CHE", name: "Old pending" }
     },
     pageVisible: false,
     hasShown: true,
@@ -564,7 +626,8 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.deepEqual(context.data.ownershipAvailablePlayers, []);
   assert.equal(context.data.ownershipSummary, "未筛选");
   assert.equal(context.data.selectedOwnershipTeam, null);
-  assert.equal(context.data.selectedTeamExposure, null);
+  assert.deepEqual(context.data.teamExposureRules, []);
+  assert.equal(context.data.pendingExposureTeam, null);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
 });

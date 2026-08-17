@@ -27,10 +27,34 @@ export const MINI_GAMEWEEK_SUMMARY_QUERY = `
       dreamTeam {
         player { ...MiniSummaryPlayerFields }
         totalPoints
+        minutes
+        goalsScored
+        assists
+        cleanSheets
+        saves
+        bonus
+        bps
+        yellowCards
+        redCards
+        ownGoals
+        penaltiesSaved
+        penaltiesMissed
       }
       topPerformers(limit: 20) {
         player { ...MiniSummaryPlayerFields }
         totalPoints
+        minutes
+        goalsScored
+        assists
+        cleanSheets
+        saves
+        bonus
+        bps
+        yellowCards
+        redCards
+        ownGoals
+        penaltiesSaved
+        penaltiesMissed
       }
     }
     topTransfersIn(eventId: $eventId, limit: $limit) {
@@ -101,6 +125,17 @@ const ENTRY_EVENT_RESULT = `
         totalPoints
         minutes
         position
+        goalsScored
+        assists
+        cleanSheets
+        saves
+        yellowCards
+        redCards
+        bonus
+        bps
+        againstShortName
+        wasHome
+        isPlayed
       }
       teamValue
       bank
@@ -127,6 +162,13 @@ const ENTRY_HISTORY = `
         eventTransfers
         eventTransfersCost
         eventNetPoints
+        eventBenchPoints
+        eventChip
+        eventCaptainPoints
+        eventPlayedCaptain {
+          webName
+          team { shortName }
+        }
         teamValue
         bank
       }
@@ -141,7 +183,7 @@ const ENTRY_HISTORY = `
 
 const ENTRY_TRANSFER_HISTORY = `
   query EntryTransferHistory($entryId: Int!) {
-    entryTransferHistory(entryId: $entryId) {
+    entryTransferHistory(entryId: $entryId, live: true) {
       eventId
       eventTransfers
       eventTransfersCost
@@ -151,10 +193,14 @@ const ENTRY_TRANSFER_HISTORY = `
         elementInTypeName
         elementInTeamShortName
         elementInCost
+        elementInPoints
+        elementInPlayed
         elementOutWebName
         elementOutTypeName
         elementOutTeamShortName
         elementOutCost
+        elementOutPoints
+        elementOutPlayed
         time
       }
     }
@@ -175,6 +221,18 @@ interface GraphQLEventPlayer {
   totalPoints?: number;
   transfersInEvent?: number;
   transfersOutEvent?: number;
+  minutes?: number;
+  goalsScored?: number;
+  assists?: number;
+  cleanSheets?: number;
+  saves?: number;
+  bonus?: number;
+  bps?: number;
+  yellowCards?: number;
+  redCards?: number;
+  ownGoals?: number;
+  penaltiesSaved?: number;
+  penaltiesMissed?: number;
 }
 
 interface MiniGameweekSummaryResponse extends EventOverallResultResponse {
@@ -214,6 +272,17 @@ export interface EntryEventPick {
   totalPoints: number;
   minutes: number;
   position: number;
+  goalsScored?: number;
+  assists?: number;
+  cleanSheets?: number;
+  saves?: number;
+  yellowCards?: number;
+  redCards?: number;
+  bonus?: number;
+  bps?: number;
+  againstShortName?: string;
+  wasHome?: boolean;
+  isPlayed?: boolean;
 }
 
 export interface EntryEventResult {
@@ -256,6 +325,12 @@ export interface EntryHistoryItem {
   eventTransfers: number;
   eventTransfersCost: number;
   eventNetPoints: number;
+  eventBenchPoints?: number;
+  eventCaptainPoints?: number;
+  eventPlayedCaptain?: {
+    webName?: string;
+    team?: { shortName?: string } | null;
+  } | null;
   teamValue: number | null;
   bank: number | null;
 }
@@ -281,10 +356,14 @@ export interface EntryTransferMove {
   elementInTypeName?: string | null;
   elementInTeamShortName?: string | null;
   elementInCost?: number | null;
+  elementInPoints?: number;
+  elementInPlayed?: boolean;
   elementOutWebName: string;
   elementOutTypeName?: string | null;
   elementOutTeamShortName?: string | null;
   elementOutCost?: number | null;
+  elementOutPoints?: number;
+  elementOutPlayed?: boolean;
   time?: string | null;
 }
 
@@ -321,7 +400,19 @@ function mapEventPlayer(row: GraphQLEventPlayer): Record<string, unknown> {
     points: row.totalPoints,
     totalPoints: row.totalPoints,
     transfersInEvent: row.transfersInEvent,
-    transfersOutEvent: row.transfersOutEvent
+    transfersOutEvent: row.transfersOutEvent,
+    minutes: row.minutes,
+    goalsScored: row.goalsScored,
+    assists: row.assists,
+    cleanSheets: row.cleanSheets,
+    saves: row.saves,
+    bonus: row.bonus,
+    bps: row.bps,
+    yellowCards: row.yellowCards,
+    redCards: row.redCards,
+    ownGoals: row.ownGoals,
+    penaltiesSaved: row.penaltiesSaved,
+    penaltiesMissed: row.penaltiesMissed
   };
 }
 

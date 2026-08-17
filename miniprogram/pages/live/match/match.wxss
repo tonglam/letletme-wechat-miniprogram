@@ -1,19 +1,40 @@
-.match-header {
+.match-toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24rpx;
-  margin-bottom: 22rpx;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.match-toolbar-status {
+  min-width: 0;
+  flex: 1;
 }
 
 .match-count {
   flex-shrink: 0;
-  min-width: 112rpx;
-  padding: 14rpx 16rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  background: var(--card);
+  min-width: 96rpx;
+  padding: 8rpx 14rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
   text-align: center;
+}
+
+/* Count chip echoes the active status tab */
+.match-count-playing {
+  background: var(--accent-tint);
+}
+
+.match-count-playing .match-count-number {
+  color: var(--green-ink);
+}
+
+.match-count-not_start {
+  background: var(--info-tint);
+}
+
+.match-count-not_start .match-count-number {
+  color: var(--info);
 }
 
 .match-count-number {
@@ -37,19 +58,20 @@
   top: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8rpx;
-  margin: 0 -4rpx 24rpx;
-  padding: 8rpx 4rpx;
-  background: var(--bg);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6rpx;
+  margin-bottom: 16rpx;
+  padding: 6rpx;
+  border-radius: 14rpx;
+  background: var(--track);
 }
 
 .status-tab {
   min-width: 0;
-  padding: 16rpx 6rpx;
-  border: 1rpx solid var(--line);
+  padding: 12rpx 6rpx;
+  border: 0;
   border-radius: 10rpx;
-  background: var(--card);
+  background: transparent;
   color: var(--muted-ink);
   font-size: 22rpx;
   font-weight: 800;
@@ -58,9 +80,9 @@
 }
 
 .status-tab.active {
-  border-color: var(--plum);
-  background: var(--plum);
-  color: var(--chalk);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2rpx 6rpx var(--plum-a8);
 }
 
 .match-content {
@@ -79,12 +101,12 @@
   letter-spacing: 2rpx;
 }
 
-/* Extends global .card — keeps the status edge + tighter padding */
+/* Extends global .card — slim status edge + tighter padding */
 .match-card {
   position: relative;
   margin-bottom: 18rpx;
-  padding: 22rpx;
-  border-left: 8rpx solid var(--muted-ink);
+  padding: 20rpx 24rpx;
+  border-left: 4rpx solid var(--muted-ink);
 }
 
 /* Status edge colours — aligned to web semantics */
@@ -103,10 +125,11 @@
 .match-card-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 18rpx;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
 }
 
+/* Per-match share — quiet circular tool, same language as the web icon button */
 .status-pill {
   flex-shrink: 0;
   padding: 6rpx 12rpx;
@@ -159,17 +182,19 @@
   line-height: 36rpx;
 }
 
+/* Scoreline — dark plum board with electric text, same as home fixture-board */
 .scoreline {
   min-height: 84rpx;
   padding: 8rpx 6rpx;
-  border-radius: 10rpx;
-  background: var(--track);
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 12rpx;
+  background: var(--plum);
   box-sizing: border-box;
   text-align: center;
 }
 
 .score {
-  color: var(--ink);
+  color: var(--electric);
   font-size: 34rpx;
   font-weight: 900;
   line-height: 44rpx;
@@ -177,9 +202,9 @@
 
 .minute {
   margin-top: 2rpx;
-  color: var(--green-ink);
+  color: var(--electric);
   font-size: 20rpx;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 26rpx;
 }
 
@@ -190,30 +215,184 @@
 }
 
 .event-title {
-  margin-bottom: 8rpx;
-  color: var(--ink);
-  font-size: 22rpx;
-  font-weight: 900;
+  margin-bottom: 12rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
 }
 
-.event-row {
+/* Compact event rows: tinted icon tile is the only graphic anchor,
+   kind colour lands on the label + value, names stay ink */
+.hl-row {
   display: flex;
   align-items: flex-start;
   gap: 14rpx;
-  padding: 8rpx 0;
-  font-size: 22rpx;
-  line-height: 30rpx;
+  padding: 10rpx 0;
 }
 
-.event-label {
+.hl-row + .hl-row {
+  border-top: 1rpx solid var(--line);
+}
+
+.hl-badge {
+  display: flex;
   flex-shrink: 0;
-  width: 72rpx;
-  color: var(--ink);
-  font-weight: 900;
+  align-items: center;
+  justify-content: center;
+  width: 36rpx;
+  height: 36rpx;
+  margin-top: 2rpx;
+  border-radius: 8rpx;
 }
 
-.event-value {
+.hl-badge-bonus {
+  background: var(--warning-tint);
+}
+
+.hl-badge-goals,
+.hl-badge-cleansheet,
+.hl-badge-pensaved {
+  background: var(--accent-tint);
+}
+
+.hl-badge-assists,
+.hl-badge-defensive,
+.hl-badge-saves {
+  background: var(--info-tint);
+}
+
+.hl-badge-bps {
+  background: var(--track);
+}
+
+.hl-badge-yellow {
+  background: var(--warning-a25);
+}
+
+.hl-badge-red,
+.hl-badge-penmissed,
+.hl-badge-owngoal {
+  background: var(--danger-tint);
+}
+
+.hl-icon {
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.hl-label {
+  flex-shrink: 0;
+  width: 96rpx;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 40rpx;
+}
+
+.hl-label-bonus {
+  color: var(--warning);
+}
+
+.hl-label-goals,
+.hl-label-cleansheet,
+.hl-label-pensaved {
+  color: var(--green-ink);
+}
+
+.hl-label-assists,
+.hl-label-defensive,
+.hl-label-saves {
+  color: var(--info);
+}
+
+.hl-label-bps {
+  color: var(--ink);
+}
+
+.hl-label-yellow {
+  color: var(--warning);
+}
+
+.hl-label-red,
+.hl-label-penmissed,
+.hl-label-owngoal {
+  color: var(--danger);
+}
+
+/* Literal yellow / red card glyph, like the web CardGlyph */
+.card-glyph {
+  flex-shrink: 0;
+  width: 16rpx;
+  height: 24rpx;
+  border-radius: 3rpx;
+  box-shadow: inset 0 0 0 1rpx var(--plum-a8);
+}
+
+.card-yellow {
+  background: var(--warning-bright);
+}
+
+.card-red {
+  background: var(--danger);
+}
+
+.hl-items {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 4rpx 16rpx;
   min-width: 0;
+}
+
+.hl-item {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  line-height: 40rpx;
+}
+
+.hl-name {
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.hl-team {
+  margin-left: 6rpx;
   color: var(--muted-ink);
-  word-break: break-all;
+  font-size: 18rpx;
+}
+
+.hl-val {
+  margin-left: 6rpx;
+  font-size: 22rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hl-val-bonus,
+.hl-val-yellow {
+  color: var(--warning);
+}
+
+.hl-val-bps {
+  color: var(--ink);
+}
+
+.hl-val-defensive,
+.hl-val-assists,
+.hl-val-saves {
+  color: var(--info);
+}
+
+.hl-val-goals,
+.hl-val-cleansheet,
+.hl-val-pensaved {
+  color: var(--green-ink);
+}
+
+.hl-val-red,
+.hl-val-penmissed,
+.hl-val-owngoal {
+  color: var(--danger);
 }

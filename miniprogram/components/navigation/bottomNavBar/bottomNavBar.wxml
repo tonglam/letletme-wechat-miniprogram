@@ -1,15 +1,24 @@
 <view class="bottomNavBar">
 
-  <van-tabbar active="{{activeName}}" bind:change="onChange" border="{{false}}" safe-area-inset-bottom="{{true}}" placeholder="{{true}}">
-    <van-tabbar-item name="myFpl" icon="user-o">我的 FPL</van-tabbar-item>
-    <van-tabbar-item name="live" icon="fire-o">实时</van-tabbar-item>
-    <van-tabbar-item name="competitions" icon="medal-o">赛事</van-tabbar-item>
-    <van-tabbar-item name="explore" icon="guide-o">探索</van-tabbar-item>
-    <van-tabbar-item wx:if="{{showPerf}}" name="perf" icon="chart-trending-o">性能</van-tabbar-item>
-  </van-tabbar>
+  <view class="ll-tabbar">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="name"
+      class="ll-tabbar-item {{activeName === item.name ? 'is-active' : ''}}"
+      hover-class="hover-dim"
+      hover-stay-time="80"
+      bindtap="onTapTab"
+      data-name="{{item.name}}"
+    >
+      <view class="van-icon van-icon-{{item.icon}} ll-tabbar-icon"></view>
+      <text class="ll-tabbar-label">{{item.label}}</text>
+    </view>
+  </view>
+  <view class="ll-tabbar-placeholder" />
 
-  <view class="tabbar-edge" />
+  <view wx:if="{{edgeVisible && !show}}" class="tabbar-edge" />
 
   <van-action-sheet round show="{{show}}" actions="{{actions}}" bind:close="onClose" bind:select="onSelect" />
 
+  <privacy-dialog />
 </view>

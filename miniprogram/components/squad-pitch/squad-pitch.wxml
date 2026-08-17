@@ -1,0 +1,81 @@
+<view class="squad-pitch-wrap">
+  <view class="squad-pitch">
+    <image class="squad-pitch-bg" src="{{pitchBg}}" mode="aspectFill" />
+
+    <view class="squad-watermark" aria-hidden="true">
+      <text class="squad-watermark-title">LETLETME</text>
+      <text class="squad-watermark-url">letletme.top</text>
+    </view>
+
+    <view class="squad-header">
+      <view class="squad-header-left">
+        <text class="squad-header-team">{{headerView.teamName}}</text>
+        <text wx:if="{{headerView.managerName}}" class="squad-header-manager">{{headerView.managerName}}</text>
+      </view>
+      <view class="squad-header-right">
+        <text class="squad-header-score">{{headerView.gwPoints}}</text>
+      </view>
+    </view>
+
+    <view
+      wx:for="{{rows}}"
+      wx:key="position"
+      class="squad-row"
+      style="top: {{item.top}};"
+    >
+      <view
+        wx:for="{{item.players}}"
+        wx:for-item="player"
+        wx:key="id"
+        class="squad-player"
+        style="width: {{item.cardWidth}};"
+        hover-class="squad-player-pressed"
+        hover-stay-time="80"
+        bindtap="onPlayerTap"
+        data-id="{{player.id}}"
+      >
+        <view class="squad-kit-wrap">
+          <image class="squad-kit" src="{{player.kitSrc}}" mode="widthFix" />
+          <view wx:if="{{player.marker === 'C'}}" class="squad-marker captain">C</view>
+          <view wx:elif="{{player.marker === 'V'}}" class="squad-marker vice">V</view>
+        </view>
+        <view class="squad-nameplate">
+          <view class="squad-name"><text class="squad-name-text">{{player.webName}}</text></view>
+          <view class="squad-score"><text class="squad-score-text">{{player.score}}</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="squad-share-slot">
+      <canvas
+        type="2d"
+        id="squad-pitch-share-canvas"
+        class="squad-share-canvas"
+        style="width: {{shareWidth}}px; height: {{shareHeight}}px;"
+      ></canvas>
+    </view>
+  </view>
+
+  <view wx:if="{{hasBench}}" class="squad-bench">
+    <view class="squad-bench-head">
+      <text class="squad-bench-title">{{benchTitle}}</text>
+      <text wx:if="{{benchBoost}}" class="squad-bench-bb">BB</text>
+    </view>
+    <view class="squad-bench-row">
+      <view
+        wx:for="{{bench}}"
+        wx:key="id"
+        class="squad-bench-card"
+        hover-class="squad-player-pressed"
+        hover-stay-time="80"
+        bindtap="onPlayerTap"
+        data-id="{{item.id}}"
+      >
+        <image class="squad-bench-kit" src="{{item.kitSrc}}" mode="aspectFit" />
+        <text class="squad-bench-label">{{item.label}}</text>
+        <text class="squad-bench-name">{{item.webName}}</text>
+        <text class="squad-bench-line">{{item.scoreText}}</text>
+      </view>
+    </view>
+  </view>
+</view>

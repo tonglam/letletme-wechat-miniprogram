@@ -6,6 +6,10 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "data-status": "../../../components/data-status/data-status",
-    "gw-picker": "../../../components/gw-picker/gw-picker"
+    "gw-picker": "../../../components/gw-picker/gw-picker",
+    "player-row": "../../../components/player-row/player-row",
+    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet",
+    "squad-pitch": "../../../components/squad-pitch/squad-pitch",
+    "mini-chart": "../../../components/mini-chart/mini-chart"
   }
 }

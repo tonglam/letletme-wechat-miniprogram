@@ -25,11 +25,22 @@ declare namespace WechatMiniprogram {
   interface Wx {
     requirePrivacyAuthorize(option: {
       success?: (res: { errMsg: string }) => void
-      fail?: (err: { errMsg: string }) => void
+      fail?: (err: { errMsg: string; errno?: number }) => void
       complete?: (res: { errMsg: string }) => void
     }): void
     getPrivacySetting(option: {
-      success?: (res: { privacyAuthorized: boolean; privacyRequires: string[] }) => void
+      success?: (res: { needAuthorization: boolean; privacyContractName: string }) => void
+      fail?: (err: { errMsg: string }) => void
+      complete?: (res: { errMsg: string }) => void
+    }): void
+    onNeedPrivacyAuthorization(
+      callback: (
+        resolve: (result: { event: "agree" | "disagree"; buttonId?: string }) => void,
+        eventInfo: { referrer: string }
+      ) => void
+    ): void
+    openPrivacyContract(option?: {
+      success?: (res: { errMsg: string }) => void
       fail?: (err: { errMsg: string }) => void
       complete?: (res: { errMsg: string }) => void
     }): void

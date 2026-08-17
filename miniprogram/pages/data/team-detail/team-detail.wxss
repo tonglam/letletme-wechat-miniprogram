@@ -1,6 +1,34 @@
-.detail-row {
+.strength-row {
   display: flex;
-  justify-content: space-between;
-  padding: 20rpx 0;
-  border-top: 1rpx solid var(--line);
+  align-items: center;
+  gap: 16rpx;
+}
+
+.strength-label {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.strength-dots {
+  display: flex;
+  flex: 1;
+  gap: 8rpx;
+}
+
+.strength-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: var(--track);
+}
+
+.strength-dot.on {
+  background: var(--green-ink);
+}
+
+.strength-value {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
 }

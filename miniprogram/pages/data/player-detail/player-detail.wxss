@@ -1,7 +1,1 @@
-.detail-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 0;
-  border-top: 1rpx solid var(--line);
-}
+/* Hero uses the global .scoreboard score-hero family — no page-local styles */

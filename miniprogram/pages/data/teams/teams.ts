@@ -1,3 +1,5 @@
+import { MOCK_ENABLED } from "../../../config/mock-mode";
+import { dataTeamsMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamList } from "../../../services/common.service";
 import type { TeamOption } from "../../../models/common";
@@ -58,6 +60,10 @@ PerformancePage({
   },
 
   async loadData(forceRefresh = false, originatingTrace?: PageRequestTrace) {
+    if (MOCK_ENABLED) {
+      this.setData(dataTeamsMockData);
+      return;
+    }
     this.activeForceRefresh = forceRefresh;
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;

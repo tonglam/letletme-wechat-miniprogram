@@ -1,8 +1,8 @@
 {
   "component": true,
+  "renderer": "webview",
   "usingComponents": {
-    "van-tabbar": "../../../miniprogram_npm/@vant/weapp/tabbar/index",
-    "van-tabbar-item": "../../../miniprogram_npm/@vant/weapp/tabbar-item/index",
-    "van-action-sheet": "../../../miniprogram_npm/@vant/weapp/action-sheet/index"
+    "van-action-sheet": "../../../miniprogram_npm/@vant/weapp/action-sheet/index",
+    "privacy-dialog": "../../privacy-dialog/privacy-dialog"
   }
 }

@@ -1,5 +1,5 @@
 <picker mode="selector" range="{{options}}" value="{{selectedIndex}}" bindchange="onPickerChange">
-  <view class="gw-picker">
+  <view class="gw-picker {{compact ? 'gw-picker-compact' : ''}} {{dark ? 'gw-picker-dark' : ''}}">
     <text>{{label}}</text>
     <text class="gw-picker-action">切换</text>
   </view>

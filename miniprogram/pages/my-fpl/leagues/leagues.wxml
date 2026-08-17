@@ -1,58 +1,248 @@
 <view class="page page-tabbar">
-  <view class="section">
-    <view class="title">我的联赛</view>
-    <view class="subtitle">官方 FPL 联赛 · 竞赛筹备与管理在网页版进行</view>
-  </view>
-
-  <view wx:if="{{entryId}}" class="section">
-    <filter-bar keyword="{{keyword}}" placeholder="搜索联赛" actionText="查询" bind:search="onKeyword" bind:submit="onKeyword" bind:reset="onResetSearch" />
-  </view>
-
-  <view wx:if="{{error}}" class="section">
-    <view class="inline-error">
-      <text>{{error}}</text>
-      <view class="inline-error-retry" bindtap="onRetry" hover-class="hover-dim">重试</view>
+  <!-- Toolbar — same language as the live tournament desk -->
+  <view class="section toolbar">
+    <view class="row">
+      <picker wx:if="{{tournaments.length}}" class="league-picker" mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+        <view class="league-switch">
+          <text class="league-name">{{selectedTournament.name || '请选择赛事'}}</text>
+        </view>
+      </picker>
+      <view wx:else>
+        <view class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事数据待就绪'}}</view>
+      </view>
+      <gw-picker wx:if="{{tournaments.length && !emptyState}}" compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
   </view>
 
-  <app-loading wx:if="{{loading}}" text="加载联赛" />
-  <view id="perf-primary-content" wx:elif="{{!entryId}}" class="section">
+  <view wx:if="{{selectedTournament && !emptyState}}" class="section tab-strip">
+    <view class="tab-item {{showSeason ? 'tab-active' : ''}}" data-view="season" catchtap="onViewTap" hover-class="hover-dim">赛季</view>
+    <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
+  </view>
+
+  <app-error-state id="perf-primary-content" wx:if="{{error && !tournaments.length && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading}}" text="加载赛事" />
+  <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
-      eyebrow="需要球队"
-      title="先选择我的球队"
-      description="查找球队并设为我的球队后，即可查看你所在的官方联赛。"
-      actionText="去选择球队"
+      eyebrow="{{emptyEyebrow}}"
+      title="{{emptyTitle}}"
+      description="{{emptyDescription}}"
+      actionText="{{emptyActionText}}"
       featured="{{true}}"
       bind:action="onEmptyAction"
     />
+    <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink" hover-class="hover-dim">创建和管理赛事请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
-  <view id="perf-primary-content" wx:elif="{{displayLeagues.length === 0 && !error}}" class="section">
-    <app-empty-state
-      title="{{keyword ? '没有匹配的联赛' : '暂无官方联赛'}}"
-      description="{{keyword ? '换个关键词试试。' : '加入官方 FPL 联赛后会显示在这里。'}}"
-      actionText="{{keyword ? '清除搜索' : ''}}"
-      bind:action="onResetSearch"
-    />
-  </view>
+
   <block wx:else>
-    <view id="perf-primary-content" class="section card league-list">
-      <view
-        wx:for="{{displayLeagues}}"
-        wx:key="id"
-        class="league-row"
-      >
-        <view class="league-main">
-          <view class="league-name">{{item.name}}</view>
-          <view class="league-meta">
-            <text wx:if="{{item.viewerRank !== undefined}}">我的排名 {{item.viewerRank}} · </text>
-            <text>{{item.associationCount !== undefined ? (item.associationCount + ' 个关联竞赛') : '竞赛关联信息未就绪'}}</text>
+    <view wx:if="{{error}}" class="live-refresh-error">{{error}}</view>
+    <view wx:if="{{viewError}}" class="live-refresh-error">{{viewError}}</view>
+    <app-loading wx:if="{{viewLoading}}" text="加载赛事数据" />
+
+    <!-- 赛季 · 你在赛事中 -->
+    <block wx:if="{{showSeason && !viewLoading}}">
+      <view wx:if="{{!hasSeasonData}}" class="section">
+        <app-empty-state title="该赛事暂无可用的积分榜数据" description="赛事完成第一轮结算后会显示赛季数据" />
+      </view>
+      <block wx:else>
+        <view id="perf-primary-content" class="section">
+          <view class="score-card scoreboard">
+            <view class="score-top">
+              <view class="score-identity">
+                <view class="score-team">你在赛事中</view>
+                <view class="score-manager">{{heroKicker}}</view>
+              </view>
+              <view class="score-hero">
+                <view class="score-label">赛事内排名</view>
+                <view class="score">{{heroRank}}</view>
+              </view>
+            </view>
+            <view class="score-sub">{{heroRankSub}}</view>
           </view>
         </view>
-        <view class="league-action" data-id="{{item.id}}" bindtap="onOpenWebsite" hover-class="hover-dim">网页查看</view>
+
+        <view class="section me-grid">
+          <view wx:for="{{meTiles}}" wx:key="label" class="me-tile">
+            <view class="me-tile-label">{{item.label}}</view>
+            <view class="me-tile-value">{{item.value}}</view>
+            <view class="me-tile-meta">{{item.meta || '　'}}</view>
+          </view>
+        </view>
+
+        <view class="section card">
+          <view class="section-heading">联赛概况</view>
+          <view class="stat-strip stat-strip-4">
+            <view wx:for="{{overviewStats}}" wx:key="label" class="stat">
+              <text class="stat-label">{{item.label}}</text>
+              <text class="stat-value">{{item.value}}</text>
+            </view>
+          </view>
+          <view class="section-heading leader-heading">联赛之最</view>
+          <view wx:for="{{leaderRows}}" wx:key="id" class="leader-row">
+            <text class="leader-label">{{item.label}}</text>
+            <view class="leader-main">
+              <text class="leader-name">{{item.name}}</text>
+              <view wx:if="{{item.meta}}" class="leader-meta">{{item.meta}}</view>
+            </view>
+            <text class="leader-value">{{item.value}}</text>
+          </view>
+        </view>
+
+        <view class="section card season-chart-card">
+          <view class="section-heading">赛季路径</view>
+          <app-loading wx:if="{{pathLoading && !pathVisible}}" text="加载赛事走势" />
+          <app-empty-state
+            wx:elif="{{!pathLoading && !pathVisible}}"
+            title="还不够画路径"
+            description="至少两个比赛周的积分榜后会显示你相对榜首和平均的走势"
+          />
+          <block wx:else>
+            <view class="chart-modes">
+              <view
+                wx:for="{{pathModes}}"
+                wx:key="id"
+                class="chart-mode {{pathMode === item.id ? 'chart-mode-on' : ''}}"
+                data-mode="{{item.id}}"
+                bindtap="onPathMode"
+                hover-class="hover-dim"
+              >{{item.label}}</view>
+            </view>
+            <view class="chart-summary">{{pathSummary}}</view>
+            <mini-chart
+              type="line"
+              points="{{pathSeries}}"
+              invertY="{{pathInvertY}}"
+              selectedX="{{pathSelectedGw || 0}}"
+              hasSelected="{{pathHasSelected}}"
+              bind:select="onPathSelect"
+            />
+            <view class="chart-hint">{{pathHint}}</view>
+          </block>
+        </view>
+      </block>
+    </block>
+
+    <!-- 单轮 · 我的表现 + 本轮看点 -->
+    <block wx:if="{{showGameweek && !viewLoading}}">
+      <view wx:if="{{gwNotice}}" class="live-refresh-error">{{gwNotice}}</view>
+      <view wx:if="{{!hasGwData}}" class="section">
+        <app-empty-state title="暂无赛事数据" description="本轮赛事结果结算后会显示在这里" />
       </view>
-    </view>
+      <block wx:else>
+        <view id="perf-primary-content" class="section summary-grid">
+          <view wx:for="{{gwTiles}}" wx:key="label" class="summary-tile">
+            <view class="tile-label">{{item.label}}</view>
+            <view class="tile-value {{item.tone === 'good' ? 'tile-good' : ''}} {{item.tone === 'bad' ? 'tile-bad' : ''}}">{{item.value}}</view>
+            <view class="tile-meta {{item.tone === 'good' ? 'tile-good' : ''}} {{item.tone === 'bad' ? 'tile-bad' : ''}}">{{item.meta || '　'}}</view>
+          </view>
+        </view>
+
+        <view class="section card">
+          <view class="section-heading">本轮高分</view>
+            <app-empty-state wx:if="{{topRows.length === 0}}" title="本轮暂无得分数据" />
+            <view wx:for="{{topRows}}" wx:key="id" class="hl-row">
+              <view class="hl-main">
+                <view class="hl-title">{{item.title}}</view>
+                <view wx:if="{{item.meta}}" class="hl-meta">{{item.meta}}</view>
+              </view>
+              <text class="hl-value">{{item.value}}</text>
+            </view>
+        </view>
+
+        <view class="section hl-pair">
+          <view class="card hl-card">
+            <view class="section-heading">进步榜</view>
+            <app-empty-state wx:if="{{riserRows.length === 0}}" title="本轮无人名次上升" />
+            <view wx:for="{{riserRows}}" wx:key="id" class="hl-row">
+              <view class="hl-main">
+                <view class="hl-title">{{item.title}}</view>
+                <view class="hl-meta">{{item.meta}}</view>
+              </view>
+              <text class="hl-value hl-good">{{item.value}}</text>
+            </view>
+          </view>
+          <view class="card hl-card">
+            <view class="section-heading">退步榜</view>
+            <app-empty-state wx:if="{{fallerRows.length === 0}}" title="本轮无人名次下降" />
+            <view wx:for="{{fallerRows}}" wx:key="id" class="hl-row">
+              <view class="hl-main">
+                <view class="hl-title">{{item.title}}</view>
+                <view class="hl-meta">{{item.meta}}</view>
+              </view>
+              <text class="hl-value hl-bad">{{item.value}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </block>
+
+    <!-- 积分榜 — board language lifted from the live tournament desk -->
+    <block wx:if="{{(showSeason && hasSeasonData) || (showGameweek && hasGwData)}}">
+      <view class="section card filter-card">
+        <view class="filter-top">
+          <filter-bar class="filter-search" keyword="{{keyword}}" placeholder="搜索球队或经理" actionText="查" bind:search="onKeyword" bind:submit="onKeyword" bind:reset="onResetSearch" />
+        </view>
+      </view>
+
+      <view class="section sort-tabs">
+        <view
+          wx:for="{{sortOptions}}"
+          wx:key="key"
+          class="sort-tab {{sortKey === item.key ? 'active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onSortTap"
+          hover-class="hover-dim"
+        >{{item.label}}{{sortKey === item.key ? (sortAsc ? ' ↑' : ' ↓') : ''}}</view>
+      </view>
+
+      <view class="section">
+        <view class="result-row">
+          <view class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{boardRows.length}}</view>
+        </view>
+        <app-empty-state
+          wx:if="{{displayedRows.length === 0}}"
+          title="没有匹配的球队"
+          description="换个关键词试试"
+          actionText="清除搜索"
+          bind:action="onResetSearch"
+        />
+        <view wx:else class="board">
+          <view class="board-head">
+            <text class="col-rank">#</text>
+            <text class="col-team">球队</text>
+            <text class="col-num col-c1">{{boardCol1}}</text>
+            <text class="col-num col-c2">{{boardCol2}}</text>
+            <text class="col-num col-c3">{{boardCol3}}</text>
+          </view>
+          <view
+            wx:for="{{displayedRows}}"
+            wx:key="entryId"
+            class="board-row {{item.me ? 'me' : ''}}"
+          >
+            <view class="col-rank">
+              <text>{{item.rankText}}</text>
+              <text wx:if="{{item.moveText}}" class="rank-move move-{{item.moveTone}}">{{item.moveText}}</text>
+            </view>
+            <view class="col-team">
+              <view class="team-line">
+                <text class="team-name">{{item.name}}</text>
+                <text wx:if="{{item.me}}" class="me-badge">我</text>
+              </view>
+              <view class="team-meta">
+                <text>{{item.manager}}</text>
+                <text wx:if="{{item.chip}}" class="chip-badge chip-{{item.chip}}">{{item.chip}}</text>
+              </view>
+            </view>
+            <text class="col-num col-c1 {{item.c1Tone === 'good' ? 'num-good' : ''}}">{{item.c1}}</text>
+            <text class="col-num col-c2 {{item.c2Tone === 'bad' ? 'num-bad' : ''}}">{{item.c2}}</text>
+            <text class="col-num col-c3">{{item.c3}}</text>
+          </view>
+          <view wx:if="{{hasMore}}" class="load-more" bindtap="onLoadMore" hover-class="hover-dim">再显示 20 队</view>
+        </view>
+      </view>
+    </block>
+
     <view class="section">
-      <view class="footnote">创建、筹备和管理竞赛请访问 LetLetMe 网页版</view>
+      <view class="footnote" bindtap="onOpenWebsite" hover-class="hover-dim">创建、筹备和管理赛事请访问 LetLetMe 网页版</view>
     </view>
   </block>
 

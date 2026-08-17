@@ -6,6 +6,7 @@
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
-    "live-status-bar": "../../../components/live-status-bar/live-status-bar"
+    "live-status-bar": "../../../components/live-status-bar/live-status-bar",
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
   }
 }

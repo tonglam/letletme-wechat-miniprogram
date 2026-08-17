@@ -1,19 +1,60 @@
 .gw-picker {
   display: inline-flex;
   align-items: center;
-  gap: 12rpx;
-  min-height: 64rpx;
-  padding: 0 18rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 10rpx;
-  background: var(--card);
+  gap: 16rpx;
+  min-height: 80rpx;
+  padding: 0 22rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
   color: var(--ink);
-  font-size: 24rpx;
+  font-size: 30rpx;
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .gw-picker-action {
   color: var(--green-ink);
-  font-size: 22rpx;
+  font-size: 28rpx;
   font-weight: 700;
+}
+
+.gw-picker-compact {
+  gap: 8rpx;
+  min-height: 72rpx;
+  padding: 0 18rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.gw-picker-compact::after {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-right: 8rpx solid transparent;
+  border-left: 8rpx solid transparent;
+  border-top: 10rpx solid var(--muted-ink);
+}
+
+.gw-picker-compact .gw-picker-action {
+  display: none;
+}
+
+/* Dark fascia variant — same plum board + electric edge as .gw-pill-dark */
+.gw-picker-dark {
+  border: 1rpx solid var(--electric-a35);
+  background: var(--plum);
+  color: var(--electric);
+}
+
+.gw-picker-dark .gw-picker-action {
+  color: var(--electric);
+}
+
+.gw-picker-compact.gw-picker-dark::after {
+  border-top-color: var(--electric);
 }

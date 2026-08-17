@@ -2,29 +2,143 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+globalThis.Page = globalThis.Page || ((definition) => definition);
+
+const homeModule = await import("../miniprogram/pages/home/index/index.ts");
+
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("home paints Core fixtures before starting independent secondary sections", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
   const fixtureAwait = page.indexOf("const fixtureResult = await fixtureTask");
-  const primaryCommit = page.indexOf("fixtureRows: fixtureResult.fixtures.map");
+  const primaryCommit = page.indexOf("fixtureDeskState(fixtureResult.fixtures)");
   const secondaryStart = page.indexOf("void this.loadSecondaryData");
   assert.ok(fixtureAwait >= 0 && primaryCommit > fixtureAwait && secondaryStart > primaryCommit);
   assert.match(page, /await this\.syncAppState\([\s\S]*tracker\?\.mark\("primaryRequestStartAt"\)/);
   assert.match(page, /syncAppState\(extra: Partial<HomeData> = \{\}\): Promise<void>[\s\S]*return setDataAsync\(this/);
   assert.doesNotMatch(page, /this\._loadedContextRevision = context\.contextRevision;\s*this\.syncAppState\(\);\s*this\.startCountdown\(\);\s*await this\.loadPage\(\)/);
-  assert.match(page, /Promise\.allSettled\(\[entryTask, supplementTask\]\)/);
-  assert.match(page, /getEntryInfo[\s\S]*this\.setData\(\{ entry, entryError: "" \}\)/);
-  assert.match(page, /getMiniHomeSupplement[\s\S]*\.then\(\(supplement\)/);
+  assert.match(page, /Promise\.all\(\[marketTask, supplementTask\]\)/);
+  assert.match(page, /getEntryInfo[\s\S]*this\.setData\(\{ entry, leagues, entryError: "" \}\)/);
+  assert.match(page, /getMiniHomeMarket/);
+  assert.match(page, /getMiniHomeSupplement/);
 });
 
-test("home first viewport order is deadline, fixtures, entry, then auxiliary notice", () => {
+test("home deadline pill is the next-event GW badge, matching the web scoreboard", () => {
   const template = source("miniprogram/pages/home/index/index.wxml");
+  const deadline = template.slice(
+    template.indexOf("deadline-card"),
+    template.indexOf("perf-primary-fixtures")
+  );
+  assert.match(deadline, /下一轮截止/);
+  assert.match(deadline, /wx:if="\{\{nextGw\}\}"[\s\S]*class="gw-pill-dark">GW\{\{nextGw\}\}/);
+  assert.doesNotMatch(deadline, /Current GW/);
+  assert.doesNotMatch(deadline, /Next GW/);
+  assert.doesNotMatch(deadline, /GW\{\{nextGw \|\| '-' \}\} Deadline/);
+});
+
+test("home transfer desk matches the web market teaser, not a renamed price list", () => {
+  const template = source("miniprogram/pages/home/index/index.wxml");
+  const service = source("miniprogram/services/home.service.ts");
+  assert.match(template, /marketMode === 'ownership'/);
+  assert.match(template, /availabilityRows/);
+  assert.match(service, /availabilityUpdates/);
+  assert.match(service, /ownershipMovers/);
+  assert.match(service, /mostSelected/);
+  assert.match(service, /latest真实身价变化|最新真实身价变化/);
+});
+
+test("home first viewport order matches the web: deadline, team desk, market, then fixtures last", () => {
+  const page = source("miniprogram/pages/home/index/index.ts");
+  const template = source("miniprogram/pages/home/index/index.wxml");
+  const bindTeam = template.indexOf("bind-team");
   const deadline = template.indexOf("deadline-card");
+  const boundEntry = template.lastIndexOf("<entry-card");
+  const market = template.indexOf("transfer-desk");
+  const gwStats = template.indexOf("gw-stats-card");
   const fixtures = template.indexOf("perf-primary-fixtures");
-  const entry = template.indexOf("<entry-card");
-  const notice = template.indexOf("notice-strip");
-  assert.ok(deadline >= 0 && fixtures > deadline && entry > fixtures && notice > entry);
+  assert.ok(bindTeam >= 0 && bindTeam < deadline, "unbound bind CTA sits above public desks");
+  assert.ok(
+    deadline >= 0
+      && boundEntry > deadline
+      && market > boundEntry
+      && gwStats > market
+      && fixtures > gwStats,
+    "web order: deadline, personal desk, transfer desk, stats, fixtures last"
+  );
+  assert.match(template, /转会台/);
+  assert.match(template, /打开市场/);
+  assert.match(template, /持有上升/);
+  assert.match(template, /持有下降/);
+  assert.match(template, /出场状态观察/);
+  assert.match(template, /最新真实身价变化|marketLeadTitle/);
+  assert.match(template, /notice-strip/);
+  assert.match(template, /noticeText/);
+  assert.match(page, /noticeText: supplement\.notice|noticeText: nextNotice/);
+  assert.match(page, /NOTICE_AUTO_CLOSE_MS = 5 \* 1000/);
+  assert.match(page, /scheduleNoticeAutoClose/);
+  assert.doesNotMatch(template, /section-title">身价变化/);
+  assert.match(template, /bind-team[\s\S]*onChangeEntry[\s\S]*onGoAccountLink/);
+  assert.doesNotMatch(template, /选择球队后开始/);
+});
+
+test("desks use quiet text actions, not filled pills", () => {
+  const entry = source("miniprogram/components/entry-card/entry-card.wxml");
+  const filter = source("miniprogram/components/filter-bar/filter-bar.wxml");
+  const buttons = source("miniprogram/app.wxss");
+  assert.match(entry, /class="action"[^>]*>切换/);
+  assert.doesNotMatch(entry, /btn-primary|btn-compact|<button/);
+  assert.match(filter, /class="action[^"]*filter-reset"/);
+  assert.doesNotMatch(buttons, /btn-compact[^{]*\{[^}]*border-radius:\s*999rpx/);
+});
+
+test("home fixtures follow the web desk: day tabs, score-or-time, no FDR, live board link", () => {
+  const template = source("miniprogram/pages/home/index/index.wxml");
+  assert.match(template, /近期赛程/);
+  assert.match(template, /onOpenLiveMatches/);
+  assert.match(template, /打开实时比赛/);
+  assert.match(template, /selectedDayRows/);
+  assert.match(template, /item\.homeName/);
+  assert.match(template, /item\.centerLabel/);
+  assert.doesNotMatch(template, /fdr-/);
+  assert.doesNotMatch(template, /fixture-vs/);
+});
+
+test("groupHomeFixturesByDay buckets by local date and prefers today", () => {
+  const grouped = homeModule.groupHomeFixturesByDay([
+    {
+      id: 1,
+      teamName: "Arsenal",
+      teamShortName: "ARS",
+      againstTeamName: "Chelsea",
+      againstTeamShortName: "CHE",
+      kickoffTime: new Date(2026, 7, 15, 19, 30).toISOString(),
+      finished: false
+    },
+    {
+      id: 2,
+      teamShortName: "LIV",
+      againstTeamShortName: "MUN",
+      kickoffTime: new Date(2026, 7, 15, 21, 0).toISOString(),
+      finished: true,
+      homeScore: 2,
+      awayScore: 1
+    },
+    {
+      id: 3,
+      teamShortName: "MCI",
+      againstTeamShortName: "TOT",
+      kickoffTime: new Date(2026, 7, 16, 21, 0).toISOString(),
+      finished: false
+    }
+  ], new Date(2026, 7, 16, 8, 0));
+  assert.equal(grouped.days.length, 2);
+  assert.equal(grouped.selectedDayKey, grouped.days[1].dateKey);
+  assert.equal(grouped.days[0].rows.length, 2);
+  assert.equal(grouped.days[0].rows[0].homeName, "Arsenal");
+  assert.equal(grouped.days[0].rows[0].awayName, "Chelsea");
+  assert.equal(grouped.days[0].rows[1].centerLabel, "2-1");
+  assert.equal(grouped.days[0].rows[1].finished, true);
+  assert.match(grouped.days[0].rows[0].centerLabel, /^\d{2}:\d{2}$/);
 });
 
 test("home secondary completion stays on the navigation tracker that started it", () => {
@@ -46,4 +160,22 @@ test("home pull refresh does not force CurrentEventInfo while context is fresh",
     /else \{[\s\S]*ensureAppContext\(\{[\s\S]*reason: "pull-refresh"[\s\S]*\}\);[\s\S]*loadPage\(true, tracker\)/
   );
   assert.doesNotMatch(page, /const forceContextForUserRefresh = !deadlineTriggered/);
+});
+
+test("preseason GW summary with highestScore 0 hides the home stats card", () => {
+  assert.deepEqual(
+    homeModule.mapHomeGameweekStats({ highestScore: 0, chipPlays: [] }),
+    [],
+    "a lone zero highest score is placeholder data, not a published GW"
+  );
+  assert.deepEqual(
+    homeModule.mapHomeGameweekStats({
+      highestScore: 98,
+      mostCaptainedPlayer: { webName: "Haaland" }
+    }).map((row) => [row.key, row.value]),
+    [
+      ["highestScore", "98"],
+      ["viceCaptain", "Haaland"]
+    ]
+  );
 });

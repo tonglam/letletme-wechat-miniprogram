@@ -31,9 +31,9 @@ export interface FixtureRunTeam {
   shortName?: string;
 }
 
-/** Only 3 and 5 are meaningful windows; anything else clamps to 3. */
-export function normalizeHorizon(horizon: number): 3 | 5 {
-  return horizon === 5 ? 5 : 3;
+/** Web FDR_HORIZONS; anything outside 3/5/8 clamps to 3. */
+export function normalizeHorizon(horizon: number): 3 | 5 | 8 {
+  return horizon === 8 ? 8 : horizon === 5 ? 5 : 3;
 }
 
 /** Real event ids needed by the visible fixture window. */
@@ -96,6 +96,69 @@ export function buildFixtureRuns(
     runs.push({ teamId, teamName: team.name, teamShortName: team.shortName || team.name, chips });
   }
   return runs;
+}
+
+export interface FixtureRunCell {
+  event: number;
+  chips: FixtureRunChip[];
+  /** No fixture in this event — the web marks this BGW (轮空). */
+  blank: boolean;
+  /** More than one fixture in the event — the web marks this DGW (双赛). */
+  double: boolean;
+}
+
+/** One cell per event in the window so blanks and doubles stay visible. */
+export function buildFixtureRunCells(
+  run: FixtureRun,
+  startEvent: number,
+  horizon: number,
+  maxEvent = 38
+): FixtureRunCell[] {
+  return fixtureWindowEvents(startEvent, horizon, maxEvent).map((event) => {
+    const chips = run.chips.filter((chip) => chip.event === event);
+    return { event, chips, blank: chips.length === 0, double: chips.length > 1 };
+  });
+}
+
+/** Web thresholds (lib/fixtures-fdr.ts): ≤2 easy, ≥4 hard. */
+export const FDR_EASY_MAX = 2;
+export const FDR_HARD_MIN = 4;
+
+export interface FixtureRunSummary {
+  /** Mean difficulty over the window (unknown difficulties skipped); null when nothing is known. */
+  avgFdr: number | null;
+  easyCount: number;
+  hardCount: number;
+  /** First fixture of the window — the web's "next fixture" glance cards. */
+  next: FixtureRunChip | null;
+}
+
+export function summarizeFixtureRun(run: FixtureRun): FixtureRunSummary {
+  const known = run.chips.filter(
+    (chip) => typeof chip.difficulty === "number" && Number.isFinite(chip.difficulty)
+  );
+  const sum = known.reduce((total, chip) => total + (chip.difficulty as number), 0);
+  return {
+    avgFdr: known.length ? sum / known.length : null,
+    easyCount: known.filter((chip) => (chip.difficulty as number) <= FDR_EASY_MAX).length,
+    hardCount: known.filter((chip) => (chip.difficulty as number) >= FDR_HARD_MIN).length,
+    next: run.chips[0] ?? null
+  };
+}
+
+export type FixtureRunSort = "easiest" | "hardest";
+
+/** Aggregate-difficulty order mirroring the web matrix; unknown averages sort last either way. */
+export function sortFixtureRuns(runs: FixtureRun[], order: FixtureRunSort): FixtureRun[] {
+  const direction = order === "hardest" ? -1 : 1;
+  return [...runs].sort((a, b) => {
+    const avgA = summarizeFixtureRun(a).avgFdr;
+    const avgB = summarizeFixtureRun(b).avgFdr;
+    if (avgA === null && avgB === null) return 0;
+    if (avgA === null) return 1;
+    if (avgB === null) return -1;
+    return (avgA - avgB) * direction;
+  });
 }
 
 export function maxFixtureEvent(fixtures: Fixture[]): number {

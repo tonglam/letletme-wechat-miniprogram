@@ -40,8 +40,9 @@
   min-width: 250rpx;
   height: 72rpx;
   padding: 0 20rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
   color: var(--ink);
   font-size: 24rpx;
   box-sizing: border-box;
@@ -49,9 +50,6 @@
 
 .picker-action {
   margin-left: 20rpx;
-  color: var(--green-ink);
-  font-size: 22rpx;
-  font-weight: 700;
 }
 
 .price-columns {
@@ -161,10 +159,8 @@
   padding-bottom: 8rpx;
 }
 
-.clear-button {
+.picker-clear {
   flex-shrink: 0;
-  margin: 0;
-  color: var(--muted-ink);
 }
 
 .filter-grid {
@@ -178,9 +174,9 @@
 .search-input {
   height: 72rpx;
   padding: 0 20rpx;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
-  background: var(--card);
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
   color: var(--ink);
   font-size: 24rpx;
   line-height: 72rpx;
@@ -266,6 +262,234 @@
   margin-top: 18rpx;
 }
 
-.load-more-button {
-  margin: 20rpx auto 0;
+.load-more {
+  padding: 24rpx 0 8rpx;
+  text-align: center;
+}
+
+/* Share row above the boards — same language as the live tournament desk */
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 10rpx;
+}
+
+.result-row .result-count {
+  padding: 0;
+  font-weight: 700;
+}
+
+/* ---------- 市场全景 (web /explore/market pulse sections) ---------- */
+
+.pulse-heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.coverage-text {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: right;
+}
+
+.glance-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.glance-card {
+  width: calc(50% - 6rpx);
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  background: var(--card);
+  box-shadow: 0 2rpx 8rpx var(--plum-a4);
+  box-sizing: border-box;
+}
+
+.glance-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.glance-value {
+  margin-top: 8rpx;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 30rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glance-value.good {
+  color: var(--green-ink);
+}
+
+.glance-value.bad {
+  color: var(--danger);
+}
+
+.glance-sub {
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulse-card {
+  padding-bottom: 8rpx;
+}
+
+.pulse-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--line);
+}
+
+.pulse-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.pulse-top {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.pulse-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulse-meta {
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.pulse-sub {
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulse-side {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.pulse-value {
+  display: block;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.pulse-value.good {
+  color: var(--green-ink);
+}
+
+.pulse-value.bad {
+  color: var(--danger);
+}
+
+.pulse-side .pulse-sub {
+  text-align: right;
+}
+
+.bar-track {
+  height: 8rpx;
+  margin-top: 10rpx;
+  border-radius: 999rpx;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  min-width: 8rpx;
+  border-radius: 999rpx;
+  background: var(--info);
+}
+
+.bar-fill.good {
+  background: var(--green-ink);
+}
+
+.bar-fill.bad {
+  background: var(--danger);
+}
+
+.swing-columns {
+  display: flex;
+  gap: 20rpx;
+}
+
+.swing-col {
+  min-width: 0;
+  flex: 1;
+}
+
+.swing-title {
+  padding: 6rpx 0 10rpx;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.swing-title.good {
+  color: var(--green-ink);
+}
+
+.swing-title.bad {
+  color: var(--danger);
+}
+
+.swing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  padding: 14rpx 0;
+  border-top: 1rpx solid var(--line);
+}
+
+.swing-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.status-pill {
+  flex-shrink: 0;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.availability-toggle {
+  padding: 22rpx 0 10rpx;
+  border-top: 1rpx solid var(--line);
+  text-align: center;
 }

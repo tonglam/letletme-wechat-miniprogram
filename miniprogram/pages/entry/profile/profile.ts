@@ -1,3 +1,5 @@
+import { MOCK_ENABLED } from "../../../config/mock-mode";
+import { entryProfileMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
@@ -114,6 +116,10 @@ PerformancePage({
     trace?: PageRequestTrace,
     lifecycleRevision?: number
   ) {
+    if (MOCK_ENABLED) {
+      this.setData(entryProfileMockData);
+      return;
+    }
     if (!Number.isFinite(entryId) || entryId <= 0) {
       this.setData({ loading: false, error: "", emptyState: true, entry: {} });
       return;

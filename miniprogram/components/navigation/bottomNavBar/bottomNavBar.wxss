@@ -1,11 +1,72 @@
-/* bottomNavBar — dark fascia tab bar (mirrors web footer: fascia + electric top edge) */
+@import "../../../miniprogram_npm/@vant/weapp/icon/index.wxss";
+
+/* bottomNavBar — dark fascia tab bar (mirrors web footer: fascia + electric top edge)
+ *
+ * The icon+label cluster is centered in the FULL visual bar, including the
+ * min floor / home-indicator inset. Vant's tabbar cannot do this: its items
+ * are height:100% of a 50px content box, so labels sit in the upper strip.
+ *
+ *   [electric edge]
+ *   [ equal space ]
+ *   [ icon + label ]
+ *   [ equal space ]
+ */
+.ll-tabbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: calc(var(--tabbar-height) + var(--tabbar-floor));
+  height: calc(var(--tabbar-height) + max(var(--tabbar-floor), constant(safe-area-inset-bottom)));
+  height: calc(var(--tabbar-height) + max(var(--tabbar-floor), env(safe-area-inset-bottom)));
+  background: var(--tabbar-background-color);
+}
+
+.ll-tabbar-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  color: var(--tabbar-item-text-color);
+}
+
+.ll-tabbar-item.is-active {
+  color: var(--tabbar-item-active-color);
+}
+
+.ll-tabbar-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ll-tabbar-label {
+  margin-top: 2px;
+  font-size: 20rpx;
+  line-height: 1;
+}
+
+.ll-tabbar-placeholder {
+  height: calc(var(--tabbar-height) + var(--tabbar-floor));
+  height: calc(var(--tabbar-height) + max(var(--tabbar-floor), constant(safe-area-inset-bottom)));
+  height: calc(var(--tabbar-height) + max(var(--tabbar-floor), env(safe-area-inset-bottom)));
+}
+
 .tabbar-edge {
   position: fixed;
-  left: 0;
   right: 0;
-  bottom: calc(50px + env(safe-area-inset-bottom));
+  bottom: calc(var(--tabbar-height) + var(--tabbar-floor));
+  bottom: calc(var(--tabbar-height) + max(var(--tabbar-floor), constant(safe-area-inset-bottom)));
+  bottom: calc(var(--tabbar-height) + max(var(--tabbar-floor), env(safe-area-inset-bottom)));
+  left: 0;
+  z-index: 101;
   height: 4rpx;
   background: var(--electric);
-  z-index: 2;
   pointer-events: none;
 }

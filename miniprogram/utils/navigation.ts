@@ -8,6 +8,12 @@ function encodeQuery(query: Record<string, string | number | undefined>): string
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
+export function setPageTitle(title: string): void {
+  const next = String(title || "").trim();
+  if (!next) return;
+  wx.setNavigationBarTitle({ title: next });
+}
+
 export function navigateTo(path: string, query: Record<string, string | number | undefined> = {}): void {
   wx.navigateTo({ url: `${path}${encodeQuery(query)}` });
 }
@@ -38,10 +44,4 @@ export function switchToHome(): void {
 
 export function switchToLive(): void {
   wx.redirectTo({ url: routes.liveIndex });
-}
-
-export function switchToData(): void {
-  // The data hub is now the Explore overview (explore plan §7.3); the data/*
-  // destination routes themselves are unchanged.
-  wx.redirectTo({ url: routes.exploreIndex });
 }

@@ -1,3 +1,5 @@
+import { MOCK_ENABLED } from "../../../config/mock-mode";
+import { performanceMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getPerf, clearPerf } from "../../../utils/perf";
 import type { StoredPerf, ApiRecord } from "../../../utils/perf";
@@ -87,6 +89,10 @@ PerformancePage({
   },
 
   loadMetrics() {
+    if (MOCK_ENABLED) {
+      this.setData(performanceMockData);
+      return;
+    }
     const stored = getPerf();
     let wxLaunchMs: number | undefined;
     let wxFirstRenderMs: number | undefined;

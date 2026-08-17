@@ -11,17 +11,30 @@
   </view>
   <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球员详情" />
-  <view id="perf-primary-content" wx:else class="section card">
-    <view class="title">{{player.name || '球员详情'}}</view>
-    <view class="subtitle">{{player.team || ''}} {{player.position || ''}}</view>
-    <view class="detail-row">
-      <text>总分</text>
-      <text>{{player.totalPoints || '-'}}</text>
+  <block wx:else>
+    <view id="perf-primary-content" class="section">
+      <view class="score-card scoreboard">
+        <view class="score-top">
+          <view class="score-identity">
+            <view class="score-team">{{player.name || '-'}}</view>
+            <view class="score-manager">{{player.team || ''}} · {{player.position || ''}}<text wx:if="{{player.teamName}}"> · {{player.teamName}}</text></view>
+          </view>
+          <view class="score-hero">
+            <view class="score-label">身价</view>
+            <view class="score">{{player.priceText || '-'}}</view>
+          </view>
+        </view>
+      </view>
     </view>
-    <view class="detail-row">
-      <text>价格</text>
-      <text>{{player.price || '-'}}</text>
+    <view class="section">
+      <view class="section-heading">赛季数据</view>
+      <view class="metric-grid">
+        <view wx:for="{{metrics}}" wx:key="label" class="metric-card">
+          <text class="metric-label">{{item.label}}</text>
+          <text class="metric-value">{{item.value}}</text>
+        </view>
+      </view>
     </view>
-  </view>
+  </block>
   <bottomNavBar />
 </view>

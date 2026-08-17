@@ -1,0 +1,101 @@
+<wxs src="/components/pos.wxs" module="pos" />
+<view wx:if="{{show && detail}}" class="pls-root">
+  <view class="pls-mask" bindtap="onClose" catchtouchmove="onNoop"></view>
+  <view class="pls-sheet" catchtap="onNoop">
+
+    <!-- Hero: dark fascia band, same language as the page scoreboard -->
+    <view class="pls-hero">
+      <view class="pls-handle"></view>
+      <view class="pls-close" bindtap="onClose" hover-class="hover-dim">
+        <image src="/assets/icons/close.svg" class="pls-close-icon" mode="aspectFit" />
+      </view>
+      <view class="pls-hero-row">
+        <view class="pls-identity">
+          <view class="pls-name">{{detail.name}}</view>
+          <view class="pls-meta">
+            <text wx:if="{{detail.team}}">{{detail.team}}</text>
+            <text wx:if="{{detail.team && detail.position}}"> · </text>
+            <text wx:if="{{detail.position}}" class="pos-badge {{pos.cls(detail.position)}}">{{detail.position}}</text>
+            <text wx:if="{{detail.statusText}}"> · {{detail.statusText}}</text>
+          </view>
+        </view>
+        <view class="pls-hero-pts">
+          <text class="pls-hero-pts-label">得分</text>
+          <text class="pls-hero-pts-value">{{detail.pointsText}}</text>
+        </view>
+      </view>
+      <view wx:if="{{detail.roleBadge || detail.bpsText || detail.bonusText}}" class="pls-hero-foot">
+        <view wx:if="{{detail.roleBadge}}" class="pls-pill pls-pill-role">
+          <text class="pls-pill-value pls-pill-role-value">{{detail.roleBadge}}</text>
+        </view>
+        <view wx:if="{{detail.bpsText}}" class="pls-pill">
+          <text class="pls-pill-label">BPS</text>
+          <text class="pls-pill-value pls-bps-{{detail.bpsTone}}">{{detail.bpsText}}</text>
+        </view>
+        <view wx:if="{{detail.bonusText}}" class="pls-pill">
+          <text class="pls-pill-label">奖励</text>
+          <text class="pls-pill-value pls-pill-bonus">{{detail.bonusText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- Live "points still available": DC progress, CS 60-minute threshold -->
+    <view wx:if="{{detail.opportunityRows.length > 0}}" class="pls-section">
+      <view class="pls-section-title">加分机会</view>
+      <view class="pls-opps">
+        <view wx:for="{{detail.opportunityRows}}" wx:key="kind" class="pls-opp">
+          <view class="pls-break-badge pls-break-badge-{{item.kind}}">
+            <image src="/assets/icons/hl-{{item.kind}}.svg" class="pls-break-icon" mode="aspectFit" />
+          </view>
+          <view class="pls-opp-main">
+            <view class="pls-opp-head">
+              <text class="pls-opp-label">{{item.label}}</text>
+              <text class="pls-opp-text">{{item.text}}</text>
+            </view>
+            <view class="pls-opp-track">
+              <view class="pls-opp-fill pls-opp-fill-{{item.kind}}" style="width: {{item.progressPct}}%"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="pls-section">
+      <view class="pls-section-head">
+        <view class="pls-section-title">得分明细</view>
+        <text wx:if="{{detail.multiplierNote}}" class="pls-mult">{{detail.multiplierNote}}</text>
+      </view>
+      <view wx:if="{{detail.breakdownRows.length === 0}}" class="pls-empty">{{detail.breakdownHint || '暂无得分明细'}}</view>
+      <block wx:else>
+        <view wx:if="{{detail.breakdownHint}}" class="pls-hint">{{detail.breakdownHint}}</view>
+        <view class="pls-break">
+          <view wx:for="{{detail.breakdownRows}}" wx:key="label" class="pls-break-row">
+            <view class="pls-break-badge pls-break-badge-{{item.kind}}">
+              <view wx:if="{{item.kind === 'yellow' || item.kind === 'red'}}" class="pls-card pls-card-{{item.kind}}"></view>
+              <image wx:else src="/assets/icons/hl-{{item.kind}}.svg" class="pls-break-icon" mode="aspectFit" />
+            </view>
+            <view class="pls-break-label">
+              <text>{{item.label}}</text>
+              <text wx:if="{{item.countText}}" class="pls-break-count">{{item.countText}}</text>
+            </view>
+            <text class="pls-break-pts {{item.negative ? 'neg' : 'pos'}}">{{item.pointsText}}</text>
+          </view>
+          <view class="pls-break-row pls-break-sum">
+            <text>合计</text>
+            <text>{{detail.breakdownSumText}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="pls-section">
+      <view class="pls-section-title">本场数据</view>
+      <view class="pls-stats">
+        <view wx:for="{{detail.statRows}}" wx:key="label" class="pls-stat {{item.muted ? 'muted' : ''}}">
+          <view class="pls-stat-label">{{item.label}}</view>
+          <view class="pls-stat-value">{{item.value}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

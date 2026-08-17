@@ -2,14 +2,20 @@ export interface PlayerOption {
   element?: number;
   code?: number | string;
   name: string;
+  teamId?: number;
   team?: string;
   teamName?: string;
   position?: string;
   price?: number;
   priceText?: string;
+  totalPoints?: number;
+  form?: number;
+  selectedByPercent?: number;
+  /** Directory meta segment, e.g. "状态 5.2 · 持有 45.1%" (web player-stats row). */
+  statText?: string;
 }
 
-export interface PlayerDetail extends PlayerOption {
+export interface PlayerDetail extends Omit<PlayerOption, "totalPoints" | "selectedByPercent" | "form"> {
   totalPoints?: number;
   selectedByPercent?: string | number;
   form?: string | number;

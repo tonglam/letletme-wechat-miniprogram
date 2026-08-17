@@ -12,21 +12,6 @@ test("Match and Live Tournament retain queued resume work across repeated hides"
   assert.match(tournament, /resumeRowsAfterShow = this\.resumeRowsAfterShow[\s\S]*\|\| \(!this\.resumeDirectoryAfterShow/);
 });
 
-test("Competitions preserves a forced list refresh independently of placeholder loading", () => {
-  const page = read("miniprogram/pages/competitions/index/index.ts");
-  assert.match(page, /loadPending = true[\s\S]*loadForceRefresh = forceRefresh/);
-  assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow[\s\S]*this\.loadPending[\s\S]*resumeForceRefresh = this\.resumeForceRefresh \|\| this\.loadForceRefresh/);
-  assert.match(page, /onShow\(\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*loadList\(forceRefresh, trace, lifecycleRevision\)/);
-});
-
-test("My FPL overview waits for forced secondary reads and resumes the force bit", () => {
-  const page = read("miniprogram/pages/my-fpl/index/index.ts");
-  assert.match(page, /loadOverview\([\s\S]*overviewRequestPending = true[\s\S]*performLoadOverview/);
-  assert.match(page, /if \(forceRefresh\) await secondaryTask/);
-  assert.match(page, /onHide\(\)[\s\S]*overviewRequestPending && this\.overviewRequestForceRefresh[\s\S]*resumeForceRefresh = true/);
-  assert.match(page, /resumeOverview\([\s\S]*loadOverview\(forceRefresh, lifecycleRevision\)/);
-});
-
 test("Fixture Explorer resumes forced context and data reads", () => {
   const page = read("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(page, /runForcedRefresh\([\s\S]*refreshPending = true[\s\S]*syncEventContext\(true[\s\S]*load\(true/);

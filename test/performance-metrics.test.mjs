@@ -37,14 +37,21 @@ test("performance buffers remain bounded and page operation counts are separate"
     observe(_selector, next) { callback = next; },
     disconnect() { disconnectCount += 1; }
   };
+  let observerOptions;
   const tracker = new PagePerformanceTracker(
-    { createIntersectionObserver: () => observer },
+    {
+      createIntersectionObserver: (options) => {
+        observerOptions = options;
+        return observer;
+      }
+    },
     "pages/test/index",
     "warm-enter"
   );
   tracker.countOperation(false);
   tracker.countOperation(true);
   tracker.observePrimary();
+  assert.equal(observerOptions.nativeMode, true);
   assert.equal(getActivePagePerformanceTrace().navigationId, tracker.navigationId);
   callback({ intersectionRatio: 1 });
   callback({ intersectionRatio: 1 });

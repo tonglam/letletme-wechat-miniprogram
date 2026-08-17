@@ -1,46 +1,95 @@
 <view class="page page-tabbar">
   <view class="section">
-    <view class="section-title">赛程</view>
-    <view class="subtitle">20 支球队的未来赛程 · 主客场与难度</view>
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">赛程</view>
+          <view class="score-manager">20 支球队 · 按难度着色 · 1 易 5 难</view>
+        </view>
+        <gw-picker compact="{{true}}" dark="{{true}}" value="{{startEvent}}" min="{{1}}" max="{{maxEvent}}" bind:change="onGwChange" />
+      </view>
+    </view>
   </view>
 
   <view class="section controls">
-    <gw-picker value="{{startEvent}}" min="{{1}}" max="{{maxEvent}}" bind:change="onGwChange" />
     <view class="mode-tabs">
       <view class="mode-tab {{horizon === 3 ? 'active' : ''}}" data-horizon="3" hover-class="hover-dim" bindtap="onHorizonChange">3 轮</view>
       <view class="mode-tab {{horizon === 5 ? 'active' : ''}}" data-horizon="5" hover-class="hover-dim" bindtap="onHorizonChange">5 轮</view>
+      <view class="mode-tab {{horizon === 8 ? 'active' : ''}}" data-horizon="8" hover-class="hover-dim" bindtap="onHorizonChange">8 轮</view>
+    </view>
+    <view class="mode-tabs sort-tabs">
+      <view class="mode-tab {{sortOrder === 'easiest' ? 'active' : ''}}" data-sort="easiest" hover-class="hover-dim" bindtap="onSortChange">最易</view>
+      <view class="mode-tab {{sortOrder === 'hardest' ? 'active' : ''}}" data-sort="hardest" hover-class="hover-dim" bindtap="onSortChange">最难</view>
     </view>
   </view>
 
   <view wx:if="{{error}}" class="section">
-    <view class="inline-error">
-      <text>{{error}}</text>
-      <view class="inline-error-retry" hover-class="hover-dim" bindtap="onRetry">重试</view>
-    </view>
+    <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
 
   <app-loading wx:if="{{loading}}" text="加载赛程" />
   <block wx:else>
+    <view wx:if="{{glanceCards.length}}" class="section glance-grid">
+      <view
+        wx:for="{{glanceCards}}"
+        wx:key="key"
+        class="glance-card"
+        data-sort="{{item.sort}}"
+        hover-class="{{item.sort ? 'hover-dim' : ''}}"
+        bindtap="onGlanceTap"
+      >
+        <view class="glance-label">{{item.label}}</view>
+        <view class="glance-value {{item.valueClass}}">{{item.valueText}}</view>
+        <view class="glance-sub">{{item.subText}}</view>
+      </view>
+    </view>
+
+    <view class="section legend-row">
+      <text class="legend-label">难度</text>
+      <view class="legend-items">
+        <text class="legend-item fdr-1"><text class="legend-dot fdr-dot-1"></text>1</text>
+        <text class="legend-item fdr-2"><text class="legend-dot fdr-dot-2"></text>2</text>
+        <text class="legend-item fdr-3"><text class="legend-dot fdr-dot-3"></text>3</text>
+        <text class="legend-item fdr-4"><text class="legend-dot fdr-dot-4"></text>4</text>
+        <text class="legend-item fdr-5"><text class="legend-dot fdr-dot-5"></text>5</text>
+      </view>
+      <text class="legend-hint">易 → 难</text>
+    </view>
+
     <view id="perf-primary-content" class="section team-list">
-      <view wx:for="{{runs}}" wx:key="teamId" class="card team-card">
-        <view class="team-name">{{item.teamName}}</view>
-        <view class="chip-row">
+      <view wx:for="{{runCards}}" wx:key="teamId" class="card team-card">
+        <view class="team-head">
+          <view class="team-name">{{item.teamName}}</view>
+          <view class="team-meta">{{item.metaText}}</view>
+          <view class="avg-badge {{item.avgClass}}">{{item.avgText}}</view>
+        </view>
+        <view class="cell-row">
           <view
-            wx:for="{{item.chips}}"
-            wx:for-item="chip"
-            wx:for-index="chipIndex"
-            wx:key="chipIndex"
-            class="chip-wrap {{chip.finished ? 'chip-finished' : ''}}"
+            wx:for="{{item.cells}}"
+            wx:for-item="cell"
+            wx:key="key"
+            class="run-cell"
           >
-            <text class="chip-event">GW{{chip.event}}</text>
-            <fixture-chip
-              opponent="{{chip.opponentShortName}}"
-              difficulty="{{chip.difficulty}}"
-              difficultyKnown="{{chip.difficulty != null}}"
-              homeAway="{{chip.home ? '主' : '客'}}"
-            />
+            <view class="cell-head">
+              <text class="cell-event">GW{{cell.event}}</text>
+              <text wx:if="{{cell.double}}" class="cell-dgw">双赛</text>
+            </view>
+            <view wx:if="{{cell.blank}}" class="cell-blank">轮空</view>
+            <view
+              wx:for="{{cell.chips}}"
+              wx:for-item="chip"
+              wx:for-index="chipIndex"
+              wx:key="chipIndex"
+              class="chip-wrap {{chip.finished ? 'chip-finished' : ''}}"
+            >
+              <fixture-chip
+                opponent="{{chip.opponentShortName}}"
+                homeAway="{{chip.home ? '主' : '客'}}"
+                difficulty="{{chip.difficulty}}"
+                difficultyKnown="{{chip.difficulty > 0}}"
+              />
+            </view>
           </view>
-          <text wx:if="{{item.chips.length === 0}}" class="muted chip-empty">本窗口无赛程</text>
         </view>
       </view>
     </view>

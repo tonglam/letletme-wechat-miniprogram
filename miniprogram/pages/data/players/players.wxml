@@ -1,12 +1,120 @@
 <view class="page page-tabbar">
   <view class="section">
-    <view class="title">球员数据</view>
-    <view class="subtitle">服务端搜索与分页，每次最多加载 50 名球员。</view>
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">球员数据</view>
+          <view class="score-manager">搜索 · 身价 · 所属球队</view>
+        </view>
+        <view class="score-hero">
+          <view class="score-label">在库</view>
+          <view class="score">{{totalCount || '-'}}</view>
+        </view>
+      </view>
+    </view>
   </view>
 
   <view class="section">
-    <filter-bar keyword="{{keyword}}" placeholder="搜索球员" bind:search="onSearch" bind:reset="onResetSearch" />
+    <filter-bar keyword="{{keyword}}" placeholder="输入球员姓名…" bind:search="onKeywordDraft" bind:submit="onSearch" bind:reset="onResetSearch" />
   </view>
+
+  <view class="section card browse-card">
+    <view class="filter-grid">
+      <picker wx:if="{{!filtersLocked}}" mode="selector" range="{{teamOptionNames}}" value="{{selectedTeamIndex}}" bindchange="onTeamFilterChange">
+        <view class="filter-picker">{{teamOptionNames[selectedTeamIndex] || '全部球队'}}</view>
+      </picker>
+      <view wx:else class="filter-picker filter-disabled" bindtap="onFilterPickerTap">{{teamOptionNames[selectedTeamIndex] || '全部球队'}}</view>
+      <picker wx:if="{{!filtersLocked}}" mode="selector" range="{{positionOptionNames}}" value="{{selectedPositionIndex}}" bindchange="onPositionFilterChange">
+        <view class="filter-picker">{{positionOptionNames[selectedPositionIndex] || '全部位置'}}</view>
+      </picker>
+      <view wx:else class="filter-picker filter-disabled" bindtap="onFilterPickerTap">{{positionOptionNames[selectedPositionIndex] || '全部位置'}}</view>
+    </view>
+    <view class="filter-grid filter-grid-3">
+      <view class="filter-sort">
+        <picker mode="selector" range="{{sortOptionNames}}" value="{{selectedSortIndex}}" bindchange="onSortChange">
+          <view class="filter-picker">{{sortOptionNames[selectedSortIndex]}}</view>
+        </picker>
+        <view class="filter-dir" bindtap="onToggleSortDir" hover-class="hover-dim">{{sortDir === 'DESC' ? '降序' : '升序'}}</view>
+      </view>
+      <picker wx:if="{{!filtersLocked}}" mode="selector" range="{{maxPriceOptionNames}}" value="{{selectedMaxPriceIndex}}" bindchange="onMaxPriceChange">
+        <view class="filter-picker">{{selectedMaxPriceIndex === 0 ? '最高价' : maxPriceOptionNames[selectedMaxPriceIndex]}}</view>
+      </picker>
+      <view wx:else class="filter-picker filter-disabled" bindtap="onFilterPickerTap">{{selectedMaxPriceIndex === 0 ? '最高价' : maxPriceOptionNames[selectedMaxPriceIndex]}}</view>
+      <picker wx:if="{{!filtersLocked}}" mode="selector" range="{{ownBandOptionNames}}" value="{{selectedOwnBandIndex}}" bindchange="onOwnBandChange">
+        <view class="filter-picker">{{selectedOwnBandIndex === 0 ? '持有率' : ownBandOptionNames[selectedOwnBandIndex]}}</view>
+      </picker>
+      <view wx:else class="filter-picker filter-disabled" bindtap="onFilterPickerTap">{{selectedOwnBandIndex === 0 ? '持有率' : ownBandOptionNames[selectedOwnBandIndex]}}</view>
+    </view>
+    <view class="browse-foot">
+      <text wx:if="{{filtersLocked}}" class="browse-hint">姓名搜索中 · 筛选暂不生效</text>
+      <text class="action browse-reset" hover-class="hover-dim" bindtap="onResetFilters">重置</text>
+    </view>
+  </view>
+
+  <!-- 双球员对比(web player-stats 选择面板 v1) -->
+  <view class="section card compare-panel">
+    <view class="compare-slots">
+      <view class="compare-slot {{compareArmedSlot === 1 ? 'compare-slot-armed' : ''}}" data-slot="1" bindtap="onCompareArm" hover-class="hover-dim">
+        <block wx:if="{{comparePlayers[0]}}">
+          <view class="slot-name">{{comparePlayers[0].name}}</view>
+          <view class="slot-meta">{{comparePlayers[0].team}} · {{comparePlayers[0].position}}</view>
+          <text class="slot-clear" data-slot="1" catchtap="onCompareClear">×</text>
+        </block>
+        <block wx:else>
+          <view class="slot-placeholder">球员 1</view>
+          <view class="slot-hint">{{compareArmedSlot === 1 ? '点下方球员选入' : '点击选择'}}</view>
+        </block>
+      </view>
+      <view class="compare-vs">VS</view>
+      <view wx:if="{{compareOpen || comparePlayers[1]}}" class="compare-slot {{compareArmedSlot === 2 ? 'compare-slot-armed' : ''}}" data-slot="2" bindtap="onCompareArm" hover-class="hover-dim">
+        <block wx:if="{{comparePlayers[1]}}">
+          <view class="slot-name">{{comparePlayers[1].name}}</view>
+          <view class="slot-meta">{{comparePlayers[1].team}} · {{comparePlayers[1].position}}</view>
+          <text class="slot-clear" data-slot="2" catchtap="onCompareClear">×</text>
+        </block>
+        <block wx:else>
+          <view class="slot-placeholder">球员 2</view>
+          <view class="slot-hint">{{compareArmedSlot === 2 ? '点下方球员选入' : '点击选择'}}</view>
+        </block>
+      </view>
+      <view wx:else class="compare-slot compare-add {{comparePlayers[0] ? '' : 'compare-add-disabled'}}" data-slot="2" bindtap="onCompareArm" hover-class="hover-dim">
+        <view class="slot-placeholder">+ 添加对比</view>
+      </view>
+    </view>
+  </view>
+
+  <block wx:if="{{comparePlayers[0] && comparePlayers[1]}}">
+    <app-loading wx:if="{{compareLoading}}" text="加载对比" />
+    <view wx:elif="{{compareError}}" class="section card compare-error-card">
+      <text class="compare-error-text">{{compareError}}</text>
+      <text class="action" bindtap="onCompareRetry" hover-class="hover-dim">重试</text>
+    </view>
+    <view wx:elif="{{compareView}}" class="section card compare-card">
+      <view class="compare-cards">
+        <view class="compare-player">
+          <view class="compare-player-name">{{compareView.cardA.name}}</view>
+          <view class="compare-player-meta">{{compareView.cardA.meta}}</view>
+          <view class="compare-player-price">{{compareView.cardA.priceText}}</view>
+          <view class="compare-player-own">持有 {{compareView.cardA.ownText}}</view>
+        </view>
+        <view class="compare-player compare-player-b">
+          <view class="compare-player-name">{{compareView.cardB.name}}</view>
+          <view class="compare-player-meta">{{compareView.cardB.meta}}</view>
+          <view class="compare-player-price">{{compareView.cardB.priceText}}</view>
+          <view class="compare-player-own">持有 {{compareView.cardB.ownText}}</view>
+        </view>
+      </view>
+      <view wx:if="{{!compareView.samePosition}}" class="compare-note">跨位置对比 · 不标注赢家</view>
+      <view wx:for="{{compareView.groups}}" wx:key="key" class="compare-group">
+        <view class="section-heading">{{item.title}}</view>
+        <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="key" class="compare-row">
+          <text class="compare-value {{row.winA ? 'compare-win' : ''}}">{{row.valueA}}</text>
+          <text class="compare-label">{{row.label}}</text>
+          <text class="compare-value compare-value-b {{row.winB ? 'compare-win' : ''}}">{{row.valueB}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
 
   <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && players.length === 0}}" text="加载球员" />
@@ -37,7 +145,7 @@
       <view class="inline-error-retry" hover-class="hover-dim" bindtap="onRetryLoadMore">重试加载更多</view>
     </view>
     <app-loading wx:elif="{{loadingMore}}" text="加载更多球员" />
-    <button wx:elif="{{hasMore}}" class="btn-secondary load-more-button" bindtap="loadMore">加载更多</button>
+    <view wx:elif="{{hasMore}}" class="load-more" bindtap="loadMore" hover-class="hover-dim"><text class="action">加载更多</text></view>
     <view wx:elif="{{players.length}}" class="list-end">已加载全部结果</view>
   </view>
   <bottomNavBar />

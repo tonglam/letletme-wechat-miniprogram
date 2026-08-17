@@ -4,12 +4,11 @@
   <view class="section">
     <view class="perf-header">
       <view>
-        <view class="title">性能监控</view>
         <view class="subtitle">应用运行性能分析</view>
       </view>
       <view class="perf-actions">
-        <view class="perf-btn" hover-class="hover-dim" catchtap="onRefresh">刷新</view>
-        <view class="perf-btn perf-btn-danger" hover-class="hover-dim" catchtap="onClear">清除</view>
+        <view class="action perf-action" hover-class="hover-dim" catchtap="onRefresh">刷新</view>
+        <view class="action perf-action perf-danger" hover-class="hover-dim" catchtap="onClear">清除</view>
       </view>
     </view>
   </view>
@@ -42,7 +41,7 @@
 
   <!-- Key Metrics -->
   <view wx:if="{{hasData}}" class="section card">
-    <view class="card-heading">关键指标</view>
+    <view class="section-heading">关键指标</view>
     <view wx:for="{{metrics}}" wx:key="key" class="metric-row">
       <view class="metric-label muted">{{item.label}}</view>
       <view class="metric-right">
@@ -57,7 +56,7 @@
 
   <!-- Runtime Environment -->
   <view class="section card">
-    <view class="card-heading">运行环境</view>
+    <view class="section-heading">运行环境</view>
     <view class="env-row">
       <view class="env-item">
         <text class="muted env-key">网络</text>
@@ -73,7 +72,7 @@
 
   <!-- API Breakdown -->
   <view wx:if="{{hasData}}" class="section card">
-    <view class="card-heading">API 接口</view>
+    <view class="section-heading">API 接口</view>
     <view class="muted api-summary">
       逻辑 {{totalApiCalls}} 次 · 网络 {{networkApiCalls}} 次 · 命中率 {{cacheHitRate}}%
     </view>
@@ -88,5 +87,5 @@
       </view>
     </view>
   </view>
-
+  <privacy-dialog />
 </view>

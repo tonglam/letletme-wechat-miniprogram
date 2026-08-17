@@ -1,21 +1,25 @@
-<wxs module="pos">
-  var map = {
-    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
-    DEF: 'pos-def', DEFENDER: 'pos-def',
-    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
-    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
-  };
-  function cls(p) {
-    if (!p) return '';
-    var key = String(p).toUpperCase();
-    return map[key] || '';
-  }
-  module.exports = { cls: cls };
-</wxs>
+<wxs src="/components/pos.wxs" module="pos" />
 <view class="page page-tabbar">
-  <view class="home-header section">
-    <view class="title">{{entry.entryName || entry.teamName || 'LetLetMe'}}</view>
-    <view class="subtitle">{{entry.playerName || '选择球队后开始'}}</view>
+  <view wx:if="{{noticeText}}" class="notice-strip section">
+    <text class="notice-icon">i</text>
+    <text class="notice-text">{{noticeText}}</text>
+    <view class="notice-close" catchtap="onCloseNotice">×</view>
+  </view>
+  <view wx:if="{{!pos.hasTeam(entry)}}" class="section bind-team">
+    <view class="bind-strip" bindtap="onChangeEntry" hover-class="hover-dim">
+      <view>
+        <view class="bind-kicker">选择我的球队</view>
+        <view class="bind-title">输入 Entry ID</view>
+      </view>
+      <text class="action bind-action">去选择</text>
+    </view>
+    <view class="bind-strip bind-strip-account" bindtap="onGoAccountLink" hover-class="hover-dim">
+      <view>
+        <view class="bind-kicker">已有网页账户</view>
+        <view class="bind-title">同步已验证球队</view>
+      </view>
+      <text class="action bind-action">去关联</text>
+    </view>
   </view>
 
   <view wx:if="{{error}}" id="perf-primary-home-error">
@@ -27,10 +31,10 @@
     <view class="deadline-card scoreboard section">
       <view class="deadline-top">
         <view>
-          <view class="deadline-label">GW{{nextGw || '-' }} Deadline</view>
+          <view class="deadline-label">下一轮截止</view>
           <view class="deadline-time">{{deadline || '等待赛程更新'}}</view>
         </view>
-        <view class="gw-pill-dark">Current GW{{gw || '-'}}</view>
+        <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
       </view>
       <view wx:if="{{utcDeadline}}" class="countdown">
         <view class="countdown-item">
@@ -53,118 +57,87 @@
       <view wx:else class="deadline-empty">赛程更新后显示倒计时</view>
     </view>
 
-    <view id="perf-primary-fixtures" class="section card fixture-card">
-      <view class="fixture-head">
-        <view class="section-title">GW{{selectedFixtureGw || nextGw || '-'}} 赛程</view>
-        <view class="fixture-stepper">
-          <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">
-            <text decode="{{true}}">&lt;</text>
-          </view>
-          <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw" hover-class="hover-dim">
-            <text decode="{{true}}">&gt;</text>
-          </view>
-        </view>
-      </view>
-      <app-error-state wx:if="{{fixtureError}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
-      <app-loading wx:elif="{{fixtureLoading}}" text="加载赛程" />
-      <data-status wx:elif="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
-      <app-empty-state
-        wx:elif="{{fixtureRows.length === 0}}"
-        title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
-        description="官方赛程发布后会自动显示在这里"
-        actionText="重新加载"
-        bind:action="onRetryFixtures"
-      />
-      <view wx:for="{{fixtureRows}}" wx:key="id" class="fixture-row">
-        <view class="fixture-team home-team">
-          <text class="team-name">{{item.homeName}}</text>
-          <text wx:if="{{item.homeDifficulty}}" class="fdr fdr-{{item.homeDifficulty}}">FDR {{item.homeDifficulty}}</text>
-        </view>
-        <view class="fixture-center">
-          <text class="fixture-vs">vs</text>
-          <text class="fixture-time">{{item.kickoffLabel}}</text>
-        </view>
-        <view class="fixture-team away-team">
-          <text class="team-name">{{item.awayName}}</text>
-          <text wx:if="{{item.awayDifficulty}}" class="fdr fdr-{{item.awayDifficulty}}">FDR {{item.awayDifficulty}}</text>
-        </view>
-      </view>
-    </view>
-
-    <view class="section">
+    <view wx:if="{{pos.hasTeam(entry) || entryError}}" class="section">
       <block wx:if="{{entryError}}">
         <app-error-state message="{{entryError}}" bind:retry="onRetry" />
-        <view class="section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
+        <view class="action section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
       </block>
-      <block wx:else>
-        <entry-card entry="{{entry}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
-        <view wx:if="{{!entry.entryId && !entry.entry && !entry.entryName && !entry.teamName}}" class="section-link account-link-hint" bindtap="onGoAccountLink" hover-class="hover-dim">已有 LetLetMe 账户？关联后自动同步网页已验证球队</view>
-      </block>
+      <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
     </view>
 
-    <view wx:if="{{noticeText}}" class="notice-strip section">
-      <text class="notice-icon">i</text>
-      <text class="notice-text">{{noticeText}}</text>
-      <view class="notice-close" catchtap="onCloseNotice" hover-class="hover-dim">×</view>
-    </view>
-
-    <view wx:if="{{supplementLoading || priceError || priceRises.length > 0 || priceFalls.length > 0}}" class="section card price-card">
-      <view class="price-head">
+    <view class="section card transfer-desk">
+      <view class="transfer-head">
         <view>
-          <view class="section-title">身价变化</view>
-          <view class="section-subtitle">今日上涨 / 下跌</view>
+          <view class="section-title">转会台</view>
+          <view class="section-subtitle">{{marketCoverage}}</view>
         </view>
-        <view class="section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">更多</view>
+        <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
       </view>
       <view wx:if="{{priceError}}" class="section-status section-status-error">{{priceError}}，已保留上次成功数据</view>
-      <view wx:if="{{supplementLoading && priceRises.length === 0 && priceFalls.length === 0}}" class="section-status">身价数据加载中</view>
-      <view class="price-groups">
-        <view class="price-group price-rise">
-          <view class="price-group-head">
-            <text>上涨</text>
-            <text class="price-count">{{priceRises.length}}</text>
-          </view>
-          <view wx:if="{{priceRises.length === 0}}" class="price-empty">今天没有上涨</view>
-          <view wx:for="{{priceRises}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
-            <view class="price-player">
-              <view class="price-name-line">
-                <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
-                <text class="price-name">{{item.name}}</text>
+      <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0}}" class="section-status">转会台加载中</view>
+      <block wx:else>
+        <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-up">持有上升</view>
+            <view wx:if="{{marketRisers.length === 0}}" class="transfer-empty-inline">本窗口尚未观测到持有率上升</view>
+            <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
               </view>
-              <text class="price-team">{{item.team}}</text>
+              <text class="transfer-delta transfer-up">{{item.changeText}}</text>
             </view>
-            <view class="price-values">
-              <text class="price-current price-up">{{item.newPrice}}</text>
-              <text class="price-change price-up">{{item.changeText}}</text>
+          </view>
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-down">持有下降</view>
+            <view wx:if="{{marketFallers.length === 0}}" class="transfer-empty-inline">本窗口尚未观测到持有率下降</view>
+            <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-down">{{item.changeText}}</text>
             </view>
           </view>
         </view>
-        <view class="price-group price-fall">
-          <view class="price-group-head">
-            <text>下跌</text>
-            <text class="price-count">{{priceFalls.length}}</text>
-          </view>
-          <view wx:if="{{priceFalls.length === 0}}" class="price-empty">今天没有下跌</view>
-          <view wx:for="{{priceFalls}}" wx:key="id" class="price-row {{index === 0 ? 'price-row-first' : ''}}">
-            <view class="price-player">
-              <view class="price-name-line">
+        <view wx:elif="{{marketLeadRows.length > 0}}" class="transfer-lead">
+          <view class="transfer-col-head">{{marketLeadTitle}}</view>
+          <view wx:for="{{marketLeadRows}}" wx:key="id" class="transfer-row">
+            <view class="transfer-player">
+              <view class="transfer-name-line">
                 <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
-                <text class="price-name">{{item.name}}</text>
+                <text class="transfer-name">{{item.name}}</text>
               </view>
-              <text class="price-team">{{item.team}}</text>
+              <text class="transfer-meta">{{item.team}}{{item.meta ? ' · ' + item.meta : ''}}</text>
             </view>
-            <view class="price-values">
-              <text class="price-current price-down">{{item.newPrice}}</text>
-              <text class="price-change price-down">{{item.changeText}}</text>
-            </view>
+            <text class="transfer-delta {{item.rising ? 'transfer-up' : 'transfer-down'}}">{{item.changeText}}</text>
           </view>
         </view>
-      </view>
+        <view wx:elif="{{marketMode === 'empty' && availabilityRows.length === 0}}" class="transfer-empty">下一次 09:40 UTC+8 采集后，将记录首份完整球员快照</view>
+
+        <view wx:if="{{availabilityRows.length > 0}}" class="transfer-watch">
+          <view class="transfer-col-head">出场状态观察</view>
+          <view wx:for="{{availabilityRows}}" wx:key="id" class="watch-row">
+            <view class="watch-top">
+              <text class="transfer-name">{{item.name}}</text>
+              <text class="watch-status watch-{{item.statusKey}}">{{item.status}}</text>
+            </view>
+            <view class="transfer-meta">{{item.team}} · {{item.owned}}</view>
+            <view class="watch-body">{{item.body}}</view>
+          </view>
+        </view>
+      </block>
     </view>
 
     <view wx:if="{{supplementLoading || gameweekStatsError || gameweekStats.length > 0}}" class="section card gw-stats-card">
       <view class="gw-stats-head">
-        <view class="section-title">GW{{gw || '-'}} 数据</view>
+        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
       </view>
       <view wx:if="{{gameweekStatsError}}" class="section-status section-status-error">{{gameweekStatsError}}，已保留上次成功数据</view>
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
@@ -174,6 +147,56 @@
           <text class="gw-stat-value">{{item.value}}</text>
         </view>
       </view>
+    </view>
+
+    <view id="perf-primary-fixtures" class="section card fixture-card">
+      <view class="fixture-head">
+        <view class="fixture-head-copy">
+          <view class="section-title">近期赛程</view>
+          <view wx:if="{{selectedFixtureGw || nextGw}}" class="gw-pill-dark">GW{{selectedFixtureGw || nextGw}}</view>
+        </view>
+        <view class="fixture-head-tools">
+          <view class="fixture-live-link" bindtap="onOpenLiveMatches" hover-class="hover-dim">打开实时比赛</view>
+          <view class="fixture-stepper">
+            <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">
+              <text decode="{{true}}">&lt;</text>
+            </view>
+            <view class="fixture-arrow {{selectedFixtureGw >= 38 ? 'fixture-arrow-disabled' : ''}}" catchtap="onNextFixtureGw" hover-class="hover-dim">
+              <text decode="{{true}}">&gt;</text>
+            </view>
+          </view>
+        </view>
+      </view>
+      <app-error-state wx:if="{{fixtureError && fixtureCount === 0}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
+      <app-loading wx:elif="{{fixtureLoading && fixtureCount === 0}}" text="加载赛程" />
+      <block wx:else>
+        <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
+        <app-empty-state
+          wx:if="{{fixtureCount === 0}}"
+          title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
+          description="官方赛程发布后会自动显示在这里"
+          actionText="重新加载"
+          bind:action="onRetryFixtures"
+        />
+        <block wx:if="{{fixtureCount > 0}}">
+          <view wx:if="{{fixtureDays.length > 1}}" class="tab-strip fixture-days">
+            <view
+              wx:for="{{fixtureDays}}"
+              wx:key="dateKey"
+              class="tab-item {{selectedFixtureDayKey === item.dateKey ? 'tab-active' : ''}}"
+              data-key="{{item.dateKey}}"
+              bindtap="onSelectFixtureDay"
+              hover-class="hover-dim"
+            >{{item.tabLabel}}</view>
+          </view>
+          <view wx:for="{{selectedDayRows}}" wx:key="id" class="fixture-row">
+            <text class="fixture-team home-team">{{item.homeName}}</text>
+            <view class="fixture-board {{item.finished ? 'is-score' : ''}}">{{item.centerLabel}}</view>
+            <text class="fixture-team away-team">{{item.awayName}}</text>
+          </view>
+          <view class="fixture-tz">时间按本机时区</view>
+        </block>
+      </block>
     </view>
 
   </block>

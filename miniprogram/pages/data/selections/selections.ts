@@ -1,3 +1,5 @@
+import { MOCK_ENABLED } from "../../../config/mock-mode";
+import { dataSelectionsMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntryPointsRaceTournament,
@@ -10,6 +12,9 @@ import { goToEntrySearch } from "../../../utils/navigation";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import { copyShareText } from "../../../utils/live-share";
+import { formatSelectionsShareText } from "../../../utils/explore-share";
+import { formatCompactNumber } from "../../../utils/summary-format";
 
 type SelectionTab = "selected" | "captain" | "transfersIn" | "transfersOut";
 type SelectionsEmptyState = "" | "entry" | "tournaments";
@@ -19,11 +24,9 @@ interface SelectionRow {
   id: string;
   rank: number;
   name: string;
+  /** team · position · secondary stat (EO% or transfer count) — one compact line. */
   meta: string;
   primaryValue: string;
-  primaryLabel: string;
-  secondaryValue: string;
-  secondaryLabel: string;
   barStyle: string;
 }
 
@@ -59,6 +62,10 @@ interface SelectionsData {
   transferInRows: SelectionRow[];
   transferOutRows: SelectionRow[];
   visibleRows: SelectionRow[];
+  activeTabLabel: string;
+  shareCopied: boolean;
+  shareSheetOpen: boolean;
+  shareText: string;
 }
 
 const STATS_LIMIT = 10;
@@ -81,7 +88,7 @@ PerformancePage({
     emptyDescription: "",
     emptyActionText: "",
     statsEmptyTitle: "本轮还没有选择率数据",
-    statsEmptyDescription: "GW 数据同步后会显示联赛内的阵容趋势",
+    statsEmptyDescription: "GW 数据同步后会显示赛事内的阵容趋势",
     entryId: 0,
     event: 1,
     maxGw: 1,
@@ -97,7 +104,11 @@ PerformancePage({
     captainRows: [],
     transferInRows: [],
     transferOutRows: [],
-    visibleRows: []
+    visibleRows: [],
+    activeTabLabel: "选择率",
+    shareCopied: false,
+    shareSheetOpen: false,
+    shareText: ""
   } as SelectionsData,
 
   pageVisible: false,
@@ -227,6 +238,13 @@ PerformancePage({
   },
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    if (MOCK_ENABLED) {
+      // Mock mode binds no entry — the directory gate below would otherwise
+      // park the preview on the 需要球队 empty state and the stats mock in
+      // loadStats would never surface.
+      this.setData(dataSelectionsMockData);
+      return;
+    }
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
@@ -274,9 +292,9 @@ PerformancePage({
           selectedTournamentName: "",
           visibleRows: [],
           emptyState: "tournaments",
-          emptyEyebrow: "联赛待就绪",
-          emptyTitle: "当前球队还没有可查看的联赛",
-          emptyDescription: "加入一个积分联赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyEyebrow: "赛事待就绪",
+          emptyTitle: "当前球队还没有可查看的赛事",
+          emptyDescription: "加入一个赛事之后，或等待新赛季数据同步，再回到这里重新检查。",
           emptyActionText: "重新检查"
         });
         return;
@@ -307,6 +325,10 @@ PerformancePage({
   },
 
   async loadStats(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
+    if (MOCK_ENABLED) {
+      this.setData(dataSelectionsMockData);
+      return;
+    }
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
@@ -379,8 +401,10 @@ PerformancePage({
   onTabTap(event: WechatMiniprogram.TouchEvent) {
     const activeTab = String(event.currentTarget.dataset.tab || "selected") as SelectionTab;
     const emptyCopy = selectionEmptyCopy(activeTab, this.data.event);
+    const activeTabLabel = TABS.find((item) => item.key === activeTab)?.label || "选择率";
     this.setData({
       activeTab,
+      activeTabLabel,
       visibleRows: getRowsForTab(this.data, activeTab),
       statsEmptyTitle: emptyCopy.title,
       statsEmptyDescription: emptyCopy.description
@@ -401,6 +425,37 @@ PerformancePage({
       return;
     }
     this.loadTournaments(true);
+  },
+
+  onCopyShare() {
+    try {
+      if (this.data.visibleRows.length === 0) {
+        wx.showToast({ title: "当前榜单还没有可分享的数据", icon: "none" });
+        return;
+      }
+      const text = formatSelectionsShareText({
+        tabLabel: this.data.activeTabLabel,
+        tournamentName: this.data.selectedTournamentName,
+        event: this.data.event,
+        fieldLine: this.data.totalEntriesText ? `范围：${this.data.totalEntriesText}` : "",
+        rows: this.data.visibleRows
+      });
+      void copyShareText(text).then((ok) => {
+        if (ok) {
+          this.setData({ shareCopied: true, shareSheetOpen: false });
+          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      });
+    } catch (error) {
+      console.error("[copy-share] selections", error);
+      wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   }
 });
 
@@ -410,10 +465,10 @@ function mapSelectionStats(
   stats: TournamentSelectionStats | null,
   activeTab: SelectionTab
 ): Partial<SelectionsData> {
-  const selectedRows = mapPercentRows(stats?.mostSelectedPlayers || [], "Selected", "EO");
-  const captainRows = mapPercentRows(stats?.captainSelect || [], "Captain", "EO");
-  const transferInRows = mapTransferRows(stats?.mostTransferIn || [], "In", "Count");
-  const transferOutRows = mapTransferRows(stats?.mostTransferOut || [], "Out", "Count");
+  const selectedRows = mapPercentRows(stats?.mostSelectedPlayers || []);
+  const captainRows = mapPercentRows(stats?.captainSelect || []);
+  const transferInRows = mapTransferRows(stats?.mostTransferIn || []);
+  const transferOutRows = mapTransferRows(stats?.mostTransferOut || []);
   const emptyCopy = selectionEmptyCopy(activeTab, event);
   const nextData = {
     selectedTournamentName: tournament.name,
@@ -437,24 +492,24 @@ function selectionEmptyCopy(tab: SelectionTab, event: number): { title: string; 
   if (tab === "captain") {
     return {
       title: `GW${event} 还没有队长趋势`,
-      description: "联赛成员提交阵容后会显示队长选择"
+      description: "赛事成员提交阵容后会显示队长选择"
     };
   }
   if (tab === "transfersIn") {
     return {
       title: `GW${event} 还没有转入趋势`,
-      description: "联赛内产生转会后会显示热门转入"
+      description: "赛事内产生转会后会显示热门转入"
     };
   }
   if (tab === "transfersOut") {
     return {
       title: `GW${event} 还没有转出趋势`,
-      description: "联赛内产生转会后会显示热门转出"
+      description: "赛事内产生转会后会显示热门转出"
     };
   }
   return {
     title: `GW${event} 还没有选择率数据`,
-    description: "联赛成员提交阵容后会显示球员选择率"
+    description: "赛事成员提交阵容后会显示球员选择率"
   };
 }
 
@@ -474,7 +529,7 @@ function getRowsForTab(
   return data.selectedRows;
 }
 
-function mapPercentRows(players: TournamentSelectionPlayer[], primaryLabel: string, secondaryLabel: string): SelectionRow[] {
+function mapPercentRows(players: TournamentSelectionPlayer[]): SelectionRow[] {
   return players.map((player, index) => {
     const selectedPercent = safeNumber(player.selectedByPercent);
     const eoPercent = safeNumber(player.eoByPercent);
@@ -482,17 +537,18 @@ function mapPercentRows(players: TournamentSelectionPlayer[], primaryLabel: stri
       id: `${player.id}-${index}`,
       rank: index + 1,
       name: player.webName,
-      meta: compactJoin([player.teamShortName, positionLabel(player.position)]),
+      meta: compactJoin([
+        player.teamShortName,
+        positionLabel(player.position),
+        eoPercent > 0 ? `EO ${formatPercent(eoPercent)}` : ""
+      ]),
       primaryValue: formatPercent(selectedPercent),
-      primaryLabel,
-      secondaryValue: formatPercent(eoPercent),
-      secondaryLabel,
       barStyle: `width: ${Math.min(Math.max(selectedPercent, 0), 100)}%;`
     };
   });
 }
 
-function mapTransferRows(players: TournamentSelectionPlayer[], primaryLabel: string, secondaryLabel: string): SelectionRow[] {
+function mapTransferRows(players: TournamentSelectionPlayer[]): SelectionRow[] {
   const sorted = [...players].sort((left, right) => safeNumber(right.transfersEvent) - safeNumber(left.transfersEvent));
   const maxTransfers = Math.max(...sorted.map((player) => safeNumber(player.transfersEvent)), 1);
 
@@ -502,11 +558,12 @@ function mapTransferRows(players: TournamentSelectionPlayer[], primaryLabel: str
       id: `${player.id}-${index}`,
       rank: index + 1,
       name: player.webName,
-      meta: compactJoin([player.teamShortName, positionLabel(player.position)]),
+      meta: compactJoin([
+        player.teamShortName,
+        positionLabel(player.position),
+        `${formatCompactNumber(transferCount)} 次`
+      ]),
       primaryValue: formatPercent(player.selectedByPercent),
-      primaryLabel,
-      secondaryValue: String(transferCount),
-      secondaryLabel,
       barStyle: `width: ${Math.min(Math.round((transferCount / maxTransfers) * 100), 100)}%;`
     };
   });

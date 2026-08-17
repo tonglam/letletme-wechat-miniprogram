@@ -54,7 +54,22 @@ page {
   /* Alpha variants — keep in sync with the base tokens above */
   --plum-a4: rgba(56, 0, 60, 0.04);
   --plum-a8: rgba(56, 0, 60, 0.08);
+  --plum-a55: rgba(56, 0, 60, 0.55);
   --plum-a70: rgba(56, 0, 60, 0.7);
+
+  /* Squad pitch (web SquadPitch cream / fascia) */
+  --pitch-cream: #f8f6ef;
+  --pitch-dark: #210025;
+  --pitch-marker: #111315;
+  --pitch-marker-ink: #f5f1e8;
+  --pitch-bench: #b8d9b9;
+  --pitch-cream-a30: rgba(248, 246, 239, 0.3);
+  --pitch-cream-a45: rgba(248, 246, 239, 0.45);
+  --pitch-cream-a55: rgba(248, 246, 239, 0.55);
+  --pitch-cream-a70: rgba(248, 246, 239, 0.7);
+  --pitch-cream-a95: rgba(248, 246, 239, 0.95);
+  --pitch-dark-a55: rgba(33, 0, 37, 0.55);
+  --pitch-bench-a90: rgba(184, 217, 185, 0.9);
   --chalk-a12: rgba(249, 247, 242, 0.12);
   --chalk-a30: rgba(249, 247, 242, 0.3);
   --chalk-a45: rgba(249, 247, 242, 0.45);
@@ -64,15 +79,19 @@ page {
   --electric-a45: rgba(0, 255, 133, 0.45);
   --green-ink-a25: rgba(0, 133, 69, 0.25);
   --green-ink-a30: rgba(0, 133, 69, 0.3);
+  --green-ink-a40: rgba(0, 133, 69, 0.4);
   --green-ink-a70: rgba(0, 133, 69, 0.7);
   --cta-a12: rgba(0, 209, 109, 0.12);
   --cta-a45: rgba(0, 209, 109, 0.45);
   --danger-a20: rgba(201, 24, 63, 0.2);
   --danger-a30: rgba(201, 24, 63, 0.3);
   --danger-a35: rgba(201, 24, 63, 0.35);
+  --danger-a40: rgba(201, 24, 63, 0.4);
   --warning-a10: rgba(146, 74, 7, 0.1);
   --warning-a25: rgba(146, 74, 7, 0.25);
+  --warning-a45: rgba(146, 74, 7, 0.45);
   --warning-a80: rgba(146, 74, 7, 0.8);
+  --muted-ink-a50: rgba(110, 90, 114, 0.5);
   --ink-a12: rgba(48, 19, 51, 0.12);
   --white-a10: rgba(255, 255, 255, 0.1);
   --white-a15: rgba(255, 255, 255, 0.15);
@@ -82,6 +101,10 @@ page {
   --tabbar-background-color: #1d0520;
   --tabbar-item-text-color: rgba(249, 247, 242, 0.55);
   --tabbar-item-active-color: #00ff85;
+  /* Interactive strip. Total bar = this + max(--tabbar-floor, safe-area). */
+  --tabbar-height: 42px;
+  /* Floor when env(safe-area-inset-bottom) is 0 (SE / many Androids / DevTools). */
+  --tabbar-floor: 6px;
 
   background: var(--bg);
   color: var(--ink);
@@ -96,10 +119,11 @@ page {
   padding: 24rpx;
 }
 
-/* Pages rendering <bottomNavBar />: clear the fixed bar + home indicator */
+/* Pages rendering <bottomNavBar />: content box + floor/safe-area + scroll peek */
 .page-tabbar {
-  padding-bottom: calc(140rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--tabbar-height) + var(--tabbar-floor) + 24px);
+  padding-bottom: calc(var(--tabbar-height) + 24px + max(var(--tabbar-floor), constant(safe-area-inset-bottom)));
+  padding-bottom: calc(var(--tabbar-height) + 24px + max(var(--tabbar-floor), env(safe-area-inset-bottom)));
 }
 
 .section {
@@ -108,7 +132,7 @@ page {
 
 .card {
   background: var(--card);
-  border: 1rpx solid var(--line);
+  border: 0;
   border-radius: 16rpx;
   padding: 24rpx;
   box-sizing: border-box;
@@ -130,6 +154,15 @@ page {
   font-weight: 800;
 }
 
+/* Sub-section / card-level heading — live desk benchmark (was per-page
+   .section-heading / .section-title-small copies) */
+.section-heading {
+  margin-bottom: 8rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
 .subtitle {
   margin-top: 8rpx;
   color: var(--muted-ink);
@@ -146,9 +179,18 @@ page {
   color: var(--muted-ink);
 }
 
+/* Quiet text control — desks, card headers, inline switches.
+   Not a button. Web personal desk / live strip use this language. */
 .action {
   color: var(--green-ink);
-  font-weight: 600;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.action-muted {
+  color: var(--muted-ink);
+  font-weight: 700;
 }
 
 /* Universal press feedback: hover-class="hover-dim" */
@@ -156,61 +198,150 @@ page {
   opacity: 0.82;
 }
 
-/* ---------- Controls ---------- */
-
-.btn-primary {
+/* Compact outline tools — Lucide copy / compare, same language as web */
+.tool-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 220rpx;
-  min-height: 76rpx;
-  padding: 0 32rpx;
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 64rpx;
+  border: 0;
   border-radius: 12rpx;
-  background: var(--cta);
-  color: var(--cta-ink);
-  font-size: 24rpx;
-  font-weight: 800;
+  background: var(--track);
   box-sizing: border-box;
 }
 
-.btn-primary::after {
-  border: 0;
+.tool-btn.on {
+  background: var(--accent-tint);
+}
+
+/* Labeled variant — icon + 2-char verb so the action is discoverable */
+.tool-btn-labeled {
+  width: auto;
+  padding: 0 22rpx;
+  gap: 8rpx;
+}
+
+.tool-btn-labeled .tool-icon {
+  width: 30rpx;
+  height: 30rpx;
+}
+
+.tool-label {
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.tool-btn.done .tool-label {
+  color: var(--green-ink);
+}
+
+.tool-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.tool-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 28rpx;
+  height: 28rpx;
+  padding: 0 6rpx;
+  border-radius: 14rpx;
+  background: var(--plum);
+  color: var(--electric);
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+/* ---------- Controls ---------- */
+
+/* Form / recovery CTAs only. Never put these on a desk or list card. */
+.btn-primary,
+.btn-secondary,
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  min-height: 76rpx;
+  padding: 0 32rpx;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.btn-primary {
+  min-width: 220rpx;
+  background: var(--cta);
+  color: var(--cta-ink);
+  font-weight: 800;
+}
+
+.btn-primary[disabled] {
+  background: var(--cta-a45);
+  color: var(--cta-ink);
 }
 
 .btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 76rpx;
-  padding: 0 32rpx;
   border: 1rpx solid var(--line);
-  border-radius: 12rpx;
   background: var(--card);
   color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 700;
-  box-sizing: border-box;
 }
 
-.btn-secondary::after {
+.btn-text {
+  min-height: 64rpx;
+  padding: 0 8rpx;
+  background: transparent;
+  color: var(--muted-ink);
+  font-weight: 600;
+}
+
+.btn-primary.btn-compact,
+.btn-secondary.btn-compact {
+  min-width: 104rpx;
+  min-height: 64rpx;
+  padding: 0 24rpx;
+  font-size: 20rpx;
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+.btn-primary::after,
+.btn-secondary::after,
+.btn-text::after {
   border: 0;
 }
 
 .input {
-  padding: 18rpx 20rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
+  height: 80rpx;
+  min-height: 80rpx;
+  padding: 0 20rpx;
+  background: var(--track);
+  border: 0;
   border-radius: 12rpx;
   box-sizing: border-box;
   color: var(--ink);
-  font-size: 24rpx;
+  font-size: 28rpx;
+  line-height: 80rpx;
 }
 
 .picker {
   min-height: 72rpx;
   padding: 18rpx 20rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
+  background: var(--track);
+  border: 0;
   border-radius: 12rpx;
   box-sizing: border-box;
   color: var(--ink);
@@ -224,8 +355,9 @@ page {
   justify-content: space-between;
   padding: 20rpx 24rpx;
   background: var(--card);
-  border: 1rpx solid var(--line);
+  border: 0;
   border-radius: 12rpx;
+  box-shadow: 0 2rpx 8rpx var(--plum-a4);
   color: var(--warning);
   font-size: 24rpx;
 }
@@ -297,9 +429,7 @@ page {
 
 .metric-card {
   min-width: 0;
-  padding: 18rpx;
-  border-radius: 12rpx;
-  background: var(--track);
+  padding: 14rpx 6rpx;
 }
 
 .metric-label {
@@ -361,6 +491,156 @@ page {
   color: var(--chalk-a60);
 }
 
+/* Score-hero internals — dark fascia identity + big electric stat.
+   Benchmark: live entry desk; shared by every page hero. */
+.score-card {
+  padding: 32rpx 28rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.score-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28rpx;
+}
+
+.score-identity {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 6rpx;
+}
+
+.score-team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chalk);
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.score-manager {
+  margin-top: 10rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chalk-a60);
+  font-size: 24rpx;
+}
+
+.score-hero {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.score-label {
+  color: var(--muted-ink);
+  font-size: 24rpx;
+}
+
+.score-card .score-label {
+  margin: 0;
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.score {
+  margin-top: 8rpx;
+  color: var(--electric);
+  font-size: 56rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-sub {
+  margin-top: 24rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid var(--white-a10);
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+}
+
+/* Pitch — dark formation card: position lines + player chips */
+.pitch-card {
+  padding: 28rpx;
+}
+
+.pitch-line {
+  margin-bottom: 26rpx;
+}
+
+.pitch-line:last-child {
+  margin-bottom: 0;
+}
+
+.pitch-pos {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 14rpx;
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 3rpx;
+}
+
+.pitch-tick {
+  width: 18rpx;
+  height: 4rpx;
+  border-radius: 2rpx;
+  background: var(--electric);
+}
+
+.pitch-players {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14rpx;
+}
+
+.pitch-chip {
+  min-width: 176rpx;
+  padding: 14rpx 18rpx;
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 12rpx;
+  background: var(--white-a10);
+  text-align: center;
+}
+
+.pitch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chalk);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.pitch-team {
+  margin-left: 8rpx;
+  color: var(--chalk-a60);
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.pitch-points {
+  margin-top: 4rpx;
+  color: var(--electric);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.pitch-empty {
+  padding: 16rpx 0;
+  color: var(--chalk-a60);
+  font-size: 22rpx;
+  text-align: center;
+}
+
 /* GW pill — plum board, electric text (web GW badge) */
 .gw-pill-dark {
   display: inline-flex;
@@ -375,25 +655,20 @@ page {
   letter-spacing: 2rpx;
 }
 
-/* Position badges — official FPL position colours */
+/* Position labels — same muted ink for every position */
 .pos-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  padding: 2rpx 10rpx;
-  border-radius: 6rpx;
-  background: var(--track);
+  padding: 0;
+  background: transparent;
   color: var(--muted-ink);
   font-size: 18rpx;
   font-weight: 800;
   line-height: 1.5;
+  letter-spacing: 0.5rpx;
 }
-
-.pos-gkp { background: var(--pos-gkp); color: var(--pos-gkp-ink); }
-.pos-def { background: var(--electric); color: var(--plum); }
-.pos-mid { background: var(--pink); color: var(--pos-mid-ink); }
-.pos-fwd { background: var(--plum); color: var(--electric); }
 
 /* Fixture difficulty rating — web DIFFICULTY_COLORS scale */
 .fdr {

@@ -262,3 +262,176 @@ export async function getPlayerValues(changeDate: string, forceRefresh = false):
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
   return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || formatDateKey(), true);
 }
+
+/* ---------- Market pulse (web /explore/market parity) ---------- */
+
+const MARKET_PLAYER_FIELDS = `
+  playerId
+  webName
+  teamShortName
+  position
+  price
+  selectedByPercent
+`;
+
+const MARKET_PULSE = `
+  query MiniMarketPulse($days: Int!) {
+    marketSnapshotContext {
+      revision
+      source
+      snapshotDate
+      capturedAt
+      rowCount
+    }
+    marketPulse(days: $days) {
+      coverage { requestedDays observedDays latestDate capturedAt complete stale }
+      mostSelected { ${MARKET_PLAYER_FIELDS} }
+      ownershipMovers {
+        risers { player { ${MARKET_PLAYER_FIELDS} } previousSelectedByPercent selectedByPercent change }
+        fallers { player { ${MARKET_PLAYER_FIELDS} } previousSelectedByPercent selectedByPercent change }
+      }
+      transferMovers { player { ${MARKET_PLAYER_FIELDS} } transfersIn transfersOut netTransfers }
+      availabilityUpdateCount
+      availabilityHighlights {
+        player { ${MARKET_PLAYER_FIELDS} }
+        status
+        previousStatus
+        news
+        observedDate
+        chanceOfPlayingThisRound
+      }
+      newPlayers { player { ${MARKET_PLAYER_FIELDS} } firstObservedDate }
+    }
+  }
+`;
+
+const MARKET_AVAILABILITY = `
+  query MiniMarketAvailability($days: Int!) {
+    marketPulse(days: $days) {
+      availabilityUpdates {
+        player { ${MARKET_PLAYER_FIELDS} }
+        status
+        previousStatus
+        news
+        observedDate
+        chanceOfPlayingThisRound
+      }
+    }
+  }
+`;
+
+/** Web marketPulse window (lib/market days param). */
+export const MARKET_PULSE_DAYS = 14;
+
+export interface MarketPulsePlayer {
+  playerId: number;
+  webName: string;
+  teamShortName: string;
+  position: string;
+  /** FPL tenths — format with formatPrice. */
+  price: number;
+  selectedByPercent: number;
+}
+
+export interface MarketOwnershipMove {
+  player: MarketPulsePlayer;
+  previousSelectedByPercent: number;
+  selectedByPercent: number;
+  change: number;
+}
+
+export interface MarketTransferMove {
+  player: MarketPulsePlayer;
+  transfersIn: number;
+  transfersOut: number;
+  netTransfers: number;
+}
+
+export interface MarketAvailabilityItem {
+  player: MarketPulsePlayer;
+  status: string;
+  previousStatus?: string | null;
+  news: string;
+  observedDate?: string | null;
+  chanceOfPlayingThisRound?: number | null;
+}
+
+export interface MarketPulse {
+  snapshot: {
+    revision: string;
+    source: string;
+    snapshotDate?: string | null;
+    capturedAt?: string | null;
+  } | null;
+  coverage: {
+    requestedDays: number;
+    observedDays: number;
+    latestDate?: string | null;
+    complete: boolean;
+    stale: boolean;
+  } | null;
+  mostSelected: MarketPulsePlayer[];
+  ownershipRisers: MarketOwnershipMove[];
+  ownershipFallers: MarketOwnershipMove[];
+  transferMovers: MarketTransferMove[];
+  availabilityHighlights: MarketAvailabilityItem[];
+  availabilityUpdateCount: number;
+  newPlayers: Array<{ player: MarketPulsePlayer; firstObservedDate?: string | null }>;
+}
+
+interface MarketPulseResponse {
+  marketSnapshotContext?: MarketPulse["snapshot"];
+  marketPulse?: {
+    coverage?: MarketPulse["coverage"];
+    mostSelected?: MarketPulsePlayer[];
+    ownershipMovers?: {
+      risers?: MarketOwnershipMove[];
+      fallers?: MarketOwnershipMove[];
+    };
+    transferMovers?: MarketTransferMove[];
+    availabilityUpdateCount?: number;
+    availabilityHighlights?: MarketAvailabilityItem[];
+    newPlayers?: Array<{ player: MarketPulsePlayer; firstObservedDate?: string | null }>;
+    availabilityUpdates?: MarketAvailabilityItem[];
+  };
+}
+
+function mapPulse(data: MarketPulseResponse | undefined): MarketPulse {
+  const pulse = data?.marketPulse;
+  return {
+    snapshot: data?.marketSnapshotContext ?? null,
+    coverage: pulse?.coverage ?? null,
+    mostSelected: pulse?.mostSelected ?? [],
+    ownershipRisers: pulse?.ownershipMovers?.risers ?? [],
+    ownershipFallers: pulse?.ownershipMovers?.fallers ?? [],
+    transferMovers: pulse?.transferMovers ?? [],
+    availabilityHighlights: pulse?.availabilityHighlights ?? [],
+    availabilityUpdateCount: pulse?.availabilityUpdateCount ?? 0,
+    newPlayers: pulse?.newPlayers ?? []
+  };
+}
+
+/** Latest snapshot board: ownership / transfers / availability / new players. */
+export async function getMarketPulse(forceRefresh = false, trace?: ServiceReadOptions["trace"]): Promise<MarketPulse> {
+  const result = await graphqlRead<MarketPulseResponse>(MARKET_PULSE, { days: MARKET_PULSE_DAYS }, {
+    cachePolicy: "market",
+    forceRefresh,
+    trace
+  });
+  if (result.errors.length > 0) {
+    throw new Error(
+      result.errors.map((error) => error.message).filter(Boolean).join("; ")
+      || "市场动态数据暂时不可用，请稍后重试"
+    );
+  }
+  return mapPulse(result.data);
+}
+
+/** Full availability list — lazy-loaded behind the 伤情动态 disclosure (web pattern). */
+export async function getMarketAvailability(forceRefresh = false): Promise<MarketAvailabilityItem[]> {
+  const data = await graphqlRequest<MarketPulseResponse>(MARKET_AVAILABILITY, { days: MARKET_PULSE_DAYS }, {
+    cachePolicy: "market",
+    forceRefresh
+  });
+  return data?.marketPulse?.availabilityUpdates ?? [];
+}

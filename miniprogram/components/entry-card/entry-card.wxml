@@ -1,24 +1,31 @@
 <view class="card">
-  <view wx:if="{{entry && (entry.entry || entry.entryId || entry.entryName || entry.teamName)}}" class="{{rich ? 'entry-content entry-content-rich' : 'entry-content'}}" hover-class="hover-dim" bindtap="onOpen">
-    <view class="entry-main">
-      <view class="entry-head">
-        <view class="entry-name-block">
-          <view class="entry-title">{{entry.entryName || entry.teamName || '已选择球队'}}</view>
-          <view class="entry-subtitle">{{entry.playerName || ''}}</view>
-        </view>
-        <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">切换</button>
+  <view wx:if="{{entry && (entry.entry || entry.entryId || entry.entryName || entry.teamName)}}" class="{{rich ? 'entry-desk' : 'entry-content'}}" hover-class="hover-dim" bindtap="onOpen">
+    <view class="entry-head">
+      <view class="entry-name-block">
+        <view class="entry-title">{{entry.entryName || entry.teamName || '已选择球队'}}</view>
+        <view class="entry-subtitle">{{entry.playerName || ''}}</view>
       </view>
+      <text wx:if="{{!compact}}" class="action" catchtap="onChange">切换</text>
+    </view>
 
-      <view wx:if="{{rich && entryMetaText}}" class="entry-meta-line">{{entryMetaText}}</view>
-
-      <view wx:if="{{rich}}" class="entry-stat-grid">
-        <view wx:for="{{statRows}}" wx:key="label" class="entry-stat">
-          <text class="entry-stat-label">{{item.label}}</text>
-          <text class="entry-stat-value">{{item.value}}</text>
-        </view>
+    <view wx:if="{{rich}}" class="entry-metric-grid">
+      <view wx:for="{{statRows}}" wx:key="label" class="entry-metric">
+        <text class="entry-metric-value">{{item.value}}</text>
+        <text class="entry-metric-label">{{item.label}}</text>
       </view>
     </view>
-    
+
+    <view wx:if="{{rich && leagues.length}}" class="entry-leagues">
+      <view class="entry-leagues-head">
+        <text class="entry-leagues-title">我的联赛</text>
+        <text class="entry-leagues-count">{{leagues.length}}</text>
+      </view>
+      <view wx:for="{{displayLeagues}}" wx:key="id" class="entry-league-row">
+        <text class="entry-league-name">{{item.name}}</text>
+        <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
+      </view>
+    </view>
+
     <view wx:if="{{!rich}}" class="entry-meta">
       <text wx:if="{{entry.totalPoints}}">{{entry.totalPoints}} pts</text>
       <text wx:elif="{{entry.entry || entry.entryId}}">#{{entry.entry || entry.entryId}}</text>
@@ -27,10 +34,9 @@
 
   <view wx:else class="entry-empty" hover-class="hover-dim" bindtap="onChange">
     <view>
-      <view class="entry-title">还没有我的球队</view>
-      <view class="entry-subtitle">查找球队并设为我的球队后开始</view>
+      <view class="entry-title">选择我的球队</view>
+      <view class="entry-subtitle">输入 Entry ID，首页会跟着这支球队走</view>
     </view>
-    <button wx:if="{{rich && !compact}}" class="entry-action entry-action-inline" size="mini" catchtap="onChange">选择</button>
+    <text wx:if="{{!compact}}" class="action">去选择</text>
   </view>
-  <button wx:if="{{!rich && !compact}}" class="entry-action" size="mini" bindtap="onChange">切换</button>
 </view>

@@ -1,18 +1,41 @@
-.summary-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-}
-
-.row-meta,
-.list-empty {
+.row-meta {
   color: var(--muted-ink);
   font-size: 22rpx;
 }
 
-.metric-meta {
-  display: block;
+/* 总览 — KPI 大数字带 */
+.headline-card {
+  display: flex;
+  margin-bottom: 18rpx;
+}
+
+.headline-stat {
+  flex: 1;
+  min-width: 0;
+  padding: 4rpx 10rpx;
+  text-align: center;
+}
+
+.headline-stat + .headline-stat {
+  border-left: 1rpx solid var(--line);
+}
+
+.headline-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.headline-value {
+  margin-top: 6rpx;
+  color: var(--ink);
+  font-size: 48rpx;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.headline-meta {
   margin-top: 6rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -21,19 +44,214 @@
   font-size: 20rpx;
 }
 
-.subsection {
-  margin-top: 26rpx;
-}
-
-.summary-card {
+.most-card {
   margin-bottom: 18rpx;
 }
 
-.section-title-small {
-  margin-bottom: 14rpx;
+.most-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.most-row:last-child {
+  border-bottom: 0;
+}
+
+.most-label {
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.most-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  text-align: right;
+}
+
+.most-meta {
+  margin-left: 10rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+/* 总览 — 开卡条形 */
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 0;
+}
+
+.chip-title {
+  width: 150rpx;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.chip-track {
+  flex: 1;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.chip-fill {
+  height: 100%;
+  border-radius: 6rpx;
+  background: var(--green-ink);
+}
+
+.chip-value {
+  width: 90rpx;
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: right;
+}
+
+.dream-pitch-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.live-pitch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.live-pitch-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.dream-pitch-section squad-pitch {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* 高分 — 排行榜 */
+.elite-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.elite-row:last-child {
+  border-bottom: 0;
+}
+
+.elite-rank {
+  width: 56rpx;
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 34rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.elite-rank-top {
+  color: var(--green-ink);
+}
+
+.elite-points {
+  flex-shrink: 0;
   color: var(--ink);
   font-size: 28rpx;
   font-weight: 800;
+}
+
+/* 转会 — 方向卡 */
+.transfer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18rpx;
+}
+
+.flow-card {
+  min-width: 0;
+  padding-top: 0;
+  overflow: hidden;
+}
+
+.flow-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin: 0 -24rpx 4rpx;
+  padding: 18rpx 24rpx;
+}
+
+.flow-head-in {
+  background: var(--accent-tint);
+}
+
+.flow-head-out {
+  background: var(--danger-tint);
+}
+
+.flow-arrow {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.flow-arrow-in {
+  background: var(--green-ink);
+  color: var(--chalk);
+}
+
+.flow-arrow-out {
+  background: var(--danger);
+  color: var(--chalk);
+}
+
+.flow-title {
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
+.flow-title-in {
+  color: var(--green-ink);
+}
+
+.flow-title-out {
+  color: var(--danger);
+}
+
+.flow-body {
+  padding-top: 8rpx;
 }
 
 .summary-row {
@@ -41,8 +259,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18rpx;
-  min-height: 72rpx;
-  padding: 16rpx 0;
+  padding: 12rpx 0;
   border-bottom: 1rpx solid var(--line);
 }
 
@@ -64,6 +281,13 @@
   font-weight: 700;
 }
 
+.row-title-meta {
+  margin-left: 10rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
 .row-value {
   flex-shrink: 0;
   color: var(--ink);
@@ -79,20 +303,6 @@
   color: var(--danger);
 }
 
-.list-empty {
-  padding: 22rpx 0;
-  text-align: center;
-}
-
-.transfer-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18rpx;
-}
-
-.transfer-card {
-  min-width: 0;
-}
 .last-good-notice {
   margin: 16rpx 24rpx 0;
   padding: 14rpx 18rpx;

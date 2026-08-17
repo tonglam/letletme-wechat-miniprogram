@@ -1,0 +1,333 @@
+/* Phone-first pitch. Field is ~1:1; bench sits below so 375px screens don't overflow. */
+
+:host {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.squad-pitch-wrap {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 16rpx;
+  background: var(--pitch-dark);
+}
+
+.squad-pitch {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--pitch-dark);
+  aspect-ratio: 1 / 1;
+}
+
+.squad-pitch-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.squad-watermark {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 48%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(-50%) rotate(-8deg);
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.squad-watermark-title {
+  color: var(--pitch-cream);
+  font-size: 34rpx;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.squad-watermark-url {
+  margin-top: 4rpx;
+  color: var(--electric);
+  font-size: 18rpx;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.squad-header {
+  position: absolute;
+  top: 3.6%;
+  right: 5.2%;
+  left: 5.2%;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 10.4%;
+  min-width: 0;
+  color: var(--pitch-cream);
+}
+
+.squad-header-left {
+  flex: 1;
+  min-width: 0;
+  padding-right: 16rpx;
+}
+
+.squad-header-right {
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.squad-header-left,
+.squad-header-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.squad-header-team,
+.squad-header-manager {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-header-team {
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.squad-header-manager {
+  margin-top: 2rpx;
+  color: var(--pitch-cream-a70);
+  font-size: 18rpx;
+  line-height: 1.15;
+}
+
+.squad-header-score {
+  color: var(--electric);
+  font-size: 38rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.squad-row {
+  position: absolute;
+  right: 2%;
+  left: 2%;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+}
+
+.squad-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 132rpx;
+}
+
+.squad-player-pressed {
+  opacity: 0.88;
+  transform: scale(0.96);
+}
+
+.squad-kit-wrap {
+  position: relative;
+  z-index: 10;
+  width: 78%;
+  margin-bottom: -8rpx;
+}
+
+.squad-kit {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.squad-marker {
+  position: absolute;
+  top: 4%;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24rpx;
+  height: 24rpx;
+  border: 2rpx solid var(--pitch-marker-ink);
+  border-radius: 50%;
+  background: var(--pitch-marker);
+  color: var(--pitch-marker-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.squad-marker.captain {
+  border-color: var(--electric);
+}
+
+.squad-nameplate {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 6rpx;
+}
+
+.squad-name,
+.squad-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 24rpx;
+  padding: 0 4rpx;
+}
+
+.squad-name {
+  background: var(--pitch-cream);
+}
+
+.squad-score {
+  background: var(--plum);
+}
+
+.squad-name-text,
+.squad-score-text {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.squad-name-text {
+  color: var(--plum);
+  font-size: 18rpx;
+}
+
+.squad-score-text {
+  color: var(--pitch-cream);
+  font-size: 18rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.squad-bench {
+  padding: 12rpx 12rpx 14rpx;
+  background: var(--pitch-bench-a90);
+}
+
+.squad-bench-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.squad-bench-title {
+  color: var(--plum);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.squad-bench-bb {
+  padding: 2rpx 8rpx;
+  border-radius: 4rpx;
+  background: var(--plum);
+  color: var(--electric);
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+.squad-bench-row {
+  display: flex;
+  gap: 8rpx;
+}
+
+.squad-bench-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 6rpx 4rpx 8rpx;
+  border-radius: 8rpx;
+  background: var(--pitch-cream-a95);
+}
+
+.squad-bench-kit {
+  width: 56rpx;
+  height: 50rpx;
+}
+
+.squad-bench-label,
+.squad-bench-name,
+.squad-bench-line {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.squad-bench-label {
+  margin-top: 2rpx;
+  color: var(--plum-a55);
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.squad-bench-name {
+  color: var(--plum);
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+.squad-bench-line {
+  color: var(--plum-a70);
+  font-size: 18rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.squad-share-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.squad-share-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}

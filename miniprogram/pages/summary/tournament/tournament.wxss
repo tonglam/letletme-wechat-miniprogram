@@ -1,15 +1,3 @@
-.summary-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-}
-
-.header-copy {
-  min-width: 0;
-  flex: 1;
-}
-
 .control-card {
   padding-bottom: 18rpx;
 }
@@ -31,8 +19,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
+  border: 0;
+  border-radius: 14rpx;
   background: var(--track);
   box-sizing: border-box;
   color: var(--ink);
@@ -45,12 +33,6 @@
   margin-bottom: 18rpx;
 }
 
-.section-title-small {
-  margin-bottom: 14rpx;
-  color: var(--ink);
-  font-size: 28rpx;
-  font-weight: 800;
-}
 
 .metric-meta {
   display: block;
@@ -130,7 +112,7 @@
   font-weight: 900;
 }
 
-.score-sub {
+.points-sub {
   margin-top: 4rpx;
   color: var(--muted-ink);
   font-size: 20rpx;

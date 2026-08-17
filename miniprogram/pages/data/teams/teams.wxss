@@ -1,8 +1,51 @@
+/* Team directory rows — badge + name + chevron, same cell language as account */
+.team-list {
+  padding-top: 8rpx;
+  padding-bottom: 8rpx;
+}
+
 .team-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 22rpx 0;
+  gap: 16rpx;
+  padding: 20rpx 0;
   border-bottom: 1rpx solid var(--line);
-  font-size: 28rpx;
+}
+
+.team-row:last-child {
+  border-bottom: 0;
+}
+
+.team-row::after {
+  content: '';
+  flex-shrink: 0;
+  width: 14rpx;
+  height: 14rpx;
+  border-top: 3rpx solid var(--muted-ink);
+  border-right: 3rpx solid var(--muted-ink);
+  transform: rotate(45deg);
+}
+
+.team-badge {
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 44rpx;
+  border-radius: 8rpx;
+  background: var(--track);
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 44rpx;
+  text-align: center;
+}
+
+.team-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

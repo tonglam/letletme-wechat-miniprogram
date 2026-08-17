@@ -1,0 +1,4 @@
+<view class="mini-chart" style="height: {{height}}rpx;">
+  <canvas type="2d" id="mini-chart-node" class="mini-chart-node"></canvas>
+  <view class="mini-chart-hit" bindtap="onTap"></view>
+</view>

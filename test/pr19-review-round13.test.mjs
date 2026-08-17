@@ -5,7 +5,6 @@ import test from "node:test";
 const source = (path) => readFileSync(path, "utf8");
 
 for (const [name, path, loadMethod, surface] of [
-  ["Competitions", "miniprogram/pages/competitions/index/index.ts", "loadList", "competitions"],
   ["My FPL Leagues", "miniprogram/pages/my-fpl/leagues/leagues.ts", "loadLeagues", "my-fpl-leagues"]
 ]) {
   test(`${name} captures traces before authoritative context waits`, () => {
@@ -21,12 +20,10 @@ for (const [name, path, loadMethod, surface] of [
   });
 }
 
-test("Competition and League service wrappers pass explicit traces to GraphQL", () => {
-  const competition = source("miniprogram/services/competition.service.ts");
+test("League service wrappers pass explicit traces to GraphQL", () => {
   const tournament = source("miniprogram/services/tournament.service.ts");
   const myFpl = source("miniprogram/services/my-fpl.service.ts");
   const entry = source("miniprogram/services/entry.service.ts");
-  assert.match(competition, /getEntryAllTournaments\(entryId, forceRefresh, trace\)/);
   assert.match(tournament, /getEntryAllTournaments[\s\S]*?trace\?: PageRequestTrace \| null[\s\S]*?readDirectory\(entry, forceRefresh, trace \?\? undefined\)/);
   assert.match(myFpl, /getEntryLeagueInfo\(entryId, forceRefresh, trace \?\? undefined\)/);
   assert.match(entry, /getEntryLeagueInfo[\s\S]*?trace\?: PageRequestTrace[\s\S]*?forceRefresh,\s+trace/);

@@ -1,16 +1,23 @@
 <view class="page">
   <view class="entry-hero section">
-    <view class="title">查找 FPL 球队</view>
-    <view class="subtitle">输入 Entry ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
+    <view class="subtitle">输入 FPL 参赛 ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
+  </view>
+
+  <view wx:if="{{hasEntry}}" class="card section current-card">
+    <view class="current-main">
+      <view class="current-label">当前球队</view>
+      <view class="current-id">#{{currentEntryId}}</view>
+    </view>
+    <view class="action current-unbind" bindtap="onUnbind" hover-class="hover-dim">解除绑定</view>
   </view>
 
   <view id="perf-primary-content" class="card lookup-card section">
-    <view class="field-label">FPL Entry ID</view>
+    <view class="field-label">FPL 参赛 ID</view>
     <view class="input-shell">
       <input
         class="entry-input"
-        type="number"
-        placeholder="例如 123456"
+        type="text"
+        placeholder="例如 123456，或直接粘贴网址"
         placeholder-class="input-placeholder"
         value="{{manualEntryId}}"
         confirm-type="done"
@@ -18,17 +25,17 @@
         bindconfirm="onEntryConfirm"
       />
     </view>
-    <view class="field-help">可在 FPL 官网球队页面 URL 中找到 Entry ID。</view>
+    <view class="field-help">粘贴球队页面网址，可自动提取参赛 ID。</view>
     <view class="guide">
-      <view class="guide-title">如何找到你的 Entry ID</view>
+      <view class="guide-title">如何查找参赛 ID</view>
       <view class="guide-steps">
-        <view class="guide-step"><text class="step-num">1</text>打开 fantasy.premierleague.com 并登录</view>
-        <view class="guide-step"><text class="step-num">2</text>进入 "Points" 或 "Pick Team" 页面</view>
-        <view class="guide-step"><text class="step-num">3</text>URL 中的数字就是你的 Entry ID</view>
-        <view class="guide-step"><text class="step-num">4</text>例如 …/entry/<text class="step-hl">123456</text>/event/…</view>
+        <view class="guide-step"><text class="step-num">1</text>在 fantasy.premierleague.com 登录</view>
+        <view class="guide-step"><text class="step-num">2</text>打开你的球队页面，点击 <text class="step-hl">Gameweek History</text></view>
+        <view class="guide-step"><text class="step-num">3</text>复制该页面网址，<text class="step-hl">粘贴到上方输入框</text>，自动提取参赛 ID</view>
+        <view class="guide-step"><text class="step-num">4</text>网址长这样：…/en/entry/<text class="step-hl">123456</text>/history</view>
       </view>
     </view>
-    <button class="primary-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onLookupEntry">
+    <button class="btn-primary btn-block search-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onLookupEntry">
       {{buttonText}}
     </button>
   </view>
@@ -48,10 +55,10 @@
         <view class="stat-label">总排名</view>
       </view>
     </view>
-    <button wx:if="{{!isCurrentEntry}}" class="primary-button" bindtap="onSetMyEntry">设为我的球队</button>
+    <button wx:if="{{!isCurrentEntry}}" class="btn-primary btn-block search-button" bindtap="onSetMyEntry">设为我的球队</button>
     <view wx:else class="current-entry-hint">这已经是我的球队</view>
   </view>
 
-  <view class="sync-hint section" hover-class="hover-dim" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
-
+  <view class="sync-hint section action" hover-class="hover-dim" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
+  <privacy-dialog />
 </view>

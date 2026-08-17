@@ -1,36 +1,35 @@
+/* Unified search capsule — input + actions live in one track pill */
 .filter-bar {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 4rpx;
+  padding: 0 10rpx 0 20rpx;
+  border-radius: 16rpx;
+  background: var(--track);
 }
 
-/* Layout-only; visuals come from the global .input primitive */
 .filter-input {
   flex: 1;
-}
-
-.filter-button {
-  flex-shrink: 0;
+  min-width: 0;
   height: 80rpx;
-  margin: 0;
-  padding: 0 22rpx;
-  border-radius: 12rpx;
-  background: var(--card);
-  color: var(--ink);
-  border: 1rpx solid var(--line);
-  font-size: 24rpx;
-  font-weight: 600;
-  line-height: 78rpx;
-  box-sizing: border-box;
-}
-
-.filter-button::after {
+  min-height: 80rpx;
+  padding: 0;
   border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 28rpx;
+  line-height: 80rpx;
 }
 
-.filter-button.primary {
-  background: var(--cta);
-  color: var(--cta-ink);
-  border-color: transparent;
-  font-weight: 700;
+.filter-placeholder {
+  color: var(--muted-ink);
+  font-size: 28rpx;
+  line-height: 80rpx;
+}
+
+.filter-submit,
+.filter-reset {
+  flex-shrink: 0;
+  padding: 12rpx 10rpx;
+  font-size: 26rpx;
 }

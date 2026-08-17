@@ -4,9 +4,9 @@
   align-items: center;
   justify-content: space-between;
   min-height: 88rpx;
-  padding: 12rpx 20rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
+  padding: 12rpx 4rpx;
+  background: transparent;
+  border: 0;
   border-radius: 12rpx;
 }
 
@@ -72,19 +72,19 @@
   white-space: nowrap;
 }
 
+/* Same recipe as .tool-btn-labeled — refresh and share read as one family */
 .status-refresh {
   flex-shrink: 0;
-  min-width: 88rpx;
   min-height: 64rpx;
   line-height: 64rpx;
   margin-left: 16rpx;
-  padding: 0 20rpx;
+  padding: 0 22rpx;
   box-sizing: border-box;
-  border-radius: 999rpx;
+  border-radius: 12rpx;
   background: var(--track);
-  color: var(--green-ink);
-  font-size: 24rpx;
-  font-weight: 700;
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
   text-align: center;
 }
 
@@ -93,6 +93,17 @@
 }
 
 .status-bar-compact {
-  min-height: 72rpx;
-  padding: 8rpx 16rpx;
+  min-height: 64rpx;
+  padding: 8rpx 4rpx;
+  border: 0;
+  background: transparent;
+}
+
+.status-bar-compact .status-label {
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.status-bar-compact .status-meta {
+  font-size: 20rpx;
 }
