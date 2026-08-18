@@ -1,3 +1,5 @@
+import { selectHomeEntryLeagues } from "../../utils/entry-leagues";
+
 interface EntryCardInfo {
   entry?: number;
   entryId?: number;
@@ -89,10 +91,17 @@ Component({
         entry?.region || ""
       ].filter(Boolean);
 
-      const leagues = (this.properties.leagues || []) as Array<{ id: number; name: string; viewerRank?: number }>;
+      const leagues = (this.properties.leagues || []) as Array<{
+        id: number;
+        name: string;
+        viewerRank?: number;
+        rank?: number;
+        officialKind?: string;
+        shortName?: string | null;
+      }>;
       this.setData({
         entryMetaText: metaParts.join(" · "),
-        displayLeagues: leagues.slice(0, 4),
+        displayLeagues: selectHomeEntryLeagues(leagues),
         statRows: [
           { label: "总分", value: formatNumber(entry?.totalPoints) },
           { label: "总排名", value: formatRank(entry?.overallRank) },

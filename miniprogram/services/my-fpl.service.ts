@@ -153,9 +153,7 @@ export async function getMyFplTeamBrief(
 }
 
 /**
- * Official league list. The current contract yields id/name only; gated
- * fields (viewerRank, associationCount) arrive with plan §10 and stay absent
- * until then.
+ * Official league list. viewerRank is entryRank from EntryLeagues when present.
  */
 export async function getMyFplLeagues(
   entryId: number,
