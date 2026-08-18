@@ -95,6 +95,8 @@ test("sends operationName and classifies public/session operations explicitly", 
     }
   );
   assert.equal(getGraphQLOperationPolicy("Teams").authMode, "public");
+  assert.equal(getGraphQLOperationPolicy("MiniPlayerStatsDesk").authMode, "public");
+  assert.equal(getGraphQLOperationPolicy("TournamentSeasonSnapshot").authMode, "session");
   assert.equal(getGraphQLOperationPolicy("EntryHistory").authMode, "session");
   assert.equal(getGraphQLOperationPolicy("UnknownPrivateQuery").cachePolicy, "network-only");
 });

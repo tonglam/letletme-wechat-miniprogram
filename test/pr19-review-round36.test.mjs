@@ -4,12 +4,20 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
+test("Data selections directory rejects superseded responses", () => {
+  const page = read("miniprogram/pages/data/selections/selections.ts");
+  assert.match(page, /const requestId = \+\+this\.directoryRequestId/);
+  assert.match(page, /requestId === this\.directoryRequestId/);
+});
+
 test("Tournament summary rejects superseded tournament and event responses", () => {
   const page = read("miniprogram/pages/summary/tournament/tournament.ts");
   assert.match(page, /const requestId = \+\+this\.summaryRequestId/);
   assert.match(page, /requestedEvent = this\.data\.event[\s\S]*requestedEntryId = this\.data\.entryId/);
   assert.match(page, /requestId === this\.summaryRequestId[\s\S]*selectedTournamentIndex[\s\S]*requestedEvent/);
   assert.match(page, /mapTournamentSummaryData\([^;]*requestedEntryId, requestedEvent\)/);
+  assert.match(page, /const requestId = \+\+this\.directoryRequestId/);
+  assert.match(page, /requestId === this\.directoryRequestId/);
 });
 
 test("Home invalidates and resumes a refresh interrupted by page hide", () => {

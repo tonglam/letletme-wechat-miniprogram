@@ -122,6 +122,10 @@ PerformancePage({
     this.loadData("refresh", true);
   },
 
+  onPullDownRefresh() {
+    return this.loadData("refresh", true).finally(() => wx.stopPullDownRefresh());
+  },
+
   onBackToTeams() {
     wx.redirectTo({ url: routes.dataTeams });
   }

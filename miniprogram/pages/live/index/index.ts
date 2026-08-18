@@ -1,8 +1,25 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
-import { ensureAppContext } from "../../../services/app-context.service";
+import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { getEntryInfo } from "../../../services/entry.service";
+
+/** Live index warm-show skip window (aligned with home/leagues at 60s; team is 5 min). */
+export const LIVE_INDEX_REVALIDATE_MS = 60 * 1000;
+
+export function shouldReloadLiveIndex(
+  lastLoadAt: number,
+  loadedContextRevision: number,
+  currentContextRevision: number,
+  loadedEntryId: number,
+  currentEntryId: number,
+  now = Date.now()
+): boolean {
+  return !lastLoadAt
+    || loadedContextRevision !== currentContextRevision
+    || loadedEntryId !== currentEntryId
+    || now - lastLoadAt >= LIVE_INDEX_REVALIDATE_MS;
+}
 
 PerformancePage({
   data: {
@@ -39,6 +56,9 @@ PerformancePage({
   pageVisible: false,
   hasShown: false,
   lifecycleRevision: 0,
+  lastLoadAt: 0,
+  loadedContextRevision: 0,
+  loadedEntryId: 0,
 
   onLoad() {
     this.pageVisible = true;
@@ -50,6 +70,17 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return undefined;
+    const snapshot = getAppContextSnapshot();
+    const currentEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
+    if (!shouldReloadLiveIndex(
+      this.lastLoadAt,
+      this.loadedContextRevision,
+      snapshot?.contextRevision ?? 0,
+      this.loadedEntryId,
+      currentEntryId
+    )) {
+      return undefined;
+    }
     return this.loadContext("page-show");
   },
 
@@ -90,6 +121,9 @@ PerformancePage({
       event: app.globalData.gw,
       currentGw: app.globalData.currentGw || 0
     });
+    this.lastLoadAt = Date.now();
+    this.loadedEntryId = entryId;
+    this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
   },
 
   onOpenEntryStrip() {

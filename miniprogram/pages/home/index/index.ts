@@ -99,6 +99,7 @@ interface HomeStatRow {
   value: string;
 }
 
+/** Home warm-show skip window. Live index and leagues use the same 60s; team uses 5 min. */
 const HOME_REVALIDATE_MS = 60 * 1000;
 const HOME_DEADLINE_RETRY_MS = 60 * 1000;
 export const NOTICE_AUTO_CLOSE_MS = 5 * 1000;
@@ -178,6 +179,7 @@ Page({
   _refreshPending: false,
   _resumeRefreshOnShow: false,
   _activeRefreshDeadlineTriggered: false,
+  _resumeFixtureGwOnShow: false,
   _resumeRefreshDeadlineTriggered: false,
   _refreshRequestId: 0,
   _hasShown: false,
@@ -228,6 +230,7 @@ Page({
         context.contextRevision
       )) {
         this._resumeSecondaryOnShow = false;
+        this._resumeFixtureGwOnShow = false;
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
@@ -244,6 +247,11 @@ Page({
         if (this._resumeSecondaryOnShow) {
           this._resumeSecondaryOnShow = false;
           this.startSecondaryData();
+        }
+        if (this._resumeFixtureGwOnShow) {
+          this._resumeFixtureGwOnShow = false;
+          const event = this.data.selectedFixtureGw;
+          if (event > 0) void this.loadFixtureGw(event);
         }
       }
     } catch (error) {
@@ -288,6 +296,7 @@ Page({
     this._resumeStartupOnShow = false;
     this._resumeRefreshOnShow = false;
     this._resumeRefreshDeadlineTriggered = false;
+    this._resumeFixtureGwOnShow = false;
     this._refreshPending = false;
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
@@ -304,8 +313,10 @@ Page({
     this._resumeSecondaryOnShow = this._secondaryPending;
     this._resumeRefreshOnShow = this._refreshPending;
     this._resumeRefreshDeadlineTriggered = this._activeRefreshDeadlineTriggered;
+    this._resumeFixtureGwOnShow = this.data.fixtureLoading;
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
+    this._fixtureGwRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
     this.clearNoticeTimer();
@@ -568,7 +579,7 @@ Page({
       gameweekStatsError: "",
       entryError: ""
     });
-    const entryTask = (async (): Promise<void> => {
+    void (async (): Promise<void> => {
       if (!getApiSessionToken()) {
         try { await app.authReady; } catch {}
       }
@@ -725,7 +736,10 @@ Page({
 
   updateCountdown(): boolean {
     const ms = getDeadlineDiffMs(this.data.utcDeadline);
-    this.setData({ countdown: formatCountdown(ms) });
+    const countdown = formatCountdown(ms);
+    if (countdown !== this.data.countdown) {
+      this.setData({ countdown });
+    }
     if (this.data.utcDeadline && ms <= 0) {
       this.stopCountdown();
       void this.refreshHome(true);
@@ -830,7 +844,7 @@ Page({
         getApp<IAppOption>().globalData.season,
         { forceRefresh }
       );
-      if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      if (!this._pageVisible || requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
       const staleStoredAt = read.meta.stale ? read.meta.storedAt || null : null;
       this.setData({
         ...fixtureDeskState(read.data),
@@ -839,7 +853,7 @@ Page({
         fixtureStaleMessage: read.meta.stale ? fixtureStaleMessage(staleStoredAt) : ""
       });
     } catch (error) {
-      if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      if (!this._pageVisible || requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
       this.setData({
         ...emptyFixtureDesk(),
         fixtureStaleMessage: "",
@@ -847,7 +861,7 @@ Page({
         fixtureError: error instanceof Error ? error.message : "赛程加载失败"
       });
     } finally {
-      if (requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
+      if (this._pageVisible && requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
         this.setData({ fixtureLoading: false });
       }
     }

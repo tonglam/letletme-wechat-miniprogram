@@ -129,7 +129,7 @@ export async function readCoreEventFixtureSchedule(
     { eventId: event },
     {
       cachePolicy: "fixtures",
-      cacheVariant: `season:${season}`,
+      season,
       forceRefresh: options.forceRefresh,
       trace: options.trace
     }
@@ -158,7 +158,7 @@ export async function getFixtureWindow(
   const request = buildFixtureWindowRequest(events);
   const data = await graphqlRequest<FixtureWindowResponse>(request.query, request.variables, {
     cachePolicy: "fixtures",
-    cacheVariant: `season:${season}`,
+    season,
     forceRefresh,
     trace
   });

@@ -38,6 +38,11 @@ export interface TeamDirectoryItem {
   shortName?: string;
 }
 
+function pickerIndex(value: unknown): number | null {
+  const index = Number(value);
+  return Number.isFinite(index) ? index : null;
+}
+
 /**
  * The backend picker only matches player web names. A keyword that exactly
  * names a team (or its short code, case-insensitive) is converted to a
@@ -252,6 +257,15 @@ function getTime(value?: string): number {
   return Number.isNaN(time) ? 0 : time;
 }
 
+function priceChangeRowKey(row: PlayerValueChange, direction: string, index: number): string {
+  return [
+    row.element || row.playerId || 0,
+    row.changeDate || "",
+    direction,
+    row.lastValue ?? row.oldValue ?? index
+  ].join(":");
+}
+
 function splitChanges(changes: PlayerValueChange[]): {
   riseChanges: PlayerValueChange[];
   fallChanges: PlayerValueChange[];
@@ -259,10 +273,18 @@ function splitChanges(changes: PlayerValueChange[]): {
   return {
     riseChanges: changes
       .filter((change) => (change.newValue ?? change.value ?? 0) > (change.oldValue ?? change.lastValue ?? 0))
-      .sort((left, right) => (right.newValue ?? right.value ?? 0) - (left.newValue ?? left.value ?? 0)),
+      .sort((left, right) => (right.newValue ?? right.value ?? 0) - (left.newValue ?? left.value ?? 0))
+      .map((change, index) => ({
+        ...change,
+        rowKey: priceChangeRowKey(change, "rise", index)
+      })),
     fallChanges: changes
       .filter((change) => (change.newValue ?? change.value ?? 0) < (change.oldValue ?? change.lastValue ?? 0))
       .sort((left, right) => (left.newValue ?? left.value ?? 0) - (right.newValue ?? right.value ?? 0))
+      .map((change, index) => ({
+        ...change,
+        rowKey: priceChangeRowKey(change, "fall", index)
+      }))
   };
 }
 
@@ -328,6 +350,7 @@ Page({
     shareText: ""
   } as PricePageData,
 
+  shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   pulseData: null as MarketPulse | null,
   pulseRevision: 0,
 
@@ -464,6 +487,7 @@ Page({
     this.invalidatePlayerRequest();
     this.historyRequestRevision += 1;
     this.perfTracker?.disconnect();
+    this.clearShareCopiedTimer();
   },
 
   onUnload() {
@@ -484,6 +508,7 @@ Page({
     if (this.playerSearchTimer !== undefined) {
       clearTimeout(this.playerSearchTimer);
     }
+    this.clearShareCopiedTimer();
   },
 
   onPullDownRefresh() {
@@ -516,7 +541,13 @@ Page({
     const mode = event.currentTarget.dataset.mode;
     if (!mode || mode === this.data.activeMode) return;
 
-    this.setData({ activeMode: mode });
+    this.clearShareCopiedTimer();
+    this.setData({
+      activeMode: mode,
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
+    });
     if (mode === "player") {
       this.ensurePlayerModeReady();
     }
@@ -524,12 +555,16 @@ Page({
 
   onDateChange(event: WechatMiniprogram.PickerChange) {
     this.startDailyRefreshTrace();
+    this.clearShareCopiedTimer();
     this.setData({
       changeDate: String(event.detail.value),
       riseChanges: [],
       fallChanges: [],
       staleMessage: "",
-      error: ""
+      error: "",
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
     });
     this.loadDailyChanges();
   },
@@ -582,7 +617,11 @@ Page({
         error: hasRows
           ? "刷新时间较长，请稍后重试；当前继续显示已有数据"
           : "加载时间较长，请稍后重试；当前请求仍在后台继续"
-      }, () => wx.nextTick(() => tracker?.observePrimary("#perf-primary-content")));
+      }, () => {
+        if (hasRows) {
+          wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
+        }
+      });
     });
     try {
       const read = await readTask;
@@ -973,7 +1012,8 @@ Page({
   },
 
   onTeamFilterChange(event: WechatMiniprogram.PickerChange) {
-    const selectedTeamIndex = Number(event.detail.value);
+    const selectedTeamIndex = pickerIndex(event.detail.value);
+    if (selectedTeamIndex === null) return;
     const option = this.data.teamOptions[selectedTeamIndex] || this.data.teamOptions[0];
     this.setData({
       selectedTeamIndex,
@@ -983,7 +1023,8 @@ Page({
   },
 
   onPositionFilterChange(event: WechatMiniprogram.PickerChange) {
-    const selectedPositionIndex = Number(event.detail.value);
+    const selectedPositionIndex = pickerIndex(event.detail.value);
+    if (selectedPositionIndex === null) return;
     const option = this.data.positionOptions[selectedPositionIndex] || this.data.positionOptions[0];
     this.setData({
       selectedPositionIndex,
@@ -1011,7 +1052,12 @@ Page({
     try {
       const historyRows = await getPlayerValueByElement(playerId, forceRefresh);
       if (!this.pageActive || revision !== this.historyRequestRevision) return;
-      this.setData({ historyRows: historyRows.sort(sortByChangeDateDesc) });
+      this.setData({
+        historyRows: historyRows.sort(sortByChangeDateDesc).map((row, index) => ({
+          ...row,
+          rowKey: priceChangeRowKey(row, row.changeType || "history", index)
+        }))
+      });
     } catch (error) {
       if (!this.pageActive || revision !== this.historyRequestRevision) return;
       this.setData({ historyError: error instanceof Error ? error.message : "球员身价历史加载失败" });
@@ -1056,6 +1102,13 @@ Page({
     }
   },
 
+  clearShareCopiedTimer() {
+    if (this.shareCopiedTimer) {
+      clearTimeout(this.shareCopiedTimer);
+      this.shareCopiedTimer = undefined;
+    }
+  },
+
   onCopyShare() {
     try {
       if (this.data.riseChanges.length === 0 && this.data.fallChanges.length === 0) {
@@ -1070,7 +1123,8 @@ Page({
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ shareCopied: true, shareSheetOpen: false });
-          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          this.clearShareCopiedTimer();
+          this.shareCopiedTimer = setTimeout(() => this.setData({ shareCopied: false }), 2000);
           return;
         }
         this.setData({ shareSheetOpen: true, shareText: text });

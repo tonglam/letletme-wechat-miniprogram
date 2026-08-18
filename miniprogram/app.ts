@@ -77,9 +77,20 @@ App<IAppOption>({
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
-    this.reportError(
-      `[app] unhandled rejection: ${event?.reason ? JSON.stringify(event.reason) : String(event?.reason)}`
-    );
+    const reason = event?.reason;
+    let message = "";
+    if (reason instanceof Error) {
+      message = reason.message;
+    } else if (typeof reason === "string") {
+      message = reason;
+    } else if (reason && typeof reason === "object") {
+      const record = reason as { errMsg?: unknown; message?: unknown };
+      if (typeof record.errMsg === "string") message = record.errMsg;
+      else if (typeof record.message === "string") message = record.message;
+    } else {
+      message = String(reason ?? "");
+    }
+    this.reportError(`[app] unhandled rejection: ${message.slice(0, 300)}`);
   },
 
   onPageNotFound() {
@@ -98,27 +109,34 @@ App<IAppOption>({
   },
 
   async doLogin() {
-    // Restore only through WeChat's encrypted asynchronous storage. Legacy
-    // plaintext is migrated before any GraphQL request can read the token.
-    await restoreApiSessionCredentials();
-    // A still-valid 30-day session needs no login round trip: the local entry
-    // binding is restored, and a later 401 triggers the central refresh path.
-    this.globalData.entryId = getEntryId();
-    commitEntryBinding(this.globalData.entryId || null, "restore");
     const markAuthReady = () => {
       this._authReadyResolve?.();
       this._authReadyResolve = null;
     };
-    if (getApiSessionToken()) {
-      markAuthReady();
-      this.revalidateSessionProfile();
-      return;
+    try {
+      // Restore only through WeChat's encrypted asynchronous storage. Legacy
+      // plaintext is migrated before any GraphQL request can read the token.
+      await restoreApiSessionCredentials();
+      // A still-valid 30-day session needs no login round trip: the local entry
+      // binding is restored, and a later 401 triggers the central refresh path.
+      this.globalData.entryId = getEntryId();
+      commitEntryBinding(this.globalData.entryId || null, "restore");
+      if (getApiSessionToken()) {
+        markAuthReady();
+        this.revalidateSessionProfile();
+        return;
+      }
+      refreshWechatApiSession().catch(() => {
+        // Account linking is optional and sync is best-effort: link-required
+        // and network failures alike leave the locally followed team alone.
+        // Pages render their own no-entry state instead of being redirected.
+      }).finally(markAuthReady);
+    } catch {
+      refreshWechatApiSession().catch(() => {
+        // Restore failed; still attempt a WeChat session so authReady is not
+        // "ready with no login attempt".
+      }).finally(markAuthReady);
     }
-    refreshWechatApiSession().catch(() => {
-      // Account linking is optional and sync is best-effort: link-required
-      // and network failures alike leave the locally followed team alone.
-      // Pages render their own no-entry state instead of being redirected.
-    }).finally(markAuthReady);
   },
 
   /**

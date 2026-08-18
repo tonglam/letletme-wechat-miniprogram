@@ -103,6 +103,7 @@ PerformancePage({
   resumeStage: null as TournamentSummaryResumeStage | null,
   activeLoadStage: null as Exclude<TournamentSummaryResumeStage, "initialize"> | null,
   summaryRequestId: 0,
+  directoryRequestId: 0,
   activeLoadForceRefresh: false,
   resumeForceRefresh: false,
 
@@ -176,6 +177,7 @@ PerformancePage({
     this.resumeForceRefresh = this.resumeStage !== null && this.activeLoadForceRefresh;
     this.lifecycleRevision += 1;
     this.summaryRequestId += 1;
+    this.directoryRequestId += 1;
   },
 
   onUnload() {
@@ -187,6 +189,7 @@ PerformancePage({
     this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
     this.summaryRequestId += 1;
+    this.directoryRequestId += 1;
   },
 
   onPullDownRefresh() {
@@ -212,7 +215,10 @@ PerformancePage({
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
     const lifecycleRevision = this.lifecycleRevision;
-    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const requestId = ++this.directoryRequestId;
+    const isActiveLifecycle = () => this.pageVisible
+      && lifecycleRevision === this.lifecycleRevision
+      && requestId === this.directoryRequestId;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "summary-tournament",
       trigger: forceRefresh ? "refresh" : "load"
@@ -266,7 +272,13 @@ PerformancePage({
         return;
       }
 
-      const storedId = Number(wx.getStorageSync(storageKeys.selectedSummaryTournamentId));
+      const storedId = Number((() => {
+        try {
+          return wx.getStorageSync(storageKeys.selectedSummaryTournamentId);
+        } catch {
+          return 0;
+        }
+      })());
       const selectedTournamentIndex = Math.max(0, tournaments.findIndex((item) => item.id === storedId));
       const selectedTournament = tournaments[selectedTournamentIndex] || tournaments[0];
       this.setData({
@@ -351,7 +363,8 @@ PerformancePage({
   },
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const selectedTournamentIndex = Number(event.detail.value) || 0;
+    const selectedTournamentIndex = Number(event.detail.value);
+    if (!Number.isFinite(selectedTournamentIndex)) return;
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
     this.setData({
       selectedTournamentIndex,
@@ -361,7 +374,9 @@ PerformancePage({
   },
 
   onEventChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: Number(event.detail.value) || this.data.event });
+    const next = Number(event.detail.value);
+    if (!Number.isFinite(next) || next <= 0) return;
+    this.setData({ event: next });
     this.loadSummary();
   },
 

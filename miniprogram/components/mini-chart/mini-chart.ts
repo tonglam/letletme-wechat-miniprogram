@@ -44,6 +44,10 @@ Component({
     },
     detached() {
       const state = host(this);
+      if (state.drawTimer) {
+        clearTimeout(state.drawTimer);
+        state.drawTimer = undefined;
+      }
       state.chartCanvas = null;
       state.chartCtx = null;
     }

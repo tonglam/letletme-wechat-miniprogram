@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { normalizeTransfer } from "../miniprogram/pages/live/entry/transfer.ts";
+
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("Live Entry uses one CalcLive root and no independent LiveSnapshot root", () => {
@@ -51,4 +53,28 @@ test("changing GW invalidates and clears deferred transfer data", () => {
   assert.match(handler, /this\.loadTransfersAfterLive = false/);
   assert.match(handler, /transfers: \[\]/);
   assert.match(handler, /transfersLoading: false/);
+  assert.match(handler, /emptyLiveOverlayState\(\)/);
+});
+
+test("transfer row keys include time so repeated swaps stay unique", () => {
+  const first = normalizeTransfer({
+    elementOut: 1,
+    elementIn: 2,
+    cost: 0,
+    time: "2026-01-01T00:00:00Z"
+  });
+  const second = normalizeTransfer({
+    elementOut: 1,
+    elementIn: 2,
+    cost: 0,
+    time: "2026-01-01T00:01:00Z"
+  });
+  assert.notEqual(first.rowKey, second.rowKey);
+});
+
+test("entry transfer history cache keys include season", () => {
+  const service = source("miniprogram/services/entry.service.ts");
+  assert.match(service, /function transferHistoryCacheVariant/);
+  assert.match(service, /cacheVariant: transferHistoryCacheVariant\(isLiveEvent \? "live" : "history"\)/);
+  assert.match(service, /cacheVariant: transferHistoryCacheVariant\("history"\)/);
 });

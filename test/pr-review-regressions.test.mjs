@@ -90,6 +90,8 @@ test("player directory completion preserves edits made during the request", () =
   const players = source("miniprogram/pages/data/players/players.ts");
   assert.match(players, /!shouldApplyPlayerResponse\(revision, this\.requestRevision\)/);
   assert.match(players, /searchEditedWhileLoading \? currentKeyword/);
+  assert.match(players, /resolveKeywordAfterPlayerLoad\(/);
+  assert.match(players, /if \(this\.data\.loading\) this\.searchEditedWhileLoading = true/);
 });
 
 test("My FPL last-good views survive context and refresh failures", () => {
@@ -175,7 +177,7 @@ test("website handoffs await clipboard success", () => {
 
 test("league handoff returns bypass the cached official league list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*this\.loadLeagues\(forceRefresh, trace, lifecycleRevision\)/);
+  assert.match(leagues, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*shouldReloadLeagues\([\s\S]*this\.loadLeagues\(forceRefresh, trace, lifecycleRevision\)/);
   assert.match(leagues, /cached\.season === season/);
 });
 
@@ -201,7 +203,7 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
   assert.match(service, /if \(!season\) throw new Error/);
-  assert.match(service, /cacheVariant: `season:\$\{season\}`/);
+  assert.match(service, /cachePolicy: "fixtures",[\s\S]*season,/);
   assert.doesNotMatch(service, /season:unknown/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
@@ -214,7 +216,7 @@ test("initial league payloads use named session cache policies", () => {
   const common = source("miniprogram/services/common.service.ts");
   assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
   assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
-  assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
+  assert.match(common, /getTeamList[\s\S]*season: _season/);
   assert.doesNotMatch(common, /season:unknown/);
 });
 

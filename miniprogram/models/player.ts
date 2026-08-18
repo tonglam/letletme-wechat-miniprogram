@@ -52,6 +52,7 @@ export interface PlayerValueChange {
   movementText?: string;
   movementClass?: string;
   transferText?: string;
+  rowKey?: string;
 }
 
 export interface PlayerValue {

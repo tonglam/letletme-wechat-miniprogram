@@ -13,3 +13,9 @@ test("Data Selections preserves forced stats refresh across hide/show", () => {
   assert.match(page, /this\.activeStatsForceRefresh = forceRefresh/);
   assert.match(page, /this\.activeStatsForceRefresh = false;\n\s+this\.setData\(\{ loadingStats: false \}\)/);
 });
+
+test("Data Selections closes share fallback when tournament, GW, or tab changes", () => {
+  assert.match(page, /onTournamentChange[\s\S]*shareSheetOpen: false[\s\S]*this\.loadStats\(\)/);
+  assert.match(page, /onEventChange[\s\S]*shareSheetOpen: false[\s\S]*this\.loadStats\(\)/);
+  assert.match(page, /onTabTap[\s\S]*shareSheetOpen: false/);
+});

@@ -138,7 +138,7 @@
       actionText="重新加载"
       bind:action="onRetry"
     />
-    <player-row wx:for="{{displayedPlayers}}" wx:key="code" player="{{item}}" showPrice="{{true}}" bind:open="onOpenPlayer" />
+    <player-row wx:for="{{players}}" wx:key="element" player="{{item}}" showPrice="{{true}}" bind:open="onOpenPlayer" />
 
     <view wx:if="{{loadMoreError}}" class="inline-error load-more-error">
       <text>{{loadMoreError}}</text>

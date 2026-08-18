@@ -229,6 +229,8 @@ interface EntrySummaryData {
   overviewStats: MetricCard[];
   eventStats: MetricCard[];
   squadRows: SquadRow[];
+  starterRows: SquadRow[];
+  benchRows: SquadRow[];
   transferRows: TransferRow[];
   transferFilter: TransferFilter;
   transferSummary: MetricCard[];
@@ -309,6 +311,8 @@ Page({
     overviewStats: [],
     eventStats: [],
     squadRows: [],
+    starterRows: [],
+    benchRows: [],
     transferRows: [],
     transferFilter: "with",
     transferSummary: [],
@@ -500,6 +504,8 @@ Page({
         event: nextGw,
         phaseBanner: "",
         hasTeamData: false,
+        playerDetailOpen: false,
+        playerDetail: null,
         ...(seasonChanged ? {
           error: "",
           transferError: "",
@@ -513,6 +519,8 @@ Page({
           overviewStats: [],
           eventStats: [],
           squadRows: [],
+          starterRows: [],
+          benchRows: [],
           transferRows: [],
           transferFilter: "with",
           transferSummary: [],
@@ -537,7 +545,9 @@ Page({
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
-    // Summary data moves slowly, but an advancing current GW reloads now.
+    // Summary data moves slowly, so team uses a 5-minute warm window
+    // (home / live index / leagues stay at 60s). An advancing current GW
+    // still reloads immediately via contextChanged.
     const primaryMissing = !this.data.hasTeamData
       && !this.data.emptyState
       && !this.data.error;
@@ -665,6 +675,8 @@ Page({
         event: nextGw,
         phaseBanner: "",
         hasTeamData: false,
+        playerDetailOpen: false,
+        playerDetail: null,
         ...(seasonChanged ? {
           error: "",
           transferError: "",
@@ -678,6 +690,8 @@ Page({
           overviewStats: [],
           eventStats: [],
           squadRows: [],
+          starterRows: [],
+          benchRows: [],
           transferRows: [],
           transferFilter: "with",
           transferSummary: [],
@@ -718,6 +732,10 @@ Page({
     this.resumeStartupAfterShow = this.startupPending;
     this.resumeRefreshAfterShow = this.refreshPending;
     if (this.resumeRefreshAfterShow) this.resumeStartupAfterShow = false;
+    if (this.data.loading) {
+      this.resumeRefreshAfterShow = this.resumeRefreshAfterShow || this.data.hasTeamData;
+      this.setData({ loading: false });
+    }
     this.pageVisible = false;
     this.loadRequestId += 1;
     this.tabRequestId += 1;
@@ -773,6 +791,8 @@ Page({
       overviewStats: [],
       eventStats: [],
       squadRows: [],
+      starterRows: [],
+      benchRows: [],
       transferRows: [],
       transferFilter: "with",
       transferSummary: [],
@@ -794,7 +814,9 @@ Page({
       hasHistory: false,
       hasTeamData: false,
       supportAvailable: false,
-      phaseBanner: ""
+      phaseBanner: "",
+      playerDetailOpen: false,
+      playerDetail: null
     });
     void this.loadData(true);
     return true;
@@ -870,6 +892,8 @@ Page({
           overviewStats: [],
           eventStats: [],
           squadRows: [],
+          starterRows: [],
+          benchRows: [],
           ...emptyPitchState(),
           hasSquad: false,
           hasTeamData: false,
@@ -905,15 +929,13 @@ Page({
         totalTransfersText: primary.totalTransfersText,
         overviewStats: primary.overviewStats,
         eventStats: primary.eventStats,
-        squadRows: primary.squadRows,
+        ...squadListState(primary.squadRows),
         ...pitchStateFromEventResult(eventResult),
         chipInventoryRows: primary.chipInventoryRows,
         chipLogRows: primary.chipLogRows,
         event: selectedEvent,
         maxGw: authoritativeEvent,
         emptyState: "",
-        hasSquad: primary.squadRows.length > 0,
-        hasBench: primary.squadRows.some((row) => row.bench),
         hasTeamData: true,
         supportAvailable: true
       }, () => {
@@ -977,9 +999,11 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    const next = Number(event.detail.value);
+    if (!Number.isFinite(next) || next <= 0) return;
     this.phaseBannerRequestId += 1;
     this.setData({
-      event: event.detail.value,
+      event: next,
       phaseBanner: "",
       error: "",
       emptyState: "",
@@ -991,10 +1015,14 @@ Page({
       overviewStats: [],
       eventStats: [],
       squadRows: [],
+      starterRows: [],
+      benchRows: [],
       ...emptyPitchState(),
       hasSquad: false,
       hasTeamData: false,
-      supportAvailable: false
+      supportAvailable: false,
+      playerDetailOpen: false,
+      playerDetail: null
     });
     this.loadData(true);
   },
@@ -1293,6 +1321,16 @@ function pastSeasonPageState(rows: SeasonHistoryRow[], selectedIndex: number | n
     pastSeasonSummary: pastSeasonSummary(points, selectedIndex),
     pastSeasonSelected: selectedIndex,
     pastSeasonHasSelected: selectedIndex != null
+  };
+}
+
+function squadListState(rows: SquadRow[]) {
+  return {
+    squadRows: rows,
+    starterRows: rows.filter((row) => !row.bench),
+    benchRows: rows.filter((row) => row.bench),
+    hasSquad: rows.length > 0,
+    hasBench: rows.some((row) => row.bench)
   };
 }
 

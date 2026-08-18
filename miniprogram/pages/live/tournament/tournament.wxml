@@ -75,7 +75,7 @@
     <view id="perf-primary-content" class="section">
       <view class="result-row">
         <view wx:if="{{compareMode}}" class="compare-hint">{{compareHint}}</view>
-        <view wx:else class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{rows.length}}</view>
+        <view wx:else class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{rowCount}}</view>
         <view class="result-actions">
           <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />

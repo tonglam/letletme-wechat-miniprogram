@@ -37,6 +37,12 @@ test("current-event schedule arms a kickoff transition without preseason Live wo
   assert.match(page, /armKickoffTransition\([\s\S]*this\.targetEventId !== this\.currentEventId[\s\S]*setTimeout/);
   assert.match(page, /this\.armKickoffTransition\(coreRead\.data\)/);
   assert.match(page, /onHide\(\)[\s\S]*this\.clearKickoffTransition\(\)/);
+  assert.match(page, /onHide\(\)[\s\S]*this\.clearCopiedMatchTimer\(\)/);
+  assert.match(page, /onUnload\(\)[\s\S]*this\.clearCopiedMatchTimer\(\)/);
+  assert.match(
+    page,
+    /seasonChanged \|\| nextCurrentEventId !== this\.currentEventId[\s\S]*clearCopiedMatchTimer\(\)[\s\S]*shareSheetOpen: false/
+  );
   assert.match(page, /catch \(error\)[\s\S]*this\.armKickoffTransition\(this\.coreMatches, true\)/);
 });
 

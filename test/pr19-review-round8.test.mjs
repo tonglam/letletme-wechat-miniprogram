@@ -37,7 +37,7 @@ test("Home retries failed deadline context recovery without a request storm", ()
 
 test("Live landing waits for shared cold-start context before painting GW", () => {
   const live = source("miniprogram/pages/live/index/index.ts");
-  assert.match(live, /import \{ ensureAppContext \}/);
+  assert.match(live, /import \{ ensureAppContext, getAppContextSnapshot \}/);
   assert.match(
     live,
     /async loadContext\([\s\S]*await ensureAppContext\(\{ reason \}\)[\s\S]*contextResolved: true[\s\S]*event: app\.globalData\.gw/

@@ -23,3 +23,57 @@ test("tournament directory cache never crosses season boundaries", () => {
   );
   assert.equal(leaguesModule.readTournamentsCache(123, undefined), null);
 });
+
+test("league warm show reloads only after identity change or the 60s window", () => {
+  assert.equal(
+    leaguesModule.shouldReloadLeagues(1_000, 9, 9, "2025-26", "2025-26", 12, 12, 4, 4, 1_100),
+    false
+  );
+  assert.equal(
+    leaguesModule.shouldReloadLeagues(1_000, 9, 9, "2025-26", "2025-26", 12, 12, 4, 4, 61_000),
+    true
+  );
+  assert.equal(
+    leaguesModule.shouldReloadLeagues(1_000, 9, 10, "2025-26", "2025-26", 12, 12, 4, 4, 1_100),
+    true
+  );
+  assert.equal(
+    leaguesModule.shouldReloadLeagues(1_000, 9, 9, "2025-26", "2026-27", 12, 12, 4, 4, 1_100),
+    true
+  );
+  assert.equal(
+    leaguesModule.shouldReloadLeagues(1_000, 9, 9, "2025-26", "2025-26", 12, 13, 4, 4, 1_100),
+    true
+  );
+});
+
+test("league view loaders discard superseded responses and resume interrupted view loads", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url), "utf8");
+  assert.match(page, /isActiveViewRequest\(requestId\)/);
+  assert.match(page, /async loadSeasonView\([\s\S]*requestId: number/);
+  assert.match(page, /async loadGameweekView\([\s\S]*requestId: number/);
+  assert.match(page, /onHide\(\)[\s\S]*this\.data\.viewLoading[\s\S]*this\.data\.pathLoading/);
+  assert.match(page, /shouldReloadLeagues\([\s\S]*this\.loadedEvent,[\s\S]*this\.data\.event,/);
+  assert.match(page, /this\.pathLoadedKey = pathKey;[\s\S]*this\.setData\(\{ pathLoading: false \}\)/);
+  assert.match(page, /this\.pathLoadedKey = "";/);
+  assert.doesNotMatch(
+    page.slice(page.indexOf("const recent = await loadTournamentSeasonPath"), page.indexOf("if (window.hasOlder)")),
+    /this\.pathLoadedKey = pathKey/
+  );
+});
+
+test("season path window loads the latest 8 gameweeks first", () => {
+  assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
+    recentStart: 31,
+    recentEnd: 38,
+    hasOlder: true,
+    olderEnd: 30
+  });
+  assert.deepEqual(leaguesModule.seasonPathWindow(1, 6), {
+    recentStart: 1,
+    recentEnd: 6,
+    hasOlder: false,
+    olderEnd: 0
+  });
+});

@@ -1,5 +1,6 @@
 import { ensureAppContext } from "./app-context.service";
 import { getEntryEventResult, getEntryInfo, getEntryLeagueInfo } from "./entry.service";
+import type { EntryEventResult } from "./entry.service";
 import { getLiveSnapshot } from "./live.service";
 import { getApiSessionToken } from "./auth.service";
 import { storageKeys } from "../config/storage-keys";
@@ -17,14 +18,6 @@ import type { PageRequestTrace } from "./graphql.service";
  * part of the view and must never throw away the rest, and nothing here ever
  * touches the follow pointer.
  */
-
-/** Raw shape of the EntryEventResult payload (service returns it untyped). */
-interface EntryEventResultPayload {
-  eventId?: number | null;
-  eventPoints?: number | null;
-  overallPoints?: number | null;
-  overallRank?: number | null;
-}
 
 type ReadResult<T> =
   | { available: true; value: T }
@@ -55,7 +48,7 @@ function pickNumber(value: number | null | undefined): number | undefined {
  */
 export function mergeMyFplTeamBrief(
   entry: { entryName?: string; playerName?: string; overallPoints?: number; overallRank?: number } | null,
-  eventResult: EntryEventResultPayload | null
+  eventResult: EntryEventResult | null
 ): MyFplTeamBrief | null {
   if (!entry && !eventResult) {
     return null;
@@ -133,8 +126,8 @@ export async function getMyFplTeamBrief(
   const [entryRead, eventRead] = await Promise.all([
     settleRead(getEntryInfo(entryId, forceRefresh)),
     event > 0
-      ? settleRead(getEntryEventResult(entryId, event).then((res) => res as EntryEventResultPayload | null))
-      : Promise.resolve({ available: true, value: null } as ReadResult<EntryEventResultPayload | null>)
+      ? settleRead(getEntryEventResult(entryId, event).then((res) => res ?? null))
+      : Promise.resolve({ available: true, value: null } as ReadResult<EntryEventResult | null>)
   ]);
   const entry = entryRead.value;
   return {

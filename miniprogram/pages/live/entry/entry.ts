@@ -186,6 +186,8 @@ Page({
   loadedSeason: undefined as string | undefined,
   perfTracker: undefined as PagePerformanceTracker | undefined,
   loadTransfersAfterLive: false,
+  shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  resumeTransfersAfterShow: false,
   resumeLiveAfterShow: false,
   resumeStartupAfterShow: false,
   startupPending: false,
@@ -386,6 +388,7 @@ Page({
           bench: [],
           managers: [],
           transfers: [],
+          ...emptyLiveOverlayState(),
           ...emptyLivePitchState()
         });
         this.liveRefresh?.sync();
@@ -412,15 +415,16 @@ Page({
       void this.liveRefresh?.probeNow();
     }
     const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    const resumeTransfers = this.resumeTransfersAfterShow;
+    this.resumeTransfersAfterShow = false;
     if (
       resumed
       && this.data.entryId
-      && currentEventId > 0
-      && this.data.event === currentEventId
+      && this.data.event > 0
+      && (resumeTransfers || (currentEventId > 0 && this.data.event === currentEventId))
     ) {
-      // Transfers follow their own 30-second cache policy and can change while
-      // the score revision does not. Revalidate them independently on resume;
-      // the service cache makes a fresh view a memory-only read.
+      // Current-GW transfers churn independently of the score revision.
+      // Historical GW only reloads when hide interrupted an in-flight read.
       void this.loadTransfers(this.data.entryId, this.data.event, false);
     }
   },
@@ -436,6 +440,8 @@ Page({
       && !this.resumeForcedRefreshAfterShow
       && this.liveRequest !== null
     );
+    this.resumeTransfersAfterShow = this.resumeTransfersAfterShow || this.data.transfersLoading;
+    if (this.data.transfersLoading) this.setData({ transfersLoading: false });
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.liveRequest = null;
@@ -446,12 +452,14 @@ Page({
     this.liveForcedFollowupTrackNavigation = false;
     this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
+    this.clearShareCopiedTimer();
   },
 
   onUnload() {
     this.pageVisible = false;
     this.liveRefresh?.dispose();
     this.resumeLiveAfterShow = false;
+    this.resumeTransfersAfterShow = false;
     this.resumeStartupAfterShow = false;
     this.resumeForcedRefreshAfterShow = false;
     this.startupPending = false;
@@ -467,6 +475,7 @@ Page({
     this.liveForcedFollowupTrackNavigation = false;
     this.loadTransfersAfterLive = false;
     this.perfTracker?.disconnect();
+    this.clearShareCopiedTimer();
   },
 
   async onPullDownRefresh() {
@@ -611,6 +620,7 @@ Page({
       bench: [],
       managers: [],
       transfers: [],
+      ...emptyLiveOverlayState(),
       ...emptyLivePitchState()
     });
     if (nextEntryId) {
@@ -863,7 +873,10 @@ Page({
         forceRefresh,
         trace
       );
-      if (requestId !== this.transfersRequestId) return;
+      if (
+        !this.pageVisible
+        || requestId !== this.transfersRequestId
+      ) return;
       if (this.restartForPrincipalChange(entryId)) return;
       if (
         entryId !== this.data.entryId
@@ -873,7 +886,10 @@ Page({
       }
       this.setData({ transfers: transfers.map(normalizeTransfer), transfersError: "" });
     } catch (error) {
-      if (requestId !== this.transfersRequestId) return;
+      if (
+        !this.pageVisible
+        || requestId !== this.transfersRequestId
+      ) return;
       if (this.restartForPrincipalChange(entryId)) return;
       if (
         entryId !== this.data.entryId
@@ -886,7 +902,8 @@ Page({
       });
     } finally {
       if (
-        requestId === this.transfersRequestId
+        this.pageVisible
+        && requestId === this.transfersRequestId
         && entryId === this.data.entryId
         && eventId === this.data.event
       ) {
@@ -947,6 +964,8 @@ Page({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    const nextEventId = Number(event.detail.value);
+    if (!Number.isFinite(nextEventId) || nextEventId <= 0) return;
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
     this.liveRefresh?.stop();
@@ -958,15 +977,14 @@ Page({
     this.loadTransfersAfterLive = false;
     this.liveForcedFollowupIncludeTransfers = false;
     this.setData({
-      event: event.detail.value,
+      event: nextEventId,
       hasData: false,
       noPicks: false,
       lastUpdated: "",
       transfers: [],
       transfersLoading: false,
       transfersError: "",
-      playerDetailOpen: false,
-      playerDetail: null
+      ...emptyLiveOverlayState()
     });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
@@ -1041,6 +1059,13 @@ Page({
     };
   },
 
+  clearShareCopiedTimer() {
+    if (this.shareCopiedTimer) {
+      clearTimeout(this.shareCopiedTimer);
+      this.shareCopiedTimer = undefined;
+    }
+  },
+
   onCopyShare() {
     try {
       if (!this.data.hasData) {
@@ -1064,7 +1089,8 @@ Page({
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ shareCopied: true, shareSheetOpen: false });
-          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          this.clearShareCopiedTimer();
+          this.shareCopiedTimer = setTimeout(() => this.setData({ shareCopied: false }), 2000);
           return;
         }
         this.setData({ shareSheetOpen: true, shareText: text });
@@ -1079,6 +1105,20 @@ Page({
     this.setData({ shareSheetOpen: false });
   }
 });
+
+function emptyLiveOverlayState(): {
+  playerDetailOpen: false;
+  playerDetail: null;
+  shareSheetOpen: false;
+  shareText: "";
+} {
+  return {
+    playerDetailOpen: false,
+    playerDetail: null,
+    shareSheetOpen: false,
+    shareText: ""
+  };
+}
 
 function emptyLivePitchState(): {
   pitchPlayers: SquadPitchPlayer[];

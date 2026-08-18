@@ -109,10 +109,10 @@
             bind:playertap="onPitchPlayerTap"
           />
         </view>
-        <player-row wx:for="{{squadRows}}" wx:if="{{!item.bench}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+        <player-row wx:for="{{starterRows}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
         <block wx:if="{{hasBench}}">
           <view class="section-heading bench-heading">替补</view>
-          <player-row wx:for="{{squadRows}}" wx:if="{{item.bench}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+          <player-row wx:for="{{benchRows}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
         </block>
       </block>
     </view>
@@ -319,7 +319,7 @@
     </view>
   </block>
 
-  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
 
   <bottomNavBar active="myFpl" />
 </view>

@@ -356,7 +356,8 @@ PerformancePage({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    const startEvent = Number(event.detail.value) || 1;
+    const startEvent = Number(event.detail.value);
+    if (!Number.isFinite(startEvent) || startEvent <= 0) return;
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.selectedWindowByUser = startEvent !== currentGw;
     this.setData({ startEvent });

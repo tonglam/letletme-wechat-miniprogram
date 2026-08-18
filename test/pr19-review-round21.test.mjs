@@ -26,7 +26,7 @@ for (const [label, path, surface] of [
     assert.match(page, /await this\.ensureAppDataReady\(\)[\s\S]*if \(!this\.pageVisible \|\| lifecycleRevision !== this\.lifecycleRevision\) return/);
     assert.match(page, /await app\.authReady[\s\S]*if \(!this\.pageVisible \|\| lifecycleRevision !== this\.lifecycleRevision\) return/);
     assert.match(page, /onHide\(\)[\s\S]*resumeOnShow[\s\S]*lifecycleRevision \+= 1/);
-    assert.match(page, /const isActiveLifecycle = \(\) => this\.pageVisible && lifecycleRevision === this\.lifecycleRevision/);
+    assert.match(page, /const isActiveLifecycle = \(\) => this\.pageVisible[\s\S]*lifecycleRevision === this\.lifecycleRevision/);
   });
 }
 
@@ -38,8 +38,8 @@ test("Players clears an interrupted pagination latch on resume", () => {
 test("Match and Tournament resume interrupted primary loads", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
-  assert.match(match, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = this\.resumeLoadAfterShow[\s\S]*\|\| \(!this\.resumeForcedRefreshAfterShow[\s\S]*Boolean\(this\.liveRequest && !this\.data\.hasData\)[\s\S]*liveRequestId \+= 1/);
-  assert.match(match, /resumeInterruptedLoad && !this\.data\.hasData[\s\S]*loadData\(\{ forceRefresh: true \}\)/);
+  assert.match(match, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = this\.resumeLoadAfterShow[\s\S]*\|\| \(!this\.resumeForcedRefreshAfterShow[\s\S]*Boolean\(this\.liveRequest\)[\s\S]*liveRequestId \+= 1/);
+  assert.match(match, /if \(resumeInterruptedLoad\)[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/);
   assert.match(tournament, /onHide\(\)[\s\S]*if \(this\.directoryRequestPending\)[\s\S]*resumeDirectoryAfterShow = true[\s\S]*tournamentListRequestId \+= 1/);
   assert.match(tournament, /resumed && this\.resumeDirectoryAfterShow[\s\S]*loadTournaments\(forceRefresh\)/);
 });

@@ -23,12 +23,14 @@
     </view>
   </view>
 
-  <view wx:if="{{error}}" class="section">
+  <app-loading wx:if="{{loading}}" text="加载赛程" />
+  <view wx:elif="{{error && !runCards.length}}" class="section">
     <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
-
-  <app-loading wx:if="{{loading}}" text="加载赛程" />
   <block wx:else>
+    <view wx:if="{{error}}" class="section">
+      <app-error-state message="{{error}}" bind:retry="onRetry" />
+    </view>
     <view wx:if="{{glanceCards.length}}" class="section glance-grid">
       <view
         wx:for="{{glanceCards}}"

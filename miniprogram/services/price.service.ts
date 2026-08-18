@@ -414,6 +414,7 @@ function mapPulse(data: MarketPulseResponse | undefined): MarketPulse {
 /** Latest snapshot board: ownership / transfers / availability / new players. */
 export async function getMarketPulse(forceRefresh = false, trace?: ServiceReadOptions["trace"]): Promise<MarketPulse> {
   const result = await graphqlRead<MarketPulseResponse>(MARKET_PULSE, { days: MARKET_PULSE_DAYS }, {
+    authMode: "public",
     cachePolicy: "market",
     forceRefresh,
     trace
@@ -430,6 +431,7 @@ export async function getMarketPulse(forceRefresh = false, trace?: ServiceReadOp
 /** Full availability list — lazy-loaded behind the 伤情动态 disclosure (web pattern). */
 export async function getMarketAvailability(forceRefresh = false): Promise<MarketAvailabilityItem[]> {
   const data = await graphqlRequest<MarketPulseResponse>(MARKET_AVAILABILITY, { days: MARKET_PULSE_DAYS }, {
+    authMode: "public",
     cachePolicy: "market",
     forceRefresh
   });

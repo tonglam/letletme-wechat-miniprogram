@@ -7,7 +7,7 @@ const source = (path) => readFileSync(path, "utf8");
 test("Live landing resumes an unresolved context after hide/show", () => {
   const page = source("miniprogram/pages/live/index/index.ts");
   assert.match(page, /hasShown: false/);
-  assert.match(page, /onShow\(\)[\s\S]*const resumed = this\.hasShown[\s\S]*if \(!resumed\) return undefined[\s\S]*loadContext\("page-show"\)/);
+  assert.match(page, /onShow\(\)[\s\S]*const resumed = this\.hasShown[\s\S]*if \(!resumed\) return undefined[\s\S]*shouldReloadLiveIndex\([\s\S]*loadContext\("page-show"\)/);
   assert.doesNotMatch(page, /if \(!this\.data\.contextResolved\) return undefined/);
 });
 

@@ -65,7 +65,7 @@
           <text class="panel-count">{{riseChanges.length}}</text>
         </view>
         <app-empty-state wx:if="{{riseChanges.length === 0}}" title="这一天没有上涨" description="当日没有球员涨价" />
-        <view wx:for="{{riseChanges}}" wx:key="element" class="price-change-row" data-direction="rise" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
+        <view wx:for="{{riseChanges}}" wx:key="rowKey" class="price-change-row" data-direction="rise" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
             <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
@@ -83,7 +83,7 @@
           <text class="panel-count">{{fallChanges.length}}</text>
         </view>
         <app-empty-state wx:if="{{fallChanges.length === 0}}" title="这一天没有下跌" description="当日没有球员降价" />
-        <view wx:for="{{fallChanges}}" wx:key="element" class="price-change-row" data-direction="fall" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
+        <view wx:for="{{fallChanges}}" wx:key="rowKey" class="price-change-row" data-direction="fall" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
             <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
@@ -310,7 +310,7 @@
       <app-loading wx:elif="{{historyLoading}}" text="加载球员身价历史" />
       <app-empty-state wx:elif="{{historyRows.length === 0}}" title="还没有身价变化记录" description="该球员首次调价后会开始显示历史" />
       <view wx:else>
-        <view wx:for="{{historyRows}}" wx:key="changeDate" class="history-row">
+        <view wx:for="{{historyRows}}" wx:key="rowKey" class="history-row">
           <view class="history-main">
             <view class="history-date">{{item.changeDateText || item.changeDate}}</view>
             <view class="history-price">{{item.priceText}}</view>

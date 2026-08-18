@@ -42,7 +42,7 @@ test("tournament preseason is a stable business empty state", () => {
     emptyTitle: "当前赛季暂无实时比赛周",
     emptyDescription: "比赛周开始后，这里会显示赛事实时得分和排名",
     emptyActionText: "",
-    rows: [],
+    rowCount: 0,
     displayedRows: [],
     filteredCount: 0,
     lastUpdated: ""
@@ -58,7 +58,8 @@ test("tournament cold start commits preseason instead of an error", async () => 
   const calls = [];
   const context = {
     ...tournamentPage,
-    data: { ...tournamentPage.data, error: "old error", rows: [{ entry: 1 }] },
+    data: { ...tournamentPage.data, error: "old error" },
+    rows: [{ entry: 1 }],
     pageVisible: true,
     startupGeneration: 0,
     ensureContext: async () => ({ season: "2026/27", currentEvent: 0 }),
@@ -74,7 +75,7 @@ test("tournament cold start commits preseason instead of an error", async () => 
   assert.equal(context.data.event, 0);
   assert.equal(context.data.emptyState, "preseason");
   assert.equal(context.data.error, "");
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
   assert.deepEqual(calls, ["init", "stop", "display"]);
 });
 
@@ -379,7 +380,7 @@ test("entry resume drops a historical selection after a season rollover", async 
     initAppData: async (forceRefresh) => { calls.push(`init:${forceRefresh}`); }
   });
   const context = {
-    data: { ...entryPage.data, entryId: 123, event: 30, maxGw: 38, hasData: true },
+    data: { ...entryPage.data, entryId: 123, event: 30, maxGw: 38, hasData: true, shareSheetOpen: true, shareText: "old" },
     pageVisible: false,
     hasShown: true,
     loadedSeason: "2025/26",
@@ -413,6 +414,7 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.equal(context.data.event, 1);
   assert.equal(context.data.maxGw, 1);
   assert.equal(context.data.hasData, false);
+  assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.liveRequestId, 8);
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
@@ -478,7 +480,11 @@ test("entry principal changes clear old live data and restart the followed team"
       hasData: true,
       total: 77,
       starters: [{ element: 1 }],
-      transfers: [{ inText: "old" }]
+      transfers: [{ inText: "old" }],
+      playerDetailOpen: true,
+      playerDetail: { element: 1 },
+      shareSheetOpen: true,
+      shareText: "old share"
     },
     liveRequestId: 7,
     transfersRequestId: 4,
@@ -504,6 +510,9 @@ test("entry principal changes clear old live data and restart the followed team"
   assert.equal(context.data.total, 0);
   assert.deepEqual(context.data.starters, []);
   assert.deepEqual(context.data.transfers, []);
+  assert.equal(context.data.playerDetailOpen, false);
+  assert.equal(context.data.playerDetail, null);
+  assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.liveRequestId, 8);
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
@@ -528,7 +537,6 @@ test("tournament resume drops a historical selection after a season rollover", a
       event: 30,
       maxGw: 38,
       hasData: true,
-      rows: [{ entry: 1 }],
       displayedRows: [{ entry: 1 }],
       selectedOwnershipPlayers: [{ element: 999, name: "Old player" }],
       ownershipPlayerNames: ["Old player"],
@@ -536,8 +544,11 @@ test("tournament resume drops a historical selection after a season rollover", a
       selectedOwnershipTeam: { id: 1, name: "Old team" },
       ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
       teamExposureRules: [{ teamShortName: "ARS", name: "Old team", count: 2 }],
-      pendingExposureTeam: { shortName: "CHE", name: "Old pending" }
+      pendingExposureTeam: { shortName: "CHE", name: "Old pending" },
+      shareSheetOpen: true,
+      shareText: "old share"
     },
+    rows: [{ entry: 1 }],
     pageVisible: false,
     hasShown: true,
     loadedSeason: "2025/26",
@@ -565,7 +576,7 @@ test("tournament resume drops a historical selection after a season rollover", a
 
   assert.equal(context.data.event, 1);
   assert.equal(context.data.maxGw, 1);
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
   assert.equal(context.data.selectedTournament, null);
   assert.deepEqual(context.data.selectedOwnershipPlayers, []);
   assert.deepEqual(context.data.ownershipAvailablePlayers, []);
@@ -573,6 +584,7 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.selectedOwnershipTeam, null);
   assert.deepEqual(context.data.teamExposureRules, []);
   assert.equal(context.data.pendingExposureTeam, null);
+  assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
 });
@@ -588,9 +600,9 @@ test("tournament rollover to a season without a live event commits preseason", a
       maxGw: 38,
       hasData: true,
       error: "old error",
-      rows: [{ entry: 1 }],
       displayedRows: [{ entry: 1 }]
     },
+    rows: [{ entry: 1 }],
     pageVisible: false,
     hasShown: true,
     loadedSeason: "2025/26",
@@ -611,7 +623,7 @@ test("tournament rollover to a season without a live event commits preseason", a
   assert.equal(context.data.maxGw, 0);
   assert.equal(context.data.emptyState, "preseason");
   assert.equal(context.data.error, "");
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
   assert.equal(context.rowsRequestId, 3);
   assert.equal(context.tournamentListRequestId, 4);
   assert.deepEqual(calls, ["stop", "sync:0", "display"]);
@@ -746,9 +758,13 @@ test("tournament principal changes clear old lists before restarting", () => {
       hasData: true,
       tournaments: [{ id: "old", name: "Old" }],
       selectedTournament: { id: "old", name: "Old" },
-      rows: [{ entry: 123 }],
-      displayedRows: [{ entry: 123 }]
+      displayedRows: [{ entry: 123 }],
+      compareOpen: true,
+      filterSheetOpen: true,
+      shareSheetOpen: true,
+      shareText: "old share"
     },
+    rows: [{ entry: 123 }],
     liveSnapshot: { state: "SETTLED" },
     cachedLiveStoredAt: 1,
     failedEntryCount: 1,
@@ -766,7 +782,10 @@ test("tournament principal changes clear old lists before restarting", () => {
   assert.equal(restarted, true);
   assert.equal(context.data.entryId, 456);
   assert.deepEqual(context.data.tournaments, []);
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
+  assert.equal(context.data.compareOpen, false);
+  assert.equal(context.data.filterSheetOpen, false);
+  assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.rowsRequestId, 5);
   assert.deepEqual(calls, ["stop", "load:true"]);
 });
@@ -794,6 +813,20 @@ test("renders pending transfers and partial tournament rows honestly", () => {
   );
   assert.equal(tournamentPage.data.errorSuffix, "");
   assert.equal(tournamentPage.data.tournamentListError, "");
+});
+
+test("tournament applyRows keeps full rows off page data", () => {
+  const page = readFileSync(
+    new URL("../miniprogram/pages/live/tournament/tournament.ts", import.meta.url),
+    "utf8"
+  );
+  const start = page.indexOf("applyRows(rows: DisplayTournamentRow[]");
+  const apply = page.slice(start, page.indexOf("persistSelectedTournament", start));
+  assert.match(apply, /this\.rows = rows/);
+  assert.match(apply, /this\.ownershipPlayers = ownershipPlayers/);
+  assert.match(apply, /rowCount: rows\.length/);
+  assert.doesNotMatch(apply, /this\.setData\(\{[\s\S]*\brows:/);
+  assert.doesNotMatch(apply, /this\.setData\(\{[\s\S]*ownershipPlayers:/);
 });
 
 test("live loaders normalize display state after clearing loading flags", () => {
@@ -929,7 +962,9 @@ test("team principal changes clear the old view before restarting", () => {
       headerTitle: "Old team",
       squadRows: [{ id: "old" }],
       hasSquad: true,
-      hasTeamData: true
+      hasTeamData: true,
+      playerDetailOpen: true,
+      playerDetail: { element: 1 }
     },
     loadRequestId: 2,
     phaseBannerRequestId: 3,
@@ -943,6 +978,8 @@ test("team principal changes clear the old view before restarting", () => {
   assert.equal(context.data.entryId, 456);
   assert.equal(context.data.hasTeamData, false);
   assert.deepEqual(context.data.squadRows, []);
+  assert.equal(context.data.playerDetailOpen, false);
+  assert.equal(context.data.playerDetail, null);
   assert.equal(context.loadRequestId, 3);
   assert.deepEqual(calls, ["load:true"]);
 });

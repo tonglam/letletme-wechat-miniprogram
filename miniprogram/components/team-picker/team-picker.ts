@@ -23,6 +23,7 @@ Component({
   methods: {
     onChange(event: WechatMiniprogram.PickerChange) {
       const index = Number(event.detail.value);
+      if (!Number.isFinite(index) || index < 0) return;
       this.triggerEvent("change", { value: this.properties.teams[index] });
     }
   }

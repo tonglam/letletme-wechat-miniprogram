@@ -92,5 +92,9 @@ PerformancePage({
 
   onRetry() {
     this.loadData(true);
+  },
+
+  onPullDownRefresh() {
+    return this.loadData(true).finally(() => wx.stopPullDownRefresh());
   }
 });
