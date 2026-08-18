@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { exploreFixturesMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getFixtureWindow } from "../../../services/fixture.service";
 import { getTeamList } from "../../../services/common.service";
@@ -267,11 +265,6 @@ PerformancePage({
     }),
     lifecycleRevision?: number
   ) {
-    if (MOCK_ENABLED) {
-      this.setData(exploreFixturesMockData);
-      this.applyView();
-      return;
-    }
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
     const isActiveRequest = () => (

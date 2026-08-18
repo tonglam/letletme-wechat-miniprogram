@@ -1,6 +1,4 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
 import { routes } from "../../../config/routes";
-import { accountIndexMockData } from "../../../mocks/index";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { PerformancePage } from "../../../utils/performance-page";
@@ -12,19 +10,13 @@ PerformancePage({
   },
 
   onLoad() {
-    if (MOCK_ENABLED) {
-      this.setData(accountIndexMockData);
-      return;
-    }
     this.syncEntry();
   },
 
   onShow() {
     // A rebind on entry/search (or an email link sync) lands back here via the
     // tab, so refresh the status row every time the page surfaces.
-    if (!MOCK_ENABLED) {
-      this.syncEntry();
-    }
+    this.syncEntry();
   },
 
   syncEntry() {

@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { dataPlayerDetailMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
@@ -72,12 +70,7 @@ PerformancePage({
   },
 
   async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
-    if (MOCK_ENABLED) {
-      this.setData(dataPlayerDetailMockData);
-      setPageTitle(dataPlayerDetailMockData.player.name || "球员详情");
-      return;
-    }
-    if (!this.data.code) {
+        if (!this.data.code) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }

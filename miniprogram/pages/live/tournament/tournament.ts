@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { liveTournamentMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
 import {
@@ -511,30 +509,8 @@ PerformancePage({
     return ensureAppContext({ reason, forceRefresh });
   },
 
-  applyMockData() {
-    this.setData({
-      ...liveTournamentMockData,
-      displayedRows: [],
-      chipFilters: this.data.chipFilters || [],
-      captainFilters: this.data.captainFilters || [],
-      compareMode: this.data.compareMode,
-      compareIds: this.data.compareIds,
-      compareHint: this.data.compareHint,
-      filterSheetOpen: this.data.filterSheetOpen,
-      sortKey: this.data.sortKey || "livePoints",
-      sortDesc: this.data.sortDesc !== false,
-      sortOptions: this.data.sortOptions
-    });
-    this.applyRows((liveTournamentMockData.rows as DisplayTournamentRow[]).map(normalizeRow), true);
-    this.syncDisplayState();
-  },
-
   async onLoad() {
     this.pageVisible = true;
-    if (MOCK_ENABLED && typeof this.applyMockData === "function") {
-      this.applyMockData();
-      return;
-    }
     const trace = capturePageRequestTrace({
       callerSurface: "live-tournament-directory",
       trigger: "load"
@@ -664,11 +640,6 @@ PerformancePage({
 
   async onShow() {
     this.pageVisible = true;
-    if (MOCK_ENABLED && typeof this.applyMockData === "function" && !this.hasShown) {
-      this.hasShown = true;
-      this.applyMockData();
-      return;
-    }
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed && this.resumeStartupAfterShow) {
@@ -906,10 +877,6 @@ PerformancePage({
   },
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace) {
-    if (MOCK_ENABLED && typeof this.applyMockData === "function") {
-      this.applyMockData();
-      return;
-    }
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "live-tournament-directory",
       trigger: forceRefresh ? "refresh" : "load"
@@ -1059,10 +1026,6 @@ PerformancePage({
   _submittedKeyword: "",
 
   loadRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
-    if (MOCK_ENABLED && typeof this.applyMockData === "function") {
-      this.applyMockData();
-      return Promise.resolve();
-    }
     const trace = options.trace || capturePageRequestTrace({
       callerSurface: "live-tournament-rows",
       trigger: options.forceRefresh ? "refresh" : "load"

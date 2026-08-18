@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { liveIndexMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
@@ -66,10 +64,6 @@ PerformancePage({
   },
 
   async loadContext(reason: "page-load" | "page-show") {
-    if (MOCK_ENABLED) {
-      this.setData(liveIndexMockData);
-      return;
-    }
     const lifecycleRevision = this.lifecycleRevision;
     try {
       await ensureAppContext({ reason });

@@ -1,10 +1,10 @@
-import { dataPlayersMockData } from "../miniprogram/mocks/data-players.mock";
 import {
   applyPlayerDirectoryFilters,
   defaultSortDir,
   resolvePlayerPickerSort,
   toggleSortDir
 } from "../miniprogram/pages/data/players/directory-filter";
+import type { PlayerOption } from "../miniprogram/models/player";
 
 function assertEqual(actual: unknown, expected: unknown, message: string): void {
   if (actual !== expected) {
@@ -31,39 +31,48 @@ const query = {
   sortDir: "DESC" as const
 };
 
-const byPointsDesc = applyPlayerDirectoryFilters(dataPlayersMockData.players, query);
+const players: PlayerOption[] = [
+  { name: "Haaland", teamId: 13, team: "MCI", teamName: "Man City", position: "FWD", price: 14.1, totalPoints: 187, selectedByPercent: 52.6 },
+  { name: "Salah", teamId: 12, team: "LIV", teamName: "Liverpool", position: "MID", price: 13.1, totalPoints: 165, selectedByPercent: 55.2 },
+  { name: "Palmer", teamId: 6, team: "CHE", teamName: "Chelsea", position: "MID", price: 10.6, totalPoints: 152, selectedByPercent: 48.8 },
+  { name: "Saka", teamId: 1, team: "ARS", teamName: "Arsenal", position: "MID", price: 10.1, totalPoints: 148, selectedByPercent: 45.1 },
+  { name: "Raya", teamId: 1, team: "ARS", teamName: "Arsenal", position: "GKP", price: 5.6, totalPoints: 74, selectedByPercent: 12.4 },
+  { name: "Rogers", teamId: 2, team: "AVL", teamName: "Aston Villa", position: "MID", price: 5.3, totalPoints: 68, selectedByPercent: 4.8 }
+];
+
+const byPointsDesc = applyPlayerDirectoryFilters(players, query);
 assertEqual(byPointsDesc[0].name, "Haaland", "default sort is season points desc");
 
-const byPointsAsc = applyPlayerDirectoryFilters(dataPlayersMockData.players, { ...query, sortDir: "ASC" });
+const byPointsAsc = applyPlayerDirectoryFilters(players, { ...query, sortDir: "ASC" });
 assertEqual(byPointsAsc[0].name, "Rogers", "points asc is not a second option, it flips the same field");
 
-const byPriceAsc = applyPlayerDirectoryFilters(dataPlayersMockData.players, {
+const byPriceAsc = applyPlayerDirectoryFilters(players, {
   ...query,
   sortField: "PRICE",
   sortDir: "ASC"
 });
 assertEqual(byPriceAsc[0].name, "Rogers", "price asc");
 
-const chelse = applyPlayerDirectoryFilters(dataPlayersMockData.players, { ...query, teamFilter: "6" });
-assertEqual(chelse.length, 1, "chelsea team id matches mock directory");
+const chelse = applyPlayerDirectoryFilters(players, { ...query, teamFilter: "6" });
+assertEqual(chelse.length, 1, "chelsea team id matches directory");
 assertEqual(chelse[0].name, "Palmer", "chelsea filter returns palmer");
 
-const keepers = applyPlayerDirectoryFilters(dataPlayersMockData.players, {
+const keepers = applyPlayerDirectoryFilters(players, {
   ...query,
   positionFilter: "GOALKEEPER"
 });
 assertEqual(keepers.map((player) => player.name).join(","), "Raya", "position filter");
 
-const cheap = applyPlayerDirectoryFilters(dataPlayersMockData.players, { ...query, maxPrice: 60 });
+const cheap = applyPlayerDirectoryFilters(players, { ...query, maxPrice: 60 });
 assertEqual(cheap.every((player) => (player.price || 0) <= 6), true, "max price tenths");
 
-const lowOwn = applyPlayerDirectoryFilters(dataPlayersMockData.players, { ...query, ownBand: "LE5" });
+const lowOwn = applyPlayerDirectoryFilters(players, { ...query, ownBand: "LE5" });
 assertEqual(lowOwn.map((player) => player.name).join(","), "Rogers", "ownership band");
 
-const named = applyPlayerDirectoryFilters(dataPlayersMockData.players, { ...query, keyword: "saka" });
+const named = applyPlayerDirectoryFilters(players, { ...query, keyword: "saka" });
 assertEqual(named.map((player) => player.name).join(","), "Saka", "keyword search");
 assertEqual(
-  applyPlayerDirectoryFilters(dataPlayersMockData.players, {
+  applyPlayerDirectoryFilters(players, {
     ...query,
     keyword: "saka",
     teamFilter: "6"

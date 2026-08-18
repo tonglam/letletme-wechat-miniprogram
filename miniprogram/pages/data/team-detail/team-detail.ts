@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { dataTeamDetailMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
@@ -70,12 +68,7 @@ PerformancePage({
   },
 
   async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
-    if (MOCK_ENABLED) {
-      this.setData(dataTeamDetailMockData);
-      setPageTitle(dataTeamDetailMockData.team.name || "球队详情");
-      return;
-    }
-    if (!this.data.teamId) {
+        if (!this.data.teamId) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }

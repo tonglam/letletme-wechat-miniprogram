@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { dataPlayersMockData, dataPlayersMockDesk, dataTeamsMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import {
   getPlayersForPickerPage,
@@ -26,7 +24,6 @@ import {
   OWN_BAND_OPTIONS,
   POSITION_OPTIONS,
   SORT_FIELD_OPTIONS,
-  applyPlayerDirectoryFilters,
   defaultSortDir,
   resolvePlayerPickerSort,
   sortPlayerOptions,
@@ -37,7 +34,6 @@ import {
 } from "./directory-filter";
 
 export {
-  applyPlayerDirectoryFilters,
   defaultSortDir,
   resolvePlayerPickerSort,
   toggleSortDir
@@ -317,9 +313,7 @@ PerformancePage({
   async loadTeamOptions(): Promise<void> {
     if (this.data.teamsLoaded) return;
     try {
-      const teams = MOCK_ENABLED
-        ? dataTeamsMockData.teams
-        : await getTeamList((await ensureAppContext({ reason: "page-load" })).season);
+      const teams = await getTeamList((await ensureAppContext({ reason: "page-load" })).season);
       if (!this.pageVisible) return;
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },
@@ -412,17 +406,6 @@ PerformancePage({
   },
 
   async startSearch(keyword: string, forceRefresh = false): Promise<void> {
-    if (MOCK_ENABLED) {
-      const activeKeyword = keyword.trim();
-      this.setData({
-        ...dataPlayersMockData,
-        keyword,
-        activeKeyword,
-        filtersLocked: Boolean(activeKeyword)
-      });
-      this.applyMockFilters();
-      return;
-    }
     this.searchPending = true;
     this.searchPendingForceRefresh = forceRefresh;
     this.paginationPending = false;
@@ -493,26 +476,6 @@ PerformancePage({
   browseOwnershipBand(): PlayerPickerOwnershipBand | undefined {
     if (this.data.activeKeyword.trim() || this.data.ownBand === ALL_VALUE) return undefined;
     return this.data.ownBand as PlayerPickerOwnershipBand;
-  },
-
-  /** Preview: filter/sort the bundled mock directory locally, mirroring the request shape. */
-  applyMockFilters() {
-    const items = applyPlayerDirectoryFilters(dataPlayersMockData.players, {
-      keyword: this.data.activeKeyword,
-      teamFilter: this.data.teamFilter,
-      positionFilter: this.data.positionFilter,
-      maxPrice: this.data.maxPrice,
-      ownBand: this.data.ownBand,
-      sortField: this.data.sortField,
-      sortDir: this.data.sortDir
-    });
-    this.setData({
-      players: items,
-      displayedPlayers: items,
-      totalCount: items.length,
-      nextCursor: null,
-      hasMore: false
-    });
   },
 
   onFilterPickerTap() {
@@ -753,17 +716,6 @@ PerformancePage({
     if (!slotA || !slotB) return;
     const revision = ++this.compareRevision;
     this.setData({ compareLoading: true, compareError: "", compareView: null });
-    if (MOCK_ENABLED) {
-      const entryA = dataPlayersMockDesk[slotA.id];
-      const entryB = dataPlayersMockDesk[slotB.id];
-      const compareView = entryA && entryB ? buildCompareView(entryA, entryB) : null;
-      this.setData({
-        compareLoading: false,
-        compareView,
-        compareError: compareView ? "" : "对比数据暂时不可用"
-      });
-      return;
-    }
     try {
       const context = await ensureAppContext({ reason: "page-load", forceRefresh });
       const eventId = Math.max(1, Number(context.displayEvent || context.currentEvent) || 1);

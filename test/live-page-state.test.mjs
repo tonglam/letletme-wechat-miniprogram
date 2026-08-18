@@ -22,65 +22,10 @@ capturedPage = undefined;
 const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
 const teamPage = capturedPage;
 
-test("live match mock fills coreMatches so every status tab has fixtures", () => {
-  const storage = {};
-  globalThis.wx = {
-    ...(globalThis.wx || {}),
-    setStorageSync(key, value) {
-      storage[key] = value;
-    }
-  };
-  const context = {
-    ...matchPage,
-    data: { ...matchPage.data, status: "playing" },
-    coreMatches: [],
-    setData(update) {
-      Object.assign(this.data, update);
-    },
-    syncDisplayState() {}
-  };
-
-  matchPage.applyMockData.call(context);
-  assert.equal(context.coreMatches.length, 10);
-  assert.equal(context.data.matches.length, 3);
-  assert.equal(context.data.groups.length > 0, true);
-  assert.ok(context.data.matches.every((match) => match.status === "playing"));
-
-  matchPage.onStatusTap.call(context, { currentTarget: { dataset: { status: "finished" } } });
-  assert.equal(context.data.status, "finished");
-  assert.equal(context.data.matches.length, 4);
-
-  matchPage.onStatusTap.call(context, { currentTarget: { dataset: { status: "not_start" } } });
-  assert.equal(context.data.matches.length, 3);
-  assert.ok(context.data.matches.every((match) => match.scoreText === "VS"));
-});
-
-test("live tournament defaults to GW sort; mock apply keeps the page sort", async () => {
-  const { liveTournamentMockData } = await import("../miniprogram/mocks/live-tournament.mock.ts");
+test("live tournament defaults to GW sort", () => {
   assert.equal(tournamentPage.data.sortKey, "livePoints");
   assert.equal(tournamentPage.data.sortDesc, true);
   assert.equal(tournamentPage.data.sortOptions[0].key, "livePoints");
-  assert.equal(liveTournamentMockData.sortKey, "livePoints");
-
-  const applied = [];
-  const context = {
-    ...tournamentPage,
-    data: {
-      ...tournamentPage.data,
-      sortKey: "livePoints",
-      sortDesc: true,
-      sortOptions: tournamentPage.data.sortOptions
-    },
-    setData(update) {
-      Object.assign(this.data, update);
-      applied.push(update.sortKey);
-    },
-    applyRows() {},
-    syncDisplayState() {}
-  };
-  tournamentPage.applyMockData.call(context);
-  assert.equal(context.data.sortKey, "livePoints");
-  assert.equal(applied.at(-1) ?? context.data.sortKey, "livePoints");
 });
 
 test("tournament preseason is a stable business empty state", () => {

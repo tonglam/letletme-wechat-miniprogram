@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { dataSelectionsMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntryPointsRaceTournament,
@@ -238,13 +236,6 @@ PerformancePage({
   },
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
-    if (MOCK_ENABLED) {
-      // Mock mode binds no entry — the directory gate below would otherwise
-      // park the preview on the 需要球队 empty state and the stats mock in
-      // loadStats would never surface.
-      this.setData(dataSelectionsMockData);
-      return;
-    }
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({
@@ -325,10 +316,6 @@ PerformancePage({
   },
 
   async loadStats(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
-    if (MOCK_ENABLED) {
-      this.setData(dataSelectionsMockData);
-      return;
-    }
     const lifecycleRevision = this.lifecycleRevision;
     const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
     const trace = originatingTrace || capturePageRequestTrace({

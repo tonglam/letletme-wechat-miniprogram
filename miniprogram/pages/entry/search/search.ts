@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { entrySearchMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
@@ -54,13 +52,6 @@ PerformancePage({
   },
 
   syncCurrentEntry() {
-    if (MOCK_ENABLED) {
-      this.setData({
-        hasEntry: entrySearchMockData.hasEntry,
-        currentEntryId: entrySearchMockData.currentEntryId
-      });
-      return;
-    }
     const entryId = Number(getApp<IAppOption>().globalData.entryId) || 0;
     this.setData({ hasEntry: entryId > 0, currentEntryId: entryId });
   },
@@ -89,10 +80,6 @@ PerformancePage({
   },
 
   async onLookupEntry() {
-    if (MOCK_ENABLED) {
-      this.setData(entrySearchMockData);
-      return;
-    }
     const entryId = Number(extractEntryId(this.data.manualEntryId));
     if (!Number.isInteger(entryId) || entryId <= 0) {
       this.setData({ error: "请输入有效的参赛 ID" });
@@ -155,11 +142,6 @@ PerformancePage({
   },
 
   onUnbind() {
-    if (MOCK_ENABLED) {
-      this.setData({ hasEntry: false, currentEntryId: 0, isCurrentEntry: false });
-      wx.showToast({ title: "已解除绑定", icon: "success" });
-      return;
-    }
     const entryId = this.data.currentEntryId;
     wx.showModal({
       title: "解除绑定？",

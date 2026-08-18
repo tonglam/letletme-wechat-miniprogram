@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { myFplLeaguesMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntryAllTournaments,
@@ -413,13 +411,6 @@ PerformancePage({
     }),
     lifecycleRevision?: number
   ) {
-    if (MOCK_ENABLED) {
-      this.setData(myFplLeaguesMockData as unknown as Partial<LeaguesData>);
-      this.seasonRows = myFplLeaguesMockData.boardRows as unknown as BoardRow[];
-      this.afterDirectoryReady();
-      this.syncBoard();
-      return;
-    }
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
     const isActiveRequest = () => this.pageVisible
@@ -533,7 +524,7 @@ PerformancePage({
     const lastId = readLastPick(this.data.entryId);
     const index = Math.max(0, tournaments.findIndex((t) => Number(t.id) === lastId));
     this.pickTournament(index, false);
-    if (!MOCK_ENABLED) void this.loadView(this.data.activeView, false);
+    void this.loadView(this.data.activeView, false);
   },
 
   pickTournament(index: number, reload = true) {
@@ -623,7 +614,6 @@ PerformancePage({
     originatingTrace?: PageRequestTrace,
     options?: { reloadPath?: boolean }
   ) {
-    if (MOCK_ENABLED) return;
     const tournament = this.data.selectedTournament;
     const entryId = this.data.entryId;
     if (!tournament || !entryId || this.data.event <= 0) return;

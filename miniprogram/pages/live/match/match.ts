@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { liveMatchFixtures } from "../../../mocks/index";
 import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
 import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
@@ -792,34 +790,7 @@ Page({
     }
   },
 
-  applyMockData() {
-    const status = this.data.status || DEFAULT_STATUS;
-    const all = liveMatchFixtures.map((match) => normalizeMatch(match as LiveMatch, matchStatus(match as LiveMatch)));
-    this.coreMatches = all;
-    const matches = filterMatches(all, status);
-    this.setData({
-      loading: false,
-      refreshing: false,
-      hasData: true,
-      error: "",
-      fixtureStaleMessage: "",
-      displayState: "fresh",
-      status,
-      activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛中",
-      emptyDescription: emptyDescription(status),
-      statusOptions: STATUS_OPTIONS,
-      matches,
-      groups: groupMatches(matches, status),
-      lastUpdated: "21:45"
-    });
-    this.syncDisplayState();
-  },
-
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
-    if (MOCK_ENABLED) {
-      this.applyMockData();
-      return Promise.resolve();
-    }
     const tracksNavigation = options.background !== true || options.trackNavigation === true;
     const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {

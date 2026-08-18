@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { dataPriceMockData } from "../../../mocks/index";
 import {
   getPlayersForPickerPage,
   type PlayerPickerFilter
@@ -549,10 +547,6 @@ Page({
   },
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {
-    if (MOCK_ENABLED) {
-      this.setData(dataPriceMockData);
-      return;
-    }
     void this.loadMarketPulse(forceRefresh);
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
     this.dailyRequestForceRefresh = forceRefresh;
@@ -707,17 +701,8 @@ Page({
   async onAvailabilityExpand() {
     if (this.data.availabilityLoading) return;
     if (this.data.availabilityExpanded) {
-      const highlights = MOCK_ENABLED
-        ? dataPriceMockData.availabilityRows
-        : (this.pulseData?.availabilityHighlights ?? []).map(mapAvailabilityRow);
+      const highlights = (this.pulseData?.availabilityHighlights ?? []).map(mapAvailabilityRow);
       this.setData({ availabilityExpanded: false, availabilityRows: highlights });
-      return;
-    }
-    if (MOCK_ENABLED) {
-      this.setData({
-        availabilityExpanded: true,
-        availabilityRows: dataPriceMockData.availabilityRowsAll
-      });
       return;
     }
     this.setData({ availabilityLoading: true });
@@ -748,10 +733,6 @@ Page({
   },
 
   async loadTeamOptions(forceRefresh = false): Promise<void> {
-    if (MOCK_ENABLED) {
-      // Mock data carries its own teamOptions — never hit the network.
-      return;
-    }
     const tracker = this.perfTracker;
     const trace = capturePageRequestTrace({
       callerSurface: "price-team-directory",
@@ -847,29 +828,6 @@ Page({
     append: boolean,
     forceRefresh: boolean
   ): Promise<void> {
-    if (MOCK_ENABLED) {
-      // Preview: filter the bundled mock players locally so the picker works
-      // without network. Positions on mock rows are short codes (GKP..FWD).
-      const keyword = this.data.playerKeyword.trim().toLowerCase();
-      const items = dataPriceMockData.players.filter((player) => {
-        if (this.data.teamFilter !== ALL_VALUE && String(player.teamId) !== this.data.teamFilter) return false;
-        if (this.data.positionFilter !== ALL_VALUE && player.position !== POSITION_SHORT[this.data.positionFilter]) return false;
-        if (keyword && !`${player.name} ${player.teamName} ${player.team}`.toLowerCase().includes(keyword)) return false;
-        return true;
-      });
-      this.setData({
-        players: items,
-        filteredPlayers: items,
-        filteredPlayerCount: items.length,
-        playersLoaded: true,
-        playerListReady: true,
-        playerListVisible: !this.data.selectedPlayer,
-        nextCursor: null,
-        hasMorePlayers: false,
-        playersError: ""
-      });
-      return;
-    }
     this.setData(append
       ? { loadingMore: true, playersError: "" }
       : { playerLoading: true, playersError: "" });
@@ -1048,10 +1006,6 @@ Page({
   },
 
   async loadSelectedPlayerHistory(playerId: number, forceRefresh = false): Promise<void> {
-    if (MOCK_ENABLED) {
-      this.setData({ historyRows: dataPriceMockData.historyRows, historyLoading: false });
-      return;
-    }
     const revision = ++this.historyRequestRevision;
     this.setData({ historyLoading: true, historyError: "" });
     try {

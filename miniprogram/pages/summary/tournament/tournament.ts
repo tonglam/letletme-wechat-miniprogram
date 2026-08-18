@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { summaryTournamentMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import {
   getEntrySummaryTournaments,
@@ -292,10 +290,6 @@ PerformancePage({
   },
 
   async loadSummary(forceRefresh = false, originatingTrace?: PageRequestTrace) {
-    if (MOCK_ENABLED) {
-      this.setData(summaryTournamentMockData);
-      return;
-    }
     const lifecycleRevision = this.lifecycleRevision;
     const requestId = ++this.summaryRequestId;
     const trace = originatingTrace || capturePageRequestTrace({

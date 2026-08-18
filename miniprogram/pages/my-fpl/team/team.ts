@@ -1,6 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { myFplTeamMockData } from "../../../mocks/index";
-import { mockSeasonChartPoints } from "../../../mocks/my-fpl-team.mock";
 import {
   getEntryTeamStatsEventResult,
   getEntryTeamStatsHistory,
@@ -23,8 +20,6 @@ import type { LivePlayerRow } from "../../../models/live";
 import { formatCompactNumber, formatPoints } from "../../../utils/summary-format";
 import {
   buildSquadPitchView,
-  toSquadPitchHeader,
-  toSquadPitchPlayerFromRow,
   type SquadPitchHeader,
   type SquadPitchPlayer
 } from "../../../utils/squad-pitch";
@@ -810,19 +805,6 @@ Page({
     originatingTrace?: PageRequestTrace,
     awaitActiveTab = false
   ) {
-    if (MOCK_ENABLED) {
-      this.setData({
-        ...myFplTeamMockData,
-        ...pitchStateFromSquadRows(
-          myFplTeamMockData.squadRows,
-          mockPitchHeader(myFplTeamMockData)
-        ),
-        ...seasonChartPageState(mockSeasonChartPoints, "rank", null),
-        ...pastSeasonPageState(myFplTeamMockData.seasonHistoryRows, null)
-      });
-      setPageTitle(myFplTeamMockData.headerTitle || "我的球队");
-      return;
-    }
     const requestId = ++this.loadRequestId;
     const tracker = this.perfTracker;
     const trace = originatingTrace || capturePageRequestTrace({
@@ -1128,8 +1110,6 @@ Page({
 
   async loadTab(tab: EntrySummaryTab, forceRefresh: boolean, originatingTrace?: PageRequestTrace): Promise<void> {
     if (tab === "squad" || !this.data.entryId) return;
-    // Mock mode: loadData already set every tab's rows; never hit the network.
-    if (MOCK_ENABLED) return;
     this.tabForceRefreshPending = forceRefresh;
     const requestId = ++this.tabRequestId;
     const entryId = this.data.entryId;
@@ -1343,41 +1323,6 @@ function pitchStateFromEventResult(eventResult: EntryEventResult) {
     pitchBench: view.benchPlayers,
     pitchHeader: view.header,
     pitchBenchBoost: view.benchBoost,
-    shareImagePath: "",
-    shareBusy: false
-  };
-}
-
-function mockPitchHeader(mock: typeof myFplTeamMockData): SquadPitchHeader {
-  const total = Number(String(mock.overviewStats[0]?.value || "").replace(/,/g, ""));
-  const rankText = String(mock.overviewStats[1]?.value || "");
-  const rank = rankText.toLowerCase().endsWith("k")
-    ? Number(rankText.slice(0, -1)) * 1000
-    : Number(rankText.replace(/,/g, ""));
-  return toSquadPitchHeader({
-    eventId: mock.event,
-    eventPoints: Number(mock.heroScore),
-    overallPoints: Number.isFinite(total) ? total : 0,
-    overallRank: Number.isFinite(rank) ? rank : 0,
-    eventChip: mock.eventStats[0]?.value === "无" ? "" : mock.eventStats[0]?.value,
-    entry: {
-      entryName: mock.headerTitle,
-      playerName: String(mock.headerSubtitle || "").split(" · ")[0] || ""
-    }
-  });
-}
-
-function pitchStateFromSquadRows(rows: SquadRow[], header: SquadPitchHeader) {
-  const pairs = rows.flatMap((row) => {
-    const player = toSquadPitchPlayerFromRow(row);
-    return player ? [{ row, player }] : [];
-  });
-  resetShareImageCache();
-  return {
-    pitchPlayers: pairs.filter((item) => !item.row.bench).map((item) => item.player),
-    pitchBench: pairs.filter((item) => item.row.bench).map((item) => item.player),
-    pitchHeader: header,
-    pitchBenchBoost: header.chip === "BB",
     shareImagePath: "",
     shareBusy: false
   };

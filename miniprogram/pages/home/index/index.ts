@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { homeMockData } from "../../../mocks/index";
 import {
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
@@ -324,11 +322,6 @@ Page({
     forceRefresh = false,
     originatingTracker?: PagePerformanceTracker | null
   ) {
-    if (MOCK_ENABLED) {
-      this.setData(homeMockData);
-      this.scheduleNoticeAutoClose(homeMockData.noticeText);
-      return;
-    }
     this._resumeSecondaryOnShow = false;
     const tracker = originatingTracker === undefined
       ? this._perfTracker ?? null

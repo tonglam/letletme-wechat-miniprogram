@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { resolveLiveEntryMock } from "../../../mocks/index";
 import { getEntryEventTransfers, getEntryInfo } from "../../../services/entry.service";
 import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
@@ -552,37 +550,9 @@ Page({
     return this.loadData(options);
   },
 
-  applyMockData() {
-    const entryId = numberValue(this.data.entryId) || numberValue(this.routeEntryId);
-    const mock = resolveLiveEntryMock(entryId);
-    const followedEntry = numberValue(getApp<IAppOption>().globalData.entryId);
-    this.setData({
-      ...mock,
-      entryId: entryId || mock.entryId,
-      viewOnly: this.hasRouteEntry && (entryId || mock.entryId) !== followedEntry,
-      event: this.data.event || mock.event,
-      maxGw: this.data.maxGw || mock.maxGw,
-      ...livePitchState({
-        starters: mock.starters,
-        bench: mock.bench,
-        eventId: this.data.event || mock.event,
-        teamName: mock.entryName,
-        managerName: mock.playerName,
-        totalPoints: mock.total,
-        gameweekPoints: mock.livePoints,
-        chip: mock.chipText
-      })
-    });
-  },
-
   async loadEntryIdentity(entryId: number) {
     if (!entryId) {
       this.setData({ entryName: "", playerName: "" });
-      return;
-    }
-    if (MOCK_ENABLED) {
-      const mock = resolveLiveEntryMock(entryId);
-      this.setData({ entryName: mock.entryName, playerName: mock.playerName });
       return;
     }
     try {
@@ -653,10 +623,6 @@ Page({
   },
 
   loadData(options: LiveEntryLoadOptions = {}): Promise<void> {
-    if (MOCK_ENABLED) {
-      this.applyMockData();
-      return Promise.resolve();
-    }
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) {
       return Promise.resolve();
@@ -756,7 +722,7 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
-        const result = liveResult.data;
+    const result = liveResult.data;
         navigationTracker?.mark("primaryResponseAt");
         if (result.availability === "NO_PICKS") {
           this.liveSnapshot = null;

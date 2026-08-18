@@ -1,4 +1,3 @@
-import { summaryGameweekMockData } from "../miniprogram/mocks/summary-gameweek.mock";
 import { indexDreamTeamById, indexEventPlayersByRowId } from "../miniprogram/pages/summary/gameweek/dream-detail";
 import { buildPlayerLiveDetail } from "../miniprogram/pages/live/entry/player-detail";
 import { buildDreamTeamPitchState } from "../miniprogram/utils/squad-pitch";
@@ -9,35 +8,23 @@ function assertEqual(actual: unknown, expected: unknown, message: string): void 
   }
 }
 
-const mockRows = summaryGameweekMockData.pitchGroups.flatMap((group) =>
-  group.players.map((player) => ({
-    id: player.id,
-    webName: player.name,
-    teamShortName: player.team,
-    position: group.id === "gkp" ? "GKP" : group.id === "def" ? "DEF" : group.id === "mid" ? "MID" : "FWD",
-    points: player.points,
-    minutes: player.minutes,
-    goalsScored: player.goalsScored,
-    assists: player.assists,
-    cleanSheets: player.cleanSheets,
-    saves: player.saves,
-    bonus: player.bonus,
-    bps: player.bps
-  }))
-);
+const dreamRows = [
+  { id: "mid-0", webName: "Palmer", teamShortName: "CHE", position: "MID", points: 18, minutes: 90, goalsScored: 2, assists: 1, bonus: 3, bps: 61 },
+  { id: "fwd-0", webName: "Haaland", teamShortName: "MCI", position: "FWD", points: 18, minutes: 90, goalsScored: 3, assists: 1, bonus: 1, bps: 68 }
+];
 
-const pitch = buildDreamTeamPitchState(mockRows, 3);
-const byId = indexDreamTeamById(pitch.pitchPlayers, mockRows);
+const pitch = buildDreamTeamPitchState(dreamRows, 3);
+const byId = indexDreamTeamById(pitch.pitchPlayers, dreamRows);
 const palmerPitch = pitch.pitchPlayers.find((player) => player.webName === "Palmer");
-if (!palmerPitch) throw new Error("Palmer missing from mock pitch");
+if (!palmerPitch) throw new Error("Palmer missing from dream team pitch");
 
 const palmer = buildPlayerLiveDetail(byId[palmerPitch.id]);
-assertEqual(palmer.name, "Palmer", "mock palmer name");
-assertEqual(palmer.pointsText, "18", "mock palmer points");
-assertEqual(palmer.statusText, "梦之队", "mock palmer status");
-assertEqual(palmer.statRows.find((row) => row.label === "进球")?.value, "2", "mock palmer goals");
-assertEqual(palmer.breakdownRows.length > 0, true, "mock palmer has breakdown");
-assertEqual(palmer.breakdownHint.includes("官方明细"), false, "mock palmer is not empty");
+assertEqual(palmer.name, "Palmer", "palmer name");
+assertEqual(palmer.pointsText, "18", "palmer points");
+assertEqual(palmer.statusText, "梦之队", "palmer status");
+assertEqual(palmer.statRows.find((row) => row.label === "进球")?.value, "2", "palmer goals");
+assertEqual(palmer.breakdownRows.length > 0, true, "palmer has breakdown");
+assertEqual(palmer.breakdownHint.includes("官方明细"), false, "palmer is not empty");
 
 const apiRows = [{
   id: 7,
@@ -57,11 +44,21 @@ const saka = buildPlayerLiveDetail(apiById[apiPitch.pitchPlayers[0].id]);
 assertEqual(saka.statRows.find((row) => row.label === "助攻")?.value, "1", "api row maps assists");
 assertEqual(saka.bpsText, "44", "api row maps bps");
 
-const eliteById = indexEventPlayersByRowId(
-  summaryGameweekMockData.eliteRows,
-  summaryGameweekMockData.eliteRows,
-  "高分球员"
-);
+const eliteRows = [{
+  id: "e1",
+  title: "Haaland (MCI)",
+  value: "18分",
+  name: "Haaland",
+  team: "MCI",
+  position: "FWD",
+  points: 18,
+  minutes: 90,
+  goalsScored: 3,
+  assists: 1,
+  bonus: 1,
+  bps: 68
+}];
+const eliteById = indexEventPlayersByRowId(eliteRows, eliteRows, "高分球员");
 const haaland = buildPlayerLiveDetail(eliteById.e1);
 assertEqual(haaland.name, "Haaland", "elite haaland name");
 assertEqual(haaland.statusText, "高分球员", "elite status");

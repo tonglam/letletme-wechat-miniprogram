@@ -1,5 +1,3 @@
-import { MOCK_ENABLED } from "../../../config/mock-mode";
-import { summaryGameweekMockData } from "../../../mocks/index";
 import { PerformancePage } from "../../../utils/performance-page";
 import { setPageTitle } from "../../../utils/navigation";
 import { getMiniGameweekSummary } from "../../../services/summary.service";
@@ -38,18 +36,6 @@ interface PitchPlayer {
   name: string;
   team: string;
   points: string;
-  minutes?: number;
-  goalsScored?: number;
-  assists?: number;
-  cleanSheets?: number;
-  saves?: number;
-  bonus?: number;
-  bps?: number;
-  yellowCards?: number;
-  redCards?: number;
-  ownGoals?: number;
-  penaltiesSaved?: number;
-  penaltiesMissed?: number;
 }
 
 interface PitchGroup {
@@ -229,19 +215,6 @@ PerformancePage({
     trace?: PageRequestTrace,
     lifecycleRevision?: number
   ) {
-    if (MOCK_ENABLED) {
-      const pitch = pitchStateFromMockGroups(summaryGameweekMockData.pitchGroups, summaryGameweekMockData.event);
-      this.setData({
-        ...summaryGameweekMockData,
-        ...pitch,
-        eliteById: indexEventPlayersByRowId(
-          summaryGameweekMockData.eliteRows,
-          summaryGameweekMockData.eliteRows,
-          "高分球员"
-        )
-      });
-      return;
-    }
     const requestTrace = trace ?? capturePageRequestTrace({
       callerSurface: "gameweek-summary",
       trigger: forceRefresh ? "refresh" : "load"
@@ -523,40 +496,6 @@ function mapChipRows(chips: unknown): DisplayRow[] {
     meta: row.meta,
     barStyle: `width: ${Math.max(6, Math.round((row.count / maxCount) * 100))}%;`
   }));
-}
-
-function flattenMockDreamTeamRows(groups: PitchGroup[]): Record<string, unknown>[] {
-  return groups.flatMap((group) => group.players.map((player) => ({
-    id: player.id,
-    webName: player.name,
-    teamShortName: player.team,
-    position: group.id === "gkp" ? "GKP" : group.id === "def" ? "DEF" : group.id === "mid" ? "MID" : "FWD",
-    points: player.points,
-    minutes: player.minutes,
-    goalsScored: player.goalsScored,
-    assists: player.assists,
-    cleanSheets: player.cleanSheets,
-    saves: player.saves,
-    bonus: player.bonus,
-    bps: player.bps,
-    yellowCards: player.yellowCards,
-    redCards: player.redCards,
-    ownGoals: player.ownGoals,
-    penaltiesSaved: player.penaltiesSaved,
-    penaltiesMissed: player.penaltiesMissed
-  })));
-}
-
-function pitchStateFromMockGroups(
-  groups: PitchGroup[],
-  eventId: number
-) {
-  const rows = flattenMockDreamTeamRows(groups);
-  const pitch = buildDreamTeamPitchState(rows, eventId);
-  return {
-    ...pitch,
-    dreamTeamById: indexDreamTeamById(pitch.pitchPlayers, rows)
-  };
 }
 
 function mapPitchGroups(players: unknown[]): PitchGroup[] {
