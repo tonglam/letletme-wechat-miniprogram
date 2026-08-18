@@ -31,11 +31,26 @@ test("season-scoped operations fail before network when season is unresolved", a
     graphqlRead(teamsQuery, {}, { authMode: "public", cachePolicy: "team-directory" }),
     /赛季信息/
   );
+  await assert.rejects(
+    graphqlRead("query GetEntry($id: Int!) { entry(id: $id) { id } }", { id: 1 }, { cachePolicy: "reporting" }),
+    /赛季信息/
+  );
   assert.equal(requests.length, 0);
   assert.equal([...storage.keys()].some((key) => key.includes("season:unknown")), false);
 });
 
+test("season-scoped reporting accepts season from cacheVariant when global season is empty", async () => {
+  app.globalData.season = "";
+  await graphqlRead(teamsQuery, {}, {
+    authMode: "public",
+    cachePolicy: "reporting",
+    cacheVariant: "season:2025-26"
+  });
+  assert.equal(requests.length, 1);
+});
+
 test("same season-scoped key produces one network request and one in-flight source", async () => {
+  requests.length = 0;
   app.globalData.season = "2025-26";
   const options = {
     authMode: "public",

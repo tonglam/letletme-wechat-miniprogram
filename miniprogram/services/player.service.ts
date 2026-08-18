@@ -35,6 +35,10 @@ export const PLAYERS_FOR_PICKER_QUERY = `
   }
 `;
 
+// The production GraphQL complexity budget rejects the 50-row shape of this
+// query. Keep pagination intact while staying below that budget.
+export const PLAYER_PICKER_PAGE_LIMIT = 40;
+
 const PLAYER = `
   query Player($id: Int!) {
     player(id: $id) {
@@ -251,7 +255,7 @@ function mapPlayerDetail(player: GraphQLPlayer): PlayerDetail {
 export async function getPlayersForPickerPage(
   options: PlayerPickerPageOptions = {}
 ): Promise<PlayerPickerPageResult> {
-  const limit = Math.max(1, Math.min(50, Math.floor(options.limit || 50)));
+  const limit = Math.max(1, Math.min(PLAYER_PICKER_PAGE_LIMIT, Math.floor(options.limit || PLAYER_PICKER_PAGE_LIMIT)));
   const search = String(options.search || "").trim();
   const filter = options.filter && Object.keys(options.filter).length > 0
     ? options.filter
@@ -408,13 +412,15 @@ export async function getPlayerInfoByCode(
   trace?: import("./graphql.service").PageRequestTrace
 ): Promise<PlayerDetail> {
   const playerId = Number(code);
+  const seasonName = currentSeason(season);
   const data = await graphqlRequest<PlayerResponse>(
     PLAYER,
     { id: playerId },
     {
       authMode: "public",
       cachePolicy: "reporting",
-      cacheVariant: `season:${currentSeason(season)}`,
+      season: seasonName,
+      cacheVariant: `season:${seasonName}`,
       forceRefresh,
       trace
     }
@@ -438,7 +444,7 @@ export async function getPlayersByElementType(
   const position = positionByType[String(elementType)];
   const page = await getPlayersForPickerPage({
     filter: position ? { position } : undefined,
-    limit: 50,
+    limit: PLAYER_PICKER_PAGE_LIMIT,
     forceRefresh
   });
   return page.items;
@@ -476,7 +482,7 @@ export async function getPlayerDetailByElement(element: number): Promise<PlayerD
 }
 
 export async function getFilterPlayers(_season: string): Promise<PlayerFilterRow[]> {
-  const page = await getPlayersForPickerPage({ limit: 50 });
+  const page = await getPlayersForPickerPage({ limit: PLAYER_PICKER_PAGE_LIMIT });
   return page.items.map((player) => ({ ...player }));
 }
 

@@ -259,19 +259,6 @@ interface GetEntryTransferHistoryResponse {
   entryTransferHistory: EntryGameweekTransfers[];
 }
 
-function currentSeasonLabel(): string {
-  try {
-    return String(getApp<IAppOption>().globalData.season || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function transferHistoryCacheVariant(kind: "live" | "history"): string {
-  const season = currentSeasonLabel();
-  return season ? `season:${season}|${kind}` : kind;
-}
-
 function mapTransferRecord(t: EntryEventTransfersData): EntryTransfer {
   return {
     event: t.event,
@@ -318,7 +305,7 @@ export async function getEntryEventTransfers(
     // sharing one key would let a 30-minute history serve stand in for the
     // live view, and a memory-only live write could never replace a
     // persisted stale entry.
-    cacheVariant: transferHistoryCacheVariant(isLiveEvent ? "live" : "history"),
+    cacheVariant: isLiveEvent ? "live" : "history",
     cachePolicy: isLiveEvent ? "live" : "reporting",
     forceRefresh,
     trace
@@ -333,7 +320,7 @@ export async function getEntryEventTransfers(
 export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
     // Same freshness class as historical per-event views: share their entry.
-    cacheVariant: transferHistoryCacheVariant("history"),
+    cacheVariant: "history",
     cachePolicy: "reporting",
     forceRefresh
   });

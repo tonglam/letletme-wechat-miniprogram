@@ -205,11 +205,6 @@ function numberValue(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function pickerIndex(value: unknown): number | null {
-  const index = Number(value);
-  return Number.isFinite(index) ? index : null;
-}
-
 function textValue(value: unknown, fallback = "-"): string {
   if (value === undefined || value === null || value === "") {
     return fallback;
@@ -396,14 +391,15 @@ function filterOwnershipPlayers(
   ));
 }
 
-function clearTournamentBoard(page: {
-  rows: DisplayTournamentRow[];
-  ownershipPlayers: OwnershipPlayerOption[];
-  shareRows: DisplayTournamentRow[];
-}): void {
-  page.rows = [];
-  page.ownershipPlayers = [];
-  page.shareRows = [];
+function clearTournamentBoard(page: object): void {
+  const board = page as {
+    rows?: DisplayTournamentRow[];
+    ownershipPlayers?: OwnershipPlayerOption[];
+    shareRows?: DisplayTournamentRow[];
+  };
+  board.rows = [];
+  board.ownershipPlayers = [];
+  board.shareRows = [];
 }
 
 PerformancePage({

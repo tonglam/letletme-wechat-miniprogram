@@ -14,10 +14,9 @@ test("route season satisfies the season-scoped Team cache guard", () => {
   const graphql = source("miniprogram/services/graphql.service.ts");
   const team = source("miniprogram/services/team.service.ts");
   assert.match(graphql, /season\?: string/);
-  assert.match(
-    graphql,
-    /SEASON_SCOPED_POLICIES\.has\(cachePolicy\)[\s\S]*options\?\.season \|\| currentSeason\(\)/
-  );
+  assert.match(graphql, /function resolveSeason/);
+  assert.match(graphql, /options\?\.season/);
+  assert.match(graphql, /currentSeason\(\)/);
   assert.match(team, /cachePolicy: "team-directory",\s*season/);
 });
 

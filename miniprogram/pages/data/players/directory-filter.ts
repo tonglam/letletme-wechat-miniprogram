@@ -146,7 +146,8 @@ export function applyPlayerDirectoryFilters(
       items = items.filter((player) => player.position === short);
     }
     if (query.maxPrice !== null) {
-      items = items.filter((player) => Math.round((Number(player.price) || 0) * 10) <= query.maxPrice);
+      const maxPrice = query.maxPrice;
+      items = items.filter((player) => Math.round((Number(player.price) || 0) * 10) <= maxPrice);
     }
     if (query.ownBand !== ALL_VALUE) {
       items = items.filter((player) => matchesOwnBand(Number(player.selectedByPercent) || 0, query.ownBand));

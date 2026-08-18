@@ -62,8 +62,8 @@ export function numericExtent(
 ): { min: number; max: number } {
   const nums = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (nums.length === 0) return { min: 0, max: 1 };
-  let min = Math.min(...nums);
-  let max = Math.max(...nums);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
   if (min === max) {
     if (min === 0) return { min: -1, max: 1 };
     const span = Math.abs(min) * 0.12 || 1;

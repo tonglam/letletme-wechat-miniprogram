@@ -162,7 +162,9 @@ class GraphQLApplicationError extends Error {
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
   "fixtures",
   "player-picker",
-  "team-directory"
+  "team-directory",
+  "reporting",
+  "historical"
 ]);
 
 const inFlightRequests = new Map<string, Promise<GraphQLReadResult<unknown>>>();
@@ -200,15 +202,22 @@ function currentSeason(): string {
   }
 }
 
+function resolveSeason(cachePolicy: GraphQLCachePolicyName, options?: GraphQLOptions): string {
+  if (!SEASON_SCOPED_POLICIES.has(cachePolicy)) return "";
+  const explicit = String(options?.season || "").trim();
+  if (explicit) return explicit;
+  const fromVariant = /(?:^|\|)season:([^|]+)/.exec(String(options?.cacheVariant || ""));
+  if (fromVariant?.[1]) return fromVariant[1].trim();
+  return currentSeason().trim();
+}
+
 function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequestPolicy {
   const operationName = extractOpName(query);
   const configured = getGraphQLOperationPolicy(operationName);
   const cachePolicy = options?.cachePolicy ?? configured.cachePolicy;
   const policy = getGraphQLCachePolicy(cachePolicy);
   const mutation = /^\s*mutation\b/i.test(query);
-  const season = SEASON_SCOPED_POLICIES.has(cachePolicy)
-    ? String(options?.season || currentSeason()).trim()
-    : "";
+  const season = resolveSeason(cachePolicy, options);
   if (SEASON_SCOPED_POLICIES.has(cachePolicy) && !season) {
     throw new Error("赛季信息暂时不可用，请稍后重试");
   }
