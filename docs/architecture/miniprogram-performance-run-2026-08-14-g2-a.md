@@ -173,6 +173,6 @@ G2-A 后的性能页仍为 `63/100` 是数值巧合：G1 分数包含无效输�
 ## 11. 收尾状态
 
 - 代码提交只在 `codex/miniprogram-performance-g2-observability`；没有 push、merge 或改动 `main`。
-- 本记录只在 `codex/miniprogram-performance-audit-docs`；不挂在 `main`，不会覆盖 G0-G1 原始基线。
+- 本记录原稿只在 `codex/miniprogram-performance-audit-docs`；2026-08-18 已按明确要求合入 `main`，不会覆盖 G0-G1 原始基线。
 - 主 worktree 的 HEAD 仍为 `12acbb2e33d3ba94960443dc3a4d95315f5b67f0`。最终复核时存在与本轮隔离分支无关的 account/home/live tracked 修改及未跟踪 mock 配置/目录；这些内容没有读取为性能依据、没有修改、没有暂存，也不纳入 G2-A 提交。
 - 临时生产 endpoint override 已删除；绑定状态与本地 `perf:v1` 原始证据保留。

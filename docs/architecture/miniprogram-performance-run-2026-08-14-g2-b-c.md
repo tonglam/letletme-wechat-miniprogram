@@ -314,7 +314,7 @@ Gate 2 当前结论为 `🟢 检查闭环 / 🔴 性能发现保留`。真机是
 ## 12. 收尾状态
 
 - Mini 代码分支 tracked clean，提交仍为 `ca8fcac...`；本轮没有新代码 diff。
-- 文档只写在 `codex/miniprogram-performance-audit-docs`，不挂 `main`。
+- 文档原稿只写在 `codex/miniprogram-performance-audit-docs`；2026-08-18 已按明确要求合入 `main`。
 - 主 worktree 的并发页面改动、`mock-mode.ts` 和 mocks 均未修改、未暂存、未纳入证据。
 - 两个生产 endpoint override 已删除并验证为空。
 - 会话 token 仍存在且未过期，entry binding 仍存在；文档未记录原值。

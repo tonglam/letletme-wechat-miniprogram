@@ -2,7 +2,7 @@
 
 > 状态：Mini 侧五个交付阶段均已实现；PR0 已合并，PR1 已通过 CI 和 Codex 复审但仍受仓库 review-thread resolution 规则阻塞，PR2-PR5 以独立本地提交等待固定顺序发布。
 >
-> 本 Run 只修改微信小程序仓库。没有修改 Web、GraphQL resolver、Data、数据库、生产部署或公共发布；`miniprogram/config/mock-mode.ts` 未改；审计证据仅保存在 `codex/miniprogram-performance-audit-docs`，不进入 `main`。
+> 本 Run 只修改微信小程序仓库。没有修改 Web、GraphQL resolver、Data、数据库、生产部署或公共发布；`miniprogram/config/mock-mode.ts` 未改。审计证据原稿写在 `codex/miniprogram-performance-audit-docs`，2026-08-18 已按明确要求合入 `main`。
 
 ## 1. 版本与边界
 

@@ -4,7 +4,7 @@
 >
 > 本文是常驻执行策略，不代表任何页面当前已经检查或通过。
 >
-> 文档保护分支：`codex/miniprogram-performance-audit-docs`。除非用户明确要求，不合并到 `main`。
+> 原稿写在 `codex/miniprogram-performance-audit-docs`。2026-08-18 已按明确要求合入 `main`。
 
 ## 1. 配套文档
 
@@ -355,11 +355,9 @@ Explore 内不能在检查完 Market 后立刻只优化 Market。先完成 Explo
 - 最终状态：⬜ / 🟢 / 🟡 / 🔴
 ```
 
-## 14. 文档与分支保护规则
+## 14. 文档与分支规则
 
-- 本策略与全页面 Checklist 保存在专用文档分支，不自动合并到 `main`。
-- 文档必须提交后才算建立保护点；仅留作 untracked/unstaged 文件仍可能在同步或清理时丢失。
+- 本策略与全页面 Checklist 已按明确要求从 `codex/miniprogram-performance-audit-docs` 合入 `main`。
 - 后续每次执行创建独立 Run 记录，不覆盖模板和历史原始证据。
-- 代码优化分支应从执行时的最新目标代码创建，并在 Run 元数据里记录其与文档分支的关系。
-- 文档分支需要吸收最新路由或 operation 变化时，先检查差异，再做非破坏性同步；不得用 reset/checkout 删除未知记录。
-- 未经用户明确要求，不推送、合并或删除本分支。
+- 代码优化分支应从执行时的最新目标代码创建，并在 Run 元数据里记录其与这些文档的关系。
+- 需要吸收最新路由或 operation 变化时，先检查差异，再做非破坏性同步；不得用 reset/checkout 删除未知记录。

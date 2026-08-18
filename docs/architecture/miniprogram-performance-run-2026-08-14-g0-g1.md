@@ -6,7 +6,7 @@
 >
 > 执行边界：只读诊断。没有修改 Mini、Web、GraphQL、Data 业务代码，没有清理生产 Redis 或修改生产数据。
 >
-> 文档分支：`codex/miniprogram-performance-audit-docs`。本记录不合并到 `main`，除非后续得到明确授权。
+> 原稿写在 `codex/miniprogram-performance-audit-docs`。2026-08-18 已按明确要求合入 `main`。
 
 ## 1. 结论先行
 
@@ -267,4 +267,4 @@ Checklist 中的 P0 页面清单及本次状态：Home `🟡`、My FPL Overview 
 - 两个临时生产 endpoint override 已删除并验证为空；绑定状态未被改变。
 - Mini 在 G0 冻结和两轮有效采样期间为干净的 `12acbb2e33d3ba94960443dc3a4d95315f5b67f0`。收尾于 `15:31:15 AWST` 发现主 worktree 新出现未跟踪文件 `miniprogram/config/mock-mode.ts`；其创建晚于 G1 样本结束，不影响本次样本，来源不属于本次只读排查，已原样保留且没有加入文档提交。
 - 本轮没有向四个业务仓库写入任何代码或配置变更；用户或其他并行工作的现有/新改动均未触碰。
-- 本记录只提交到 `codex/miniprogram-performance-audit-docs`，不 push、不 merge。
+- 本记录原稿只提交到 `codex/miniprogram-performance-audit-docs`；2026-08-18 已按明确要求合入 `main`。

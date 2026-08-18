@@ -4,7 +4,7 @@
 >
 > 本文是实施方案，不代表任何页面已经完成改造。
 >
-> 文档保护分支：`codex/miniprogram-performance-audit-docs`。除非用户明确要求，不合并到 `main`。
+> 原稿写在 `codex/miniprogram-performance-audit-docs`。2026-08-18 已按明确要求合入 `main`。
 
 ## 1. 背景与现状盘点
 
@@ -195,10 +195,8 @@ Gate 0 基建
 - 页面回归：复用《小程序全页面性能排查执行 Checklist》的语义终态口径，双语言各跑 25/25 页面 smoke（最终渲染状态、错误态、空态、异常网络）。
 - 真机：P0 页面（home、live、我的 FPL）iOS/Android 双语言冷启 + 切换语言路径。
 
-## 10. 文档与分支保护规则
+## 10. 文档与分支规则
 
-- 本方案保存在文档保护分支 `codex/miniprogram-performance-audit-docs`，不自动合并到 `main`。
-- 文档必须提交后才算建立保护点。
+- 本方案已按明确要求从 `codex/miniprogram-performance-audit-docs` 合入 `main`。
 - 实施分支从执行时的最新 `main` 创建，commit 信息记录其与本方案文档的关系。
 - Gate 2 的抽取映射结果（web 匹配率、新 key 清单）以独立 Run 记录追加，不覆盖本文。
-- 未经用户明确要求，不推送、合并或删除本分支。
