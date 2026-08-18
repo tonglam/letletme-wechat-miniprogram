@@ -38,4 +38,7 @@ export interface EntryLeague {
   id?: number | string;
   name: string;
   rank?: number;
+  officialKind?: "SYSTEM" | "INVITATIONAL" | "PUBLIC";
+  type?: "CLASSIC" | "H2H" | string;
+  shortName?: string | null;
 }

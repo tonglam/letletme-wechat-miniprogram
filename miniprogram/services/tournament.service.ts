@@ -55,6 +55,42 @@ const GET_TOURNAMENT_SUMMARY = `
       tournamentBenchPointsRank
       autoSubPoints
       tournamentAutoSubRank
+      overallPoints
+      leaderOverallPoints
+      gapToLeader
+      pointsBehindNext
+      pointsAheadOfPrev
+    }
+  }
+`;
+
+const GET_TOURNAMENT_SEASON_SNAPSHOT = `
+  query TournamentSeasonSnapshot($tournamentId: Int!, $eventId: Int!) {
+    tournamentSeasonSnapshot(tournamentId: $tournamentId, eventId: $eventId) {
+      asOfEventId
+      entryCount
+      leaderOverallPoints
+      secondOverallPoints
+      gapFirstSecond
+      averageOverallPoints
+      metrics {
+        key
+        leaderValue
+        leaderEntryId
+        leaderEntryName
+        leaderPlayerName
+        averageValue
+        higherIsBetter
+      }
+      standings {
+        entryId
+        rank
+        entryName
+        playerName
+        overallPoints
+        overallRank
+        teamValue
+      }
     }
   }
 `;
@@ -212,6 +248,50 @@ export interface TournamentEntryRankingSummary {
   tournamentBenchPointsRank?: number | null;
   autoSubPoints?: number | null;
   tournamentAutoSubRank?: number | null;
+  overallPoints?: number | null;
+  leaderOverallPoints?: number | null;
+  gapToLeader?: number | null;
+  pointsBehindNext?: number | null;
+  pointsAheadOfPrev?: number | null;
+}
+
+export type TournamentSeasonMetricKey =
+  | "OVERALL_POINTS"
+  | "TEAM_VALUE"
+  | "TRANSFERS"
+  | "TOTAL_COSTS"
+  | "BENCH_POINTS"
+  | "AUTO_SUB_POINTS";
+
+export interface TournamentSeasonMetric {
+  key: TournamentSeasonMetricKey;
+  leaderValue?: number | null;
+  leaderEntryId?: number | null;
+  leaderEntryName?: string | null;
+  leaderPlayerName?: string | null;
+  averageValue?: number | null;
+  higherIsBetter: boolean;
+}
+
+export interface TournamentSeasonStanding {
+  entryId: number;
+  rank?: number | null;
+  entryName?: string | null;
+  playerName?: string | null;
+  overallPoints?: number | null;
+  overallRank?: number | null;
+  teamValue?: number | null;
+}
+
+export interface TournamentSeasonSnapshot {
+  asOfEventId: number;
+  entryCount: number;
+  leaderOverallPoints?: number | null;
+  secondOverallPoints?: number | null;
+  gapFirstSecond?: number | null;
+  averageOverallPoints?: number | null;
+  metrics: TournamentSeasonMetric[];
+  standings: TournamentSeasonStanding[];
 }
 
 export interface TournamentSummaryPayload {
@@ -285,6 +365,36 @@ export async function getEntryKnockoutTournament(entry: number): Promise<Knockou
     }));
 }
 
+export async function loadTournamentSeasonPath(
+  tournamentId: number,
+  entryId: number,
+  fromGw: number,
+  toGw: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  onBatch?: (pages: Array<{ gameweek: number; rows: TournamentEventResult[] }>) => boolean | void
+): Promise<Array<{
+  gameweek: number;
+  rows: TournamentEventResult[];
+}>> {
+  const start = Math.max(1, Math.min(fromGw, toGw));
+  const end = Math.max(start, toGw);
+  const events: number[] = [];
+  for (let event = start; event <= end; event += 1) events.push(event);
+  const out: Array<{ gameweek: number; rows: TournamentEventResult[] }> = [];
+  const concurrency = 4;
+  for (let offset = 0; offset < events.length; offset += concurrency) {
+    const batch = events.slice(offset, offset + concurrency);
+    const pages = await Promise.all(batch.map(async (eventId) => {
+      const payload = await getTournamentSummary(tournamentId, eventId, entryId, forceRefresh, trace);
+      return { gameweek: eventId, rows: payload.tournamentEventResults || [] };
+    }));
+    out.push(...pages);
+    if (onBatch && onBatch(out) === false) return out;
+  }
+  return out;
+}
+
 export async function getTournamentSummary(
   tournamentId: number,
   eventId: number,
@@ -297,6 +407,20 @@ export async function getTournamentSummary(
     forceRefresh,
     trace
   });
+}
+
+export async function getTournamentSeasonSnapshot(
+  tournamentId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<TournamentSeasonSnapshot | null> {
+  const data = await graphqlRequest<{ tournamentSeasonSnapshot: TournamentSeasonSnapshot | null }>(
+    GET_TOURNAMENT_SEASON_SNAPSHOT,
+    { tournamentId, eventId },
+    { cachePolicy: "reporting", forceRefresh, trace }
+  );
+  return data.tournamentSeasonSnapshot;
 }
 
 export async function getTournamentSelectionStats(

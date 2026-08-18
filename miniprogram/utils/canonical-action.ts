@@ -6,6 +6,12 @@
  * in a browser — Website login may be required. URLs are static constants:
  * never interpolate tokens, email, openid, entry IDs, or any user data.
  */
+import {
+  isClipboardApiBlocked,
+  isPrivacyScopeUndeclared,
+  markClipboardApiBlocked
+} from "./privacy";
+
 export type CanonicalActionType =
   | "ACCOUNT_LINK"
   | "TEAM_BIND"
@@ -67,8 +73,19 @@ export function openWebsiteAction(action: CanonicalAction): Promise<boolean> {
     return Promise.resolve(false);
   }
 
+  if (isClipboardApiBlocked()) {
+    wx.showToast({ title: "复制失败，请重试", icon: "none" });
+    return Promise.resolve(false);
+  }
+
   return new Promise((resolve) => {
-    const fail = () => {
+    const fail = (err?: { errno?: number; errMsg?: string }) => {
+      if (isPrivacyScopeUndeclared(err)) {
+        markClipboardApiBlocked();
+        console.error(
+          "[canonical-action] errno 112: declare 「读取你的剪切板」 in MP 用户隐私保护指引"
+        );
+      }
       wx.showToast({ title: "复制失败，请重试", icon: "none" });
       resolve(false);
     };

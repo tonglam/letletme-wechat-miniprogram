@@ -26,6 +26,7 @@ import {
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
+import { copyShareText, formatLiveTournamentShareText } from "../../../utils/live-share";
 import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -43,6 +44,7 @@ type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
+const CHIP_VALUES = ["TC", "BB", "WC", "FH"];
 
 export function partialTournamentErrorSuffix(retainedRowCount: number): string {
   return retainedRowCount > 0
@@ -66,7 +68,7 @@ export function noLiveEventState() {
     emptyState: "preseason" as const,
     emptyEyebrow: "赛季准备中",
     emptyTitle: "当前赛季暂无实时比赛周",
-    emptyDescription: "比赛周开始后，这里会显示竞赛实时得分和排名",
+    emptyDescription: "比赛周开始后，这里会显示赛事实时得分和排名",
     emptyActionText: "",
     rows: [] as DisplayTournamentRow[],
     displayedRows: [] as DisplayTournamentRow[],
@@ -85,7 +87,15 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   displayLive: string;
   displayNet: string;
   displayTotal: string;
+  displayHit: string;
   metaText: string;
+  chipCode: string;
+  displayCaptain: string;
+  playedText: string;
+  isMe: boolean;
+  pinned: boolean;
+  compared: boolean;
+  compareDisabled: boolean;
 }
 
 interface OwnershipPlayerOption {
@@ -134,6 +144,10 @@ interface LiveTournamentData {
   ownershipScope: TournamentOwnershipScope;
   ownershipCaptainMode: TournamentCaptainMode;
   ownershipPlayers: OwnershipPlayerOption[];
+  ownershipSearch: string;
+  ownershipSearchResults: OwnershipPlayerOption[];
+  ownershipMatchedText: string;
+  teamExposureMatchedText: string;
   ownershipTeamOptions: TournamentTeamOption[];
   ownershipTeamNames: string[];
   selectedOwnershipTeamIndex: number;
@@ -150,14 +164,36 @@ interface LiveTournamentData {
   teamExposureScope: TournamentOwnershipScope;
   teamExposureTeams: TournamentTeamOption[];
   teamExposureTeamNames: string[];
-  selectedTeamExposureIndex: number;
-  selectedTeamExposure: TournamentTeamOption | null;
-  teamExposureCount: number;
+  teamExposureRules: Array<{ teamShortName: string; name: string; count: number }>;
+  pendingExposureTeamIndex: number;
+  pendingExposureTeam: TournamentTeamOption | null;
+  teamExposureCountNames: string[];
   teamExposureSummary: string;
   pageSize: number;
   hasMore: boolean;
   lastUpdated: string;
   columns: Array<{ key: string; label: string }>;
+  highestText: string;
+  averageText: string;
+  entriesText: string;
+  chipFilters: string[];
+  chipOptions: Array<{ value: string; label: string; on: boolean }>;
+  captainFilters: string[];
+  captainOptions: Array<{ name: string; on: boolean }>;
+  captainValues: string[];
+  filterSheetOpen: boolean;
+  activeFilterCount: number;
+  compareMode: boolean;
+  compareIds: number[];
+  compareHint: string;
+  compareOpen: boolean;
+  compareLeft: DisplayTournamentRow | null;
+  compareRight: DisplayTournamentRow | null;
+  shareRows: DisplayTournamentRow[];
+  shareLabel: string;
+  shareCopied: boolean;
+  shareSheetOpen: boolean;
+  shareText: string;
 }
 
 interface LiveTournamentLoadOptions {
@@ -184,6 +220,16 @@ function formatTime(date: Date): string {
   return `${hours}:${minutes}`;
 }
 
+function chipCodeOf(raw: unknown): string {
+  const value = String(raw || "").toUpperCase().replace(/[\s_-]/g, "");
+  if (!value || value === "无" || value === "NONE" || value === "NULL") return "";
+  if (value === "TRIPLECAPTAIN" || value === "TC" || value === "3XC" || value === "3C") return "TC";
+  if (value === "BENCHBOOST" || value === "BB") return "BB";
+  if (value === "WILDCARD" || value === "WC") return "WC";
+  if (value === "FREEHIT" || value === "FH") return "FH";
+  return "";
+}
+
 function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const livePoints = numberValue(row.livePoints);
   const liveNetPoints = numberValue(row.liveNetPoints, livePoints);
@@ -193,6 +239,7 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const toPlay = numberValue(row.toPlay);
   const chip = textValue(row.chip, "无");
   const captain = textValue(row.captainName, "无队长");
+  const chipCode = chipCodeOf(row.chip);
 
   return {
     ...row,
@@ -205,8 +252,48 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     displayLive: `${livePoints}`,
     displayNet: `${liveNetPoints}`,
     displayTotal: `${totalPoints}`,
-    metaText: `队长 ${captain} · 开卡 ${chip} · 剁手 ${transferCost} · ${played}/${played + toPlay}`
+    displayHit: transferCost > 0 ? `-${transferCost}` : "0",
+    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCost} · ${played}/${played + toPlay}`,
+    chipCode,
+    displayCaptain: captain && captain !== "无队长" ? `${captain} (C)` : "",
+    playedText: `${played}/${played + toPlay}`,
+    isMe: false,
+    pinned: false,
+    compared: false,
+    compareDisabled: false
   };
+}
+
+function compareHintText(count: number): string {
+  if (count >= 2) return "已选 2 支";
+  if (count === 1) return "再选 1 支";
+  return "勾选 2 支队伍";
+}
+
+function buildTournamentStats(rows: DisplayTournamentRow[]) {
+  if (rows.length === 0) {
+    return { highestText: "—", averageText: "—", entriesText: "0" };
+  }
+  const points = rows.map((row) => numberValue(row.livePoints));
+  const highest = Math.max(...points);
+  const average = Math.round(points.reduce((sum, value) => sum + value, 0) / points.length);
+  return {
+    highestText: String(highest),
+    averageText: String(average),
+    entriesText: String(rows.length)
+  };
+}
+
+function takeVisibleWithPinMe(
+  rows: DisplayTournamentRow[],
+  size: number,
+  entryId?: number
+): DisplayTournamentRow[] {
+  const top = rows.slice(0, size);
+  if (!entryId) return top;
+  const me = rows.find((row) => row.entry === entryId);
+  if (!me || top.some((row) => row.entry === me.entry)) return top;
+  return [...top, { ...me, pinned: true, isMe: true }];
 }
 
 function sortRows(rows: DisplayTournamentRow[], key: SortKey, desc: boolean): DisplayTournamentRow[] {
@@ -262,6 +349,22 @@ function collectOwnershipPositions(players: OwnershipPlayerOption[], selectedTea
     .sort();
 }
 
+/** Name-first player lookup (web PlayerDirectoryPicker): instant substring match over the tournament pool. */
+function computeOwnershipSearchResults(
+  players: OwnershipPlayerOption[],
+  query: string,
+  selected: OwnershipPlayerOption[]
+): OwnershipPlayerOption[] {
+  const term = String(query || "").trim().toLowerCase();
+  if (!term) {
+    return [];
+  }
+  const chosen = new Set(selected.map((player) => player.element));
+  return players
+    .filter((player) => !chosen.has(player.element) && player.name.toLowerCase().includes(term))
+    .slice(0, 8);
+}
+
 function filterOwnershipPlayers(
   players: OwnershipPlayerOption[],
   selectedTeam?: TournamentTeamOption | null,
@@ -293,7 +396,7 @@ PerformancePage({
     emptyDescription: "",
     emptyActionText: "",
     resultsEmptyTitle: "本轮实时排名还没生成",
-    resultsEmptyDescription: "比赛开始或竞赛数据同步后会显示实时排名",
+    resultsEmptyDescription: "比赛开始或赛事数据同步后会显示实时排名",
     resultsEmptyActionText: "重新加载",
     resultsFiltered: false,
     event: 0,
@@ -307,13 +410,11 @@ PerformancePage({
     rows: [],
     displayedRows: [],
     sortOptions: [
-      { key: "livePoints", label: "GW得分" },
-      { key: "liveNetPoints", label: "GW净分" },
+      { key: "livePoints", label: "GW" },
+      { key: "liveNetPoints", label: "净分" },
       { key: "transferCost", label: "扣分" },
-      { key: "played", label: "已上场" },
-      { key: "totalPoints", label: "总分" },
-      { key: "overallRank", label: "总排名" },
-      { key: "entryName", label: "球队" }
+      { key: "played", label: "出场" },
+      { key: "totalPoints", label: "总分" }
     ],
     sortKey: "livePoints",
     sortDesc: true,
@@ -322,6 +423,10 @@ PerformancePage({
     ownershipScope: "any",
     ownershipCaptainMode: "any",
     ownershipPlayers: [],
+    ownershipSearch: "",
+    ownershipSearchResults: [],
+    ownershipMatchedText: "",
+    teamExposureMatchedText: "",
     ownershipTeamOptions: [],
     ownershipTeamNames: [],
     selectedOwnershipTeamIndex: 0,
@@ -338,9 +443,10 @@ PerformancePage({
     teamExposureScope: "any",
     teamExposureTeams: [],
     teamExposureTeamNames: [],
-    selectedTeamExposureIndex: 0,
-    selectedTeamExposure: null,
-    teamExposureCount: 1,
+    teamExposureRules: [],
+    pendingExposureTeamIndex: 0,
+    pendingExposureTeam: null,
+    teamExposureCountNames: ["1 人", "2 人", "3 人"],
     teamExposureSummary: "未筛选",
     pageSize: 20,
     hasMore: false,
@@ -350,7 +456,28 @@ PerformancePage({
       { key: "entryName", label: "球队" },
       { key: "livePoints", label: "GW" },
       { key: "totalPoints", label: "总分" }
-    ]
+    ],
+    highestText: "—",
+    averageText: "—",
+    entriesText: "0",
+    chipFilters: [],
+    chipOptions: CHIP_VALUES.map((value) => ({ value, label: value, on: false })),
+    captainFilters: [],
+    captainOptions: [],
+    captainValues: [],
+    filterSheetOpen: false,
+    activeFilterCount: 0,
+    compareMode: false,
+    compareIds: [],
+    compareHint: compareHintText(0),
+    compareOpen: false,
+    compareLeft: null,
+    compareRight: null,
+    shareRows: [],
+    shareLabel: "复制分享",
+    shareCopied: false,
+    shareSheetOpen: false,
+    shareText: ""
   } as LiveTournamentData,
 
   rowsRequest: null as Promise<void> | null,
@@ -587,10 +714,15 @@ PerformancePage({
               selectedOwnershipPosition: "",
               ownershipAvailablePlayers: [],
               ownershipAvailablePlayerNames: [],
-              selectedTeamExposureIndex: 0,
-              selectedTeamExposure: null,
-              teamExposureCount: 1,
-              teamExposureScope: "any"
+              ownershipSearch: "",
+              ownershipSearchResults: [],
+              ownershipMatchedText: "",
+              teamExposureMatchedText: "",
+              teamExposureRules: [],
+              pendingExposureTeamIndex: 0,
+              pendingExposureTeam: null,
+              teamExposureScope: "any",
+              activeFilterCount: 0
           } : {}),
           ...eventState
         });
@@ -765,7 +897,7 @@ PerformancePage({
         emptyState: "entry",
         emptyEyebrow: "需要球队",
         emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可加载实时竞赛。",
+        emptyDescription: "查找球队并设为我的球队后，即可加载实时赛事。",
         emptyActionText: "去选择球队",
         tournaments: [],
         tournamentNames: [],
@@ -810,9 +942,9 @@ PerformancePage({
           displayedRows: [],
           hasData: false,
           emptyState: "tournaments",
-          emptyEyebrow: "竞赛待就绪",
-          emptyTitle: "当前球队还没有可查看的竞赛",
-          emptyDescription: "加入一个竞赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyEyebrow: "赛事待就绪",
+          emptyTitle: "当前球队还没有可查看的赛事",
+          emptyDescription: "加入一个赛事后，或等待新赛季数据同步，再回到这里重新检查。",
           emptyActionText: "重新检查"
         });
         return;
@@ -853,7 +985,7 @@ PerformancePage({
           loading: false,
           refreshing: false,
           resultsEmptyTitle: selectedTournament.participantCount === 0
-            ? "当前竞赛还没有参赛球队"
+            ? "当前赛事还没有参赛球队"
             : "当前暂无进行中的比赛周",
           resultsEmptyDescription: selectedTournament.participantCount === 0
             ? "有球队加入后再显示实时排名"
@@ -875,7 +1007,7 @@ PerformancePage({
       if (!this.pageVisible || requestId !== this.tournamentListRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       this.setData({
-        tournamentListError: error instanceof Error ? error.message : "实时竞赛加载失败",
+        tournamentListError: error instanceof Error ? error.message : "实时赛事加载失败",
         tournamentListErrorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
       });
     } finally {
@@ -921,7 +1053,7 @@ PerformancePage({
         error: "",
         errorSuffix: "",
         resultsEmptyTitle: hasNoParticipants
-          ? "当前竞赛还没有参赛球队"
+          ? "当前赛事还没有参赛球队"
           : "当前暂无进行中的比赛周",
         resultsEmptyDescription: hasNoParticipants
           ? "有球队加入后再显示实时排名"
@@ -1002,7 +1134,7 @@ PerformancePage({
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({
-          error: error instanceof Error ? error.message : "实时竞赛加载失败",
+          error: error instanceof Error ? error.message : "实时赛事加载失败",
           errorSuffix: this.data.hasData ? "当前显示上次成功结果" : ""
         });
         this.syncDisplayState();
@@ -1082,9 +1214,7 @@ PerformancePage({
 
   applyRows(rows: DisplayTournamentRow[], resetPage: boolean, fetchedAt?: number) {
     const teamOptions = getTournamentTeamOptions(rows);
-    const selectedTeamExposure = this.data.selectedTeamExposure
-      ? teamOptions.find((team) => team.shortName === this.data.selectedTeamExposure?.shortName)
-      : null;
+    const teamExposureRules = this.data.teamExposureRules || [];
     const ownershipPlayers = collectOwnershipPlayers(rows);
     const selectedOwnershipTeam = this.data.selectedOwnershipTeam
       ? teamOptions.find((team) => team.shortName === this.data.selectedOwnershipTeam?.shortName)
@@ -1100,36 +1230,70 @@ PerformancePage({
       captainMode: this.data.ownershipCaptainMode
     }) as DisplayTournamentRow[];
     filteredRows = filterTournamentRowsByTeamExposure(filteredRows, {
-      teamShortName: selectedTeamExposure?.shortName || "",
-      exactCount: this.data.teamExposureCount,
+      rules: teamExposureRules.map((rule) => ({ teamShortName: rule.teamShortName, exactCount: rule.count })),
       scope: this.data.teamExposureScope
     }) as DisplayTournamentRow[];
-    const sortedRows = sortRows(filteredRows, this.data.sortKey, this.data.sortDesc).map((row, index) => ({
-      ...row,
-      visibleRank: index + 1
-    }));
-    // The keyword filter is applied server-side at submit time, so classify
-    // by the submitted keyword: an unsubmitted draft in the search box must
-    // not make unfiltered rows claim "no teams match the current filters".
+    const keyword = String(this.data.keyword || this._submittedKeyword || "").trim().toLowerCase();
+    if (keyword) {
+      filteredRows = filteredRows.filter((row) => {
+        const haystack = `${row.entryName || ""} ${row.playerName || ""} ${row.searchText || ""}`.toLowerCase();
+        return haystack.includes(keyword);
+      });
+    }
+    const chipFilters = this.data.chipFilters || [];
+    if (chipFilters.length) {
+      filteredRows = filteredRows.filter((row) => chipFilters.includes(textValue(row.chipCode)));
+    }
+    const captainFilters = this.data.captainFilters || [];
+    if (captainFilters.length) {
+      filteredRows = filteredRows.filter((row) => captainFilters.includes(textValue(row.captainName)));
+    }
+    const viewerId = numberValue(this.data.entryId);
+    const compareIds = this.data.compareIds || [];
+    const sortedRows = sortRows(filteredRows, this.data.sortKey, this.data.sortDesc).map((row, index) => {
+      const compared = compareIds.includes(numberValue(row.entry));
+      return {
+        ...row,
+        visibleRank: index + 1,
+        isMe: row.entry === viewerId,
+        pinned: false,
+        compared,
+        compareDisabled: this.data.compareMode && compareIds.length >= 2 && !compared
+      };
+    });
     const resultsFiltered = Boolean(
-      this._submittedKeyword.trim()
+      keyword
       || this.data.selectedOwnershipPlayers.length
-      || selectedTeamExposure
+      || teamExposureRules.length
+      || chipFilters.length
+      || captainFilters.length
     );
     const nextSize = resetPage ? this.data.pageSize : this.data.displayedRows.length + this.data.pageSize;
+    const stats = buildTournamentStats(rows);
+    const captainValues = Array.from(new Set(rows
+      .map((row) => textValue(row.captainName))
+      .filter((name) => name && name !== "-" && name !== "无队长")))
+      .sort((left, right) => left.localeCompare(right));
     this.setData({
       hasData: true,
       rows,
-      displayedRows: sortedRows.slice(0, nextSize),
+      displayedRows: takeVisibleWithPinMe(sortedRows, nextSize, viewerId),
+      shareRows: sortedRows,
       filteredCount: sortedRows.length,
       hasMore: sortedRows.length > nextSize,
+      highestText: stats.highestText,
+      averageText: stats.averageText,
+      entriesText: stats.entriesText,
+      captainValues,
+      captainOptions: captainValues.map((name) => ({ name, on: captainFilters.includes(name) })),
+      chipOptions: CHIP_VALUES.map((value) => ({ value, label: value, on: chipFilters.includes(value) })),
       resultsFiltered,
       resultsEmptyTitle: resultsFiltered
         ? "没有符合当前筛选的球队"
         : `GW${this.data.event} 实时排名还没生成`,
       resultsEmptyDescription: resultsFiltered
         ? "清除搜索或球员持有、球队人数筛选后再看"
-        : "比赛开始或竞赛数据同步后会显示实时排名",
+        : "比赛开始或赛事数据同步后会显示实时排名",
       resultsEmptyActionText: resultsFiltered ? "清除全部筛选" : "重新加载",
       ownershipPlayers,
       ownershipTeamOptions: teamOptions,
@@ -1145,11 +1309,30 @@ PerformancePage({
       ownershipSummary: this.data.selectedOwnershipPlayers.length
         ? this.data.selectedOwnershipPlayers.map((player) => player.name).join("、")
         : "未筛选",
+      ownershipSearchResults: computeOwnershipSearchResults(ownershipPlayers, this.data.ownershipSearch, this.data.selectedOwnershipPlayers),
+      ownershipMatchedText: this.data.selectedOwnershipPlayers.length
+        ? ` · 匹配 ${filterTournamentRowsByOwnership(rows, {
+            playerIds: this.data.selectedOwnershipPlayers.map((player) => player.element),
+            scope: this.data.ownershipScope,
+            captainMode: this.data.ownershipCaptainMode
+          }).length}/${rows.length}`
+        : "",
+      teamExposureMatchedText: teamExposureRules.length
+        ? ` · 匹配 ${filterTournamentRowsByTeamExposure(rows, {
+            rules: teamExposureRules.map((rule) => ({ teamShortName: rule.teamShortName, exactCount: rule.count })),
+            scope: this.data.teamExposureScope
+          }).length}/${rows.length}`
+        : "",
       teamExposureTeams: teamOptions,
       teamExposureTeamNames: teamOptions.map(formatTeamName),
-      selectedTeamExposure,
-      selectedTeamExposureIndex: selectedTeamExposure ? teamOptions.findIndex((team) => team.shortName === selectedTeamExposure.shortName) : 0,
-      teamExposureSummary: selectedTeamExposure ? `${selectedTeamExposure.name} 等于 ${this.data.teamExposureCount} 人` : "未筛选",
+      teamExposureSummary: teamExposureRules.length
+        ? teamExposureRules.map((rule) => `${rule.name}恰好${rule.count}人`).join("、")
+        : "未筛选",
+      activeFilterCount:
+        (chipFilters.length ? 1 : 0)
+        + (captainFilters.length ? 1 : 0)
+        + (this.data.selectedOwnershipPlayers.length ? 1 : 0)
+        + (teamExposureRules.length ? 1 : 0),
       // Local re-sorts/filter tweaks reapply the same rows without a fetch:
       // keep the original fetch time rather than stamping "now" as if the
       // data had just been refreshed.
@@ -1167,6 +1350,9 @@ PerformancePage({
 
   onKeyword(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
     this.setData({ keyword: event.detail.keyword });
+    if (this.data.rows.length > 0) {
+      this.applyRows(this.data.rows, true);
+    }
   },
 
   onSearch(event?: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
@@ -1241,6 +1427,101 @@ PerformancePage({
     this.applyRows(this.data.rows, true);
   },
 
+  onToggleChip(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { value: string }>) {
+    const value = String(event.currentTarget.dataset.value || "");
+    if (!value) {
+      return;
+    }
+    const chipFilters = this.data.chipFilters.includes(value)
+      ? this.data.chipFilters.filter((item) => item !== value)
+      : [...this.data.chipFilters, value];
+    this.setData({ chipFilters });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onToggleCaptain(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { name: string }>) {
+    const name = String(event.currentTarget.dataset.name || "");
+    if (!name) {
+      return;
+    }
+    const captainFilters = this.data.captainFilters.includes(name)
+      ? this.data.captainFilters.filter((item) => item !== name)
+      : [...this.data.captainFilters, name];
+    this.setData({ captainFilters });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onToggleAdvanced() {
+    this.setData({ filterSheetOpen: !this.data.filterSheetOpen });
+  },
+
+  onCloseFilterSheet() {
+    this.setData({ filterSheetOpen: false });
+  },
+
+  onClearAllFilters() {
+    // Same semantics as the empty-state clear: in-memory rows may be a
+    // keyword-filtered subset, so the cleared-filter reload refetches.
+    this.onEmptyResultsAction();
+  },
+
+  onToggleCompare() {
+    if (this.data.compareMode) {
+      this.setData({
+        compareMode: false,
+        compareIds: [],
+        compareHint: compareHintText(0),
+        compareOpen: false,
+        compareLeft: null,
+        compareRight: null
+      });
+      this.applyRows(this.data.rows, true);
+      return;
+    }
+    this.setData({
+      compareMode: true,
+      compareIds: [],
+      compareHint: compareHintText(0),
+      compareOpen: false,
+      compareLeft: null,
+      compareRight: null
+    });
+    this.applyRows(this.data.rows, true);
+  },
+
+  onCloseCompare() {
+    this.setData({ compareOpen: false });
+  },
+
+  onOpenCompareSheet() {
+    if (this.data.compareIds.length !== 2 || !this.data.compareLeft || !this.data.compareRight) {
+      return;
+    }
+    this.setData({ compareOpen: true });
+  },
+
+  toggleCompareEntry(entry: number) {
+    const current = this.data.compareIds.slice();
+    const index = current.indexOf(entry);
+    if (index >= 0) {
+      current.splice(index, 1);
+    } else if (current.length >= 2) {
+      return;
+    } else {
+      current.push(entry);
+    }
+    const left = current[0] ? this.data.rows.find((row) => row.entry === current[0]) || null : null;
+    const right = current[1] ? this.data.rows.find((row) => row.entry === current[1]) || null : null;
+    this.setData({
+      compareIds: current,
+      compareHint: compareHintText(current.length),
+      compareLeft: left,
+      compareRight: right,
+      compareOpen: current.length === 2
+    });
+    this.applyRows(this.data.rows, true);
+  },
+
   onToggleOwnership() {
     this.setData({ ownershipExpanded: !this.data.ownershipExpanded });
   },
@@ -1295,6 +1576,28 @@ PerformancePage({
     this.applyRows(this.data.rows, true);
   },
 
+  onOwnershipSearchInput(event: WechatMiniprogram.Input) {
+    const ownershipSearch = textValue(event.detail.value, "");
+    this.setData({
+      ownershipSearch,
+      ownershipSearchResults: computeOwnershipSearchResults(this.data.ownershipPlayers, ownershipSearch, this.data.selectedOwnershipPlayers)
+    });
+  },
+
+  onOwnershipSearchPick(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { element: string }>) {
+    const element = Number(event.currentTarget.dataset.element);
+    const player = this.data.ownershipPlayers.find((option) => option.element === element);
+    if (!player || this.data.selectedOwnershipPlayers.some((selected) => selected.element === element)) {
+      return;
+    }
+    this.setData({
+      selectedOwnershipPlayers: [...this.data.selectedOwnershipPlayers, player],
+      ownershipSearch: "",
+      ownershipSearchResults: []
+    });
+    this.applyRows(this.data.rows, true);
+  },
+
   onRemoveOwnershipPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { element: string }>) {
     const element = Number(event.currentTarget.dataset.element);
     this.setData({ selectedOwnershipPlayers: this.data.selectedOwnershipPlayers.filter((player) => player.element !== element) });
@@ -1311,7 +1614,9 @@ PerformancePage({
       selectedOwnershipPositionIndex: 0,
       selectedOwnershipPosition: "",
       ownershipAvailablePlayers: [],
-      ownershipAvailablePlayerNames: []
+      ownershipAvailablePlayerNames: [],
+      ownershipSearch: "",
+      ownershipSearchResults: []
     });
     this.applyRows(this.data.rows, true);
   },
@@ -1326,22 +1631,37 @@ PerformancePage({
   },
 
   onTeamExposureTeamChange(event: WechatMiniprogram.PickerChange) {
-    const selectedTeamExposureIndex = Number(event.detail.value);
-    const selectedTeamExposure = this.data.teamExposureTeams[selectedTeamExposureIndex];
-    this.setData({ selectedTeamExposureIndex, selectedTeamExposure });
+    const pendingExposureTeamIndex = Number(event.detail.value);
+    const pendingExposureTeam = this.data.teamExposureTeams[pendingExposureTeamIndex] || null;
+    this.setData({ pendingExposureTeamIndex, pendingExposureTeam });
+  },
+
+  /** Second step of the cascade — picking a count commits the rule, like ownership's player picker. */
+  onTeamExposureCountChange(event: WechatMiniprogram.PickerChange) {
+    const pendingExposureTeam = this.data.pendingExposureTeam;
+    if (!pendingExposureTeam) {
+      return;
+    }
+    const count = Number(event.detail.value) + 1;
+    const rules = this.data.teamExposureRules.filter((rule) => rule.teamShortName !== pendingExposureTeam.shortName);
+    rules.push({ teamShortName: pendingExposureTeam.shortName, name: pendingExposureTeam.name, count });
+    this.setData({ teamExposureRules: rules, pendingExposureTeam: null, pendingExposureTeamIndex: 0 });
     this.applyRows(this.data.rows, true);
   },
 
-  onTeamExposureCountTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { count: string }>) {
-    this.setData({ teamExposureCount: Number(event.currentTarget.dataset.count) });
+  onRemoveTeamExposureRule(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { shortname?: string }>) {
+    const shortName = event.currentTarget.dataset.shortname;
+    this.setData({
+      teamExposureRules: this.data.teamExposureRules.filter((rule) => rule.teamShortName !== shortName)
+    });
     this.applyRows(this.data.rows, true);
   },
 
   onClearTeamExposureFilter() {
     this.setData({
-      selectedTeamExposureIndex: 0,
-      selectedTeamExposure: null,
-      teamExposureCount: 1,
+      teamExposureRules: [],
+      pendingExposureTeam: null,
+      pendingExposureTeamIndex: 0,
       teamExposureScope: "any"
     });
     this.applyRows(this.data.rows, true);
@@ -1354,9 +1674,13 @@ PerformancePage({
     this.applyRows(this.data.rows, false);
   },
 
-  onOpenEntry(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { entry: string }>) {
-    const entry = Number(event.currentTarget.dataset.entry);
+  onOpenEntry(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { entryId?: string; entry?: string }>) {
+    const entry = Number(event.currentTarget.dataset.entryId || event.currentTarget.dataset.entry);
     if (!Number.isFinite(entry) || entry <= 0) {
+      return;
+    }
+    if (this.data.compareMode) {
+      this.toggleCompareEntry(entry);
       return;
     }
     wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
@@ -1376,6 +1700,42 @@ PerformancePage({
       return;
     }
     this.loadRows({ forceRefresh: true });
+  },
+
+  onCopyShare() {
+    try {
+      const rows = (this.data.shareRows && this.data.shareRows.length > 0)
+        ? this.data.shareRows
+        : (this.data.displayedRows || []);
+      if (rows.length === 0) {
+        wx.showToast({ title: "还没有可分享的榜单", icon: "none" });
+        return;
+      }
+      const text = formatLiveTournamentShareText({
+        gameweek: this.data.event,
+        tournamentName: this.data.selectedTournament?.name,
+        tournamentId: this.data.selectedTournament?.id,
+        highestText: this.data.highestText,
+        averageText: this.data.averageText,
+        entriesText: this.data.entriesText,
+        rows
+      });
+      void copyShareText(text).then((ok) => {
+        if (ok) {
+          this.setData({ shareCopied: true, shareSheetOpen: false });
+          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      });
+    } catch (error) {
+      console.error("[copy-share] tournament", error);
+      wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   },
 
   onChooseEntry() {
@@ -1408,6 +1768,8 @@ PerformancePage({
     this._submittedKeyword = "";
     this.setData({
       keyword: "",
+      chipFilters: [],
+      captainFilters: [],
       selectedOwnershipPlayers: [],
       ownershipScope: "any",
       ownershipCaptainMode: "any",
@@ -1417,10 +1779,15 @@ PerformancePage({
       selectedOwnershipPosition: "",
       ownershipAvailablePlayers: [],
       ownershipAvailablePlayerNames: [],
-      selectedTeamExposureIndex: 0,
-      selectedTeamExposure: null,
-      teamExposureCount: 1,
+      ownershipSearch: "",
+      ownershipSearchResults: [],
+      ownershipMatchedText: "",
+      teamExposureMatchedText: "",
+      teamExposureRules: [],
+      pendingExposureTeamIndex: 0,
+      pendingExposureTeam: null,
       teamExposureScope: "any",
+      activeFilterCount: 0,
       // In-memory rows may be a keyword-filtered subset, so they cannot be
       // reapplied locally; treat the cleared-filter reload as a new result
       // context instead of letting the old empty filtered view linger.

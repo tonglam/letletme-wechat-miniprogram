@@ -66,6 +66,7 @@ export interface LivePlayerRow {
   saves?: number;
   yellowCards?: number;
   redCards?: number;
+  defensiveContribution?: number;
   ownGoals?: number;
   penaltiesSaved?: number;
   penaltiesMissed?: number;
@@ -121,7 +122,11 @@ export interface LiveMatch {
   minuteText?: string;
   homeTeamDisplay?: string;
   awayTeamDisplay?: string;
-  eventSummary?: Array<{ label: string; value: string }>;
+  eventSummary?: Array<{
+    kind: string;
+    label: string;
+    items: Array<{ name: string; team: string; text: string }>;
+  }>;
 }
 
 export interface LiveTournamentRow {

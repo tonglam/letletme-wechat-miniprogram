@@ -1,0 +1,35 @@
+/* 用户页:账户操作 strips(首页 bind-strip 语言) */
+
+.me-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 14rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+.me-strip:last-child {
+  margin-bottom: 0;
+}
+
+.me-strip-main {
+  min-width: 0;
+}
+
+.me-strip-kicker {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.me-strip-title {
+  margin-top: 4rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+}

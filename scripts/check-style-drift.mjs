@@ -29,6 +29,7 @@ const TOKEN_CHANNELS = new Set(
 		'#f9f8f4', '#301333', '#6e5a72', '#ffffff', '#ddd4de', '#f1efe9',
 		'#dcf6ea', '#fbe3e9', '#f6ead9', '#f0e3f2', '#fbbf24', '#f87171',
 		'#fcd34d', '#451a03', '#500724', '#000000',
+		'#f8f6ef', '#210025', '#111315', '#f5f1e8', '#b8d9b9',
 	].map(hex => {
 		const n = parseInt(hex.slice(1), 16)
 		return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`

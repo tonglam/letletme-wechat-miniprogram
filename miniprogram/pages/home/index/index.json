@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "LetLetMe",
   "enablePullDownRefresh": true,
+  "renderer": "webview",
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",

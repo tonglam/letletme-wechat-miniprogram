@@ -1,0 +1,27 @@
+var map = {
+  GKP: 'pos-gkp',
+  GK: 'pos-gkp',
+  GOALKEEPER: 'pos-gkp',
+  DEF: 'pos-def',
+  DEFENDER: 'pos-def',
+  MID: 'pos-mid',
+  MIDFIELDER: 'pos-mid',
+  FWD: 'pos-fwd',
+  FORWARD: 'pos-fwd'
+};
+
+function cls(p) {
+  if (!p) return '';
+  var key = (p + '').toUpperCase();
+  return map[key] || '';
+}
+
+function hasTeam(entry) {
+  if (!entry) return false;
+  return !!(entry.entryId || entry.entry || entry.entryName || entry.teamName);
+}
+
+module.exports = {
+  cls: cls,
+  hasTeam: hasTeam
+};

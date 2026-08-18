@@ -11,13 +11,26 @@
   </view>
   <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队详情" />
-  <view id="perf-primary-content" wx:else class="section card">
-    <view class="title">{{team.name || '球队详情'}}</view>
-    <view class="subtitle">{{team.shortName || ''}}</view>
-    <view class="detail-row">
-      <text>强度</text>
-      <text>{{team.strength || '-'}}</text>
+  <block wx:else>
+    <view id="perf-primary-content" class="section">
+      <view class="score-card scoreboard">
+        <view class="score-top">
+          <view class="score-identity">
+            <view class="score-team">{{team.name || '-'}}</view>
+            <view class="score-manager">{{team.shortName || ''}}<text wx:if="{{season}}"> · {{season}}</text></view>
+          </view>
+        </view>
+      </view>
     </view>
-  </view>
+    <view class="section card">
+      <view class="strength-row">
+        <text class="strength-label">强度</text>
+        <view class="strength-dots">
+          <view wx:for="{{strengthDots}}" wx:key="index" class="strength-dot {{item ? 'on' : ''}}"></view>
+        </view>
+        <text class="strength-value">{{team.strength || '-'}} / 5</text>
+      </view>
+    </view>
+  </block>
   <bottomNavBar />
 </view>

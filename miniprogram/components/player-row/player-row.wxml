@@ -1,17 +1,4 @@
-<wxs module="pos">
-  var map = {
-    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
-    DEF: 'pos-def', DEFENDER: 'pos-def',
-    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
-    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
-  };
-  function cls(p) {
-    if (!p) return '';
-    var key = String(p).toUpperCase();
-    return map[key] || '';
-  }
-  module.exports = { cls: cls };
-</wxs>
+<wxs src="/components/pos.wxs" module="pos" />
 <view class="player-row {{player.statusClass || ''}}" hover-class="hover-dim" bindtap="onOpen">
   <view class="player-main">
     <view class="player-title-line">
@@ -21,12 +8,14 @@
     <view class="player-meta">
       <text wx:if="{{showTeam}}">{{player.team || player.teamShortName || ''}}</text>
       <text wx:if="{{player.position || player.elementTypeName}}" class="pos-badge {{pos.cls(player.position || player.elementTypeName)}} player-pos">{{player.position || player.elementTypeName}}</text>
+      <text wx:if="{{player.statText}}" class="stat-text"> · {{player.statText}}</text>
       <text wx:if="{{showLiveMeta && player.metaText}}"> · {{player.metaText}}</text>
     </view>
   </view>
   <view class="player-side">
-    <text wx:if="{{showPoints}}">{{player.pointsText || player.points || player.livePoints || player.totalPoints || 0}} pts</text>
+    <text wx:if="{{showPoints}}" class="player-points">{{player.pointsText || player.points || player.livePoints || player.totalPoints || 0}}分</text>
     <text wx:elif="{{showPrice}}">{{player.priceText || player.price || ''}}</text>
+    <text wx:if="{{showPoints && showPrice && player.priceText}}" class="player-price-sub">{{player.priceText}}</text>
     <text wx:if="{{showLiveMeta && player.statusText}}" class="status-text">{{player.statusText}}</text>
   </view>
 </view>

@@ -7,6 +7,7 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
     "player-row": "../../../components/player-row/player-row",
-    "evidence-source": "../../../components/evidence-source/evidence-source"
+    "evidence-source": "../../../components/evidence-source/evidence-source",
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
   }
 }

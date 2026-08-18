@@ -3,11 +3,20 @@ import {
   type PlayerPickerFilter
 } from "../../../services/player.service";
 import { getTeamList } from "../../../services/common.service";
-import { getPlayerValueByElement, readPlayerValueByDate } from "../../../services/price.service";
+import { getPlayerValueByElement, getMarketAvailability, getMarketPulse, readPlayerValueByDate } from "../../../services/price.service";
+import type {
+  MarketAvailabilityItem,
+  MarketPulse,
+  MarketPulsePlayer
+} from "../../../services/price.service";
 import type { PlayerOption, PlayerValueChange } from "../../../models/player";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
+import { copyShareText } from "../../../utils/live-share";
+import { formatPriceMovementShareText } from "../../../utils/explore-share";
+import { formatCompactNumber } from "../../../utils/summary-format";
+import { formatPrice } from "../../../utils/fpl";
 import {
   nextRequestRevision,
   isCurrentRevision,
@@ -23,10 +32,24 @@ interface FilterOption {
   value: string;
 }
 
-interface TeamDirectoryItem {
+export interface TeamDirectoryItem {
   id: number;
   name: string;
   shortName?: string;
+}
+
+/**
+ * The backend picker only matches player web names. A keyword that exactly
+ * names a team (or its short code, case-insensitive) is converted to a
+ * teamId filter so the whole squad comes back.
+ */
+export function resolveTeamSearchId(keyword: string, directory: TeamDirectoryItem[]): number | null {
+  const needle = keyword.trim().toLowerCase();
+  if (!needle) return null;
+  const hit = directory.find((team) =>
+    team.name.toLowerCase() === needle || (team.shortName || "").toLowerCase() === needle
+  );
+  return hit ? hit.id : null;
 }
 
 interface PricePageData {
@@ -62,16 +85,154 @@ interface PricePageData {
   riseChanges: PlayerValueChange[];
   fallChanges: PlayerValueChange[];
   historyRows: PlayerValueChange[];
+  pulseLoaded: boolean;
+  pulseError: string;
+  coverageText: string;
+  pulseStale: boolean;
+  glanceTiles: GlanceTile[];
+  mostSelectedRows: PulseListRow[];
+  ownershipRiserRows: PulseListRow[];
+  ownershipFallerRows: PulseListRow[];
+  transferRows: PulseListRow[];
+  availabilityRows: PulseListRow[];
+  availabilityUpdateCount: number;
+  availabilityExpanded: boolean;
+  availabilityLoading: boolean;
+  newPlayerRows: PulseListRow[];
+  shareCopied: boolean;
+  shareSheetOpen: boolean;
+  shareText: string;
 }
 
 const ALL_VALUE = "ALL";
 
+const POSITION_SHORT: Record<string, string> = {
+  GOALKEEPER: "GKP",
+  DEFENDER: "DEF",
+  MIDFIELDER: "MID",
+  FORWARD: "FWD"
+};
+
+/** FPL availability status codes → web MarketStatusBadge labels. */
+const AVAILABILITY_STATUS: Record<string, string> = {
+  a: "可出战",
+  d: "存疑",
+  i: "受伤",
+  s: "停赛",
+  u: "不可用"
+};
+
+interface PulseListRow {
+  id: number;
+  name: string;
+  meta: string;
+  valueText: string;
+  subText: string;
+  tone: "" | "good" | "bad";
+  barStyle: string;
+}
+
+interface GlanceTile {
+  key: string;
+  label: string;
+  valueText: string;
+  subText: string;
+  tone: "" | "good" | "bad";
+}
+
+function pulsePlayerMeta(player: MarketPulsePlayer): string {
+  return `${player.teamShortName} · ${POSITION_SHORT[player.position] || player.position}`;
+}
+
+function signedPercent(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${Math.abs(value).toFixed(1)}%`;
+}
+
+function signedCompact(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${formatCompactNumber(Math.abs(value))}`;
+}
+
+function toBasicRow(player: MarketPulsePlayer, valueText: string, subText = "", barWidth = 0): PulseListRow {
+  return {
+    id: player.playerId,
+    name: player.webName,
+    meta: pulsePlayerMeta(player),
+    valueText,
+    subText,
+    tone: "",
+    barStyle: barWidth > 0 ? `width: ${Math.min(100, Math.max(4, barWidth))}%` : ""
+  };
+}
+
+function mapOwnershipRows(moves: MarketPulse["ownershipRisers"], direction: "rise" | "fall"): PulseListRow[] {
+  const maxAbs = Math.max(...moves.map((move) => Math.abs(move.change)), 0);
+  return moves.slice(0, 8).map((move) => ({
+    ...toBasicRow(
+      move.player,
+      signedPercent(move.change),
+      `${move.previousSelectedByPercent.toFixed(1)}% → ${move.selectedByPercent.toFixed(1)}%`,
+      maxAbs > 0 ? (Math.abs(move.change) / maxAbs) * 100 : 0
+    ),
+    tone: direction === "rise" ? "good" : "bad"
+  }));
+}
+
+function mapAvailabilityRow(item: MarketAvailabilityItem): PulseListRow {
+  const chance = item.chanceOfPlayingThisRound;
+  const detail = [
+    item.news,
+    chance === null || chance === undefined ? "" : `本轮出场 ${chance}%`
+  ].filter(Boolean).join(" · ");
+  return toBasicRow(item.player, AVAILABILITY_STATUS[item.status] || item.status, detail);
+}
+
+/** Pulse section view-model, mirroring the web market dashboard sections. */
+export function buildPulseView(pulse: MarketPulse): {
+  coverageText: string;
+  pulseStale: boolean;
+  mostSelectedRows: PulseListRow[];
+  ownershipRiserRows: PulseListRow[];
+  ownershipFallerRows: PulseListRow[];
+  transferRows: PulseListRow[];
+  availabilityRows: PulseListRow[];
+  newPlayerRows: PulseListRow[];
+} {
+  const coverage = pulse.coverage;
+  const snapshotDate = coverage?.latestDate || pulse.snapshot?.snapshotDate || "";
+  const coverageText = coverage
+    ? `快照 ${snapshotDate || "-"} · 观察 ${coverage.observedDays}/${coverage.requestedDays} 天${coverage.complete ? "" : " · 覆盖不完整"}`
+    : "";
+  return {
+    coverageText,
+    pulseStale: coverage?.stale === true,
+    mostSelectedRows: pulse.mostSelected.slice(0, 8).map((player) =>
+      toBasicRow(player, `${player.selectedByPercent.toFixed(1)}%`, formatPrice(player.price), player.selectedByPercent)
+    ),
+    ownershipRiserRows: mapOwnershipRows(pulse.ownershipRisers, "rise"),
+    ownershipFallerRows: mapOwnershipRows(pulse.ownershipFallers, "fall"),
+    transferRows: pulse.transferMovers.slice(0, 8).map((move) => ({
+      ...toBasicRow(
+        move.player,
+        signedCompact(move.netTransfers),
+        `转入 ${formatCompactNumber(move.transfersIn)} · 转出 ${formatCompactNumber(move.transfersOut)}`
+      ),
+      tone: move.netTransfers > 0 ? "good" : move.netTransfers < 0 ? "bad" : ""
+    })),
+    availabilityRows: pulse.availabilityHighlights.map(mapAvailabilityRow),
+    newPlayerRows: pulse.newPlayers.slice(0, 6).map((item) =>
+      toBasicRow(item.player, formatPrice(item.player.price), `首次观察 ${item.firstObservedDate || "-"}`)
+    )
+  };
+}
+
 const POSITION_OPTIONS: FilterOption[] = [
   { label: "全部位置", value: ALL_VALUE },
-  { label: "门将", value: "GOALKEEPER" },
-  { label: "后卫", value: "DEFENDER" },
-  { label: "中场", value: "MIDFIELDER" },
-  { label: "前锋", value: "FORWARD" }
+  { label: "GKP", value: "GOALKEEPER" },
+  { label: "DEF", value: "DEFENDER" },
+  { label: "MID", value: "MIDFIELDER" },
+  { label: "FWD", value: "FORWARD" }
 ];
 
 function formatPickerDate(date = new Date()): string {
@@ -147,11 +308,32 @@ Page({
     hasMorePlayers: false,
     riseChanges: [],
     fallChanges: [],
-    historyRows: []
+    historyRows: [],
+    pulseLoaded: false,
+    pulseError: "",
+    coverageText: "",
+    pulseStale: false,
+    glanceTiles: [],
+    mostSelectedRows: [],
+    ownershipRiserRows: [],
+    ownershipFallerRows: [],
+    transferRows: [],
+    availabilityRows: [],
+    availabilityUpdateCount: 0,
+    availabilityExpanded: false,
+    availabilityLoading: false,
+    newPlayerRows: [],
+    shareCopied: false,
+    shareSheetOpen: false,
+    shareText: ""
   } as PricePageData,
+
+  pulseData: null as MarketPulse | null,
+  pulseRevision: 0,
 
   playerRequestRevision: 0,
   playerSearchTimer: undefined as number | undefined,
+  teamDirectory: [] as TeamDirectoryItem[],
   dailyRequestOwner: {} as object,
   perfTracker: undefined as PagePerformanceTracker | undefined,
   pageActive: false,
@@ -365,6 +547,7 @@ Page({
   },
 
   async loadDailyChanges(forceRefresh = false): Promise<void> {
+    void this.loadMarketPulse(forceRefresh);
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
     this.dailyRequestForceRefresh = forceRefresh;
     const changeDate = this.data.changeDate;
@@ -413,6 +596,7 @@ Page({
           : ""
       });
       tracker?.mark("primarySetDataAt");
+      this.rebuildGlanceTiles();
       wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
     } catch (error) {
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
@@ -422,6 +606,119 @@ Page({
       if (this.pageActive && isCurrentRevision(this.dailyRequestOwner, "daily", revision)) {
         this.setData({ loading: false, refreshing: false });
         this.dailyRequestForceRefresh = false;
+      }
+    }
+  },
+
+  /** Latest market snapshot sections (web /explore/market) — date-picker independent. */
+  async loadMarketPulse(forceRefresh = false): Promise<void> {
+    const revision = ++this.pulseRevision;
+    try {
+      const pulse = await getMarketPulse(forceRefresh);
+      if (!this.pageActive || revision !== this.pulseRevision) return;
+      this.pulseData = pulse;
+      this.setData({
+        ...buildPulseView(pulse),
+        pulseLoaded: true,
+        pulseError: "",
+        availabilityUpdateCount: pulse.availabilityUpdateCount,
+        availabilityExpanded: false
+      });
+      this.rebuildGlanceTiles();
+    } catch (error) {
+      if (!this.pageActive || revision !== this.pulseRevision) return;
+      this.setData({ pulseError: error instanceof Error ? error.message : "市场动态加载失败" });
+    }
+  },
+
+  /** Glance strip: board counts (picked date) + top ownership movers (snapshot). */
+  rebuildGlanceTiles() {
+    const tiles: GlanceTile[] = [
+      {
+        key: "rise",
+        label: "上涨",
+        valueText: String(this.data.riseChanges.length),
+        subText: this.data.changeDate,
+        tone: "good"
+      },
+      {
+        key: "fall",
+        label: "下跌",
+        valueText: String(this.data.fallChanges.length),
+        subText: this.data.changeDate,
+        tone: "bad"
+      }
+    ];
+    const topRiser = this.pulseData?.ownershipRisers[0];
+    const topFaller = this.pulseData?.ownershipFallers[0];
+    if (topRiser) {
+      tiles.push({
+        key: "hot",
+        label: "持有最热",
+        valueText: topRiser.player.webName,
+        subText: `${signedPercent(topRiser.change)} → ${topRiser.selectedByPercent.toFixed(1)}%`,
+        tone: "good"
+      });
+    }
+    if (topFaller) {
+      tiles.push({
+        key: "cold",
+        label: "持有最冷",
+        valueText: topFaller.player.webName,
+        subText: `${signedPercent(topFaller.change)} → ${topFaller.selectedByPercent.toFixed(1)}%`,
+        tone: "bad"
+      });
+    }
+    this.setData({ glanceTiles: tiles });
+  },
+
+  /** Web: clicking a price-change row opens that player's history panel. */
+  onPriceRowTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { direction: string; index: number }>) {
+    const { direction, index } = event.currentTarget.dataset;
+    const list = direction === "rise" ? this.data.riseChanges : this.data.fallChanges;
+    const change = list[Number(index)];
+    if (!change?.element) return;
+    const player: PlayerOption = {
+      element: change.element,
+      name: change.name || change.playerName || "-",
+      team: change.team,
+      teamName: change.teamName,
+      position: change.position,
+      priceText: change.newPriceText || ""
+    };
+    this.setData({
+      activeMode: "player",
+      selectedPlayer: player,
+      playerListVisible: false,
+      historyRows: [],
+      historyError: ""
+    });
+    this.loadSelectedPlayerHistory(player.element);
+    void this.ensurePlayerModeReady();
+  },
+
+  /** 伤情动态 disclosure — highlights first, full availabilityUpdates on demand (web pattern). */
+  async onAvailabilityExpand() {
+    if (this.data.availabilityLoading) return;
+    if (this.data.availabilityExpanded) {
+      const highlights = (this.pulseData?.availabilityHighlights ?? []).map(mapAvailabilityRow);
+      this.setData({ availabilityExpanded: false, availabilityRows: highlights });
+      return;
+    }
+    this.setData({ availabilityLoading: true });
+    try {
+      const items = await getMarketAvailability();
+      if (!this.pageActive) return;
+      this.setData({
+        availabilityRows: items.map(mapAvailabilityRow),
+        availabilityExpanded: true
+      });
+    } catch {
+      if (!this.pageActive) return;
+      wx.showToast({ title: "伤情列表加载失败", icon: "none" });
+    } finally {
+      if (this.pageActive) {
+        this.setData({ availabilityLoading: false });
       }
     }
   },
@@ -448,6 +745,7 @@ Page({
       const season = context.season;
       const teams = await getTeamList(season, forceRefresh, trace) as TeamDirectoryItem[];
       if (!this.pageActive || this.perfTracker !== tracker) return;
+      this.teamDirectory = teams;
       const teamOptions: FilterOption[] = [
         { label: "全部球队", value: ALL_VALUE },
         ...teams
@@ -535,9 +833,16 @@ Page({
       : { playerLoading: true, playersError: "" });
 
     try {
+      // Team keyword → squad listing. An explicit team picker choice wins.
+      const keyword = this.data.playerKeyword.trim();
+      const teamSearchId = keyword && this.data.teamFilter === ALL_VALUE
+        ? resolveTeamSearchId(keyword, this.teamDirectory)
+        : null;
+      const filter: PlayerPickerFilter = this.pickerFilter() || {};
+      if (teamSearchId !== null) filter.teamId = teamSearchId;
       const page = await getPlayersForPickerPage({
-        search: this.data.playerKeyword,
-        filter: this.pickerFilter(),
+        search: teamSearchId !== null ? "" : this.data.playerKeyword,
+        filter: Object.keys(filter).length ? filter : undefined,
         limit: 50,
         cursor,
         forceRefresh
@@ -749,5 +1054,34 @@ Page({
         this.playerRefreshPending = false;
       }
     }
+  },
+
+  onCopyShare() {
+    try {
+      if (this.data.riseChanges.length === 0 && this.data.fallChanges.length === 0) {
+        wx.showToast({ title: "当日还没有可分享的调价", icon: "none" });
+        return;
+      }
+      const text = formatPriceMovementShareText({
+        changeDate: this.data.changeDate,
+        rises: this.data.riseChanges,
+        falls: this.data.fallChanges
+      });
+      void copyShareText(text).then((ok) => {
+        if (ok) {
+          this.setData({ shareCopied: true, shareSheetOpen: false });
+          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      });
+    } catch (error) {
+      console.error("[copy-share] price", error);
+      wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   }
 });

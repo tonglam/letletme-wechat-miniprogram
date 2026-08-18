@@ -1,0 +1,20 @@
+<view wx:if="{{show}}" class="pd-root">
+  <view class="pd-mask" catchtouchmove="onNoop"></view>
+  <view class="pd-card" catchtap="onNoop">
+    <view class="pd-title">隐私保护提示</view>
+    <view class="pd-body">
+      使用复制分享等功能前，请阅读并同意
+      <text class="pd-link" bindtap="onOpenContract">{{privacyContractName}}</text>
+      。我们会读取剪切板，用于把实时积分和赛事榜单复制到你的设备，方便你分享。
+    </view>
+    <view class="pd-actions">
+      <button class="btn-secondary pd-btn" bindtap="onDisagree">拒绝</button>
+      <button
+        id="privacy-agree-btn"
+        class="btn-primary pd-btn"
+        open-type="agreePrivacyAuthorization"
+        bindagreeprivacyauthorization="onAgree"
+      >同意</button>
+    </view>
+  </view>
+</view>

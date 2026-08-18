@@ -1,6 +1,0 @@
-{
-  "navigationBarTitleText": "探索",
-  "usingComponents": {
-    "filter-bar": "../../../components/filter-bar/filter-bar"
-  }
-}

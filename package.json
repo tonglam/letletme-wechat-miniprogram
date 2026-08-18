@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/**/*.test.mjs tests/**/*.test.ts",
     "check:style": "node scripts/check-style-drift.mjs",
+    "assets:squad-pitch": "node scripts/convert-squad-pitch-assets.mjs",
     "package:check": "npm pack --dry-run",
     "prune:vant": "node scripts/prune-vant.mjs"
   },
@@ -21,6 +22,7 @@
   "license": "ISC",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "eslint": "^10.2.1",
     "miniprogram-api-typings": "^2.8.3-1",
     "tsx": "^4.21.0",

@@ -1,3 +1,81 @@
+/* Browse filters — same language as the market picker card. */
+.browse-card {
+  padding-top: 18rpx;
+  padding-bottom: 14rpx;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
+}
+
+.filter-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 12rpx;
+}
+
+.filter-picker {
+  height: 72rpx;
+  padding: 0 16rpx;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
+  color: var(--ink);
+  font-size: 22rpx;
+  line-height: 72rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.filter-sort {
+  display: flex;
+  min-width: 0;
+  gap: 8rpx;
+}
+
+.filter-sort picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-dir {
+  flex-shrink: 0;
+  height: 72rpx;
+  padding: 0 14rpx;
+  border-radius: 14rpx;
+  background: var(--track);
+  color: var(--ink);
+  font-size: 22rpx;
+  line-height: 72rpx;
+  box-sizing: border-box;
+}
+
+/* Web parity: a name search suspends the browse filters. */
+.filter-disabled {
+  opacity: 0.45;
+}
+
+.browse-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 14rpx;
+}
+
+.browse-hint {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.browse-reset {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .result-summary {
   margin-bottom: 16rpx;
   color: var(--muted-ink);
@@ -8,13 +86,198 @@
   margin-top: 18rpx;
 }
 
-.load-more-button {
-  margin: 20rpx auto 0;
+.load-more {
+  padding: 24rpx 0 8rpx;
+  text-align: center;
 }
 
 .list-end {
   padding: 24rpx 0 8rpx;
   color: var(--muted-ink);
   font-size: 22rpx;
+  text-align: center;
+}
+
+/* ---------- 双球员对比(web player-stats 选择面板 v1) ---------- */
+
+.compare-panel {
+  padding-top: 18rpx;
+  padding-bottom: 18rpx;
+}
+
+.compare-slots {
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.compare-slot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 88rpx;
+  padding: 14rpx 18rpx;
+  border: 1rpx solid transparent;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+.compare-slot-armed {
+  border-color: var(--green-ink-a40);
+  background: var(--accent-tint);
+}
+
+.compare-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx dashed var(--line);
+  background: transparent;
+}
+
+.compare-add-disabled {
+  opacity: 0.5;
+}
+
+.compare-vs {
+  align-self: center;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.slot-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-meta {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.slot-placeholder {
+  color: var(--muted-ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.slot-hint {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+.slot-clear {
+  position: absolute;
+  top: 8rpx;
+  right: 14rpx;
+  color: var(--muted-ink);
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.compare-error-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.compare-error-text {
+  color: var(--danger);
+  font-size: 22rpx;
+}
+
+.compare-cards {
+  display: flex;
+  gap: 12rpx;
+}
+
+.compare-player {
+  flex: 1;
+  min-width: 0;
+  padding: 16rpx 18rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+.compare-player-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-player-meta {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.compare-player-price {
+  margin-top: 10rpx;
+  color: var(--ink);
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.compare-player-own {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.compare-note {
+  margin-top: 14rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.compare-group {
+  margin-top: 18rpx;
+}
+
+.compare-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.compare-row:last-child {
+  border-bottom: 0;
+}
+
+.compare-value {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.compare-value-b {
+  text-align: right;
+}
+
+.compare-win {
+  color: var(--green-ink);
+  font-weight: 800;
+}
+
+.compare-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
   text-align: center;
 }

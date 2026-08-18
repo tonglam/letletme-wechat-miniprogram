@@ -37,7 +37,11 @@ const GET_ENTRY_LEAGUES = `
     entryLeagues(entryId: $entryId) {
       id
       name
+      type
+      officialKind
+      shortName
       startedEvent
+      entryRank
     }
   }
 `;
@@ -81,7 +85,11 @@ interface EntryLeaguesResponse {
   entryLeagues: Array<{
     id: number;
     name: string;
+    type?: string | null;
+    officialKind?: string | null;
+    shortName?: string | null;
     startedEvent?: number | null;
+    entryRank?: number | null;
   }>;
 }
 
@@ -164,7 +172,16 @@ export async function getEntryLeagueInfo(
   });
   return (data.entryLeagues || []).map((league) => ({
     id: league.id,
-    name: league.name
+    name: league.name,
+    rank: league.entryRank ?? undefined,
+    officialKind:
+      league.officialKind === "SYSTEM" ||
+      league.officialKind === "INVITATIONAL" ||
+      league.officialKind === "PUBLIC"
+        ? league.officialKind
+        : undefined,
+    type: league.type ?? undefined,
+    shortName: league.shortName ?? undefined
   }));
 }
 

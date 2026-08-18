@@ -1,0 +1,27 @@
+<view class="page page-tabbar">
+  <view id="perf-primary-content" class="section">
+    <view class="me-strip" bindtap="onGoEntrySearch" hover-class="hover-dim">
+      <view class="me-strip-main">
+        <view class="me-strip-kicker">ENTRY ID{{hasEntry ? ' · #' + entryId : ''}}</view>
+        <view class="me-strip-title">更换球队</view>
+      </view>
+      <text class="action">去更换 ›</text>
+    </view>
+    <view class="me-strip" bindtap="onGoAccountLink" hover-class="hover-dim">
+      <view class="me-strip-main">
+        <view class="me-strip-kicker">网页版账户</view>
+        <view class="me-strip-title">关联账户</view>
+      </view>
+      <text class="action">去关联 ›</text>
+    </view>
+    <view class="me-strip" bindtap="onOpenWebsite" hover-class="hover-dim">
+      <view class="me-strip-main">
+        <view class="me-strip-kicker">LETLETME.TOP</view>
+        <view class="me-strip-title">访问网页版</view>
+      </view>
+      <text class="action">复制链接 ›</text>
+    </view>
+  </view>
+
+  <bottomNavBar active="me" />
+</view>

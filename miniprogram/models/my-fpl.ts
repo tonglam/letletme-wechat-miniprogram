@@ -42,9 +42,7 @@ export interface MyFplTeamBrief {
 }
 
 /**
- * Official-league list row. The current EntryLeagues query returns id/name
- * only; viewerRank and associationCount are backend-gated additive fields
- * (plan §10) and stay absent until the contract ships them.
+ * Official-league list row. viewerRank is populated from EntryLeagues.entryRank.
  */
 export interface MyFplLeagueBrief {
   id: number;

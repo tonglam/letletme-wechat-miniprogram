@@ -2,8 +2,10 @@ import type { EntryTransfer } from "../../../models/entry";
 import { formatPrice } from "../../../utils/fpl";
 
 export interface TransferRow {
-  inText: string;
-  outText: string;
+  inName: string;
+  inTeam: string;
+  outName: string;
+  outTeam: string;
   priceText: string;
 }
 
@@ -28,8 +30,10 @@ export function normalizeTransfer(transfer: EntryTransfer): TransferRow {
   const price = numberValue(raw.cost ?? raw.transferCost);
 
   return {
-    inText: inTeam ? `【${inTeam}】${inName}` : inName,
-    outText: outTeam ? `【${outTeam}】${outName}` : outName,
+    inName,
+    inTeam,
+    outName,
+    outTeam,
     priceText: formatPrice(price)
   };
 }

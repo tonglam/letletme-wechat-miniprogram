@@ -17,6 +17,38 @@
   line-height: 1.45;
 }
 
+.current-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 22rpx 28rpx;
+}
+
+.current-main {
+  min-width: 0;
+}
+
+.current-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.current-id {
+  margin-top: 4rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.current-unbind {
+  flex-shrink: 0;
+  color: var(--danger);
+}
+
 .lookup-card,
 .preview-card {
   padding: 28rpx;
@@ -32,9 +64,9 @@
 .input-shell {
   height: 88rpx;
   padding: 0 24rpx;
-  background: var(--card);
-  border: 1rpx solid var(--line);
-  border-radius: 12rpx;
+  background: var(--track);
+  border: 0;
+  border-radius: 14rpx;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -109,28 +141,8 @@
   font-weight: 700;
 }
 
-/* Primary CTA — pitch green, plum text (web primary button) */
-.primary-button {
+.search-button {
   margin: 28rpx 0 0;
-  width: 100%;
-  height: 88rpx;
-  line-height: 88rpx;
-  border-radius: 12rpx;
-  background: var(--cta);
-  color: var(--cta-ink);
-  font-size: 28rpx;
-  font-weight: 800;
-  padding: 0;
-}
-
-.primary-button[disabled] {
-  background: var(--cta-a45);
-  color: var(--cta-ink);
-  opacity: 1;
-}
-
-.primary-button::after {
-  border: 0;
 }
 
 .preview-title {
@@ -186,7 +198,4 @@
   min-height: 64rpx;
   box-sizing: border-box;
   text-align: center;
-  color: var(--green-ink);
-  font-size: 24rpx;
-  font-weight: 700;
 }

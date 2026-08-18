@@ -3,14 +3,22 @@ import { getEntryInfo } from "../../../services/entry.service";
 import type { EntryInfo } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
-import { clearEntryScopedStorage, setEntryId } from "../../../utils/storage";
+import { clearEntryId, clearEntryScopedStorage, setEntryId } from "../../../utils/storage";
 import { commitEntryBinding } from "../../../services/app-context.service";
+
+/** Same contract as the web bind-entry form: a pasted FPL URL yields its ID. */
+function extractEntryId(raw: string): string {
+  const urlMatch = raw.match(/\/entry\/(\d+)/);
+  return urlMatch ? urlMatch[1] : raw.trim();
+}
 
 interface EntrySearchData {
   manualEntryId: string;
   loading: boolean;
   error: string;
   buttonText: string;
+  hasEntry: boolean;
+  currentEntryId: number;
   hasPreview: boolean;
   previewEntryId: number;
   previewTitle: string;
@@ -26,6 +34,8 @@ PerformancePage({
     loading: false,
     error: "",
     buttonText: "查找球队",
+    hasEntry: false,
+    currentEntryId: 0,
     hasPreview: false,
     previewEntryId: 0,
     previewTitle: "",
@@ -37,10 +47,21 @@ PerformancePage({
 
   lookupRequestId: 0,
 
+  onShow() {
+    this.syncCurrentEntry();
+  },
+
+  syncCurrentEntry() {
+    const entryId = Number(getApp<IAppOption>().globalData.entryId) || 0;
+    this.setData({ hasEntry: entryId > 0, currentEntryId: entryId });
+  },
+
   onManualEntryInput(event: WechatMiniprogram.Input) {
     this.lookupRequestId += 1;
+    const raw = String(event.detail.value || "");
+    const extracted = extractEntryId(raw);
     this.setData({
-      manualEntryId: event.detail.value,
+      manualEntryId: extracted,
       loading: false,
       buttonText: "查找球队",
       error: "",
@@ -59,9 +80,9 @@ PerformancePage({
   },
 
   async onLookupEntry() {
-    const entryId = Number(this.data.manualEntryId);
+    const entryId = Number(extractEntryId(this.data.manualEntryId));
     if (!Number.isInteger(entryId) || entryId <= 0) {
-      this.setData({ error: "请输入有效的 Entry ID" });
+      this.setData({ error: "请输入有效的参赛 ID" });
       return;
     }
     const requestId = ++this.lookupRequestId;
@@ -90,7 +111,7 @@ PerformancePage({
         return;
       }
       this.setData({
-        error: error instanceof Error ? error.message : "无法找到该 Entry ID 对应的球队"
+        error: error instanceof Error ? error.message : "无法找到该参赛 ID 对应的球队"
       });
     } finally {
       if (requestId === this.lookupRequestId) {
@@ -113,10 +134,34 @@ PerformancePage({
     }
     setEntryId(entryId);
     commitEntryBinding(entryId, "rebind");
+    this.setData({ hasEntry: true, currentEntryId: entryId });
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.
     setTimeout(() => wx.reLaunch({ url: routes.home }), 800);
+  },
+
+  onUnbind() {
+    const entryId = this.data.currentEntryId;
+    wx.showModal({
+      title: "解除绑定？",
+      content: `将解除与球队 #${entryId} 的绑定，首页会回到未绑定状态。`,
+      confirmText: "解除绑定",
+      confirmColor: "#c9183f",
+      success: ({ confirm }) => {
+        if (!confirm) return;
+        clearEntryScopedStorage();
+        clearEntryId();
+        commitEntryBinding(null, "rebind");
+        this.setData({
+          hasEntry: false,
+          currentEntryId: 0,
+          hasPreview: false,
+          isCurrentEntry: false
+        });
+        wx.showToast({ title: "已解除绑定", icon: "success" });
+      }
+    });
   },
 
   onGoAccountLink() {

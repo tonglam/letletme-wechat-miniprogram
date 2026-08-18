@@ -6,13 +6,16 @@ export const PLAYERS_FOR_PICKER_QUERY = `
   query PlayersForPicker(
     $search: String
     $filter: PlayersFilter
+    $sort: PlayerPickerSort
+    $ownershipBand: PlayerPickerOwnershipBand
     $limit: Int!
     $cursor: Int
   ) {
     playersForPicker(
       search: $search
       filter: $filter
-      sort: NAME_ASC
+      sort: $sort
+      ownershipBand: $ownershipBand
       limit: $limit
       cursor: $cursor
     ) {
@@ -22,6 +25,9 @@ export const PLAYERS_FOR_PICKER_QUERY = `
         team { name shortName }
         position
         price
+        selectedByPercent
+        totalPoints
+        form
       }
       nextCursor
       totalCount
@@ -97,6 +103,9 @@ interface GraphQLPickerPlayer {
   team: { name: string; shortName: string };
   position: string;
   price: number;
+  selectedByPercent?: number | null;
+  totalPoints?: number | null;
+  form?: number | null;
 }
 
 interface PlayersForPickerResponse {
@@ -152,9 +161,24 @@ export interface PlayerPickerFilter {
   maxPrice?: number;
 }
 
+/** Backend PlayerPickerSort enum (players/schema.ts). NAME_ASC preserves legacy caller behavior. */
+export type PlayerPickerSort =
+  | "AUTO"
+  | "NAME_ASC"
+  | "TOTAL_POINTS_DESC"
+  | "FORM_DESC"
+  | "PRICE_ASC"
+  | "PRICE_DESC"
+  | "OWNERSHIP_DESC";
+
+/** Backend PlayerPickerOwnershipBand enum (players/schema.ts). */
+export type PlayerPickerOwnershipBand = "LE5" | "GT5_LE15" | "GT15_LE40" | "GT40";
+
 export interface PlayerPickerPageOptions {
   search?: string;
   filter?: PlayerPickerFilter;
+  sort?: PlayerPickerSort;
+  ownershipBand?: PlayerPickerOwnershipBand;
   limit?: number;
   cursor?: number | null;
   forceRefresh?: boolean;
@@ -209,7 +233,10 @@ function mapPickerPlayer(player: GraphQLPickerPlayer): PlayerOption {
     teamName: player.team.name,
     position: positionLabel(player.position),
     price: player.price,
-    priceText: formatPrice(player.price)
+    priceText: formatPrice(player.price),
+    totalPoints: typeof player.totalPoints === "number" ? player.totalPoints : undefined,
+    form: typeof player.form === "number" ? player.form : undefined,
+    selectedByPercent: typeof player.selectedByPercent === "number" ? player.selectedByPercent : undefined
   };
 }
 
@@ -232,6 +259,8 @@ export async function getPlayersForPickerPage(
   const variables = {
     search: search || null,
     filter,
+    sort: options.sort || "NAME_ASC",
+    ownershipBand: options.ownershipBand || null,
     limit,
     cursor: options.cursor ?? null
   };
@@ -252,6 +281,120 @@ export async function getPlayersForPickerPage(
     nextCursor: page?.nextCursor ?? null,
     totalCount: Number(page?.totalCount) || 0
   };
+}
+
+const PLAYER_STATS_DESK_QUERY = `
+  query MiniPlayerStatsDesk($playerIds: [Int!]!, $eventId: Int!, $horizon: Int!) {
+    playerStatsDesk(playerIds: $playerIds, eventId: $eventId, horizon: $horizon) {
+      eventId
+      entries {
+        playerId
+        overview {
+          id
+          webName
+          teamShortName
+          elementType
+          elementTypeName
+          price
+          startPrice
+          totalPoints
+          selectedByPercent
+          form
+          seasonTransfersIn
+          seasonTransfersOut
+          transfersInEvent
+          transfersOutEvent
+          minutes
+          starts
+          goalsScored
+          assists
+          cleanSheets
+          bonus
+          bps
+          expectedGoals
+          expectedAssists
+          expectedGoalInvolvements
+        }
+        evidence {
+          ictIndex
+        }
+      }
+    }
+  }
+`;
+
+/** Overview payload for one desk entry — prices are £ floats (not tenths). */
+export interface PlayerStatsDeskOverview {
+  id: number;
+  webName: string;
+  teamShortName: string;
+  elementType: number;
+  elementTypeName: string;
+  price: number;
+  startPrice: number;
+  totalPoints?: number | null;
+  selectedByPercent?: number | null;
+  form?: number | null;
+  seasonTransfersIn?: number | null;
+  seasonTransfersOut?: number | null;
+  transfersInEvent?: number | null;
+  transfersOutEvent?: number | null;
+  minutes?: number | null;
+  starts?: number | null;
+  goalsScored?: number | null;
+  assists?: number | null;
+  cleanSheets?: number | null;
+  bonus?: number | null;
+  bps?: number | null;
+  expectedGoals?: number | null;
+  expectedAssists?: number | null;
+  expectedGoalInvolvements?: number | null;
+}
+
+export interface PlayerStatsDeskEntry {
+  playerId: number;
+  overview: PlayerStatsDeskOverview | null;
+  /** Lifted out of evidence — the only evidence field the compare view uses. */
+  ictIndex?: number | null;
+}
+
+interface PlayerStatsDeskResponse {
+  playerStatsDesk: {
+    eventId: number;
+    entries?: Array<{
+      playerId: number;
+      overview?: PlayerStatsDeskOverview | null;
+      evidence?: { ictIndex?: number | null } | null;
+    }>;
+  };
+}
+
+/** Two-player compare desk (web playerStatsDesk, max 2 ids). */
+export async function getPlayerStatsDesk(
+  playerIds: number[],
+  eventId: number,
+  horizon = 5,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<PlayerStatsDeskEntry[]> {
+  const ids = playerIds.map(Number).filter(Number.isSafeInteger).slice(0, 2);
+  if (!ids.length || !Number.isSafeInteger(eventId) || eventId <= 0) return [];
+  const data = await graphqlRequest<PlayerStatsDeskResponse>(
+    PLAYER_STATS_DESK_QUERY,
+    { playerIds: ids, eventId, horizon },
+    {
+      authMode: "public",
+      cachePolicy: "player-picker",
+      cacheVariant: `season:${currentSeason()}`,
+      forceRefresh,
+      trace
+    }
+  );
+  return (data.playerStatsDesk?.entries || []).map((entry) => ({
+    playerId: entry.playerId,
+    overview: entry.overview || null,
+    ictIndex: entry.evidence?.ictIndex ?? null
+  }));
 }
 
 export async function getPlayerInfoByElement(element: number): Promise<PlayerDetail> {

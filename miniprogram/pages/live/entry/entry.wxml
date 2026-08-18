@@ -1,16 +1,13 @@
 <view class="page page-tabbar">
-  <view class="section">
-    <view class="row">
-      <view>
-        <view class="title">实时球队</view>
-        <view class="subtitle">Entry #{{entryId || '-'}}{{viewOnly ? ' · 查看模式' : ''}}</view>
-      </view>
-      <gw-picker wx:if="{{!emptyState}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
-    </view>
+  <view wx:if="{{viewOnly}}" class="section">
+    <view class="subtitle">查看模式</view>
   </view>
 
-  <view wx:if="{{!emptyState}}" class="section status-section">
-    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
+  <view wx:if="{{!emptyState}}" class="section live-toolbar">
+    <view class="live-toolbar-status">
+      <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
+    </view>
+    <gw-picker compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
   </view>
 
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">
@@ -41,8 +38,16 @@
     <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" class="section live-summary">
       <view class="score-card scoreboard">
-        <view class="score-label">实时总分</view>
-        <view class="score">{{total}}</view>
+        <view class="score-top">
+          <view class="score-identity">
+            <view class="score-team"><text user-select="{{true}}">{{entryName || '我的球队'}}</text></view>
+            <view wx:if="{{playerName}}" class="score-manager"><text user-select="{{true}}">{{playerName}}</text></view>
+          </view>
+          <view class="score-hero">
+            <view class="score-label">实时总分</view>
+            <view class="score">{{total}}</view>
+          </view>
+        </view>
         <view class="score-sub">更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
       </view>
       <view class="summary-grid">
@@ -56,11 +61,11 @@
     <view class="section card info-card">
       <view class="info-item">
         <view class="score-label">队长</view>
-        <view class="info-value">{{captainText}}</view>
+        <view class="info-value"><text user-select="{{true}}">{{captainText}}</text></view>
       </view>
       <view class="info-item">
         <view class="score-label">开卡</view>
-        <view class="info-value">{{chipText}}</view>
+        <view class="info-value"><text user-select="{{true}}">{{chipText}}</text></view>
       </view>
       <view class="info-item">
         <view class="score-label">已上场</view>
@@ -68,8 +73,36 @@
       </view>
     </view>
 
-    <view class="section card">
-      <view class="section-heading">阵容</view>
+    <view wx:if="{{pitchPlayers.length}}" class="section live-pitch-section">
+      <view class="live-pitch-bar">
+        <text class="live-pitch-label">阵容图</text>
+        <view
+          class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+          bindtap="onSharePitch"
+          hover-class="hover-dim"
+        >
+          <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+        </view>
+      </view>
+      <squad-pitch
+        id="live-squad-pitch"
+        players="{{pitchPlayers}}"
+        benchPlayers="{{pitchBench}}"
+        header="{{pitchHeader}}"
+        benchBoost="{{pitchBenchBoost}}"
+        bind:playertap="onPitchPlayerTap"
+      />
+    </view>
+
+    <view class="section card lineup-card">
+      <view class="lineup-head">
+        <view class="section-heading">阵容</view>
+        <view wx:if="{{hasData}}" class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+          <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+          <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+          <text class="tool-label">{{shareCopied ? '已复制' : '分享'}}</text>
+        </view>
+      </view>
       <app-empty-state
         wx:if="{{starters.length === 0 && bench.length === 0 && managers.length === 0}}"
         title="GW{{event}} 阵容还没公布"
@@ -77,32 +110,42 @@
         actionText="重新加载"
         bind:action="onRetry"
       />
-      <player-row wx:for="{{starters}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" />
+      <player-row wx:for="{{starters}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+      <block wx:if="{{bench.length > 0}}">
+        <view class="section-heading bench-heading">替补</view>
+        <player-row wx:for="{{bench}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+      </block>
     </view>
 
-    <view wx:if="{{bench.length > 0}}" class="section card">
-      <view class="section-heading">替补</view>
-      <player-row wx:for="{{bench}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" />
-    </view>
-
-    <view wx:if="{{managers.length > 0}}" class="section card">
+    <view wx:if="{{managers.length > 0}}" class="section card lineup-card">
       <view class="section-heading">教练</view>
-      <player-row wx:for="{{managers}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" />
+      <player-row wx:for="{{managers}}" wx:key="element" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
     </view>
 
-    <view class="section card">
+    <view class="section card lineup-card">
       <view class="section-heading">本周转会{{transfersLoading && transfers.length > 0 ? ' · 刷新中' : ''}}</view>
       <app-loading wx:if="{{transfersLoading && transfers.length === 0}}" text="加载本周转会" />
       <app-error-state wx:elif="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{transfers.length === 0}}" title="本周保持原阵容" description="GW{{event}} 没有转会记录" />
-      <view wx:for="{{transfers}}" wx:key="inText" class="transfer-row">
-        <view>
-          <view class="transfer-in">转入 {{item.inText}}</view>
-          <view class="transfer-out">转出 {{item.outText}}</view>
+      <view wx:for="{{transfers}}" wx:key="inName" class="swap-row">
+        <view class="swap-side">
+          <text class="swap-kicker">转出</text>
+          <text class="swap-name" user-select="{{true}}">{{item.outName}}</text>
+          <text wx:if="{{item.outTeam}}" class="swap-team">{{item.outTeam}}</text>
         </view>
-        <text class="transfer-price">{{item.priceText}}</text>
+        <view class="swap-mid">
+          <view class="swap-mark"></view>
+          <text class="swap-price">{{item.priceText}}</text>
+        </view>
+        <view class="swap-side swap-in">
+          <text class="swap-kicker">转入</text>
+          <text class="swap-name" user-select="{{true}}">{{item.inName}}</text>
+          <text wx:if="{{item.inTeam}}" class="swap-team">{{item.inTeam}}</text>
+        </view>
       </view>
     </view>
   </block>
+  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

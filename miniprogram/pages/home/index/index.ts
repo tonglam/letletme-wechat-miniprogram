@@ -1,15 +1,24 @@
 import {
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
-import { getEntryInfo } from "../../../services/entry.service";
+import { getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.service";
+import type { EntryLeague } from "../../../models/entry";
 import { getApiSessionToken } from "../../../services/auth.service";
-import { getMiniHomeSupplement } from "../../../services/home.service";
+import {
+  getMiniHomeMarket,
+  getMiniHomeSupplement
+} from "../../../services/home.service";
+import type {
+  HomeAvailabilityRow,
+  HomeMarketMover,
+  MiniHomeMarketMode
+} from "../../../services/home.service";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { PlayerValue } from "../../../models/player";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
-import { goToEntryProfile, goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { formatPrice } from "../../../utils/fpl";
@@ -35,31 +44,43 @@ interface HomeData {
   gameweekStatsError: string;
   supplementLoading: boolean;
   entry: EntryInfo;
-  fixtureRows: HomeFixtureRow[];
-  priceRises: HomePriceChangeRow[];
-  priceFalls: HomePriceChangeRow[];
+  leagues: EntryLeague[];
+  fixtureDays: HomeFixtureDay[];
+  selectedFixtureDayKey: string;
+  selectedDayRows: HomeFixtureMatch[];
+  fixtureCount: number;
   gameweekStats: HomeStatRow[];
-  noticeText: string;
-  noticeClosed: boolean;
+  marketMode: MiniHomeMarketMode;
+  marketCoverage: string;
+  marketLeadTitle: string;
+  marketLeadRows: HomeMarketMover[];
+  marketRisers: HomeMarketMover[];
+  marketFallers: HomeMarketMover[];
+  availabilityRows: HomeAvailabilityRow[];
   gw: number;
+  currentGw: number;
   nextGw: number;
   selectedFixtureGw: number;
   minFixtureGw: number;
   deadline: string;
   utcDeadline: string;
   countdown: CountdownParts;
+  noticeText: string;
+  noticeClosed: boolean;
 }
 
-interface HomeFixtureRow {
+export interface HomeFixtureMatch {
   id: string;
   homeName: string;
   awayName: string;
-  kickoffTime: string;
-  kickoffLabel: string;
-  homeDifficulty?: number;
-  awayDifficulty?: number;
-  teamId?: number | string;
-  againstTeamId?: number | string;
+  centerLabel: string;
+  finished: boolean;
+}
+
+export interface HomeFixtureDay {
+  dateKey: string;
+  tabLabel: string;
+  rows: HomeFixtureMatch[];
 }
 
 interface HomePriceChangeRow {
@@ -80,6 +101,7 @@ interface HomeStatRow {
 
 const HOME_REVALIDATE_MS = 60 * 1000;
 const HOME_DEADLINE_RETRY_MS = 60 * 1000;
+export const NOTICE_AUTO_CLOSE_MS = 5 * 1000;
 
 export function shouldReloadHome(
   lastLoadAt: number,
@@ -115,22 +137,33 @@ Page({
     gameweekStatsError: "",
     supplementLoading: false,
     entry: {},
-    fixtureRows: [],
-    priceRises: [],
-    priceFalls: [],
+    leagues: [],
+    fixtureDays: [],
+    selectedFixtureDayKey: "",
+    selectedDayRows: [],
+    fixtureCount: 0,
     gameweekStats: [],
-    noticeText: "",
-    noticeClosed: false,
+    marketMode: "empty",
+    marketCoverage: "最近 14 天最值得关注的信号",
+    marketLeadTitle: "最新真实身价变化",
+    marketLeadRows: [],
+    marketRisers: [],
+    marketFallers: [],
+    availabilityRows: [],
     gw: 0,
+    currentGw: 0,
     nextGw: 0,
     selectedFixtureGw: 0,
     minFixtureGw: 0,
     deadline: "",
     utcDeadline: "",
-    countdown: formatCountdown(0)
+    countdown: formatCountdown(0),
+    noticeText: "",
+    noticeClosed: false
   } as HomeData,
 
   countdownTimer: undefined as number | undefined,
+  noticeTimer: undefined as number | undefined,
   _initialLoadDone: false,
   _lastLoadAt: 0,
   _loadRequestId: 0,
@@ -261,6 +294,7 @@ Page({
     this._fixtureGwRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
+    this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -274,6 +308,7 @@ Page({
     this._loadRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
+    this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -305,7 +340,7 @@ Page({
       const fixtureRequestStartedAt = Date.now();
       const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
       const currentGw = app.globalData.gw;
-      const hadFixtureRows = this.data.fixtureRows.length > 0 && this.data.selectedFixtureGw === fixtureGw;
+      const hadFixtureRows = this.data.fixtureCount > 0 && this.data.selectedFixtureGw === fixtureGw;
       await this.syncAppState({
         loading: !this._initialLoadDone && !hadFixtureRows,
         fixtureLoading: !hadFixtureRows,
@@ -375,7 +410,7 @@ Page({
         this.setData({
           ...(fixtureResult.fixtures === null
             ? {}
-            : { fixtureRows: fixtureResult.fixtures.map(mapFixtureRow) }),
+            : fixtureDeskState(fixtureResult.fixtures)),
           fixtureError,
           fixtureStaleMessage: staleMessage,
           fixtureStoredAt: fixtureResult.fixtures === null
@@ -390,7 +425,7 @@ Page({
           const fixtureSetDataCallbackAt = Date.now();
           recordRenderCommit({
             surface: "home-fixtures",
-            itemCount: this.data.fixtureRows.length,
+            itemCount: this.data.fixtureCount,
             duration: fixtureSetDataCallbackAt - fixtureCommitStartedAt
           });
           recordHomeFixtureTiming({
@@ -498,7 +533,7 @@ Page({
       ? this._perfTracker ?? null
       : originatingTracker;
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    const hasFixtureRows = this.data.fixtureRows.length > 0;
+    const hasFixtureRows = this.data.fixtureCount > 0;
     const primarySelector = hasFixtureRows
       ? "#perf-primary-fixtures"
       : "#perf-primary-home-error";
@@ -544,8 +579,11 @@ Page({
         const entryTrace: PageRequestTrace | null = primaryTrace
           ? { ...primaryTrace, callerSurface: "home-entry" }
           : null;
-        const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
-        if (isActiveSecondary()) this.setData({ entry, entryError: "" });
+        const [entry, leagues] = await Promise.all([
+          getEntryInfo(entryId, forceRefresh, entryTrace),
+          getEntryLeagueInfo(entryId, forceRefresh, entryTrace || undefined).catch(() => [] as EntryLeague[])
+        ]);
+        if (isActiveSecondary()) this.setData({ entry, leagues, entryError: "" });
       } catch (error) {
         if (isActiveSecondary()) {
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
@@ -555,6 +593,10 @@ Page({
     const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
       : null;
+    const marketTrace: PageRequestTrace | null = primaryTrace
+      ? { ...primaryTrace, callerSurface: "home-market" }
+      : null;
+    const marketTask = getMiniHomeMarket(forceRefresh, marketTrace).catch(() => null);
     const supplementTask = getMiniHomeSupplement(
       currentGw,
       formatDateKey(),
@@ -570,26 +612,55 @@ Page({
           summary: error instanceof Error ? error.message : "GW 数据加载失败",
           playerValues: error instanceof Error ? error.message : "身价数据加载失败"
         }
-      }))
-      .then((supplement) => {
-        if (!isActiveSecondary()) return;
-        const priceGroups = mapHomePriceChanges(supplement.playerValues);
-        this.setData({
-          priceError: supplement.errors.playerValues,
-          gameweekStatsError: supplement.errors.summary,
-          supplementLoading: false,
-          ...(this.data.noticeClosed ? {} : { noticeText: supplement.notice }),
-          ...(supplement.errors.playerValues && supplement.playerValues.length === 0
-            ? {}
-            : { priceRises: priceGroups.rises, priceFalls: priceGroups.falls }),
-          ...(supplement.errors.summary && !supplement.summary
-            ? {}
-            : { gameweekStats: mapHomeGameweekStats(supplement.summary) })
-        });
-      });
-    await Promise.allSettled([entryTask, supplementTask]);
+      }));
+    const [market, supplement] = await Promise.all([marketTask, supplementTask]);
+    if (!isActiveSecondary()) return;
+    const fallbackLead = mapHomePriceChanges(supplement.playerValues);
+    const fallbackRows = [...fallbackLead.rises, ...fallbackLead.falls].map((row) => ({
+      id: row.id,
+      name: row.name,
+      team: row.team,
+      position: row.position,
+      meta: row.newPrice,
+      changeText: row.changeText,
+      rising: !row.changeText.startsWith("-")
+    }));
+    const desk = market && (market.mode !== "empty" || market.availability.length > 0)
+      ? market
+      : {
+          mode: fallbackRows.length ? "price" as const : "empty" as const,
+          coverage: market?.coverage || "今日身价涨跌",
+          leadTitle: "最新真实身价变化",
+          leadRows: fallbackRows.slice(0, 5),
+          risers: [] as HomeMarketMover[],
+          fallers: [] as HomeMarketMover[],
+          availability: [] as HomeAvailabilityRow[],
+          error: supplement.errors.playerValues || market?.error || ""
+        };
+    const nextNotice = this.data.noticeClosed || supplement.errors.notice
+      ? this.data.noticeText
+      : (supplement.notice || "");
+    this.setData({
+      priceError: desk.error,
+      gameweekStatsError: supplement.errors.summary,
+      ...(this.data.noticeClosed || supplement.errors.notice
+        ? {}
+        : { noticeText: nextNotice }),
+      supplementLoading: false,
+      marketMode: desk.mode,
+      marketCoverage: desk.coverage,
+      marketLeadTitle: desk.leadTitle,
+      marketLeadRows: desk.leadRows,
+      marketRisers: desk.risers,
+      marketFallers: desk.fallers,
+      availabilityRows: desk.availability,
+      ...(supplement.errors.summary && !supplement.summary
+        ? {}
+        : { gameweekStats: mapHomeGameweekStats(supplement.summary) })
+    });
     if (!isActiveSecondary()) return;
     this._secondaryPending = false;
+    if (!this.data.noticeClosed && nextNotice) this.scheduleNoticeAutoClose(nextNotice);
     tracker?.mark("secondaryCompleteAt");
   },
 
@@ -618,6 +689,7 @@ Page({
     const app = getApp<IAppOption>();
     return setDataAsync(this, {
       gw: app.globalData.gw,
+      currentGw: app.globalData.currentGw,
       nextGw: app.globalData.nextGw,
       minFixtureGw: app.globalData.nextGw,
       selectedFixtureGw: clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw),
@@ -668,7 +740,25 @@ Page({
   },
 
   onCloseNotice() {
+    this.clearNoticeTimer();
     this.setData({ noticeClosed: true, noticeText: "" });
+  },
+
+  scheduleNoticeAutoClose(text: string) {
+    this.clearNoticeTimer();
+    if (!text || this.data.noticeClosed) return;
+    this.noticeTimer = setTimeout(() => {
+      this.noticeTimer = undefined;
+      if (!this._pageVisible || this.data.noticeClosed || !this.data.noticeText) return;
+      this.setData({ noticeClosed: true, noticeText: "" });
+    }, NOTICE_AUTO_CLOSE_MS) as unknown as number;
+  },
+
+  clearNoticeTimer() {
+    if (this.noticeTimer !== undefined) {
+      clearTimeout(this.noticeTimer);
+      this.noticeTimer = undefined;
+    }
   },
 
   onChangeEntry() {
@@ -680,14 +770,25 @@ Page({
   },
 
   onOpenEntry() {
-    const entryId = getApp<IAppOption>().globalData.entryId;
-    if (entryId) {
-      goToEntryProfile(entryId);
-    }
+    navigateTo(routes.myFplTeam);
   },
 
   onOpenPriceChanges() {
     navigateTo(routes.dataPrice);
+  },
+
+  onOpenLiveMatches() {
+    navigateTo(routes.liveMatch);
+  },
+
+  onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {
+    const dateKey = String(event.currentTarget.dataset.key || "");
+    const day = this.data.fixtureDays.find((item) => item.dateKey === dateKey);
+    if (!day || dateKey === this.data.selectedFixtureDayKey) return;
+    this.setData({
+      selectedFixtureDayKey: dateKey,
+      selectedDayRows: day.rows
+    });
   },
 
   onPreviousFixtureGw() {
@@ -721,7 +822,7 @@ Page({
       fixtureStoredAt: null,
       fixtureStaleStoredAt: null,
       selectedFixtureGw: event,
-      fixtureRows: []
+      ...emptyFixtureDesk()
     });
     try {
       const read = await readCoreEventFixtureSchedule(
@@ -732,7 +833,7 @@ Page({
       if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
       const staleStoredAt = read.meta.stale ? read.meta.storedAt || null : null;
       this.setData({
-        fixtureRows: read.data.map(mapFixtureRow),
+        ...fixtureDeskState(read.data),
         fixtureStoredAt: read.meta.storedAt || Date.now(),
         fixtureStaleStoredAt: staleStoredAt,
         fixtureStaleMessage: read.meta.stale ? fixtureStaleMessage(staleStoredAt) : ""
@@ -740,7 +841,7 @@ Page({
     } catch (error) {
       if (requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
       this.setData({
-        fixtureRows: [],
+        ...emptyFixtureDesk(),
         fixtureStaleMessage: "",
         fixtureStaleStoredAt: null,
         fixtureError: error instanceof Error ? error.message : "赛程加载失败"
@@ -757,40 +858,96 @@ Page({
   }
 });
 
-function mapFixtureRow(fixture: Fixture, index: number): HomeFixtureRow {
-  const fixtureWithDifficulty = fixture as Fixture & {
-    homeDifficulty?: number;
-    awayDifficulty?: number;
-  };
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatTabLabel(date: Date): string {
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)} ${WEEKDAYS[date.getDay()]}`;
+}
+
+function formatKickoffTime(date: Date): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+function mapHomeFixtureMatch(fixture: Fixture, index: number): HomeFixtureMatch {
+  const kickoff = fixture.kickoffTime ? new Date(fixture.kickoffTime) : null;
+  const validKickoff = Boolean(kickoff && !Number.isNaN(kickoff.getTime()));
+  const finished = fixture.finished === true
+    && typeof fixture.homeScore === "number"
+    && typeof fixture.awayScore === "number";
   return {
     id: String(fixture.id || `${fixture.teamId || "team"}-${fixture.againstTeamId || "against"}-${index}`),
-    homeName: fixture.teamShortName || fixture.homeTeam || fixture.teamName || "-",
-    awayName: fixture.againstTeamShortName || fixture.awayTeam || fixture.againstTeamName || "-",
-    kickoffTime: fixture.kickoffTime || "",
-    kickoffLabel: formatKickoff(fixture.kickoffTime),
-    homeDifficulty: fixtureWithDifficulty.homeDifficulty ?? fixture.difficulty,
-    awayDifficulty: fixtureWithDifficulty.awayDifficulty,
-    teamId: fixture.teamId,
-    againstTeamId: fixture.againstTeamId
+    homeName: fixture.teamName || fixture.homeTeam || fixture.teamShortName || "-",
+    awayName: fixture.againstTeamName || fixture.awayTeam || fixture.againstTeamShortName || "-",
+    centerLabel: finished
+      ? `${fixture.homeScore}-${fixture.awayScore}`
+      : validKickoff
+        ? formatKickoffTime(kickoff as Date)
+        : "待定",
+    finished
   };
 }
 
-function formatKickoff(value?: string): string {
-  if (!value) {
-    return "时间待定";
-  }
+export function groupHomeFixturesByDay(
+  fixtures: Fixture[],
+  now = new Date()
+): { days: HomeFixtureDay[]; selectedDayKey: string } {
+  const buckets = new Map<string, { sortKey: string; tabLabel: string; rows: HomeFixtureMatch[] }>();
+  fixtures.forEach((fixture, index) => {
+    const kickoff = fixture.kickoffTime ? new Date(fixture.kickoffTime) : null;
+    const validKickoff = Boolean(kickoff && !Number.isNaN(kickoff.getTime()));
+    const dateKey = validKickoff ? localDateKey(kickoff as Date) : "tbd";
+    const match = mapHomeFixtureMatch(fixture, index);
+    const existing = buckets.get(dateKey);
+    if (existing) {
+      existing.rows.push(match);
+      return;
+    }
+    buckets.set(dateKey, {
+      sortKey: dateKey,
+      tabLabel: validKickoff ? formatTabLabel(kickoff as Date) : "待定",
+      rows: [match]
+    });
+  });
+  const days = Array.from(buckets.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([dateKey, bucket]) => ({
+      dateKey,
+      tabLabel: bucket.tabLabel,
+      rows: bucket.rows
+    }));
+  const today = localDateKey(now);
+  const selectedDayKey = days.some((day) => day.dateKey === today)
+    ? today
+    : (days[0]?.dateKey || "");
+  return { days, selectedDayKey };
+}
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+function fixtureDeskState(fixtures: Fixture[]): Pick<HomeData, "fixtureDays" | "selectedFixtureDayKey" | "selectedDayRows" | "fixtureCount"> {
+  const grouped = groupHomeFixturesByDay(fixtures);
+  const selected = grouped.days.find((day) => day.dateKey === grouped.selectedDayKey);
+  return {
+    fixtureDays: grouped.days,
+    selectedFixtureDayKey: grouped.selectedDayKey,
+    selectedDayRows: selected ? selected.rows : [],
+    fixtureCount: grouped.days.reduce((count, day) => count + day.rows.length, 0)
+  };
+}
 
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${month}/${day} ${hour}:${minute}`;
+function emptyFixtureDesk(): Pick<HomeData, "fixtureDays" | "selectedFixtureDayKey" | "selectedDayRows" | "fixtureCount"> {
+  return {
+    fixtureDays: [],
+    selectedFixtureDayKey: "",
+    selectedDayRows: [],
+    fixtureCount: 0
+  };
 }
 
 function clampFixtureGw(value: number, min: number): number {
@@ -846,7 +1003,7 @@ function stripPriceSortFields(row: HomePriceChangeRow & { rawChange: number; new
   };
 }
 
-function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {
+export function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {
   if (!summary) {
     return [];
   }
@@ -896,7 +1053,7 @@ function formatTopScorer(summary: GameweekOverallSummary): string {
 }
 
 function formatOptionalNumber(value?: number): string {
-  return typeof value === "number" ? String(value) : "-";
+  return typeof value === "number" && value > 0 ? String(value) : "-";
 }
 
 function formatCompactNumber(value?: number): string {

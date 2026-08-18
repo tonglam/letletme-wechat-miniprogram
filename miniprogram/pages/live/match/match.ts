@@ -23,6 +23,7 @@ import {
   type LiveDisplayState
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
+import { copyShareText, formatLiveMatchShareText } from "../../../utils/live-share";
 
 interface StatusOption {
   key: string;
@@ -131,52 +132,143 @@ function scoreText(match: LiveMatch, fallbackStatus: string): string {
   return `${numberValue(match.homeScore)}-${numberValue(match.awayScore)}`;
 }
 
-function playerName(player: LivePlayerRow): string {
-  const team = player.teamShortName || player.team || "";
-  const name = player.webName || player.name || "-";
-  return team ? `${name} (${team})` : name;
+export type MatchHighlightKind =
+  | "bonus"
+  | "goals"
+  | "assists"
+  | "defensive"
+  | "bps"
+  | "saves"
+  | "cleansheet"
+  | "pensaved"
+  | "yellow"
+  | "red"
+  | "penmissed"
+  | "owngoal";
+
+export interface MatchHighlightItem {
+  name: string;
+  team: string;
+  text: string;
+  /** Row display value: counts drop "1" and read "×N"; bonus/DC/BPS keep text. */
+  display: string;
 }
 
-function collectMetric(players: LivePlayerRow[], key: keyof LivePlayerRow, label: string): { label: string; value: string } | undefined {
-  const names = players
-    .filter((player) => numberValue(player[key]) > 0)
-    .map((player) => {
-      const count = numberValue(player[key]);
-      return count > 1 ? `${playerName(player)} x${count}` : playerName(player);
-    });
-
-  if (names.length === 0) {
-    return undefined;
-  }
-
-  return { label, value: names.slice(0, 3).join("、") + (names.length > 3 ? "..." : "") };
+export interface MatchHighlightGroup {
+  kind: MatchHighlightKind;
+  label: string;
+  items: MatchHighlightItem[];
 }
 
-function collectBonus(players: LivePlayerRow[]): { label: string; value: string } | undefined {
-  const names = players
-    .filter((player) => numberValue(player.bonus) > 0)
-    .sort((a, b) => numberValue(b.bonus) - numberValue(a.bonus))
-    .map((player) => `${playerName(player)} +${numberValue(player.bonus)}`);
+const HIGHLIGHT_LABELS: Record<MatchHighlightKind, string> = {
+  bonus: "奖励分",
+  goals: "进球",
+  assists: "助攻",
+  defensive: "防守贡献",
+  bps: "BPS",
+  saves: "扑救",
+  cleansheet: "零封",
+  pensaved: "扑点",
+  yellow: "黄牌",
+  red: "红牌",
+  penmissed: "失点",
+  owngoal: "乌龙"
+};
 
-  if (names.length === 0) {
-    return undefined;
-  }
-
-  return { label: "Bonus", value: names.slice(0, 3).join("、") };
+function playerTeam(player: LivePlayerRow): string {
+  return textValue(player.teamShortName || player.team, "");
 }
 
-function buildEventSummary(match: LiveMatch): Array<{ label: string; value: string }> {
+function playerShortName(player: LivePlayerRow): string {
+  return textValue(player.webName || player.name, "-");
+}
+
+export function isDefensiveContributionEarned(player: LivePlayerRow): boolean {
+  const contribution = numberValue(player.defensiveContribution);
+  const type = numberValue(player.elementType);
+  if (type === 2) return contribution >= 10;
+  if (type === 3 || type === 4) return contribution >= 12;
+  return false;
+}
+
+/** Clean sheet scores only with 60+ minutes, and only for GKP/DEF (+4) / MID (+1). */
+export function isCleanSheetEarned(player: LivePlayerRow): boolean {
+  const type = numberValue(player.elementType);
+  if (type < 1 || type > 3) return false;
+  return numberValue(player.cleanSheets) > 0 && numberValue(player.minutes) >= 60;
+}
+
+function sortedHighlightItems(
+  players: LivePlayerRow[],
+  read: (player: LivePlayerRow) => number,
+  format: (value: number) => string
+): MatchHighlightItem[] {
+  return players
+    .map((player) => ({ player, value: read(player) }))
+    .filter((row) => row.value > 0)
+    .sort((left, right) => right.value - left.value)
+    .map((row) => ({
+      name: playerShortName(row.player),
+      team: playerTeam(row.player),
+      text: format(row.value),
+      display: format(row.value)
+    }));
+}
+
+/** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
+export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
+  const status = String(match.status || match.playStatus || "");
+  if (status === "not_start" || status === "not_started") return [];
   const players = [...(match.homeTeamDataList || []), ...(match.awayTeamDataList || [])];
-  return [
-    collectBonus(players),
-    collectMetric(players, "goalsScored", "进球"),
-    collectMetric(players, "assists", "助攻"),
-    collectMetric(players, "redCards", "红牌"),
-    collectMetric(players, "yellowCards", "黄牌"),
-    collectMetric(players, "penaltiesSaved", "扑点"),
-    collectMetric(players, "penaltiesMissed", "丢点"),
-    collectMetric(players, "saves", "扑救")
-  ].filter((item): item is { label: string; value: string } => Boolean(item));
+  const groups: MatchHighlightGroup[] = [
+    { kind: "goals", label: HIGHLIGHT_LABELS.goals, items: sortedHighlightItems(players, (player) => numberValue(player.goalsScored), String) },
+    { kind: "assists", label: HIGHLIGHT_LABELS.assists, items: sortedHighlightItems(players, (player) => numberValue(player.assists), String) },
+    {
+      kind: "defensive",
+      label: HIGHLIGHT_LABELS.defensive,
+      items: sortedHighlightItems(
+        players,
+        (player) => (isDefensiveContributionEarned(player) ? numberValue(player.defensiveContribution) : 0),
+        String
+      )
+    },
+    { kind: "saves", label: HIGHLIGHT_LABELS.saves, items: sortedHighlightItems(players, (player) => numberValue(player.saves), String) },
+    {
+      kind: "cleansheet",
+      label: HIGHLIGHT_LABELS.cleansheet,
+      items: sortedHighlightItems(players, (player) => (isCleanSheetEarned(player) ? numberValue(player.cleanSheets) : 0), String)
+    },
+    { kind: "pensaved", label: HIGHLIGHT_LABELS.pensaved, items: sortedHighlightItems(players, (player) => numberValue(player.penaltiesSaved), String) },
+    { kind: "yellow", label: HIGHLIGHT_LABELS.yellow, items: sortedHighlightItems(players, (player) => numberValue(player.yellowCards), String) },
+    { kind: "red", label: HIGHLIGHT_LABELS.red, items: sortedHighlightItems(players, (player) => numberValue(player.redCards), String) },
+    { kind: "penmissed", label: HIGHLIGHT_LABELS.penmissed, items: sortedHighlightItems(players, (player) => numberValue(player.penaltiesMissed), String) },
+    { kind: "owngoal", label: HIGHLIGHT_LABELS.owngoal, items: sortedHighlightItems(players, (player) => numberValue(player.ownGoals), String) },
+    { kind: "bonus", label: HIGHLIGHT_LABELS.bonus, items: sortedHighlightItems(players, (player) => numberValue(player.bonus), (value) => `+${value}`) },
+    {
+      kind: "bps",
+      label: HIGHLIGHT_LABELS.bps,
+      items: players
+        .filter((player) => player.bps != null && Number.isFinite(Number(player.bps)))
+        .sort((left, right) => numberValue(right.bps) - numberValue(left.bps))
+        .slice(0, 5)
+        .map((player) => ({
+          name: playerShortName(player),
+          team: playerTeam(player),
+          text: String(numberValue(player.bps)),
+          display: String(numberValue(player.bps))
+        }))
+    }
+  ];
+  const countKinds = new Set<MatchHighlightKind>(["goals", "assists", "saves", "yellow", "red", "cleansheet", "pensaved", "penmissed", "owngoal"]);
+  return groups
+    .filter((group) => group.items.length > 0)
+    .map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        display: countKinds.has(group.kind) ? (item.text === "1" ? "" : `×${item.text}`) : item.text
+      }))
+    }));
 }
 
 function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
@@ -190,7 +282,7 @@ function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
     scoreText: scoreText(match, fallbackStatus),
     kickoffText: kickoffText(match),
     minuteText: minuteText(match),
-    eventSummary: buildEventSummary(match)
+    eventSummary: buildMatchHighlights(match)
   };
 }
 
@@ -292,7 +384,10 @@ Page({
     statusOptions: STATUS_OPTIONS,
     matches: [] as LiveMatch[],
     groups: [] as MatchGroup[],
-    lastUpdated: ""
+    lastUpdated: "",
+    copiedMatchId: "" as number | string,
+    shareSheetOpen: false,
+    shareText: ""
   },
 
   liveRequest: null as Promise<void> | null,
@@ -893,5 +988,36 @@ Page({
     this.perfTracker?.disconnect();
     this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
     void this.runForcedRefresh(this.perfTracker, false);
+  },
+
+  onCopyMatchShare(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { matchid?: number | string }>) {
+    try {
+      const matchId = event.currentTarget.dataset.matchid;
+      const match = this.coreMatches.find((item) => String(item.matchId) === String(matchId));
+      if (!match) {
+        wx.showToast({ title: "还没有可分享的比赛", icon: "none" });
+        return;
+      }
+      const text = formatLiveMatchShareText(match);
+      void copyShareText(text).then((ok) => {
+        if (ok) {
+          this.setData({ copiedMatchId: match.matchId || "", shareSheetOpen: false });
+          setTimeout(() => {
+            if (this.data.copiedMatchId === match.matchId) {
+              this.setData({ copiedMatchId: "" });
+            }
+          }, 2000);
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      });
+    } catch (error) {
+      console.error("[copy-share] match", error);
+      wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   }
 });

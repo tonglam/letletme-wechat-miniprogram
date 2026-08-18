@@ -108,7 +108,7 @@ export class PagePerformanceTracker {
     if (this.disconnected || this.visibleRecorded) return;
     this.pendingSetDataAt = monotonicNow();
     this.observer?.disconnect();
-    const observer = this.page.createIntersectionObserver?.({});
+    const observer = this.page.createIntersectionObserver?.({ nativeMode: true });
     if (!observer) return;
     this.observer = observer;
     observer.relativeToViewport().observe(

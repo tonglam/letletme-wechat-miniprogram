@@ -12,21 +12,11 @@
   flex-shrink: 0;
 }
 
-.perf-btn {
-  display: flex;
-  align-items: center;
-  min-height: 64rpx;
-  box-sizing: border-box;
-  padding: 0 22rpx;
-  background: var(--track);
-  color: var(--ink);
-  font-size: 24rpx;
-  border-radius: 8rpx;
-  font-weight: 600;
+.perf-action {
+  padding: 12rpx 0 12rpx 20rpx;
 }
 
-.perf-btn-danger {
-  background: var(--danger-tint);
+.perf-danger {
   color: var(--danger);
 }
 
@@ -109,12 +99,6 @@
 }
 
 /* Section heading */
-.card-heading {
-  font-size: 26rpx;
-  font-weight: 700;
-  color: var(--ink);
-  margin-bottom: 20rpx;
-}
 
 /* Metrics */
 .metric-row {

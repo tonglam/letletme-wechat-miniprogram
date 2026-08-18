@@ -13,14 +13,16 @@
   <app-loading wx:elif="{{loading}}" text="加载球队资料" />
   <block wx:else>
     <entry-card id="perf-primary-content" entry="{{entry}}" bind:change="onChangeEntry" />
-    <view class="section card stats">
-      <view class="stat">
-        <text class="label">总分</text>
-        <text class="value">{{entry.totalPoints || '-'}}</text>
-      </view>
-      <view class="stat">
-        <text class="label">总排名</text>
-        <text class="value">{{entry.overallRank || '-'}}</text>
+    <view class="section">
+      <view class="metric-grid">
+        <view class="metric-card">
+          <text class="metric-label">总分</text>
+          <text class="metric-value">{{entry.totalPoints || '-'}}</text>
+        </view>
+        <view class="metric-card">
+          <text class="metric-label">总排名</text>
+          <text class="metric-value">{{entry.overallRank || '-'}}</text>
+        </view>
       </view>
     </view>
   </block>

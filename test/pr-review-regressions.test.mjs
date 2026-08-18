@@ -20,7 +20,6 @@ globalThis.Page = () => {};
 
 const { waitForAuthoritativeFollow } = await import("../miniprogram/utils/follow.ts");
 const { resolveKeywordAfterPlayerLoad } = await import("../miniprogram/pages/data/players/players.ts");
-const { mergeTeamBriefWithCache } = await import("../miniprogram/pages/my-fpl/index/index.ts");
 
 function source(relativePath) {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -38,8 +37,6 @@ test("personal list pages wait for cold-start auth before reading the follow", a
   assert.equal(settled, true);
 
   for (const path of [
-    "miniprogram/pages/competitions/index/index.ts",
-    "miniprogram/pages/my-fpl/index/index.ts",
     "miniprogram/pages/my-fpl/leagues/leagues.ts"
   ]) {
     assert.match(source(path), /await waitForAuthoritativeFollow\(\)/, path);
@@ -47,38 +44,14 @@ test("personal list pages wait for cold-start auth before reading the follow", a
 });
 
 test("initial request failures do not also claim an empty list", () => {
-  const competitions = source("miniprogram/pages/competitions/index/index.wxml");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.wxml");
-  assert.match(competitions, /items\.length === 0 && !error/);
-  assert.match(competitions, /displayItems\.length === 0 && keyword && !error/);
-  assert.match(leagues, /displayLeagues\.length === 0 && !error/);
+  assert.match(leagues, /error && !tournaments\.length && !emptyState/);
 });
 
 test("failed event metadata is represented as unavailable, not offseason", () => {
   const service = source("miniprogram/services/my-fpl.service.ts");
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  const template = source("miniprogram/pages/my-fpl/index/index.wxml");
   assert.match(service, /eventContextAvailable = false/);
   assert.match(service, /eventContextAvailable =\s*appContext\.phase !== "unresolved"/);
-  assert.match(overview, /if \(!context\.eventContextAvailable\)/);
-  assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
-});
-
-test("a total overview secondary failure settles the league module", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.match(
-    overview,
-    /if \(briefUnavailable && leagues === null\)[\s\S]*resolveOverviewLeagueState\(null, cached\?\.leagueCount\)/,
-    "terminal failure renders cached availability or an explicit unavailable state"
-  );
-});
-
-test("overview preserves the deadline fallback before and after snapshot reads", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.equal(
-    (overview.match(/nextUtcDeadline:\s*context\.utcDeadline/g) || []).length,
-    2
-  );
 });
 
 test("Home entry errors retain a team-switch escape", () => {
@@ -110,13 +83,6 @@ test("empty fixture directories clear previously composed cards", () => {
   assert.match(fixtures, /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/);
 });
 
-test("Explore paints its route registry without a context network request", () => {
-  const explore = source("miniprogram/pages/explore/index/index.ts");
-  assert.match(explore, /onLoad\(\)[\s\S]*this\.buildGroups\(\)[\s\S]*this\.syncContext\(\)/);
-  assert.doesNotMatch(explore, /initAppData\(/);
-  assert.match(explore, /onShow\(\)[\s\S]*if \(resumed\)[\s\S]*this\.syncContext\(\)/);
-});
-
 test("player directory completion preserves edits made during the request", () => {
   assert.equal(resolveKeywordAfterPlayerLoad("saka", "palmer", true), "palmer");
   assert.equal(resolveKeywordAfterPlayerLoad("saka", "", false), "saka");
@@ -126,25 +92,13 @@ test("player directory completion preserves edits made during the request", () =
   assert.match(players, /searchEditedWhileLoading \? currentKeyword/);
 });
 
-test("overview clears secondary content when the event has no matching cache", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.match(overview, /teamBrief: cached\?\.teamBrief \?\? null/);
-  assert.match(
-    overview,
-    /if \(briefUnavailable && leagues === null\)[\s\S]*teamBrief: cached\?\.teamBrief \?\? null/
-  );
-});
-
 test("My FPL last-good views survive context and refresh failures", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
-  assert.match(overview, /fallbackEvent[\s\S]*if \(cached\)[\s\S]*eventContextAvailable: true/);
   assert.match(team, /await this\.ensureContext\("page-show"\)[\s\S]*wasCurrentEvent/);
   assert.match(team, /restartForPrincipalChange\(entryId\)/);
   assert.match(template, /error && !hasTeamData/);
   assert.match(template, /当前显示上次成功结果/);
-  assert.match(overview, /cached\.season === season/);
   assert.match(team, /async loadTab[\s\S]*catch \(error\)[\s\S]*tabError: message/);
 });
 
@@ -156,24 +110,10 @@ test("match rollover detaches same-status in-flight work", () => {
   );
 });
 
-test("Explore labels an upcoming preseason round separately from the current event", () => {
-  const explore = source("miniprogram/pages/explore/index/index.ts");
-  assert.match(explore, /const currentGw = Number\(app\.globalData\.currentGw\)/);
-  assert.match(explore, /`下轮 GW \$\{resolvedGw\}`/);
-});
-
 test("entry lookup results are guarded by request generation and input identity", () => {
   const search = source("miniprogram/pages/entry/search/search.ts");
   assert.match(search, /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/);
   assert.match(search, /if \(requestId === this\.lookupRequestId\)/);
-});
-
-test("overview paints before starting snapshot and secondary reads", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  const primaryPaint = overview.indexOf("eventContextAvailable: true");
-  const snapshotRead = overview.indexOf("const [snapshotState, briefResult, leagues]");
-  assert.ok(primaryPaint >= 0 && snapshotRead > primaryPaint);
-  assert.match(overview, /storedAt: \(briefPartial \|\| retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
 });
 
 test("tournament status reports only rows actually retained", () => {
@@ -225,58 +165,9 @@ test("fixture windows honor event and season cache identity on open and resume",
   assert.match(fixtures, /onRetry\(\)[\s\S]*runForcedRefresh\(\)[\s\S]*syncEventContext\(true, lifecycleRevision\)[\s\S]*load\(true, trace, lifecycleRevision\)/);
 });
 
-test("My FPL partial brief reads retain only fields from the failed source", () => {
-  const cached = {
-    entryName: "Cached team",
-    playerName: "Cached player",
-    eventPoints: 44,
-    overallPoints: 900,
-    overallRank: 1000
-  };
-  assert.deepEqual(
-    mergeTeamBriefWithCache({
-      brief: { eventPoints: 51, overallPoints: 951, overallRank: 800 },
-      entryAvailable: false,
-      eventResultAvailable: true
-    }, cached),
-    {
-      entryName: "Cached team",
-      playerName: "Cached player",
-      eventPoints: 51,
-      overallPoints: 951,
-      overallRank: 800
-    }
-  );
-  assert.deepEqual(
-    mergeTeamBriefWithCache({
-      brief: { entryName: "Fresh team", playerName: "Fresh player", overallPoints: 960, overallRank: 750 },
-      entryAvailable: true,
-      eventResultAvailable: false
-    }, cached),
-    {
-      entryName: "Fresh team",
-      playerName: "Fresh player",
-      eventPoints: 44,
-      overallPoints: 960,
-      overallRank: 750
-    }
-  );
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.match(overview, /storedAt: \(briefPartial \|\| retainedBrief \|\| retainedLeagues\).*cached\.storedAt/);
-});
-
-test("website returns bypass competition cache and accepted handoffs await clipboard success", () => {
-  const competitions = source("miniprogram/pages/competitions/index/index.ts");
+test("website handoffs await clipboard success", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
-  assert.match(competitions, /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadList\(forceRefresh, trace, lifecycleRevision\)/);
-  assert.match(competitions, /cached\.season === season/);
-  assert.match(
-    competitions,
-    /if \(currentFollowEntryId\(\) !== entryId\) \{[\s\S]*void this\.loadList\(true, trace\)/,
-    "an authoritative principal change restarts rather than applying the old response"
-  );
-  assert.match(competitions, /if \(await openWebsiteAction\(action\)\)/);
   assert.match(leagues, /if \(await openWebsiteAction\(action\)\)/);
   assert.match(action, /success:[\s\S]*resolve\(true\)/);
   assert.match(action, /fail[\s\S]*resolve\(false\)/);
@@ -318,28 +209,23 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(fixtures, /this\.loadedSeason = season/);
 });
 
-test("initial league and competition payloads use named session cache policies", () => {
+test("initial league payloads use named session cache policies", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const common = source("miniprogram/services/common.service.ts");
   assert.match(leagues, /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/);
-  assert.match(competitions, /async onLoad\(\)[\s\S]*this\.loadList\(false, trace, lifecycleRevision\)/);
   assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
   assert.match(common, /getTeamList[\s\S]*cacheVariant: `season:\$\{_season\}`/);
   assert.doesNotMatch(common, /season:unknown/);
 });
 
-test("resident league and competition rows never cross a season", () => {
+test("resident tournament rows never cross a season", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  const competitions = source("miniprogram/pages/competitions/index/index.ts");
-  assert.match(leagues, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*leagues: \[\], displayLeagues: \[\]/);
-  assert.match(competitions, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*items: \[\], displayItems: \[\]/);
+  assert.match(leagues, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*tournaments: \[\], tournamentNames: \[\]/);
 });
 
 test("cold offline lists retain only their own persisted season cache", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  const competitions = source("miniprogram/pages/competitions/index/index.ts");
-  for (const page of [leagues, competitions]) {
+  for (const page of [leagues]) {
     assert.match(page, /readStored\w+Cache\(\)/);
     assert.match(page, /const offlineCached = season \? null : readStored\w+Cache\(\)/);
     assert.match(page, /offlineCached\?\.entryId === entryId/);
@@ -360,17 +246,13 @@ test("tournament row requests are principal- and season-generation guarded", () 
 });
 
 test("no-follow actions survive context failure and profile checks compare the retained follow", () => {
-  const template = source("miniprogram/pages/my-fpl/index/index.wxml");
   const app = source("miniprogram/app.ts");
-  assert.match(template, /eventContextAvailable \|\| principalState === 'NO_FOLLOW'/);
   assert.match(app, /const nextEntry = this\.globalData\.entryId/);
   assert.doesNotMatch(app, /const nextEntry = session\.profile\.fplEntryId/);
 });
 
 test("forced My FPL refresh reaches the cached team identity read", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const service = source("miniprogram/services/my-fpl.service.ts");
-  assert.match(overview, /loadOverviewSecondary\([\s\S]*context\.entryId,[\s\S]*forceRefresh[\s\S]*getMyFplTeamBrief\(entryId, event, forceRefresh\)/);
   assert.match(service, /getMyFplTeamBrief\([\s\S]*forceRefresh = false[\s\S]*getEntryInfo\(entryId, forceRefresh\)/);
 });
 
@@ -421,13 +303,9 @@ test("historical Live selections reset when the season changes", () => {
 });
 
 test("first personal paints honor season-aware event and reporting policies", () => {
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.ts");
-  assert.match(overview, /async onLoad\(\)[\s\S]*this\.loadOverview\(false/);
-  assert.match(overview, /async resumeOverview\(\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.loadOverview\(forceRefresh, lifecycleRevision\)/);
   assert.match(team, /async onLoad\(\)[\s\S]*capturePageRequestTrace[\s\S]*this\.initializeFromContext\(false, trace, tracker\)/);
   assert.match(team, /async initializeFromContext\([\s\S]*forceRefresh: boolean,[\s\S]*trace\?: PageRequestTrace,[\s\S]*tracker\?: PagePerformanceTracker[\s\S]*this\.loadData\(forceRefresh, trace\)/);
-  assert.match(overview, /event === undefined/);
 });
 
 test("Match and Team retries bypass repeating-season caches", () => {
@@ -446,7 +324,7 @@ test("season rollover clears row filters derived from player ids", () => {
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(
     tournament,
-    /seasonChanged \? \{[\s\S]*selectedOwnershipPlayers: \[\][\s\S]*ownershipAvailablePlayers: \[\][\s\S]*selectedTeamExposure: null/
+    /seasonChanged \? \{[\s\S]*selectedOwnershipPlayers: \[\][\s\S]*ownershipAvailablePlayers: \[\][\s\S]*teamExposureRules: \[\][\s\S]*pendingExposureTeam: null/
   );
 });
 
@@ -467,13 +345,9 @@ test("player route keywords are consumed before the first directory request sett
 });
 
 test("personal responses never cross an authoritative follow change", () => {
-  const competitions = source("miniprogram/pages/competitions/index/index.ts");
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  const overview = source("miniprogram/pages/my-fpl/index/index.ts");
   const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
-  assert.match(competitions, /principalChanged[\s\S]*items: \[\], displayItems: \[\]/);
   assert.match(leagues, /currentFollowEntryId\(\) !== entryId[\s\S]*this\.loadLeagues\(true\)/);
-  assert.match(overview, /currentFollowEntryId\(\) !== context\.entryId[\s\S]*this\.loadOverview\(true\)/);
   assert.match(liveEntry, /restartForPrincipalChange\(entryId[\s\S]*currentFollowEntryId\(\)/);
   assert.match(
     liveEntry,
@@ -500,15 +374,15 @@ test("all Live surfaces refresh event context before resume polling", () => {
   assert.match(tournament, /nextEventId[\s\S]*forceRefresh: true/);
 });
 
-test("fixture difficulty renders the WXS FDR mapping and neutral unknown style", () => {
+test("explore fixtures colour chips by FDR difficulty like the web", () => {
   const template = source("miniprogram/pages/explore/fixtures/fixtures.wxml");
   const componentTemplate = source("miniprogram/components/fixture-chip/fixture-chip.wxml");
-  const componentStyle = source("miniprogram/components/fixture-chip/fixture-chip.wxss");
-  const appStyle = source("miniprogram/app.wxss");
-  assert.doesNotMatch(template, /difficulty="\{\{chip\.difficulty \|\| 0\}\}"/);
-  assert.match(template, /difficultyKnown="\{\{chip\.difficulty != null\}\}"/);
-  assert.match(componentTemplate, /class="fixture-chip fdr \{\{fdr\.cls\(difficultyKnown, difficulty\)\}\}"/);
-  assert.match(componentStyle, /\.fdr-unknown[\s\S]*background: var\(--track\)[\s\S]*color: var\(--muted-ink\)/);
-  assert.match(appStyle, /\.fdr-2 \{ background: var\(--green-ink-a70\); color: var\(--cta-ink\); \}/);
-  assert.match(appStyle, /\.fdr-4 \{ background: var\(--warning-a80\); color: var\(--cta-ink\); \}/);
+  const componentStyles = source("miniprogram/components/fixture-chip/fixture-chip.wxss");
+  assert.match(template, /difficulty="\{\{chip\.difficulty\}\}"/);
+  assert.match(template, /difficultyKnown="\{\{chip\.difficulty > 0\}\}"/);
+  assert.match(template, /homeAway="\{\{chip\.home \? '主' : '客'\}\}"/);
+  assert.match(componentTemplate, /\{\{fdrClass\}\}/);
+  for (const band of [1, 2, 3, 4, 5]) {
+    assert.match(componentStyles, new RegExp(`\\.fixture-chip\\.fdr-${band}\\b`));
+  }
 });

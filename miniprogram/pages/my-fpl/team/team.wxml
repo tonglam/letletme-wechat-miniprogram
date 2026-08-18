@@ -1,31 +1,27 @@
-<wxs module="pos">
-  var map = {
-    GKP: 'pos-gkp', GK: 'pos-gkp', GOALKEEPER: 'pos-gkp',
-    DEF: 'pos-def', DEFENDER: 'pos-def',
-    MID: 'pos-mid', MIDFIELDER: 'pos-mid',
-    FWD: 'pos-fwd', FORWARD: 'pos-fwd'
-  };
-  function cls(p) {
-    if (!p) return '';
-    var key = String(p).toUpperCase();
-    return map[key] || '';
-  }
-  module.exports = { cls: cls };
-</wxs>
 <view class="page page-tabbar">
-  <view class="section summary-header">
-    <view class="header-text">
-      <view class="title">{{headerTitle}}</view>
-      <view class="subtitle">{{headerSubtitle || '球队数据'}}</view>
-    </view>
-    <view class="header-actions">
-      <gw-picker wx:if="{{emptyState !== 'entry'}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+  <view wx:if="{{emptyState !== 'entry'}}" class="section team-toolbar">
+    <gw-picker compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+  </view>
+
+  <view class="section">
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">{{headerTitle || '我的球队'}}</view>
+          <view class="score-manager">{{headerSubtitle || '阵容 · 转会 · 赛季数据'}}</view>
+        </view>
+        <view wx:if="{{hasTeamData}}" class="score-hero">
+          <view class="score-label">GW{{event}} 得分</view>
+          <view class="score">{{heroScore}}</view>
+        </view>
+      </view>
+      <view wx:if="{{hasTeamData}}" class="score-sub">{{heroScoreSub}}</view>
     </view>
   </view>
 
   <view wx:if="{{phaseBanner === 'live'}}" class="section phase-banner" bindtap="onOpenLiveEntry" hover-class="hover-dim">
     <text class="phase-banner-text">本轮比赛进行中，详细实时得分请前往实时球队</text>
-    <text class="phase-banner-action">去看实时</text>
+    <text class="action phase-banner-cue">去看实时</text>
   </view>
   <view wx:elif="{{phaseBanner === 'settling'}}" class="section phase-banner phase-banner-muted">
     <text class="phase-banner-text">本轮结果结算处理中，最终结果以官方确认为准</text>
@@ -57,21 +53,19 @@
       />
     </view>
     <block wx:else>
-      <view id="perf-primary-content" class="section card summary-card">
-        <view class="metric-grid metric-grid-three">
-          <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
-            <text class="metric-label">{{item.label}}</text>
-            <text class="metric-value">{{item.value}}</text>
+      <view id="perf-primary-content" class="section">
+        <view class="summary-grid">
+          <view wx:for="{{overviewStats}}" wx:key="label" class="summary-tile">
+            <view class="tile-label">{{item.label}}</view>
+            <view class="tile-value">{{item.value}}</view>
           </view>
         </view>
       </view>
 
-      <view class="section card summary-card">
-        <view class="metric-grid">
-          <view wx:for="{{eventStats}}" wx:key="label" class="metric-card">
-            <text class="metric-label">{{item.label}}</text>
-            <text class="metric-value metric-value-{{item.tone}}">{{item.value}}</text>
-          </view>
+      <view class="section card info-card">
+        <view wx:for="{{eventStats}}" wx:key="label" class="info-item">
+          <view class="score-label">{{item.label}}</view>
+          <view class="info-value">{{item.value}}</view>
         </view>
       </view>
     </block>
@@ -85,7 +79,18 @@
     <app-loading wx:if="{{tabLoading}}" text="加载当前栏目" />
     <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" showRetry="{{true}}" bind:retry="onRetry" />
 
-    <view wx:if="{{showSquad && hasTeamData}}" class="section card">
+    <view wx:if="{{showSquad && hasTeamData}}" class="section card lineup-card">
+      <view class="lineup-head">
+        <view class="section-heading">阵容</view>
+        <view
+          wx:if="{{pitchPlayers.length}}"
+          class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+          bindtap="onSharePitch"
+          hover-class="hover-dim"
+        >
+          <text class="tool-label">{{shareBusy ? '生成中' : '分享阵容'}}</text>
+        </view>
+      </view>
       <app-empty-state
         wx:if="{{!hasSquad}}"
         title="GW{{event}} 阵容还没公布"
@@ -94,18 +99,21 @@
         bind:action="onRetry"
       />
       <block wx:else>
-        <view wx:for="{{squadRows}}" wx:key="id" class="squad-row {{item.bench ? 'squad-row-bench' : ''}}">
-          <view class="row-main">
-            <view class="row-title">{{item.name}}</view>
-            <view class="row-meta">{{item.teamName}}</view>
-          </view>
-          <view class="squad-meta">
-            <text class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
-            <text class="mini-stat">{{item.minutes}}'</text>
-            <text class="points-stat">{{item.points}}</text>
-            <text class="role-badge {{item.bench ? 'role-bench' : 'role-starter'}}">{{item.role}}</text>
-          </view>
+        <view wx:if="{{pitchPlayers.length}}" class="team-pitch-section">
+          <squad-pitch
+            id="squad-pitch"
+            players="{{pitchPlayers}}"
+            benchPlayers="{{pitchBench}}"
+            header="{{pitchHeader}}"
+            benchBoost="{{pitchBenchBoost}}"
+            bind:playertap="onPitchPlayerTap"
+          />
         </view>
+        <player-row wx:for="{{squadRows}}" wx:if="{{!item.bench}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+        <block wx:if="{{hasBench}}">
+          <view class="section-heading bench-heading">替补</view>
+          <player-row wx:for="{{squadRows}}" wx:if="{{item.bench}}" wx:key="id" player="{{item}}" showTeam="{{true}}" showPoints="{{true}}" showLiveMeta="{{true}}" bind:open="onOpenPlayer" />
+        </block>
       </block>
     </view>
 
@@ -117,80 +125,201 @@
       <app-error-state wx:if="{{transferError && !hasTransfers}}" message="{{transferError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{!hasTransfers}}" title="还没有转会记录" description="产生转会后会按比赛周显示在这里" />
       <block wx:else>
-        <view wx:for="{{transferRows}}" wx:key="id" class="card transfer-card">
-          <view class="transfer-head">
-            <text class="transfer-gw">{{item.gameweek}}</text>
-            <text class="transfer-count">转会 {{item.transfers}}</text>
-            <text class="transfer-cost {{item.hasCost ? 'cost-bad' : ''}}">扣分 {{item.cost}}</text>
-          </view>
-          <view wx:if="{{item.moves.length === 0}}" class="empty-line">{{item.emptyText}}</view>
-          <view wx:for="{{item.moves}}" wx:for-item="move" wx:key="id" class="card move-card">
-            <view class="move-text">{{move.text}}</view>
-            <view class="row-meta">{{move.costText}}</view>
+        <view class="summary-grid transfer-summary-grid">
+          <view wx:for="{{transferSummary}}" wx:key="label" class="summary-tile">
+            <view class="tile-label">{{item.label}}</view>
+            <view class="tile-value {{item.tone === 'bad' ? 'tile-bad' : ''}}">{{item.value}}</view>
           </view>
         </view>
+
+        <view class="transfer-filter-bar">
+          <text class="transfer-filter-note">{{transferFilterNote}}</text>
+          <view class="tab-strip transfer-filter-tabs">
+            <view class="tab-item {{transferFilter === 'with' ? 'tab-active' : ''}}" data-filter="with" catchtap="onTransferFilterTap" hover-class="hover-dim">有转会</view>
+            <view class="tab-item {{transferFilter === 'all' ? 'tab-active' : ''}}" data-filter="all" catchtap="onTransferFilterTap" hover-class="hover-dim">全部</view>
+            <view class="tab-item {{transferFilter === 'none' ? 'tab-active' : ''}}" data-filter="none" catchtap="onTransferFilterTap" hover-class="hover-dim">无转会</view>
+          </view>
+        </view>
+
+        <app-empty-state
+          wx:if="{{visibleTransferRows.length === 0}}"
+          title="{{transferFilter === 'none' ? '每轮都有转会' : '还没有符合条件的轮次'}}"
+          description="{{transferFilter === 'none' ? '本赛季至今没有保持原阵容的比赛周' : '切换上方筛选查看其他轮次'}}"
+        />
+        <block wx:for="{{visibleTransferRows}}" wx:key="id">
+          <view wx:if="{{item.transferCount > 0 || item.moves.length > 0}}" class="card transfer-card">
+            <view
+              class="transfer-head"
+              data-id="{{item.id}}"
+              catchtap="onToggleTransferRow"
+              hover-class="{{item.collapsible ? 'hover-dim' : ''}}"
+            >
+              <text class="gw-pill-dark">{{item.gameweek}}</text>
+              <text wx:if="{{item.chip}}" class="chip-code transfer-chip">{{item.chip}}</text>
+              <text class="transfer-count">转会 {{item.transfers}}</text>
+              <text class="transfer-cost {{item.hasCost ? 'transfer-cost-bad' : ''}}">扣分 {{item.cost}}</text>
+              <text wx:if="{{item.collapsible}}" class="transfer-toggle">{{item.collapsed ? '展开' : '收起'}}</text>
+            </view>
+            <block wx:if="{{!item.collapsed}}">
+              <view wx:if="{{item.moves.length === 0}}" class="empty-line">{{item.emptyText}}</view>
+              <view wx:for="{{item.moves}}" wx:for-item="move" wx:key="id" class="swap-row">
+                <view class="swap-side">
+                  <text class="swap-kicker swap-kicker-out">出</text>
+                  <text class="swap-name" user-select="{{true}}">{{move.outName}}</text>
+                  <text wx:if="{{move.outTeam}}" class="swap-team">{{move.outTeam}}</text>
+                  <text class="swap-points">{{move.outPointsText}}</text>
+                </view>
+                <view class="swap-mid">
+                  <view class="swap-mark"></view>
+                  <text class="swap-price">{{move.priceText}}</text>
+                </view>
+                <view class="swap-side swap-in">
+                  <text class="swap-kicker swap-kicker-in">入</text>
+                  <text class="swap-name" user-select="{{true}}">{{move.inName}}</text>
+                  <text wx:if="{{move.inTeam}}" class="swap-team">{{move.inTeam}}</text>
+                  <text class="swap-points">{{move.inPointsText}}</text>
+                </view>
+              </view>
+            </block>
+          </view>
+          <view wx:else class="quiet-row">
+            <text class="gw-pill-dark">{{item.gameweek}}</text>
+            <text class="quiet-text">本轮未转会</text>
+            <text wx:if="{{item.chip}}" class="chip-code">{{item.chip}}</text>
+          </view>
+        </block>
+        <view wx:if="{{transferHasMore}}" class="load-more" bindtap="onTransferLoadMore" hover-class="hover-dim">再显示 8 轮</view>
       </block>
     </view>
 
     <view wx:if="{{showChips}}" class="section">
-      <view class="card summary-card">
-        <view class="metric-grid">
-          <view wx:for="{{chipSummaryStats}}" wx:key="label" class="metric-card">
-            <text class="metric-label">{{item.label}}</text>
-            <text class="metric-value">{{item.value}}</text>
+      <view class="card">
+        <view class="section-heading">上下半赛季额度</view>
+        <view class="chip-hint">每种开卡上半（GW1–19）/ 下半（GW20–38）各 1 张 · 表中为 已用/剩余</view>
+        <view class="chip-table">
+          <view class="chip-tr chip-tr-head">
+            <text class="chip-td-name">开卡</text>
+            <text class="chip-td-half">上半</text>
+            <text class="chip-td-half">下半</text>
+          </view>
+          <view wx:for="{{chipInventoryRows}}" wx:key="id" class="chip-tr">
+            <view class="chip-td-name">
+              <text class="chip-code">{{item.code}}</text>
+              <text class="chip-full">{{item.name}}</text>
+            </view>
+            <text class="chip-td-half {{item.firstOut ? 'chip-out' : ''}}">{{item.firstText}}</text>
+            <text class="chip-td-half {{item.secondOut ? 'chip-out' : ''}}">{{item.secondText}}</text>
           </view>
         </view>
       </view>
-      <view class="card summary-card">
-        <view class="section-title-small">开卡统计</view>
-        <app-empty-state wx:if="{{chipCountRows.length === 0}}" title="本赛季还没有开卡" description="使用特殊卡后会计入这里" />
-        <view wx:for="{{chipCountRows}}" wx:key="id" class="summary-row">
-          <view class="row-title">{{item.label}}</view>
-          <text class="row-value">{{item.value}}</text>
-        </view>
-      </view>
-      <view class="card summary-card">
-        <view class="section-title-small">使用记录</view>
-        <app-empty-state wx:if="{{chipUsageRows.length === 0}}" title="还没有特殊卡使用记录" description="首次使用后会显示比赛周与卡片类型" />
-        <view wx:for="{{chipUsageRows}}" wx:key="id" class="summary-row">
-          <view class="row-title">{{item.label}}</view>
-          <text class="row-value">{{item.value}}</text>
+      <view class="card chip-log-card">
+        <view class="section-heading">使用记录</view>
+        <app-empty-state wx:if="{{chipLogRows.length === 0}}" title="还没有开卡使用记录" description="首次使用后会显示比赛周与当轮结果" />
+        <view wx:for="{{chipLogRows}}" wx:key="id" class="chip-log-row">
+          <text class="gw-pill-dark">{{item.gameweek}}</text>
+          <text class="chip-log-code">{{item.chip}}</text>
+          <text class="chip-log-meta">积分 {{item.pointsText}} · 净 {{item.netText}} · 排名 {{item.rankText}}</text>
         </view>
       </view>
     </view>
 
-    <view wx:if="{{showHistory}}" class="section">
-      <view class="card summary-card">
-        <view class="section-title-small">GW 历史</view>
-        <app-empty-state wx:if="{{historyRows.length === 0}}" title="本赛季还没有 GW 历史" description="完成一个比赛周后会开始累计记录" />
-        <view wx:for="{{historyRows}}" wx:key="id" class="history-card">
-          <view class="history-title">{{item.gameweek}}</view>
-          <view class="history-grid">
-            <text>得分 {{item.eventPoints}}</text>
-            <text>净分 {{item.eventNetPoints}}</text>
-            <text>GW排名 {{item.eventRank}}</text>
-            <text>总分 {{item.overallPoints}}</text>
-            <text>总排名 {{item.overallRank}}</text>
-            <text>转会 {{item.eventTransfers}}</text>
-            <text>扣分 {{item.eventTransfersCost}}</text>
-            <text>身价 {{item.teamValue}}</text>
-            <text>余额 {{item.bank}}</text>
+    <view wx:if="{{showHistory && !tabLoading}}" class="section">
+      <view class="card season-chart-card">
+        <view class="section-heading">赛季走势</view>
+        <app-empty-state
+          wx:if="{{!seasonChartVisible}}"
+          title="还不够画走势"
+          description="至少完成两个比赛周后会显示排名和得分曲线"
+        />
+        <block wx:else>
+          <view class="chart-modes">
+            <view
+              wx:for="{{seasonChartModes}}"
+              wx:key="id"
+              class="chart-mode {{seasonChartMode === item.id ? 'chart-mode-on' : ''}}"
+              data-mode="{{item.id}}"
+              bindtap="onSeasonChartMode"
+              hover-class="hover-dim"
+            >{{item.label}}</view>
           </view>
-        </view>
+          <view class="chart-summary">{{seasonChartSummary}}</view>
+          <mini-chart
+            type="{{seasonChartType}}"
+            points="{{seasonChartSeries}}"
+            invertY="{{seasonChartInvertY}}"
+            referenceY="{{seasonChartReferenceY || 0}}"
+            hasReference="{{seasonChartHasReference}}"
+            selectedX="{{seasonChartSelectedGw || 0}}"
+            hasSelected="{{seasonChartHasSelected}}"
+            bind:select="onSeasonChartSelect"
+          />
+          <view class="chart-hint">{{seasonChartHint}}</view>
+        </block>
       </view>
-      <view class="card summary-card">
-        <view class="section-title-small">赛季历史</view>
-        <app-empty-state wx:if="{{seasonHistoryRows.length === 0}}" title="还没有往季记录" description="参加过的完整赛季会显示在这里" />
-        <view wx:for="{{seasonHistoryRows}}" wx:key="id" class="summary-row">
-          <view class="row-main">
-            <view class="row-title">{{item.order}}. {{item.season}}</view>
-            <view class="row-meta">总排名 {{item.overallRank}}</view>
-          </view>
-          <text class="row-value">{{item.totalPoints}}</text>
+
+      <view class="card">
+        <view class="history-head">
+          <view class="section-heading">GW 历史</view>
+          <text wx:if="{{totalTransfersText}}" class="history-total">{{totalTransfersText}}</text>
         </view>
+        <app-empty-state wx:if="{{historyRows.length === 0}}" title="本赛季还没有 GW 历史" description="完成一个比赛周后会开始累计记录" />
+        <block wx:else>
+          <view class="hist-tr hist-tr-head">
+            <text class="hist-td-gw">轮次</text>
+            <text class="hist-td-points">得分</text>
+            <text class="hist-td-captain">队长</text>
+            <text class="hist-td-cost">扣分</text>
+            <text class="hist-td-rank">总排名</text>
+          </view>
+          <view wx:for="{{pagedHistoryRows}}" wx:key="id" class="hist-tr">
+            <view class="hist-td-gw"><text class="gw-pill-dark">{{item.gameweek}}</text></view>
+            <text class="hist-td-points">{{item.pointsText}}</text>
+            <view class="hist-td-captain">
+              <text class="hist-captain-name">{{item.captainName}}</text>
+              <text wx:if="{{item.captainPointsText}}" class="hist-captain-points">{{item.captainPointsText}}</text>
+            </view>
+            <text class="hist-td-cost {{item.costBad ? 'hist-cost-bad' : ''}}">{{item.costText}}</text>
+            <text class="hist-td-rank">{{item.rankText}}</text>
+          </view>
+          <view wx:if="{{historyHasMore}}" class="load-more" bindtap="onHistoryLoadMore" hover-class="hover-dim">再显示 12 轮</view>
+        </block>
+      </view>
+
+      <view class="card season-card">
+        <view class="section-heading">赛季历史</view>
+        <block wx:if="{{pastSeasonVisible}}">
+          <view class="chart-hint">折线跨赛季总排名，越好越上。当前赛季用虚线标出。</view>
+          <view class="chart-summary">{{pastSeasonSummary}}</view>
+          <mini-chart
+            type="line"
+            points="{{pastSeasonSeries}}"
+            invertY="{{true}}"
+            selectedX="{{pastSeasonSelected || 0}}"
+            hasSelected="{{pastSeasonHasSelected}}"
+            bind:select="onPastSeasonSelect"
+          />
+        </block>
+        <app-empty-state wx:if="{{seasonHistoryRows.length === 0}}" title="还没有往季记录" description="参加过的完整赛季会显示在这里" />
+        <block wx:else>
+          <view class="season-tr season-tr-head">
+            <text class="season-td-name">赛季</text>
+            <text class="season-td-points">积分</text>
+            <text class="season-td-rank">总排名</text>
+          </view>
+          <view wx:for="{{seasonHistoryRows}}" wx:key="id" class="season-tr {{item.current ? 'season-current' : ''}}">
+            <view class="season-td-name">
+              <text class="season-name">{{item.season}}</text>
+              <text wx:if="{{item.current}}" class="season-badge">本赛季</text>
+            </view>
+            <text class="season-td-points">{{item.totalPoints}}</text>
+            <text class="season-td-rank">{{item.overallRank}}</text>
+          </view>
+        </block>
       </view>
     </view>
   </block>
+
+  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
 
   <bottomNavBar active="myFpl" />
 </view>

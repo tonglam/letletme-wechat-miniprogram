@@ -1,7 +1,0 @@
-{
-  "navigationBarTitleText": "我的 FPL",
-  "enablePullDownRefresh": true,
-  "usingComponents": {
-    "my-fpl-phase-card": "../../../components/my-fpl-phase-card/my-fpl-phase-card"
-  }
-}

@@ -258,9 +258,9 @@ PerformancePage({
           tournamentNames: [],
           selectedTournamentName: "",
           emptyState: "tournaments",
-          emptyEyebrow: "联赛待就绪",
-          emptyTitle: "当前球队还没有可查看的联赛",
-          emptyDescription: "加入或创建一个积分联赛后，或等待新赛季数据同步，再回到这里重新检查。",
+          emptyEyebrow: "赛事待就绪",
+          emptyTitle: "当前球队还没有可查看的赛事",
+          emptyDescription: "加入或创建一个赛事之后，或等待新赛季数据同步，再回到这里重新检查。",
           emptyActionText: "重新检查"
         });
         return;
@@ -279,7 +279,7 @@ PerformancePage({
       await this.loadSummary(forceRefresh, trace);
     } catch (error) {
       if (!isActiveLifecycle()) return;
-      this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
+      this.setData({ error: error instanceof Error ? error.message : "赛事回顾加载失败" });
     } finally {
       if (isActiveLifecycle() && this.activeLoadStage === "tournaments") {
         this.activeLoadStage = null;
@@ -328,7 +328,7 @@ PerformancePage({
       this.setData(mapTournamentSummaryData(tournament, payload.tournamentEventResults, payload.tournamentEntryRankingSummary, requestedEntryId, requestedEvent));
     } catch (error) {
       if (!isActiveRequest()) return;
-      this.setData({ error: error instanceof Error ? error.message : "联赛总结加载失败" });
+      this.setData({ error: error instanceof Error ? error.message : "赛事回顾加载失败" });
     } finally {
       if (isActiveRequest()) this.setData({ loading: false });
       if (isActiveRequest() && this.activeLoadStage === "summary") {
@@ -411,7 +411,7 @@ function mapTournamentSummaryData(
     { label: "本轮得分", value: formatPoints(currentRow?.eventPoints) },
     { label: "本轮净分", value: formatPoints(currentRow?.eventNetPoints) },
     { label: "小组排名", value: formatRank(currentRow?.eventGroupRank) },
-    { label: "联赛总排名", value: formatRank(summary.tournamentOverallRank) },
+    { label: "赛事排名", value: formatRank(summary.tournamentOverallRank) },
     { label: "总排名", value: formatCompactNumber(summary.overallRank ?? currentRow?.overallRank) },
     { label: "阵容身价", value: formatMoney(summary.teamValue ?? currentRow?.teamValue) }
   ].filter((item) => item.value !== "-");

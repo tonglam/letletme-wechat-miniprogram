@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/home/index/index",
+    "pages/account/index/index",
     "pages/account/link/link",
     "pages/live/index/index",
     "pages/data/index/index",
@@ -18,11 +19,8 @@
     "pages/summary/entry/entry",
     "pages/summary/tournament/tournament",
     "pages/summary/gameweek/gameweek",
-    "pages/my-fpl/index/index",
     "pages/my-fpl/team/team",
     "pages/my-fpl/leagues/leagues",
-    "pages/competitions/index/index",
-    "pages/explore/index/index",
     "pages/explore/fixtures/fixtures",
     "pages/performance/index/index"
   ],
@@ -35,7 +33,8 @@
   },
   "__usePrivacyCheck__": true,
   "usingComponents": {
-    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar"
+    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar",
+    "privacy-dialog": "./components/privacy-dialog/privacy-dialog"
   },
   "style": "v2",
   "componentFramework": "glass-easel",

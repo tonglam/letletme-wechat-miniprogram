@@ -1,9 +1,10 @@
-import { getEntryEventTransfers } from "../../../services/entry.service";
+import { getEntryEventTransfers, getEntryInfo } from "../../../services/entry.service";
 import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
+import { chipShareLabel, copyShareText, formatLiveEntryShareText } from "../../../utils/live-share";
 import {
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot
@@ -20,6 +21,7 @@ import {
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
+import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "./player-detail";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 import {
   ensureAppContext,
@@ -30,6 +32,12 @@ import {
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import {
+  buildLiveSquadPitchState,
+  type SquadPitchHeader,
+  type SquadPitchPlayer
+} from "../../../utils/squad-pitch";
+import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 
 interface SummaryTile {
   label: string;
@@ -50,6 +58,8 @@ interface LiveEntryData {
   event: number;
   maxGw: number;
   entryId?: number;
+  entryName: string;
+  playerName: string;
   total: number;
   livePoints: number;
   netPoints: number;
@@ -63,6 +73,18 @@ interface LiveEntryData {
   bench: LivePlayerRow[];
   managers: LivePlayerRow[];
   transfers: TransferRow[];
+  playerDetailOpen: boolean;
+  playerDetail: PlayerLiveDetailView | null;
+  shareLabel: string;
+  shareCopied: boolean;
+  shareSheetOpen: boolean;
+  shareText: string;
+  pitchPlayers: SquadPitchPlayer[];
+  pitchBench: SquadPitchPlayer[];
+  pitchHeader: SquadPitchHeader | null;
+  pitchBenchBoost: boolean;
+  shareImagePath: string;
+  shareBusy: boolean;
 }
 
 interface LiveEntryLoadOptions {
@@ -82,6 +104,18 @@ function textValue(value: unknown, fallback = "-"): string {
     return fallback;
   }
   return String(value);
+}
+
+function captainDisplayName(
+  players: Array<{ captain?: boolean; webName?: string; name?: string }>,
+  captainName: unknown
+): string {
+  const fromSquad = players.find((player) => player.captain);
+  const squadName = fromSquad?.webName || fromSquad?.name;
+  if (squadName) return String(squadName);
+  const raw = textValue(captainName);
+  if (raw === "-") return raw;
+  return raw.replace(/\s*[\(（].*$/, "").replace(/\s+[·—-].*$/, "").replace(/\s+\d.*$/, "").trim() || raw;
 }
 
 function formatTime(date: Date): string {
@@ -105,19 +139,33 @@ Page({
     event: 0,
     maxGw: 1,
     entryId: 0,
+    entryName: "",
+    playerName: "",
     total: 0,
     livePoints: 0,
     netPoints: 0,
     transferCost: 0,
     captainText: "-",
-    chipText: "-",
+    chipText: "无",
     playedText: "-",
     lastUpdated: "",
     summaryTiles: [],
     starters: [],
     bench: [],
     managers: [],
-    transfers: []
+    transfers: [],
+    playerDetailOpen: false,
+    playerDetail: null,
+    shareLabel: "复制分享",
+    shareCopied: false,
+    shareSheetOpen: false,
+    shareText: "",
+    pitchPlayers: [],
+    pitchBench: [],
+    pitchHeader: null,
+    pitchBenchBoost: false,
+    shareImagePath: "",
+    shareBusy: false
   } as LiveEntryData,
 
   liveRequest: null as Promise<void> | null,
@@ -203,14 +251,16 @@ Page({
     this.startupPending = false;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     const followedEntry = app.globalData.entryId;
+    const entryId = this.hasRouteEntry ? this.routeEntryId : (followedEntry ?? 0);
     this.setData({
       event: currentGw,
       maxGw: currentGw,
-      entryId: this.hasRouteEntry ? this.routeEntryId : (followedEntry ?? 0),
+      entryId,
       // An explicit route entry that is not the followed team is read-only
       // view mode; it never changes the stored follow.
       viewOnly: this.hasRouteEntry && this.routeEntryId !== followedEntry
     });
+    void this.loadEntryIdentity(entryId);
     this.initLiveRefresh();
     // onShow can run while initAppData is still pending. Re-arm here once the
     // entry/event context exists so an initial failure still recovers by poll.
@@ -329,13 +379,14 @@ Page({
           netPoints: 0,
           transferCost: 0,
           captainText: "-",
-          chipText: "-",
+          chipText: "无",
           playedText: "-",
           summaryTiles: [],
           starters: [],
           bench: [],
           managers: [],
-          transfers: []
+          transfers: [],
+          ...emptyLivePitchState()
         });
         this.liveRefresh?.sync();
         if (nextEventId > 0) {
@@ -499,6 +550,23 @@ Page({
     return this.loadData(options);
   },
 
+  async loadEntryIdentity(entryId: number) {
+    if (!entryId) {
+      this.setData({ entryName: "", playerName: "" });
+      return;
+    }
+    try {
+      const entry = await getEntryInfo(entryId);
+      if (this.data.entryId !== entryId) return;
+      this.setData({
+        entryName: entry.entryName || entry.teamName || "",
+        playerName: entry.playerName || ""
+      });
+    } catch {
+      if (this.data.entryId === entryId) this.setData({ entryName: "", playerName: "" });
+    }
+  },
+
   restartForPrincipalChange(entryId: number | undefined): boolean {
     // An explicit non-followed route entry is a stable read-only view. The
     // normal personal surface, however, must track the authoritative follow
@@ -520,6 +588,8 @@ Page({
     this.liveForcedFollowupTrackNavigation = false;
     this.setData({
       entryId: nextEntryId,
+      entryName: "",
+      playerName: "",
       loading: false,
       refreshing: false,
       transfersLoading: false,
@@ -533,16 +603,18 @@ Page({
       netPoints: 0,
       transferCost: 0,
       captainText: "-",
-      chipText: "-",
+      chipText: "无",
       playedText: "-",
       lastUpdated: "",
       summaryTiles: [],
       starters: [],
       bench: [],
       managers: [],
-      transfers: []
+      transfers: [],
+      ...emptyLivePitchState()
     });
     if (nextEntryId) {
+      void this.loadEntryIdentity(nextEntryId);
       this.liveRefresh?.sync();
       void this.loadData({ includeTransfers: true, forceRefresh: true });
     }
@@ -650,7 +722,7 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
-        const result = liveResult.data;
+    const result = liveResult.data;
         navigationTracker?.mark("primaryResponseAt");
         if (result.availability === "NO_PICKS") {
           this.liveSnapshot = null;
@@ -668,6 +740,7 @@ Page({
             bench: [],
             managers: [],
             transfers: [],
+            ...emptyLivePitchState(),
             transfersLoading: false,
             transfersError: "",
             lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
@@ -700,18 +773,28 @@ Page({
           livePoints,
           netPoints,
           transferCost,
-          captainText: textValue(result.captainName),
-          chipText: textValue(result.chip, "无"),
+          captainText: captainDisplayName(players, result.captainName),
+          chipText: chipShareLabel(textValue(result.chip, "无")),
           playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
           summaryTiles: [
             { label: "实时得分", value: `${livePoints}` },
             { label: "净得分", value: `${netPoints}` },
             { label: "实时总分", value: `${total}` },
-            { label: "剁手", value: `${transferCost}` }
+            { label: "转会扣分", value: transferCost > 0 ? `-${transferCost}` : "0" }
           ],
           starters,
           bench,
           managers,
+          ...livePitchState({
+            starters,
+            bench,
+            eventId,
+            teamName: this.data.entryName,
+            managerName: this.data.playerName,
+            totalPoints: total,
+            gameweekPoints: livePoints,
+            chip: textValue(result.chip, "")
+          }),
           lastUpdated: formatTime(new Date(fetchedAt))
         }, () => {
           navigationTracker?.mark("primarySetDataAt");
@@ -881,7 +964,9 @@ Page({
       lastUpdated: "",
       transfers: [],
       transfersLoading: false,
-      transfersError: ""
+      transfersError: "",
+      playerDetailOpen: false,
+      playerDetail: null
     });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
@@ -898,5 +983,129 @@ Page({
 
   onChooseEntry() {
     goToEntrySearch();
+  },
+
+  onOpenPlayer(event: WechatMiniprogram.CustomEvent<{ player: LivePlayerRow }>) {
+    const player = event.detail.player;
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player)
+    });
+  },
+
+  onPitchPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
+    const playerId = String(event.detail?.playerId || "");
+    if (!playerId) return;
+    const player = findLivePlayerForPitch(this.data.starters, this.data.bench, playerId);
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player)
+    });
+  },
+
+  onClosePlayer() {
+    this.setData({
+      playerDetailOpen: false
+    });
+  },
+
+  async onSharePitch() {
+    if (this.data.shareBusy) return;
+    const pitch = this.selectComponent("#live-squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
+      exportShareImage?: () => Promise<string>;
+    } | null;
+    if (!pitch?.exportShareImage) {
+      wx.showToast({ title: "阵容图还没准备好", icon: "none" });
+      return;
+    }
+    this.setData({ shareBusy: true });
+    try {
+      const path = await pitch.exportShareImage();
+      this.setData({ shareImagePath: path });
+      await presentSquadPitchShareImage(path);
+    } catch {
+      wx.showToast({ title: "阵容图生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareBusy: false });
+    }
+  },
+
+  onShareAppMessage() {
+    const teamName = this.data.pitchHeader?.teamName || this.data.entryName || "实时球队";
+    return {
+      title: `${teamName} · GW${this.data.event} · ${this.data.livePoints}分`,
+      path: this.data.entryId ? `/pages/live/entry/entry?entry=${this.data.entryId}` : "/pages/live/entry/entry",
+      imageUrl: this.data.shareImagePath || undefined
+    };
+  },
+
+  onCopyShare() {
+    try {
+      if (!this.data.hasData) {
+        wx.showToast({ title: "还没有可分享的阵容", icon: "none" });
+        return;
+      }
+      const text = formatLiveEntryShareText({
+        gameweek: this.data.event,
+        entryId: this.data.entryId,
+        entryName: this.data.entryName,
+        playerName: this.data.playerName,
+        livePoints: this.data.livePoints,
+        netPoints: this.data.netPoints,
+        totalPoints: this.data.total,
+        transferCost: this.data.transferCost,
+        chip: this.data.chipText,
+        captainName: this.data.captainText,
+        starters: this.data.starters || [],
+        bench: this.data.bench || []
+      });
+      void copyShareText(text).then((ok) => {
+        if (ok) {
+          this.setData({ shareCopied: true, shareSheetOpen: false });
+          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      });
+    } catch (error) {
+      console.error("[copy-share] entry", error);
+      wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   }
 });
+
+function emptyLivePitchState(): {
+  pitchPlayers: SquadPitchPlayer[];
+  pitchBench: SquadPitchPlayer[];
+  pitchHeader: SquadPitchHeader | null;
+  pitchBenchBoost: boolean;
+} {
+  return {
+    pitchPlayers: [],
+    pitchBench: [],
+    pitchHeader: null,
+    pitchBenchBoost: false
+  };
+}
+
+function livePitchState(input: Parameters<typeof buildLiveSquadPitchState>[0]) {
+  return buildLiveSquadPitchState(input);
+}
+
+function findLivePlayerForPitch(
+  starters: LivePlayerRow[],
+  bench: LivePlayerRow[],
+  playerId: string
+): LivePlayerRow | undefined {
+  return [...starters, ...bench].find((player) => {
+    const elementId = player.element != null ? String(player.element) : "";
+    const name = String(player.webName || player.name || "");
+    return elementId === playerId || name === playerId;
+  });
+}

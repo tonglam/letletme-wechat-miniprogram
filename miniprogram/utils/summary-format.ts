@@ -11,6 +11,7 @@ export interface DisplayRow {
   value: string;
   meta?: string;
   description?: string;
+  barStyle?: string;
   tone?: "default" | "good" | "bad" | "accent";
 }
 

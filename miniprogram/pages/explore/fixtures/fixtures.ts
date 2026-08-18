@@ -3,9 +3,14 @@ import { getFixtureWindow } from "../../../services/fixture.service";
 import { getTeamList } from "../../../services/common.service";
 import type { Fixture } from "../../../models/common";
 import {
+  buildFixtureRunCells,
   buildFixtureRuns,
   normalizeHorizon,
+  sortFixtureRuns,
+  summarizeFixtureRun,
   type FixtureRun,
+  type FixtureRunChip,
+  type FixtureRunSort,
   type FixtureRunTeam
 } from "../../../utils/fixture-run";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
@@ -13,14 +18,142 @@ import { capturePageRequestTrace } from "../../../services/graphql.service";
 
 const FALLBACK_MAX_EVENT = 38;
 
+export interface FixtureRunCardCell {
+  key: string;
+  event: number;
+  blank: boolean;
+  double: boolean;
+  chips: FixtureRunChip[];
+}
+
+export interface FixtureRunCard {
+  teamId: number;
+  teamName: string;
+  avgText: string;
+  avgClass: string;
+  metaText: string;
+  cells: FixtureRunCardCell[];
+}
+
+export interface FixtureGlanceCard {
+  key: string;
+  label: string;
+  valueText: string;
+  valueClass: string;
+  subText: string;
+  sort: FixtureRunSort | "";
+}
+
+/** The web colors aggregate numbers by their rounded 1-5 difficulty band. */
+function fdrBandClass(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  const clamped = Math.min(5, Math.max(1, Math.round(value)));
+  return `fdr-${clamped}`;
+}
+
+function buildGlanceCards(runs: FixtureRun[]): FixtureGlanceCard[] {
+  let best: { teamName: string; avg: number } | null = null;
+  let worst: { teamName: string; avg: number } | null = null;
+  let soft: { teamName: string; chip: FixtureRunChip; fdr: number } | null = null;
+  let hard: { teamName: string; chip: FixtureRunChip; fdr: number } | null = null;
+  for (const run of runs) {
+    const summary = summarizeFixtureRun(run);
+    if (summary.avgFdr !== null) {
+      if (!best || summary.avgFdr < best.avg) best = { teamName: run.teamName, avg: summary.avgFdr };
+      if (!worst || summary.avgFdr > worst.avg) worst = { teamName: run.teamName, avg: summary.avgFdr };
+    }
+    const next = summary.next;
+    const nextFdr =
+      next && typeof next.difficulty === "number" && Number.isFinite(next.difficulty)
+        ? next.difficulty
+        : null;
+    if (next && nextFdr !== null) {
+      if (!soft || nextFdr < soft.fdr) soft = { teamName: run.teamName, chip: next, fdr: nextFdr };
+      if (!hard || nextFdr > hard.fdr) hard = { teamName: run.teamName, chip: next, fdr: nextFdr };
+    }
+  }
+  const cards: FixtureGlanceCard[] = [];
+  if (best) {
+    cards.push({
+      key: "best",
+      label: "最佳赛程",
+      valueText: best.avg.toFixed(1),
+      valueClass: fdrBandClass(best.avg),
+      subText: best.teamName,
+      sort: "easiest"
+    });
+  }
+  if (worst) {
+    cards.push({
+      key: "worst",
+      label: "最差赛程",
+      valueText: worst.avg.toFixed(1),
+      valueClass: fdrBandClass(worst.avg),
+      subText: worst.teamName,
+      sort: "hardest"
+    });
+  }
+  if (soft) {
+    cards.push({
+      key: "soft",
+      label: "下场最软",
+      valueText: String(soft.fdr),
+      valueClass: fdrBandClass(soft.fdr),
+      subText: `${soft.teamName} · ${soft.chip.home ? "主" : "客"} ${soft.chip.opponentShortName}`,
+      sort: ""
+    });
+  }
+  if (hard) {
+    cards.push({
+      key: "hard",
+      label: "下场最硬",
+      valueText: String(hard.fdr),
+      valueClass: fdrBandClass(hard.fdr),
+      subText: `${hard.teamName} · ${hard.chip.home ? "主" : "客"} ${hard.chip.opponentShortName}`,
+      sort: ""
+    });
+  }
+  return cards;
+}
+
+/** View-model for the fixtures matrix: sorted team cards + glance strip. */
+export function buildFixturesView(
+  runs: FixtureRun[],
+  startEvent: number,
+  horizon: number,
+  sortOrder: FixtureRunSort
+): { runCards: FixtureRunCard[]; glanceCards: FixtureGlanceCard[] } {
+  const runCards = sortFixtureRuns(runs, sortOrder).map((run) => {
+    const summary = summarizeFixtureRun(run);
+    return {
+      teamId: run.teamId,
+      teamName: run.teamName,
+      avgText: summary.avgFdr === null ? "—" : summary.avgFdr.toFixed(1),
+      avgClass: fdrBandClass(summary.avgFdr),
+      metaText: `易 ${summary.easyCount} · 难 ${summary.hardCount}`,
+      cells: buildFixtureRunCells(run, startEvent, horizon).map((cell) => ({
+        key: `gw${cell.event}`,
+        event: cell.event,
+        blank: cell.blank,
+        double: cell.double,
+        chips: cell.chips
+      }))
+    };
+  });
+  return { runCards, glanceCards: buildGlanceCards(runs) };
+}
+
 PerformancePage({
   data: {
     loading: true,
     error: "",
     startEvent: 1,
     maxEvent: FALLBACK_MAX_EVENT,
-    horizon: 3 as 3 | 5,
-    runs: [] as FixtureRun[]
+    horizon: 5 as 3 | 5 | 8,
+    sortOrder: "easiest" as FixtureRunSort,
+    runs: [] as FixtureRun[],
+    runCards: [] as FixtureRunCard[],
+    glanceCards: [] as FixtureGlanceCard[]
   },
 
   // Payload mirrors outside data — rebuilding on control changes must not
@@ -105,7 +238,7 @@ PerformancePage({
       this.teams = [];
       this.loadedWindowKey = "";
       this.selectedWindowByUser = false;
-      this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [] });
+      this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [], runCards: [], glanceCards: [] });
       return true;
     }
     // Keep an explicitly selected historical window across same-season
@@ -119,7 +252,7 @@ PerformancePage({
       this.rebuild();
     } else {
       this.fixtures = [];
-      this.setData({ runs: [] });
+      this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
     return false;
   },
@@ -148,7 +281,7 @@ PerformancePage({
     const hadLastGood = this.teams.length > 0 && this.loadedWindowKey === windowKey;
     if (!hadLastGood) {
       this.fixtures = [];
-      this.setData({ runs: [] });
+      this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
     this.setData({ loading: !hadLastGood, error: "" });
     try {
@@ -188,10 +321,38 @@ PerformancePage({
   rebuild() {
     if (!this.teams.length) {
       this.setData({ runs: [] });
+      this.setData({ runCards: [], glanceCards: [] });
       return;
     }
     const runs = buildFixtureRuns(this.fixtures, this.teams, this.data.startEvent, this.data.horizon);
     this.setData({ runs });
+    this.applyView();
+  },
+
+  applyView() {
+    const { runCards, glanceCards } = buildFixturesView(
+      this.data.runs,
+      this.data.startEvent,
+      this.data.horizon,
+      this.data.sortOrder
+    );
+    this.setData({ runCards, glanceCards });
+  },
+
+  applySort(sortOrder: FixtureRunSort) {
+    if (sortOrder === this.data.sortOrder) return;
+    this.setData({ sortOrder });
+    this.applyView();
+  },
+
+  onSortChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { sort: string }>) {
+    this.applySort(event.currentTarget.dataset.sort === "hardest" ? "hardest" : "easiest");
+  },
+
+  onGlanceTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { sort: string }>) {
+    const sort = event.currentTarget.dataset.sort;
+    if (sort !== "easiest" && sort !== "hardest") return;
+    this.applySort(sort);
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {

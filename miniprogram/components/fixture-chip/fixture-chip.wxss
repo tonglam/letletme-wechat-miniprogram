@@ -1,18 +1,51 @@
-/* Layout modifiers on the global .fdr primitive
-   (background levels come from .fdr-1..5 via apply-shared) */
+/* FDR 1-5 palette mirrors the web FDR_CELL scale
+   (success / success-soft / muted / warning / destructive) on mini tokens. */
+
 .fixture-chip {
-  gap: 8rpx;
-  min-width: 96rpx;
-  padding: 8rpx 12rpx;
-  font-size: 22rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  width: 100%;
+  min-width: 0;
+  padding: 10rpx 6rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 8rpx;
+  background: var(--track);
+  color: var(--ink);
+  font-size: 20rpx;
   font-weight: 600;
   box-sizing: border-box;
 }
 
-/* Unknown/unrated — muted chip instead of a difficulty colour */
-.fdr-unknown {
+.fixture-chip.fdr-1 {
+  border-color: var(--green-ink-a40);
+  background: var(--accent-tint);
+  color: var(--ink);
+}
+
+.fixture-chip.fdr-2 {
+  border-color: var(--green-ink-a30);
+  background: var(--cta-a12);
+  color: var(--ink);
+}
+
+.fixture-chip.fdr-3 {
+  border-color: var(--line);
   background: var(--track);
-  color: var(--muted-ink);
+  color: var(--ink);
+}
+
+.fixture-chip.fdr-4 {
+  border-color: var(--warning-a45);
+  background: var(--warning-tint);
+  color: var(--ink);
+}
+
+.fixture-chip.fdr-5 {
+  border-color: var(--danger-a40);
+  background: var(--danger-tint);
+  color: var(--ink);
 }
 
 .home-away {

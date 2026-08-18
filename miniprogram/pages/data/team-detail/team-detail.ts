@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
 import { routes } from "../../../config/routes";
+import { setPageTitle } from "../../../utils/navigation";
 import { ensureAppContext } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -15,7 +16,8 @@ PerformancePage({
     emptyState: false,
     teamId: "",
     season: "",
-    team: undefined as TeamSummary | undefined
+    team: undefined as TeamSummary | undefined,
+    strengthDots: [] as boolean[]
   },
 
   routeSeason: "",
@@ -66,7 +68,7 @@ PerformancePage({
   },
 
   async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
-    if (!this.data.teamId) {
+        if (!this.data.teamId) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
@@ -99,7 +101,12 @@ PerformancePage({
       this.setData({ season });
       const team = await getTeamSummary(this.data.teamId, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
-      this.setData({ team });
+      const strength = Math.max(0, Math.min(5, Number(team.strength) || 0));
+      this.setData({
+        team,
+        strengthDots: Array.from({ length: 5 }, (_, index) => index < strength)
+      });
+      setPageTitle(team.name || "球队详情");
     } catch (error) {
       if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "球队详情加载失败" });

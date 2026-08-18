@@ -117,9 +117,22 @@ const benchSaka = filterTournamentRowsByOwnership(rows, { playerIds: [1], scope:
 assertEqual(benchSaka.length, 1, "bench ownership filter count");
 assertEqual(benchSaka[0]?.entry, 202, "bench ownership filter result");
 
-const arsenalDouble = filterTournamentRowsByTeamExposure(rows, { teamShortName: "ARS", exactCount: 2, scope: "starter" });
+const arsenalDouble = filterTournamentRowsByTeamExposure(rows, { rules: [{ teamShortName: "ARS", exactCount: 2 }], scope: "starter" });
 assertEqual(arsenalDouble.length, 1, "team exposure exact count");
 assertEqual(arsenalDouble[0]?.entry, 101, "team exposure exact result");
+
+const multiRule = filterTournamentRowsByTeamExposure(rows, {
+  rules: [
+    { teamShortName: "ARS", exactCount: 2 },
+    { teamShortName: "CHE", exactCount: 1 }
+  ],
+  scope: "any"
+});
+assertEqual(multiRule.length, 1, "multiple team rules all must hold");
+assertEqual(multiRule[0]?.entry, 101, "multi-rule exposure result");
+
+const noRules = filterTournamentRowsByTeamExposure(rows, { rules: [], scope: "any" });
+assertEqual(noRules.length, 2, "empty rules keep all rows");
 
 const teams = getTournamentTeamOptions(rows);
 assertEqual(teams.length, 2, "team options are deduplicated");

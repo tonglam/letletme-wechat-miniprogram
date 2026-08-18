@@ -1,7 +1,17 @@
 <view class="page page-tabbar">
   <view class="section">
-    <view class="title">身价变化</view>
-    <view class="subtitle">查看每日涨跌，或选择球员查看身价历史。</view>
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">身价变化</view>
+          <view class="score-manager">{{activeMode === 'daily' ? '每日调价 · 涨跌榜' : '单个球员的身价轨迹'}}</view>
+        </view>
+        <view wx:if="{{activeMode === 'daily'}}" class="score-hero">
+          <view class="score-label">上涨</view>
+          <view class="score">{{loading && riseChanges.length === 0 ? '-' : riseChanges.length}}</view>
+        </view>
+      </view>
+    </view>
   </view>
 
   <view class="section mode-tabs">
@@ -18,7 +28,7 @@
       <picker mode="date" value="{{changeDate}}" bindchange="onDateChange">
         <view class="date-picker">
           <text>{{changeDate}}</text>
-          <text class="picker-action">切换</text>
+          <text class="picker-action action">切换</text>
         </view>
       </picker>
     </view>
@@ -39,14 +49,23 @@
         bind:action="onRetry"
       />
     </view>
-    <view wx:else class="price-columns section">
+    <view wx:else class="price-columns-wrap">
+      <view class="section result-row">
+        <view class="result-count">{{riseChanges.length}} 涨 · {{fallChanges.length}} 跌</view>
+        <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+          <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+          <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+          <text class="tool-label">{{shareCopied ? '已复制' : '分享'}}</text>
+        </view>
+      </view>
+      <view class="price-columns section">
       <view class="card price-panel rise-panel">
         <view class="panel-head">
           <text>上涨</text>
           <text class="panel-count">{{riseChanges.length}}</text>
         </view>
         <app-empty-state wx:if="{{riseChanges.length === 0}}" title="这一天没有上涨" description="当日没有球员涨价" />
-        <view wx:for="{{riseChanges}}" wx:key="element" class="price-change-row">
+        <view wx:for="{{riseChanges}}" wx:key="element" class="price-change-row" data-direction="rise" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
             <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
@@ -64,7 +83,7 @@
           <text class="panel-count">{{fallChanges.length}}</text>
         </view>
         <app-empty-state wx:if="{{fallChanges.length === 0}}" title="这一天没有下跌" description="当日没有球员降价" />
-        <view wx:for="{{fallChanges}}" wx:key="element" class="price-change-row">
+        <view wx:for="{{fallChanges}}" wx:key="element" class="price-change-row" data-direction="fall" data-index="{{index}}" hover-class="hover-dim" bindtap="onPriceRowTap">
           <view class="change-main">
             <view class="change-player">{{item.name || item.playerName || '-'}}</view>
             <view class="change-meta">{{item.teamName || item.team || ''}} · {{item.position || ''}}</view>
@@ -75,8 +94,140 @@
           </view>
         </view>
       </view>
+      </view>
     </view>
     </block>
+    </view>
+
+    <view class="section pulse-heading-row">
+      <view class="section-heading">市场全景</view>
+      <text wx:if="{{coverageText}}" class="coverage-text">{{coverageText}}{{pulseStale ? ' · 数据可能滞后' : ''}}</text>
+    </view>
+    <view wx:if="{{pulseError}}" class="section inline-error">{{pulseError}}</view>
+
+    <view wx:if="{{glanceTiles.length}}" class="section glance-grid">
+      <view wx:for="{{glanceTiles}}" wx:key="key" class="glance-card">
+        <view class="glance-label">{{item.label}}</view>
+        <view class="glance-value {{item.tone}}">{{item.valueText}}</view>
+        <view class="glance-sub">{{item.subText}}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{mostSelectedRows.length}}" class="section card pulse-card">
+      <view class="panel-head">
+        <text>最多持有</text>
+        <text class="panel-count">{{mostSelectedRows.length}}</text>
+      </view>
+      <view wx:for="{{mostSelectedRows}}" wx:key="id" class="pulse-row">
+        <view class="pulse-main">
+          <view class="pulse-top">
+            <text class="pulse-name">{{item.name}}</text>
+            <text class="pulse-meta">{{item.meta}}</text>
+          </view>
+          <view class="bar-track"><view class="bar-fill" style="{{item.barStyle}}"></view></view>
+        </view>
+        <view class="pulse-side">
+          <text class="pulse-value">{{item.valueText}}</text>
+          <text class="pulse-sub">{{item.subText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{ownershipRiserRows.length || ownershipFallerRows.length}}" class="section card pulse-card">
+      <view class="panel-head">
+        <text>持有率摆动</text>
+      </view>
+      <view class="swing-columns">
+        <view class="swing-col">
+          <view class="swing-title good">增持</view>
+          <app-empty-state wx:if="{{ownershipRiserRows.length === 0}}" title="暂无增持" description="观察期内没有明显增持" />
+          <view wx:for="{{ownershipRiserRows}}" wx:key="id" class="swing-row">
+            <view class="swing-main">
+              <view class="pulse-top">
+                <text class="pulse-name">{{item.name}}</text>
+                <text class="pulse-meta">{{item.meta}}</text>
+              </view>
+              <view class="bar-track"><view class="bar-fill good" style="{{item.barStyle}}"></view></view>
+              <view class="pulse-sub">{{item.subText}}</view>
+            </view>
+            <text class="pulse-value {{item.tone}}">{{item.valueText}}</text>
+          </view>
+        </view>
+        <view class="swing-col">
+          <view class="swing-title bad">减持</view>
+          <app-empty-state wx:if="{{ownershipFallerRows.length === 0}}" title="暂无减持" description="观察期内没有明显减持" />
+          <view wx:for="{{ownershipFallerRows}}" wx:key="id" class="swing-row">
+            <view class="swing-main">
+              <view class="pulse-top">
+                <text class="pulse-name">{{item.name}}</text>
+                <text class="pulse-meta">{{item.meta}}</text>
+              </view>
+              <view class="bar-track"><view class="bar-fill bad" style="{{item.barStyle}}"></view></view>
+              <view class="pulse-sub">{{item.subText}}</view>
+            </view>
+            <text class="pulse-value {{item.tone}}">{{item.valueText}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{transferRows.length}}" class="section card pulse-card">
+      <view class="panel-head">
+        <text>转会动量</text>
+        <text class="panel-count">{{transferRows.length}}</text>
+      </view>
+      <view wx:for="{{transferRows}}" wx:key="id" class="pulse-row">
+        <view class="pulse-main">
+          <view class="pulse-top">
+            <text class="pulse-name">{{item.name}}</text>
+            <text class="pulse-meta">{{item.meta}}</text>
+          </view>
+          <view class="pulse-sub">{{item.subText}}</view>
+        </view>
+        <text class="pulse-value {{item.tone}}">{{item.valueText}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{availabilityRows.length}}" class="section card pulse-card">
+      <view class="panel-head">
+        <text>伤情动态</text>
+        <text class="panel-count">{{availabilityUpdateCount}}</text>
+      </view>
+      <view wx:for="{{availabilityRows}}" wx:key="id" class="pulse-row">
+        <view class="pulse-main">
+          <view class="pulse-top">
+            <text class="pulse-name">{{item.name}}</text>
+            <text class="pulse-meta">{{item.meta}}</text>
+          </view>
+          <view class="pulse-sub">{{item.subText}}</view>
+        </view>
+        <text class="status-pill">{{item.valueText}}</text>
+      </view>
+      <view
+        wx:if="{{availabilityUpdateCount > availabilityRows.length || availabilityExpanded}}"
+        class="availability-toggle"
+        hover-class="hover-dim"
+        bindtap="onAvailabilityExpand"
+      >
+        <text class="action">{{availabilityLoading ? '加载中…' : availabilityExpanded ? '收起' : '查看全部 ' + availabilityUpdateCount + ' 条'}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{newPlayerRows.length}}" class="section card pulse-card">
+      <view class="panel-head">
+        <text>新球员</text>
+        <text class="panel-count">{{newPlayerRows.length}}</text>
+      </view>
+      <view wx:for="{{newPlayerRows}}" wx:key="id" class="pulse-row">
+        <view class="pulse-main">
+          <view class="pulse-top">
+            <text class="pulse-name">{{item.name}}</text>
+            <text class="pulse-meta">{{item.meta}}</text>
+          </view>
+          <view class="pulse-sub">{{item.subText}}</view>
+        </view>
+        <text class="pulse-value">{{item.valueText}}</text>
+      </view>
     </view>
   </block>
 
@@ -87,7 +238,7 @@
           <view class="field-label">选择球员</view>
           <view class="field-help">可按球队、位置或名字筛选。</view>
         </view>
-        <button wx:if="{{selectedPlayer}}" class="clear-button" size="mini" plain bindtap="onClearSelectedPlayer">清除</button>
+        <view wx:if="{{selectedPlayer}}" class="action action-muted picker-clear" bindtap="onClearSelectedPlayer" hover-class="hover-dim">清除</view>
       </view>
 
       <view class="filter-grid">
@@ -143,7 +294,7 @@
           </view>
           <view wx:if="{{playersError}}" class="inline-error load-more-error">{{playersError}}</view>
           <app-loading wx:if="{{loadingMore}}" text="加载更多球员" />
-          <button wx:elif="{{hasMorePlayers}}" class="btn-secondary load-more-button" bindtap="loadMorePlayers">加载更多</button>
+          <view wx:elif="{{hasMorePlayers}}" class="load-more" bindtap="loadMorePlayers" hover-class="hover-dim"><text class="action">加载更多</text></view>
         </block>
       </view>
     </view>
@@ -178,5 +329,6 @@
     <evidence-source evidenceClass="OFFICIAL_FPL" freshness="每日更新" />
   </view>
 
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="explore" />
 </view>

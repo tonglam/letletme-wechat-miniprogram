@@ -7,25 +7,14 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path) => readFileSync(resolve(root, path), "utf8");
 
-test("My FPL overview re-awaits follow authority on resume", () => {
-  const page = source("miniprogram/pages/my-fpl/index/index.ts");
-  assert.match(page, /if \(resumed\)[\s\S]*resumeOverview\(\)/);
-  assert.match(page, /async resumeOverview\(\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*loadOverview\(forceRefresh, lifecycleRevision\)/);
-});
-
 for (const [label, path, loadMethod] of [
-  ["Competitions", "miniprogram/pages/competitions/index/index.ts", "loadList"],
   ["Leagues", "miniprogram/pages/my-fpl/leagues/leagues.ts", "loadLeagues"]
 ]) {
   test(`${label} cancels cold startup and resumes with a visible lifecycle`, () => {
     const page = source(path);
     assert.match(page, /await waitForAuthoritativeFollow\(\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*initAppData\(false\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision/);
     assert.match(page, new RegExp(`${loadMethod}\\((?:false|forceRefresh), trace, lifecycleRevision\\)`));
-    if (label === "Competitions") {
-      assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow[\s\S]*startupPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
-    } else {
-      assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
-    }
+    assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
   });
 }
 

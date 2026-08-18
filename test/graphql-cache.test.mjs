@@ -114,6 +114,8 @@ test("limits player picker pages and removes the unsupported full directory quer
 test("gameweek summary uses one four-root operation with a shared player fragment", () => {
   assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /query MiniGameweekSummary/);
   assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /fragment MiniSummaryPlayerFields on Player/);
+  assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /dreamTeam \{[\s\S]*minutes[\s\S]*goalsScored[\s\S]*bps/);
+  assert.match(MINI_GAMEWEEK_SUMMARY_QUERY, /topPerformers\(limit: 20\) \{[\s\S]*minutes[\s\S]*goalsScored[\s\S]*bps/);
   assert.equal((MINI_GAMEWEEK_SUMMARY_QUERY.match(/^\s{4}(eventOverallResult|eventLive|topTransfersIn|topTransfersOut)\b/gm) || []).length, 4);
   assert.ok((MINI_GAMEWEEK_SUMMARY_QUERY.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || []).length <= 200);
 });

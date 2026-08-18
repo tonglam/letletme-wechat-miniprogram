@@ -28,6 +28,22 @@ test("no-entry state observes primary only after setData commits", () => {
   assert.match(page, /if \(!entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*observePrimary/);
 });
 
+test("live entry renders the reusable squad pitch from live rows", () => {
+  const page = source("miniprogram/pages/live/entry/entry.ts");
+  const template = source("miniprogram/pages/live/entry/entry.wxml");
+  const json = source("miniprogram/pages/live/entry/entry.json");
+  assert.match(page, /buildLiveSquadPitchState/);
+  assert.match(page, /onPitchPlayerTap/);
+  assert.match(page, /onSharePitch/);
+  assert.match(page, /presentSquadPitchShareImage/);
+  assert.match(page, /buildPlayerLiveDetail\(player\)/);
+  assert.match(template, /live-pitch-section/);
+  assert.match(template, /bindtap="onSharePitch"/);
+  assert.match(template, /<squad-pitch/);
+  assert.match(template, /bind:playertap="onPitchPlayerTap"/);
+  assert.match(json, /squad-pitch/);
+});
+
 test("changing GW invalidates and clears deferred transfer data", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   const handler = page.slice(page.indexOf("onGwChange"), page.indexOf("onRetry"));

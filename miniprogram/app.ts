@@ -13,6 +13,7 @@ import {
   commitEntryBinding,
   ensureAppContext
 } from "./services/app-context.service";
+import { installPrivacyAuthorizationHandler } from "./utils/privacy";
 
 App<IAppOption>({
   globalData: {
@@ -48,6 +49,9 @@ App<IAppOption>({
     this.authReady = new Promise<void>((resolve) => {
       this._authReadyResolve = resolve;
     });
+    // Listen before requirePrivacyAuthorize so the custom dialog can resolve
+    // the first consent prompt instead of leaving it to the official popup.
+    installPrivacyAuthorizationHandler();
     this.requirePrivacyAndLogin();
     const initialization = this.initAppData();
     // AppContext initialization stays detached from the shell, but the

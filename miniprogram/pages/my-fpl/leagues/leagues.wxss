@@ -1,59 +1,568 @@
-/* League list — flush-inner card: global .card shell, rows own the padding */
-.league-list {
-  overflow: hidden;
-  padding: 0;
+/* 我的赛事 — toolbar/stat-strip/board 与实时联赛同语言 */
+
+.season-chart-card {
+  margin-bottom: 18rpx;
 }
 
-.league-row {
+.chart-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.chart-mode {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.chart-mode-on {
+  background: var(--ink);
+  color: var(--card);
+}
+
+.chart-summary,
+.chart-hint {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  line-height: 1.45;
+}
+
+.chart-summary {
+  min-height: 56rpx;
+  margin-bottom: 10rpx;
+}
+
+.chart-hint {
+  margin-top: 10rpx;
+}
+
+.page .section {
+  margin-bottom: 16rpx;
+}
+
+/* Toolbar — tournament picker pill, same as the live desk */
+.league-picker {
+  flex: 1;
+  min-width: 0;
+  margin-right: 12rpx;
+}
+
+.league-switch {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 88rpx;
-  padding: 24rpx;
+  gap: 8rpx;
+  min-width: 0;
+  min-height: 72rpx;
+  padding: 0 18rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: var(--track);
   box-sizing: border-box;
 }
 
-.league-row + .league-row {
-  border-top: 1rpx solid var(--line);
+.league-switch::after {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-right: 8rpx solid transparent;
+  border-left: 8rpx solid transparent;
+  border-top: 10rpx solid var(--muted-ink);
 }
 
-.league-main {
+.league-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+/* 你在赛事中 — 5 secondary tiles under the hero (web: grid-cols-2 on mobile) */
+.me-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10rpx;
+}
+
+.me-tile {
+  min-width: 0;
+  padding: 16rpx 8rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  text-align: center;
+}
+
+.me-tile-label {
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+.me-tile-value {
+  margin-top: 6rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.me-tile-meta {
+  margin-top: 4rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+/* 联赛概况 — dark fascia stat band, 4-up variant of the live desk strip */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 20rpx 0;
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 14rpx;
+  background:
+    radial-gradient(ellipse 120% 90% at 50% -30%, var(--plum-a70), rgba(56, 0, 60, 0) 60%),
+    linear-gradient(180deg, var(--fascia-hi), var(--fascia));
+  box-shadow: inset 0 1rpx 0 var(--electric-a28);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.stat-label {
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.stat-value {
+  color: var(--electric);
+  font-size: 34rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/* 联赛之最 — label / leader / value rows */
+.leader-heading {
+  margin-top: 22rpx;
+}
+
+.leader-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.leader-row:last-child {
+  border-bottom: 0;
+}
+
+.leader-label {
+  flex-shrink: 0;
+  width: 150rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.leader-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.leader-main {
   flex: 1;
   min-width: 0;
 }
 
-.league-name {
+.leader-meta {
+  margin-top: 2rpx;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+.leader-value {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 我的表现 — 4 tiles, same summary-grid language as the team page */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.summary-tile {
+  min-width: 0;
+  padding: 18rpx 8rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  text-align: center;
+}
+
+.tile-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.tile-value {
+  margin-top: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-meta {
+  margin-top: 4rpx;
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+.tile-good {
+  color: var(--green-ink);
+}
+
+.tile-bad {
+  color: var(--danger);
+}
+
+/* 本轮看点 — highlight rows; risers/fallers sit side by side on wide cards */
+.hl-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+}
+
+.hl-card {
+  min-width: 0;
+}
+
+.hl-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.hl-row:last-child {
+  border-bottom: 0;
+}
+
+.hl-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.hl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.hl-meta {
+  margin-top: 2rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.hl-value {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hl-good {
+  color: var(--green-ink);
+}
+
+.hl-bad {
+  color: var(--danger);
+}
+
+/* Filter card — search row, same as the live desk */
+.filter-top {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.filter-search {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sort tabs — segmented control */
+.sort-tabs {
+  display: flex;
+  gap: 6rpx;
+  padding: 6rpx;
+  overflow-x: auto;
+  border-radius: 14rpx;
+  background: var(--track);
   white-space: nowrap;
 }
 
-.league-meta {
-  margin-top: 6rpx;
-  overflow: hidden;
+.sort-tab {
+  flex-shrink: 0;
+  padding: 12rpx 20rpx;
+  border: 0;
+  border-radius: 10rpx;
+  background: transparent;
   color: var(--muted-ink);
   font-size: 24rpx;
-  text-overflow: ellipsis;
+  font-weight: 700;
+}
+
+.sort-tab.active {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2rpx 6rpx var(--plum-a8);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 10rpx;
+}
+
+.result-count {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+/* Board — 5-column variant of the live desk table */
+.board {
+  overflow: hidden;
+  border: 0;
+  border-radius: 16rpx;
+  background: var(--card);
+  box-shadow: 0 2rpx 8rpx var(--plum-a4);
+}
+
+.board-head,
+.board-row {
+  display: grid;
+  grid-template-columns: 48rpx minmax(0, 1fr) 78rpx 78rpx 108rpx;
+  align-items: center;
+  column-gap: 8rpx;
+  min-height: 48rpx;
+  padding: 0 16rpx;
+}
+
+.board-row {
+  min-height: 80rpx;
+  padding: 10rpx 16rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.board-row:last-child {
+  border-bottom: 0;
+}
+
+.board-row.me {
+  background: var(--accent-tint);
+}
+
+.board-head {
+  min-height: 44rpx;
+  border-bottom: 1rpx solid var(--line);
+  background: transparent;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.col-rank {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-row .col-rank {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  color: var(--ink);
+}
+
+/* 名次升降(web RankCell 同款):绿涨红跌 */
+.rank-move {
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.move-good {
+  color: var(--green-ink);
+}
+
+.move-bad {
+  color: var(--danger);
+}
+
+.col-team {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.team-line,
+.team-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
 }
 
-.league-action {
+.team-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.team-meta {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.me-badge,
+.chip-badge {
   flex-shrink: 0;
-  min-width: 120rpx;
-  min-height: 56rpx;
-  line-height: 56rpx;
-  margin-left: 16rpx;
-  padding: 0 24rpx;
-  box-sizing: border-box;
-  border-radius: 999rpx;
+  margin-left: 6rpx;
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+.me-badge {
+  color: var(--green-ink);
+}
+
+.chip-badge {
+  padding: 0 6rpx;
+  border-radius: 4rpx;
   background: var(--track);
+  color: var(--ink);
+}
+
+.chip-TC {
+  background: var(--accent-tint);
+  color: var(--green-ink);
+}
+
+.chip-BB {
+  background: var(--info-tint);
+  color: var(--info);
+}
+
+.chip-WC,
+.chip-FH,
+.chip-AM {
+  background: var(--plum-a8);
+  color: var(--plum);
+}
+
+.team-meta .chip-badge {
+  margin-left: 8rpx;
+}
+
+.col-num {
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.board-head .col-num {
+  color: var(--muted-ink);
+  font-weight: 800;
+}
+
+.num-good {
+  color: var(--green-ink);
+}
+
+.num-bad {
+  color: var(--danger);
+}
+
+.col-c3 {
+  color: var(--muted-ink);
+  font-weight: 700;
+}
+
+.load-more {
+  padding: 16rpx;
+  border-top: 1rpx solid var(--line);
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.manage-hint {
+  margin-top: 8rpx;
+  text-align: center;
   color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 700;
-  text-align: center;
 }
 
 .footnote {

@@ -11,8 +11,30 @@ import {
   type EntryTransferMove
 } from "../../../services/summary.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import { goToEntrySearch, goToLiveEntry } from "../../../utils/navigation";
-import { formatCompactNumber } from "../../../utils/summary-format";
+import { goToEntrySearch, goToLiveEntry, setPageTitle } from "../../../utils/navigation";
+import {
+  buildPlayerLiveDetail,
+  type PlayerLiveDetailView
+} from "../../live/entry/player-detail";
+import type { LivePlayerRow } from "../../../models/live";
+import { formatCompactNumber, formatPoints } from "../../../utils/summary-format";
+import {
+  buildSquadPitchView,
+  type SquadPitchHeader,
+  type SquadPitchPlayer
+} from "../../../utils/squad-pitch";
+import { resetShareImageCache } from "../../../utils/squad-pitch-canvas";
+import {
+  SEASON_CHART_MODES,
+  buildSeasonChartView,
+  historyToSeasonChartPoints,
+  pastSeasonSummary,
+  toPastSeasonChartPoints,
+  type PastSeasonChartPoint,
+  type SeasonChartMode,
+  type SeasonChartPoint
+} from "../../../utils/season-chart";
+import type { MiniChartPoint, MiniChartType } from "../../../utils/mini-chart";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import { currentFollowEntryId } from "../../../utils/follow";
@@ -46,22 +68,43 @@ interface MetricCard {
   tone?: "default" | "bad";
 }
 
+/** player-row contract — the same shape the live entry page renders, plus the
+ *  raw match stats buildPlayerLiveDetail reads when a row is tapped. */
 interface SquadRow {
   id: string;
   name: string;
-  teamName: string;
+  roleText: string;
+  team: string;
   position: string;
-  minutes: string;
+  metaText: string;
+  statusText: string;
   points: string;
-  role: string;
   bench: boolean;
-  played: boolean;
+  captain?: boolean;
+  viceCaptain?: boolean;
+  multiplier?: number;
+  minutes?: number;
+  goalsScored?: number;
+  assists?: number;
+  cleanSheets?: number;
+  saves?: number;
+  yellowCards?: number;
+  redCards?: number;
+  bonus?: number;
+  bps?: number;
 }
 
+/** swap-row contract — the same shape the live entry page renders. */
 interface TransferMoveRow {
   id: string;
-  text: string;
-  costText: string;
+  outName: string;
+  outTeam: string;
+  /** 当轮得分 — entryTransferHistory(live: true) reads the per-GW stats table. */
+  outPointsText: string;
+  inName: string;
+  inTeam: string;
+  inPointsText: string;
+  priceText: string;
 }
 
 interface TransferRow {
@@ -72,7 +115,22 @@ interface TransferRow {
   hasCost: boolean;
   emptyText: string;
   moves: TransferMoveRow[];
+  /** Normalized chip code for this GW ("" when none) — WC/FH weeks render collapsed. */
+  chip: string;
+  transferCount: number;
+  /** WC/FH or bulk weeks collapse behind a tap instead of flooding the list (web parity). */
+  collapsible: boolean;
+  collapsed: boolean;
 }
+
+type TransferFilter = "with" | "all" | "none";
+
+/** WC/FH (unlimited transfers) or any week whose move list would flood the page. */
+const TRANSFER_COLLAPSE_MOVE_THRESHOLD = 8;
+
+/* Long-list paging — web TeamTransfersTab shows 6+8, TeamGameweekHistory 12+12. */
+export const TRANSFER_PAGE_SIZE = 8;
+export const HISTORY_PAGE_SIZE = 12;
 
 export function retainTransferRowsAfterFailure(
   freshRows: TransferRow[],
@@ -83,45 +141,63 @@ export function retainTransferRowsAfterFailure(
   return transferFailed && sameSeason && previousRows.length > 0 ? previousRows : freshRows;
 }
 
-interface SimpleRow {
+/** One row per chip family — web TeamChipsTab inventory: used/remaining per half. */
+interface ChipInventoryRow {
   id: string;
-  label: string;
-  value: string;
-  meta?: string;
+  code: string;
+  name: string;
+  firstText: string;
+  secondText: string;
+  firstOut: boolean;
+  secondOut: boolean;
+}
+
+/** Usage log row — GW / chip / that round's outcome. */
+interface ChipLogRow {
+  id: string;
+  gameweek: string;
+  halfText: string;
+  chip: string;
+  pointsText: string;
+  netText: string;
+  rankText: string;
 }
 
 interface HistoryRow {
   id: string;
   gameweek: string;
-  eventPoints: string;
-  eventNetPoints: string;
-  eventRank: string;
-  overallPoints: string;
-  overallRank: string;
-  eventTransfers: string;
-  eventTransfersCost: string;
-  teamValue: string;
-  bank: string;
+  /** 本轮得分 — the number users scan a GW history for. */
+  pointsText: string;
+  captainName: string;
+  captainPointsText: string;
+  costText: string;
+  costBad: boolean;
+  rankText: string;
 }
 
 interface SeasonHistoryRow {
   id: string;
-  order: string;
   season: string;
   totalPoints: string;
   overallRank: string;
+  pointsValue: number;
+  rankValue: number;
+  /** Newest season first — the first row is the in-progress season. */
+  current: boolean;
 }
 
 interface TeamStatsViewModel {
   headerTitle: string;
   headerSubtitle: string;
+  heroScore: string;
+  heroScoreSub: string;
+  totalTransfersText: string;
   overviewStats: MetricCard[];
   eventStats: MetricCard[];
   squadRows: SquadRow[];
   transferRows: TransferRow[];
-  chipSummaryStats: MetricCard[];
-  chipCountRows: SimpleRow[];
-  chipUsageRows: SimpleRow[];
+  chipInventoryRows: ChipInventoryRow[];
+  chipLogRows: ChipLogRow[];
   historyRows: HistoryRow[];
   seasonHistoryRows: SeasonHistoryRow[];
 }
@@ -147,16 +223,28 @@ interface EntrySummaryData {
   showHistory: boolean;
   headerTitle: string;
   headerSubtitle: string;
+  heroScore: string;
+  heroScoreSub: string;
+  totalTransfersText: string;
   overviewStats: MetricCard[];
   eventStats: MetricCard[];
   squadRows: SquadRow[];
   transferRows: TransferRow[];
-  chipSummaryStats: MetricCard[];
-  chipCountRows: SimpleRow[];
-  chipUsageRows: SimpleRow[];
+  transferFilter: TransferFilter;
+  transferSummary: MetricCard[];
+  visibleTransferRows: TransferRow[];
+  transferFilterNote: string;
+  transferPageSize: number;
+  transferHasMore: boolean;
+  chipInventoryRows: ChipInventoryRow[];
+  chipLogRows: ChipLogRow[];
   historyRows: HistoryRow[];
+  pagedHistoryRows: HistoryRow[];
+  historyPageSize: number;
+  historyHasMore: boolean;
   seasonHistoryRows: SeasonHistoryRow[];
   hasSquad: boolean;
+  hasBench: boolean;
   hasTransfers: boolean;
   hasChips: boolean;
   hasHistory: boolean;
@@ -164,6 +252,33 @@ interface EntrySummaryData {
   supportAvailable: boolean;
   /** LIVE/SETTLING banner for the current gameweek; "" otherwise. */
   phaseBanner: "" | "live" | "settling";
+  /** In-page player sheet — same component the live entry page uses. */
+  playerDetailOpen: boolean;
+  playerDetail: PlayerLiveDetailView | null;
+  pitchPlayers: SquadPitchPlayer[];
+  pitchBench: SquadPitchPlayer[];
+  pitchHeader: SquadPitchHeader | null;
+  pitchBenchBoost: boolean;
+  shareImagePath: string;
+  shareBusy: boolean;
+  seasonChartPoints: SeasonChartPoint[];
+  seasonChartModes: Array<{ id: SeasonChartMode; label: string }>;
+  seasonChartMode: SeasonChartMode;
+  seasonChartVisible: boolean;
+  seasonChartType: MiniChartType;
+  seasonChartInvertY: boolean;
+  seasonChartReferenceY: number | null;
+  seasonChartHasReference: boolean;
+  seasonChartSeries: MiniChartPoint[];
+  seasonChartHint: string;
+  seasonChartSummary: string;
+  seasonChartSelectedGw: number | null;
+  seasonChartHasSelected: boolean;
+  pastSeasonVisible: boolean;
+  pastSeasonSeries: MiniChartPoint[];
+  pastSeasonSummary: string;
+  pastSeasonSelected: number | null;
+  pastSeasonHasSelected: boolean;
 }
 
 Page({
@@ -188,22 +303,43 @@ Page({
     showHistory: false,
     headerTitle: "球队数据",
     headerSubtitle: "",
+    heroScore: "",
+    heroScoreSub: "",
+    totalTransfersText: "",
     overviewStats: [],
     eventStats: [],
     squadRows: [],
     transferRows: [],
-    chipSummaryStats: [],
-    chipCountRows: [],
-    chipUsageRows: [],
+    transferFilter: "with",
+    transferSummary: [],
+    visibleTransferRows: [],
+    transferFilterNote: "",
+    transferPageSize: TRANSFER_PAGE_SIZE,
+    transferHasMore: false,
+    chipInventoryRows: [],
+    chipLogRows: [],
     historyRows: [],
+    pagedHistoryRows: [],
+    historyPageSize: HISTORY_PAGE_SIZE,
+    historyHasMore: false,
     seasonHistoryRows: [],
     hasSquad: false,
+    hasBench: false,
     hasTransfers: false,
     hasChips: false,
     hasHistory: false,
     hasTeamData: false,
     supportAvailable: false,
-    phaseBanner: ""
+    phaseBanner: "",
+    playerDetailOpen: false,
+    playerDetail: null,
+    pitchPlayers: [],
+    pitchBench: [],
+    pitchHeader: null,
+    pitchBenchBoost: false,
+    shareImagePath: "",
+    shareBusy: false,
+    ...emptySeasonChartState()
   } as EntrySummaryData,
 
   async onLoad() {
@@ -371,15 +507,27 @@ Page({
           tabError: "",
           headerTitle: "球队数据",
           headerSubtitle: "",
+          heroScore: "",
+          heroScoreSub: "",
+          totalTransfersText: "",
           overviewStats: [],
           eventStats: [],
           squadRows: [],
           transferRows: [],
-          chipSummaryStats: [],
-          chipCountRows: [],
-          chipUsageRows: [],
+          transferFilter: "with",
+          transferSummary: [],
+          visibleTransferRows: [],
+          transferFilterNote: "",
+          transferPageSize: TRANSFER_PAGE_SIZE,
+          transferHasMore: false,
+          chipInventoryRows: [],
+          chipLogRows: [],
           historyRows: [],
+          pagedHistoryRows: [],
+          historyPageSize: HISTORY_PAGE_SIZE,
+          historyHasMore: false,
           seasonHistoryRows: [],
+          ...emptyPitchState(),
           hasSquad: false,
           hasTransfers: false,
           hasChips: false,
@@ -524,15 +672,27 @@ Page({
           tabError: "",
           headerTitle: "球队数据",
           headerSubtitle: "",
+          heroScore: "",
+          heroScoreSub: "",
+          totalTransfersText: "",
           overviewStats: [],
           eventStats: [],
           squadRows: [],
           transferRows: [],
-          chipSummaryStats: [],
-          chipCountRows: [],
-          chipUsageRows: [],
+          transferFilter: "with",
+          transferSummary: [],
+          visibleTransferRows: [],
+          transferFilterNote: "",
+          transferPageSize: TRANSFER_PAGE_SIZE,
+          transferHasMore: false,
+          chipInventoryRows: [],
+          chipLogRows: [],
           historyRows: [],
+          pagedHistoryRows: [],
+          historyPageSize: HISTORY_PAGE_SIZE,
+          historyHasMore: false,
           seasonHistoryRows: [],
+          ...emptyPitchState(),
           hasSquad: false,
           hasTransfers: false,
           hasChips: false,
@@ -607,15 +767,27 @@ Page({
       emptyState: "",
       headerTitle: "球队数据",
       headerSubtitle: "",
+      heroScore: "",
+      heroScoreSub: "",
+      totalTransfersText: "",
       overviewStats: [],
       eventStats: [],
       squadRows: [],
       transferRows: [],
-      chipSummaryStats: [],
-      chipCountRows: [],
-      chipUsageRows: [],
+      transferFilter: "with",
+      transferSummary: [],
+      visibleTransferRows: [],
+      transferFilterNote: "",
+      transferPageSize: TRANSFER_PAGE_SIZE,
+      transferHasMore: false,
+      chipInventoryRows: [],
+      chipLogRows: [],
       historyRows: [],
+      pagedHistoryRows: [],
+      historyPageSize: HISTORY_PAGE_SIZE,
+      historyHasMore: false,
       seasonHistoryRows: [],
+      ...emptyPitchState(),
       hasSquad: false,
       hasTransfers: false,
       hasChips: false,
@@ -692,9 +864,13 @@ Page({
           transferError: "",
           headerTitle: "球队数据",
           headerSubtitle: "",
+          heroScore: "",
+          heroScoreSub: "",
+          totalTransfersText: "",
           overviewStats: [],
           eventStats: [],
           squadRows: [],
+          ...emptyPitchState(),
           hasSquad: false,
           hasTeamData: false,
           supportAvailable: true,
@@ -720,17 +896,24 @@ Page({
         { results: [], history: [] },
         []
       );
+      setPageTitle(primary.headerTitle || "我的球队");
       this.setData({
         headerTitle: primary.headerTitle,
         headerSubtitle: primary.headerSubtitle,
+        heroScore: primary.heroScore,
+        heroScoreSub: primary.heroScoreSub,
+        totalTransfersText: primary.totalTransfersText,
         overviewStats: primary.overviewStats,
         eventStats: primary.eventStats,
         squadRows: primary.squadRows,
-        chipSummaryStats: primary.chipSummaryStats,
+        ...pitchStateFromEventResult(eventResult),
+        chipInventoryRows: primary.chipInventoryRows,
+        chipLogRows: primary.chipLogRows,
         event: selectedEvent,
         maxGw: authoritativeEvent,
         emptyState: "",
         hasSquad: primary.squadRows.length > 0,
+        hasBench: primary.squadRows.some((row) => row.bench),
         hasTeamData: true,
         supportAvailable: true
       }, () => {
@@ -802,9 +985,13 @@ Page({
       emptyState: "",
       headerTitle: "球队数据",
       headerSubtitle: "",
+      heroScore: "",
+      heroScoreSub: "",
+      totalTransfersText: "",
       overviewStats: [],
       eventStats: [],
       squadRows: [],
+      ...emptyPitchState(),
       hasSquad: false,
       hasTeamData: false,
       supportAvailable: false
@@ -816,6 +1003,109 @@ Page({
     const tab = String(event.currentTarget.dataset.tab || "squad") as EntrySummaryTab;
     this.setActiveTab(tab);
     void this.loadTab(tab, false);
+  },
+
+  onTransferFilterTap(event: WechatMiniprogram.TouchEvent) {
+    const filter = String(event.currentTarget.dataset.filter || "with") as TransferFilter;
+    if (filter === this.data.transferFilter) return;
+    this.setData({
+      transferFilter: filter,
+      transferPageSize: TRANSFER_PAGE_SIZE,
+      ...buildTransferView(this.data.transferRows, filter, TRANSFER_PAGE_SIZE)
+    });
+  },
+
+  onTransferLoadMore() {
+    const transferPageSize = this.data.transferPageSize + TRANSFER_PAGE_SIZE;
+    this.setData({
+      transferPageSize,
+      ...buildTransferView(this.data.transferRows, this.data.transferFilter, transferPageSize)
+    });
+  },
+
+  onHistoryLoadMore() {
+    const historyPageSize = this.data.historyPageSize + HISTORY_PAGE_SIZE;
+    this.setData({
+      historyPageSize,
+      pagedHistoryRows: this.data.historyRows.slice(0, historyPageSize),
+      historyHasMore: this.data.historyRows.length > historyPageSize
+    });
+  },
+
+  /** WC/FH and bulk weeks start collapsed (web parity); tap the header to expand. */
+  onToggleTransferRow(event: WechatMiniprogram.TouchEvent) {
+    const id = String(event.currentTarget.dataset.id || "");
+    const target = this.data.transferRows.find((row) => row.id === id);
+    if (!target || !target.collapsible) return;
+    const transferRows = this.data.transferRows.map((row) =>
+      row.id === id ? { ...row, collapsed: !row.collapsed } : row
+    );
+    this.setData({
+      transferRows,
+      ...buildTransferView(transferRows, this.data.transferFilter, this.data.transferPageSize)
+    });
+  },
+
+  onOpenPlayer(event: WechatMiniprogram.CustomEvent<{ player: SquadRow }>) {
+    const player = event.detail.player;
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      // SquadRow.points is display text; buildPlayerLiveDetail re-parses it.
+      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow)
+    });
+  },
+
+  onPitchPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
+    const playerId = String(event.detail?.playerId || "");
+    if (!playerId) return;
+    const player = findSquadRowForPitch(
+      this.data.squadRows,
+      playerId,
+      this.data.pitchPlayers,
+      this.data.pitchBench
+    );
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow)
+    });
+  },
+
+  async onSharePitch() {
+    if (this.data.shareBusy) return;
+    const pitch = this.selectComponent("#squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
+      exportShareImage?: () => Promise<string>;
+    } | null;
+    if (!pitch?.exportShareImage) {
+      wx.showToast({ title: "阵容图还没准备好", icon: "none" });
+      return;
+    }
+    this.setData({ shareBusy: true });
+    try {
+      const path = await pitch.exportShareImage();
+      this.setData({ shareImagePath: path });
+      await presentShareImage(path);
+    } catch {
+      wx.showToast({ title: "阵容图生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareBusy: false });
+    }
+  },
+
+  onShareAppMessage() {
+    const teamName = this.data.pitchHeader?.teamName || this.data.headerTitle || "我的球队";
+    return {
+      title: `${teamName} · GW${this.data.event}`,
+      path: "/pages/my-fpl/team/team",
+      imageUrl: this.data.shareImagePath || undefined
+    };
+  },
+
+  onClosePlayer() {
+    this.setData({
+      playerDetailOpen: false
+    });
   },
 
   async loadTab(tab: EntrySummaryTab, forceRefresh: boolean, originatingTrace?: PageRequestTrace): Promise<void> {
@@ -855,18 +1145,25 @@ Page({
         historyPayload,
         transferPayload || []
       );
-      const currentEventChip = this.data.chipSummaryStats.find((item) => item.label === "本轮开卡")?.value || "无";
       this.setData({
         transferRows: support.transferRows,
-        chipCountRows: support.chipCountRows,
-        chipUsageRows: support.chipUsageRows,
-        chipSummaryStats: buildChipSummaryStats(currentEventChip, support.chipUsageRows.length),
+        ...buildTransferView(support.transferRows, this.data.transferFilter, this.data.transferPageSize),
+        chipInventoryRows: support.chipInventoryRows,
+        chipLogRows: support.chipLogRows,
         historyRows: support.historyRows,
+        pagedHistoryRows: support.historyRows.slice(0, this.data.historyPageSize),
+        historyHasMore: support.historyRows.length > this.data.historyPageSize,
         seasonHistoryRows: support.seasonHistoryRows,
         hasTransfers: support.transferRows.length > 0,
-        hasChips: support.chipUsageRows.length > 0 || support.chipCountRows.length > 0,
+        hasChips: support.chipLogRows.length > 0,
         hasHistory: support.historyRows.length > 0 || support.seasonHistoryRows.length > 0,
-        transferError: ""
+        transferError: "",
+        ...seasonChartPageState(
+          historyToSeasonChartPoints(historyPayload.results),
+          this.data.seasonChartMode,
+          this.data.seasonChartSelectedGw
+        ),
+        ...pastSeasonPageState(support.seasonHistoryRows, this.data.pastSeasonSelected)
       });
     } catch (error) {
       if (this.restartForPrincipalChange(entryId)) return;
@@ -882,6 +1179,29 @@ Page({
         this.setData({ tabLoading: false });
       }
     }
+  },
+
+  onSeasonChartMode(event: WechatMiniprogram.TouchEvent) {
+    const mode = String(event.currentTarget.dataset.mode || "rank") as SeasonChartMode;
+    if (mode === this.data.seasonChartMode) return;
+    this.setData(seasonChartPageState(this.data.seasonChartPoints, mode, this.data.seasonChartSelectedGw));
+  },
+
+  onSeasonChartSelect(event: WechatMiniprogram.CustomEvent<{ x: number | null }>) {
+    const selectedGw = event.detail?.x == null ? null : Number(event.detail.x);
+    this.setData(seasonChartPageState(
+      this.data.seasonChartPoints,
+      this.data.seasonChartMode,
+      Number.isFinite(selectedGw as number) ? selectedGw : null
+    ));
+  },
+
+  onPastSeasonSelect(event: WechatMiniprogram.CustomEvent<{ x: number | null }>) {
+    const selected = event.detail?.x == null ? null : Number(event.detail.x);
+    this.setData(pastSeasonPageState(
+      this.data.seasonHistoryRows,
+      Number.isFinite(selected as number) ? selected : null
+    ));
   },
 
   setActiveTab(tab: EntrySummaryTab) {
@@ -936,6 +1256,140 @@ Page({
   }
 });
 
+function emptySeasonChartState() {
+  return {
+    ...seasonChartPageState([], "rank", null),
+    ...pastSeasonPageState([], null)
+  };
+}
+
+function seasonChartPageState(
+  points: SeasonChartPoint[],
+  mode: SeasonChartMode,
+  selectedGw: number | null
+) {
+  return {
+    seasonChartPoints: points,
+    seasonChartModes: SEASON_CHART_MODES,
+    seasonChartMode: mode,
+    ...buildSeasonChartView(points, mode, selectedGw)
+  };
+}
+
+function pastRowsFromHistory(rows: SeasonHistoryRow[]): PastSeasonChartPoint[] {
+  return rows.map((row) => ({
+    season: row.season,
+    totalPoints: row.pointsValue,
+    overallRank: row.rankValue,
+    current: row.current
+  }));
+}
+
+function pastSeasonPageState(rows: SeasonHistoryRow[], selectedIndex: number | null) {
+  const points = pastRowsFromHistory(rows);
+  return {
+    pastSeasonVisible: points.length >= 2,
+    pastSeasonSeries: toPastSeasonChartPoints(points),
+    pastSeasonSummary: pastSeasonSummary(points, selectedIndex),
+    pastSeasonSelected: selectedIndex,
+    pastSeasonHasSelected: selectedIndex != null
+  };
+}
+
+function emptyPitchState(): {
+  pitchPlayers: SquadPitchPlayer[];
+  pitchBench: SquadPitchPlayer[];
+  pitchHeader: SquadPitchHeader | null;
+  pitchBenchBoost: boolean;
+  shareImagePath: string;
+  shareBusy: boolean;
+} {
+  resetShareImageCache();
+  return {
+    pitchPlayers: [],
+    pitchBench: [],
+    pitchHeader: null,
+    pitchBenchBoost: false,
+    shareImagePath: "",
+    shareBusy: false
+  };
+}
+
+function pitchStateFromEventResult(eventResult: EntryEventResult) {
+  const view = buildSquadPitchView(eventResult);
+  resetShareImageCache();
+  return {
+    pitchPlayers: view.players,
+    pitchBench: view.benchPlayers,
+    pitchHeader: view.header,
+    pitchBenchBoost: view.benchBoost,
+    shareImagePath: "",
+    shareBusy: false
+  };
+}
+
+function findSquadRowForPitch(
+  rows: SquadRow[],
+  playerId: string,
+  pitchPlayers: SquadPitchPlayer[],
+  pitchBench: SquadPitchPlayer[]
+): SquadRow | undefined {
+  const direct = rows.find((row) => row.id === playerId);
+  if (direct) return direct;
+  const pitchPlayer = [...pitchPlayers, ...pitchBench].find((player) => player.id === playerId);
+  if (!pitchPlayer) return undefined;
+  return rows.find((row) => row.name === pitchPlayer.webName && row.position === pitchPlayer.position);
+}
+
+function authorizeAlbum(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wx.getSetting({
+      success(res) {
+        if (res.authSetting["scope.writePhotosAlbum"]) {
+          resolve();
+          return;
+        }
+        wx.authorize({
+          scope: "scope.writePhotosAlbum",
+          success: () => resolve(),
+          fail: (err) => reject(err)
+        });
+      },
+      fail: (err) => reject(err)
+    });
+  });
+}
+
+function presentShareImage(path: string): Promise<void> {
+  return new Promise((resolve) => {
+    const showMenu = (wx as WechatMiniprogram.Wx & {
+      showShareImageMenu?: (options: { path: string; success?: () => void; fail?: () => void; complete?: () => void }) => void;
+    }).showShareImageMenu;
+    if (typeof showMenu === "function") {
+      showMenu({
+        path,
+        complete: () => resolve()
+      });
+      return;
+    }
+    void authorizeAlbum()
+      .then(() => new Promise<void>((saveResolve, saveReject) => {
+        wx.saveImageToPhotosAlbum({
+          filePath: path,
+          success: () => {
+            wx.showToast({ title: "已保存到相册", icon: "success" });
+            saveResolve();
+          },
+          fail: saveReject
+        });
+      }))
+      .catch(() => {
+        wx.showToast({ title: "保存需要相册权限", icon: "none" });
+      })
+      .finally(() => resolve());
+  });
+}
+
 function mapApiDataToTeamStats(
   eventResult: EntryEventResult,
   history: EntryHistoryPayload,
@@ -943,48 +1397,70 @@ function mapApiDataToTeamStats(
 ): TeamStatsViewModel {
   const historySupport = mapHistorySupportRows(history, transferHistory);
 
+  const squadRows = mapSquadRows(eventResult.eventPicks || []);
+  const captain = eventResult.eventPlayedCaptain;
+
   return {
     headerTitle: eventResult.entry.entryName,
     headerSubtitle: [eventResult.entry.playerName || "-", eventResult.entry.region || "-"].join(" · "),
+    heroScore: String(eventResult.eventPoints),
+    heroScoreSub: `净得分 ${eventResult.eventNetPoints} · 队长 ${captain?.webName || "-"} (${eventResult.eventCaptainPoints})`,
+    totalTransfersText: `总转会 ${formatNumber(eventResult.entry.totalTransfers)}`,
     overviewStats: [
       { label: "总分", value: String(eventResult.overallPoints) },
       { label: "总排名", value: formatCompactNumber(eventResult.overallRank) },
       { label: "阵容身价", value: formatMoney(eventResult.teamValue) },
-      { label: "银行余额", value: formatMoney(eventResult.bank) },
-      { label: "总转会", value: formatNumber(eventResult.entry.totalTransfers) }
+      { label: "银行余额", value: formatMoney(eventResult.bank) }
     ],
     eventStats: [
-      { label: "本轮得分", value: String(eventResult.eventPoints) },
-      { label: "净得分", value: String(eventResult.eventNetPoints) },
       { label: "开卡", value: formatChip(eventResult.eventChip) },
       { label: "本轮转会", value: String(eventResult.eventTransfers) },
-      { label: "板凳分", value: String(eventResult.eventBenchPoints) },
-      { label: "队长", value: `${eventResult.eventPlayedCaptain?.webName || "-"} (${eventResult.eventCaptainPoints})` }
+      { label: "板凳分", value: String(eventResult.eventBenchPoints) }
     ],
-    squadRows: mapSquadRows(eventResult.eventPicks || []),
+    squadRows,
     transferRows: historySupport.transferRows,
-    chipSummaryStats: buildChipSummaryStats(
-      formatChip(eventResult.eventChip),
-      historySupport.chipUsageRows.length
-    ),
-    chipCountRows: historySupport.chipCountRows,
-    chipUsageRows: historySupport.chipUsageRows,
+    chipInventoryRows: historySupport.chipInventoryRows,
+    chipLogRows: historySupport.chipLogRows,
     historyRows: historySupport.historyRows,
     seasonHistoryRows: historySupport.seasonHistoryRows
   };
 }
 
-export function buildChipSummaryStats(currentEventChip: string, usageCount: number): MetricCard[] {
-  return [
-    { label: "本轮开卡", value: currentEventChip || "无" },
-    { label: "开卡次数", value: String(Math.max(0, usageCount)) }
-  ];
+/** Official FPL: one of each chip before the GW19 deadline, one after. */
+export const CHIP_HALF_SPLIT_GW = 19;
+
+const CHIP_INVENTORY_FAMILIES = [
+  { code: "WC", name: "Wildcard", keys: ["WC", "WILDCARD"] },
+  { code: "FH", name: "Free Hit", keys: ["FH", "FREEHIT", "FREE_HIT"] },
+  { code: "BB", name: "Bench Boost", keys: ["BB", "BBOOST", "BENCH_BOOST", "BENCHBOOST"] },
+  { code: "TC", name: "Triple Captain", keys: ["3XC", "TC", "TRIPLE_CAPTAIN", "TRIPLECAPTAIN"] }
+];
+
+/** Half-season inventory — mirrors the web TeamChipsTab table. */
+export function buildChipInventory(usage: Array<{ eventId: number; chip: string }>): ChipInventoryRow[] {
+  return CHIP_INVENTORY_FAMILIES.map((family) => {
+    const used = usage.filter((item) =>
+      family.keys.includes(item.chip.toUpperCase().replace(/[\s-]+/g, "_")));
+    const firstUsed = used.filter((item) => item.eventId <= CHIP_HALF_SPLIT_GW).length;
+    const secondUsed = used.length - firstUsed;
+    const firstLeft = Math.max(0, 1 - firstUsed);
+    const secondLeft = Math.max(0, 1 - secondUsed);
+    return {
+      id: `chip-inv-${family.code}`,
+      code: family.code,
+      name: family.name,
+      firstText: `${firstUsed} / ${firstLeft}`,
+      secondText: `${secondUsed} / ${secondLeft}`,
+      firstOut: firstLeft === 0,
+      secondOut: secondLeft === 0
+    };
+  });
 }
 
 interface HistorySupportViewModel {
   transferRows: TransferRow[];
-  chipCountRows: SimpleRow[];
-  chipUsageRows: SimpleRow[];
+  chipInventoryRows: ChipInventoryRow[];
+  chipLogRows: ChipLogRow[];
   historyRows: HistoryRow[];
   seasonHistoryRows: SeasonHistoryRow[];
 }
@@ -996,18 +1472,23 @@ function mapHistorySupportRows(
   const transferByEvent = new Map<number, EntryGameweekTransfers>();
   transferHistory.forEach((item) => transferByEvent.set(item.eventId, item));
   const sortedHistory = [...history.results].sort((a, b) => b.eventId - a.eventId);
-  const chipUsageRows = sortedHistory
-    .filter((item) => Boolean(item.eventChip) && item.eventChip !== "NONE")
-    .map((item) => ({
-      id: `chip-${item.eventId}`,
-      label: `GW${item.eventId}`,
-      value: formatChip(item.eventChip)
-    }));
+  const chipEvents = sortedHistory
+    .filter((item) => Boolean(item.eventChip) && item.eventChip !== "NONE");
 
   return {
     transferRows: mapTransferRows(sortedHistory, transferByEvent),
-    chipCountRows: mapChipCounts(history.results),
-    chipUsageRows,
+    chipInventoryRows: buildChipInventory(
+      chipEvents.map((item) => ({ eventId: item.eventId, chip: String(item.eventChip) }))
+    ),
+    chipLogRows: chipEvents.map((item) => ({
+      id: `chip-${item.eventId}`,
+      gameweek: `GW${item.eventId}`,
+      halfText: item.eventId <= CHIP_HALF_SPLIT_GW ? "上半" : "下半",
+      chip: formatChip(item.eventChip),
+      pointsText: formatPoints(item.eventPoints),
+      netText: formatPoints(item.eventNetPoints),
+      rankText: formatCompactNumber(item.eventRank)
+    })),
     historyRows: sortedHistory.map(mapHistoryRow),
     seasonHistoryRows: [...history.history]
       .sort((a, b) => b.season.localeCompare(a.season))
@@ -1026,33 +1507,66 @@ function mapSquadRows(picks: EntryEventPick[]): SquadRow[] {
       }
       return (positionOrder[a.elementTypeName] || 5) - (positionOrder[b.elementTypeName] || 5);
     })
-    .map((pick, index) => {
-      const nameParts = [pick.webName];
-      if (pick.isCaptain) {
-        nameParts.push("(C)");
-      }
-      if (pick.isViceCaptain) {
-        nameParts.push("(VC)");
-      }
+    .map((pick, index) => ({
+      id: `${index}-${pick.webName}`,
+      name: pick.webName,
+      roleText: pick.isCaptain ? "C" : pick.isViceCaptain ? "VC" : "",
+      team: pick.teamName || pick.teamShortName || "-",
+      position: pick.elementTypeName,
+      metaText: pickMetaText(pick),
+      statusText: pick.againstShortName
+        ? `vs ${pick.againstShortName}${pick.wasHome ? "·主" : "·客"}`
+        : "",
+      points: String(pick.totalPoints),
+      bench: pick.multiplier === 0,
+      captain: pick.isCaptain,
+      viceCaptain: pick.isViceCaptain,
+      multiplier: pick.multiplier,
+      minutes: pick.minutes,
+      goalsScored: pick.goalsScored || 0,
+      assists: pick.assists || 0,
+      cleanSheets: pick.cleanSheets || 0,
+      saves: pick.saves || 0,
+      yellowCards: pick.yellowCards || 0,
+      redCards: pick.redCards || 0,
+      bonus: pick.bonus || 0,
+      bps: pick.bps
+    }));
+}
 
-      return {
-        id: `${index}-${pick.webName}`,
-        name: nameParts.join(" "),
-        teamName: pick.teamName || pick.teamShortName || "-",
-        position: pick.elementTypeName,
-        minutes: String(pick.minutes),
-        points: String(pick.totalPoints),
-        role: pick.multiplier === 0 ? "替补" : "首发",
-        bench: pick.multiplier === 0,
-        played: pick.minutes > 0
-      };
-    });
+/** Minutes plus match stats; bonus stays English (FPL habit), the rest Chinese. */
+function pickMetaText(pick: EntryEventPick): string {
+  const stats: string[] = [];
+  if (pick.goalsScored) stats.push(`进${pick.goalsScored}`);
+  if (pick.assists) stats.push(`助${pick.assists}`);
+  if (pick.cleanSheets) stats.push("零封");
+  if (pick.bonus) stats.push(`B${pick.bonus}`);
+  return [`${pick.minutes}'`, ...stats].join(" · ");
+}
+
+function normalizeChipCode(chip?: string | null): string {
+  const code = String(chip || "").toUpperCase().replace(/[\s-]+/g, "_");
+  if (!code || code === "NONE") return "";
+  if (code === "WILDCARD" || code === "WC") return "WC";
+  if (code === "FREE_HIT" || code === "FREEHIT" || code === "FH") return "FH";
+  if (code === "BENCH_BOOST" || code === "BBOOST" || code === "BENCHBOOST" || code === "BB") return "BB";
+  if (code === "TRIPLE_CAPTAIN" || code === "TRIPLECAPTAIN" || code === "3XC" || code === "TC") return "TC";
+  if (code === "MANAGER" || code === "AM") return "AM";
+  return code;
+}
+
+/** WC/FH weeks allow unlimited transfers — they and bulk weeks collapse by default. */
+function isUnlimitedTransferChip(chip: string): boolean {
+  return chip === "WC" || chip === "FH";
 }
 
 function mapTransferRows(historyRows: EntryHistoryItem[], transferByEvent: Map<number, EntryGameweekTransfers>): TransferRow[] {
   return historyRows.map((history) => {
     const transferInfo = transferByEvent.get(history.eventId);
     const moves = (transferInfo?.transfers || []).map((move, index) => mapTransferMove(history.eventId, move, index));
+    const chip = normalizeChipCode(history.eventChip);
+    const collapsible = isUnlimitedTransferChip(chip)
+      || Math.max(moves.length, history.eventTransfers) >= TRANSFER_COLLAPSE_MOVE_THRESHOLD;
     return {
       id: `transfer-${history.eventId}`,
       gameweek: `GW${history.eventId}`,
@@ -1060,60 +1574,92 @@ function mapTransferRows(historyRows: EntryHistoryItem[], transferByEvent: Map<n
       cost: String(history.eventTransfersCost),
       hasCost: history.eventTransfersCost > 0,
       emptyText: history.eventTransfers > 0 ? "转会明细还在同步" : "本轮未转会",
-      moves
+      moves,
+      chip,
+      transferCount: history.eventTransfers,
+      collapsible,
+      collapsed: collapsible
     };
   });
+}
+
+/** Top-of-tab summary + filtered page — mirrors the web TeamTransfersTab header. */
+export function buildTransferView(rows: TransferRow[], filter: TransferFilter, pageSize = TRANSFER_PAGE_SIZE): {
+  transferSummary: MetricCard[];
+  visibleTransferRows: TransferRow[];
+  transferFilterNote: string;
+  transferHasMore: boolean;
+} {
+  const withRows = rows.filter((row) => row.transferCount > 0);
+  const noneCount = rows.length - withRows.length;
+  const totalMoves = withRows.reduce((sum, row) => sum + row.transferCount, 0);
+  const totalCost = rows.reduce((sum, row) => sum + Number(row.cost || 0), 0);
+  const transferSummary: MetricCard[] = [
+    { label: "总转会", value: String(totalMoves) },
+    { label: "转会扣分", value: totalCost > 0 ? `-${totalCost}` : "0", tone: totalCost > 0 ? "bad" : "default" },
+    { label: "有转会轮数", value: String(withRows.length) }
+  ];
+  const filtered = filter === "all"
+    ? rows
+    : filter === "none"
+      ? rows.filter((row) => row.transferCount === 0)
+      : withRows;
+  const transferFilterNote = filter === "all"
+    ? `全部 ${rows.length} 轮`
+    : filter === "none"
+      ? `无转会 ${noneCount} 轮 · 共 ${rows.length} 轮`
+      : `有转会 ${withRows.length} 轮 · 共 ${rows.length} 轮`;
+  return {
+    transferSummary,
+    visibleTransferRows: filtered.slice(0, pageSize),
+    transferFilterNote,
+    transferHasMore: filtered.length > pageSize
+  };
+}
+
+function transferPointsText(points: number | undefined, played: boolean | undefined): string {
+  if (played === false) return "未出场";
+  return `${points ?? 0} 分`;
 }
 
 function mapTransferMove(eventId: number, move: EntryTransferMove, index: number): TransferMoveRow {
   return {
     id: `move-${eventId}-${index}`,
-    text: `OUT ${formatPlayerTeam(move.elementOutWebName, move.elementOutTeamShortName)} -> IN ${formatPlayerTeam(move.elementInWebName, move.elementInTeamShortName)}`,
-    costText: `Sold: ${formatMoney(move.elementOutCost)} | Bought: ${formatMoney(move.elementInCost)}`
+    outName: move.elementOutWebName || "-",
+    outTeam: move.elementOutTeamShortName || "",
+    outPointsText: transferPointsText(move.elementOutPoints, move.elementOutPlayed),
+    inName: move.elementInWebName || "-",
+    inTeam: move.elementInTeamShortName || "",
+    inPointsText: transferPointsText(move.elementInPoints, move.elementInPlayed),
+    priceText: `${formatMoney(move.elementOutCost)} → ${formatMoney(move.elementInCost)}`
   };
 }
 
-function mapChipCounts(results: EntryHistoryItem[]): SimpleRow[] {
-  const counts = results.reduce<Record<string, number>>((acc, item) => {
-    const chip = item.eventChip;
-    if (chip && chip !== "NONE") {
-      acc[chip] = (acc[chip] || 0) + 1;
-    }
-    return acc;
-  }, {});
-
-  return Object.keys(counts)
-    .map((chip) => ({
-      id: `chip-count-${chip}`,
-      label: formatChip(chip),
-      value: `${counts[chip]}次`
-    }))
-    .sort((a, b) => Number(b.value.replace(/\D/g, "")) - Number(a.value.replace(/\D/g, "")));
-}
-
+/** One compact table row per GW — web TeamGameweekHistory columns, mini-width. */
 function mapHistoryRow(item: EntryHistoryItem): HistoryRow {
+  const captain = item.eventPlayedCaptain?.webName?.trim() || "";
+  const cost = item.eventTransfersCost || 0;
   return {
     id: `history-${item.eventId}`,
     gameweek: `GW${item.eventId}`,
-    eventPoints: String(item.eventPoints),
-    eventNetPoints: String(item.eventNetPoints),
-    eventRank: item.eventRank === null || item.eventRank === undefined ? "-" : formatCompactNumber(item.eventRank),
-    overallPoints: String(item.overallPoints),
-    overallRank: formatCompactNumber(item.overallRank),
-    eventTransfers: String(item.eventTransfers),
-    eventTransfersCost: String(item.eventTransfersCost),
-    teamValue: formatMoney(item.teamValue),
-    bank: formatMoney(item.bank)
+    pointsText: String(item.eventPoints),
+    captainName: captain || "—",
+    captainPointsText: captain ? String(item.eventCaptainPoints ?? 0) : "",
+    costText: cost > 0 ? `-${cost}` : "0",
+    costBad: cost > 0,
+    rankText: formatCompactNumber(item.overallRank)
   };
 }
 
 function mapSeasonHistoryRow(item: EntrySeasonHistoryItem, index: number): SeasonHistoryRow {
   return {
     id: `season-${item.season}`,
-    order: String(index + 1),
     season: item.season,
-    totalPoints: String(item.totalPoints),
-    overallRank: formatCompactNumber(item.overallRank)
+    totalPoints: formatCompactNumber(item.totalPoints),
+    overallRank: formatCompactNumber(item.overallRank),
+    pointsValue: item.totalPoints || 0,
+    rankValue: item.overallRank || 0,
+    current: index === 0
   };
 }
 
@@ -1133,13 +1679,9 @@ function formatMoney(value: number | null | undefined): string {
   return `£${(value / 10).toFixed(1)}m`;
 }
 
-function formatPlayerTeam(playerName: string, teamShortName?: string | null): string {
-  return teamShortName ? `${playerName} (${teamShortName})` : playerName;
-}
-
 function formatChip(chip?: string | null): string {
   if (!chip) {
-    return "-";
+    return "无";
   }
 
   const labels: Record<string, string> = {
@@ -1150,5 +1692,5 @@ function formatChip(chip?: string | null): string {
     WILDCARD: "WC",
     MANAGER: "AM"
   };
-  return labels[chip] || chip || "-";
+  return labels[chip] || chip;
 }

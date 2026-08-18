@@ -1,118 +1,26 @@
 <view class="page page-tabbar">
-  <view class="section">
-    <view class="row">
-      <view>
-        <view class="title">实时竞赛</view>
-        <view class="subtitle">{{selectedTournament.name || (emptyState === 'entry' ? '选择球队后加载竞赛' : '竞赛数据待就绪')}}{{selectedTournament.name ? ' · 更新 ' + (lastUpdated || '-') + (refreshing ? ' · 刷新中' : '') : ''}}</view>
-      </view>
-      <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
-    </view>
-  </view>
-
   <view wx:if="{{tournaments.length && !emptyState}}" class="section status-section">
-    <live-status-bar state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{retainedRowCount}}" bind:refresh="onRetry" />
+    <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{retainedRowCount}}" bind:refresh="onRetry" />
   </view>
 
-  <view wx:if="{{tournaments.length}}" class="section card picker-card">
-    <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
-      <view class="picker-inner">
-        <view>
-          <view class="picker-label">联赛</view>
-          <view class="picker-value">{{selectedTournament.name || '请选择联赛'}}</view>
+  <view class="section toolbar">
+    <view class="row">
+      <picker wx:if="{{tournaments.length}}" class="league-picker" mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+        <view class="league-switch">
+          <text class="league-name">{{selectedTournament.name || '请选择赛事'}}</text>
+          <text class="league-action">切换</text>
         </view>
-        <text class="picker-arrow">切换</text>
-      </view>
-    </picker>
-  </view>
-
-  <view wx:if="{{tournaments.length}}" class="section">
-    <filter-bar keyword="{{keyword}}" placeholder="搜索球队/玩家" actionText="查询" bind:search="onKeyword" bind:submit="onSearch" bind:reset="onResetSearch" />
-  </view>
-
-  <view wx:if="{{tournaments.length}}" class="section sort-tabs">
-    <view
-      wx:for="{{sortOptions}}"
-      wx:key="key"
-      class="sort-tab {{sortKey === item.key ? 'active' : ''}}"
-      data-key="{{item.key}}"
-      bindtap="onSortTap"
-      hover-class="hover-dim"
-    >{{item.label}}{{sortKey === item.key ? (sortDesc ? ' ↓' : ' ↑') : ''}}</view>
-  </view>
-
-  <view wx:if="{{tournaments.length}}" class="section card filter-panel">
-    <view class="filter-header" bindtap="onToggleOwnership" hover-class="hover-dim">
-      <view>
-        <view class="filter-title">球员持有</view>
-        <view class="filter-summary">{{ownershipSummary}}</view>
-      </view>
-      <text class="filter-toggle">{{ownershipExpanded ? '收起' : '展开'}}</text>
-    </view>
-    <view wx:if="{{ownershipExpanded}}" class="filter-body">
-      <view class="ownership-picker-grid">
-        <picker mode="selector" range="{{ownershipTeamNames}}" value="{{selectedOwnershipTeamIndex}}" bindchange="onOwnershipTeamChange">
-          <view class="filter-picker">{{selectedOwnershipTeam ? selectedOwnershipTeam.name : '先选球队'}}</view>
-        </picker>
-        <picker mode="selector" range="{{ownershipPositionOptions}}" value="{{selectedOwnershipPositionIndex}}" bindchange="onOwnershipPositionChange">
-          <view class="filter-picker {{selectedOwnershipTeam ? '' : 'disabled'}}">{{selectedOwnershipPosition || '再选位置'}}</view>
-        </picker>
-      </view>
-      <picker mode="selector" range="{{ownershipAvailablePlayerNames}}" bindchange="onOwnershipPlayerChange">
-        <view class="filter-picker {{selectedOwnershipPosition ? '' : 'disabled'}}">{{selectedOwnershipPosition ? '选择球员' : '先选择球队和位置'}}</view>
       </picker>
-      <view wx:if="{{selectedOwnershipPlayers.length}}" class="selected-tags">
-        <view
-          wx:for="{{selectedOwnershipPlayers}}"
-          wx:key="element"
-          class="selected-tag"
-          data-element="{{item.element}}"
-          bindtap="onRemoveOwnershipPlayer"
-          hover-class="hover-dim"
-        >{{item.name}}{{item.meta ? ' · ' + item.meta : ''}} ×</view>
+      <view wx:else>
+        <view class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事数据待就绪'}}</view>
       </view>
-      <view class="segmented">
-        <view class="segment {{ownershipScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onOwnershipScopeTap" hover-class="hover-dim">全部</view>
-        <view class="segment {{ownershipScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onOwnershipScopeTap" hover-class="hover-dim">首发</view>
-        <view class="segment {{ownershipScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onOwnershipScopeTap" hover-class="hover-dim">替补</view>
-      </view>
-      <view class="segmented">
-        <view class="segment {{ownershipCaptainMode === 'any' ? 'active' : ''}}" data-mode="any" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">任意</view>
-        <view class="segment {{ownershipCaptainMode === 'captain' ? 'active' : ''}}" data-mode="captain" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">队长</view>
-        <view class="segment {{ownershipCaptainMode === 'vice' ? 'active' : ''}}" data-mode="vice" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">副队</view>
-      </view>
-      <view wx:if="{{selectedOwnershipPlayers.length}}" class="filter-clear" bindtap="onClearOwnershipFilter" hover-class="hover-dim">清除球员持有筛选</view>
-    </view>
-  </view>
-
-  <view wx:if="{{tournaments.length}}" class="section card filter-panel">
-    <view class="filter-header" bindtap="onToggleTeamExposure" hover-class="hover-dim">
-      <view>
-        <view class="filter-title">球队人数</view>
-        <view class="filter-summary">{{teamExposureSummary}}</view>
-      </view>
-      <text class="filter-toggle">{{teamExposureExpanded ? '收起' : '展开'}}</text>
-    </view>
-    <view wx:if="{{teamExposureExpanded}}" class="filter-body">
-      <picker mode="selector" range="{{teamExposureTeamNames}}" value="{{selectedTeamExposureIndex}}" bindchange="onTeamExposureTeamChange">
-        <view class="filter-picker">{{selectedTeamExposure ? selectedTeamExposure.name : '选择球队'}}</view>
-      </picker>
-      <view class="segmented count-segmented">
-        <view class="segment {{teamExposureCount === 1 ? 'active' : ''}}" data-count="1" bindtap="onTeamExposureCountTap" hover-class="hover-dim">1人</view>
-        <view class="segment {{teamExposureCount === 2 ? 'active' : ''}}" data-count="2" bindtap="onTeamExposureCountTap" hover-class="hover-dim">2人</view>
-        <view class="segment {{teamExposureCount === 3 ? 'active' : ''}}" data-count="3" bindtap="onTeamExposureCountTap" hover-class="hover-dim">3人</view>
-      </view>
-      <view class="segmented">
-        <view class="segment {{teamExposureScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">全部</view>
-        <view class="segment {{teamExposureScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">首发</view>
-        <view class="segment {{teamExposureScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">替补</view>
-      </view>
-      <view wx:if="{{selectedTeamExposure}}" class="filter-clear" bindtap="onClearTeamExposureFilter" hover-class="hover-dim">清除球队人数筛选</view>
+      <gw-picker wx:if="{{tournaments.length}}" compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
     </view>
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{tournamentListError && !hasData && !emptyState}}" message="{{tournamentListError}}" bind:retry="onRetry" />
   <app-error-state id="perf-primary-content" wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时联赛" />
+  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时赛事" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
@@ -122,42 +30,302 @@
       featured="{{true}}"
       bind:action="onEmptyAction"
     />
-    <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink" hover-class="hover-dim">创建和管理竞赛请访问 LetLetMe 网页版 · 点击复制链接</view>
+    <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink" hover-class="hover-dim">创建和管理赛事请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
-  <view id="perf-primary-content" wx:else class="section">
+  <block wx:else>
     <view wx:if="{{tournamentListError}}" class="live-refresh-error">{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}</view>
     <view wx:elif="{{error}}" class="live-refresh-error">{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}</view>
-    <view class="result-count">显示 {{displayedRows.length}} / {{filteredCount}}，共 {{rows.length}} 支球队</view>
-    <app-empty-state
-      wx:if="{{displayedRows.length === 0}}"
-      title="{{resultsEmptyTitle}}"
-      description="{{resultsEmptyDescription}}"
-      actionText="{{resultsEmptyActionText}}"
-      bind:action="onEmptyResultsAction"
-    />
-    <block wx:else>
-      <view
-        wx:for="{{displayedRows}}"
-        wx:key="entry"
-        class="card tournament-row"
-        data-entry="{{item.entry}}"
-        bindtap="onOpenEntry"
-        hover-class="hover-dim"
-      >
-        <view class="tournament-rank">#{{item.visibleRank}}</view>
-        <view class="tournament-main">
-          <view class="tournament-title">{{item.entryName || '-'}}</view>
-          <view class="tournament-subtitle">{{item.playerName || ''}}</view>
-          <view class="tournament-meta">{{item.metaText}}</view>
-        </view>
-        <view class="tournament-score">
-          <view class="score-main">{{item.displayLive}}</view>
-          <view class="score-sub">净 {{item.displayNet}}</view>
-          <view class="score-sub">总 {{item.displayTotal}}</view>
+
+    <view class="section stat-strip">
+      <view class="stat">
+        <text class="stat-label">最高</text>
+        <text class="stat-value">{{highestText}}</text>
+      </view>
+      <view class="stat">
+        <text class="stat-label">平均</text>
+        <text class="stat-value">{{averageText}}</text>
+      </view>
+      <view class="stat">
+        <text class="stat-label">参赛</text>
+        <text class="stat-value">{{entriesText}}</text>
+      </view>
+    </view>
+
+    <view class="section card filter-card">
+      <view class="filter-top">
+        <filter-bar class="filter-search" keyword="{{keyword}}" placeholder="搜索球队或经理" actionText="查" bind:search="onKeyword" bind:submit="onSearch" bind:reset="onResetSearch" />
+        <view class="filter-toggle {{activeFilterCount > 0 ? 'active' : ''}}" bindtap="onToggleAdvanced" hover-class="hover-dim">
+          <text>筛选</text>
+          <text wx:if="{{activeFilterCount > 0}}" class="filter-toggle-count">{{activeFilterCount}}</text>
         </view>
       </view>
-      <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore" hover-class="hover-dim">加载更多</view>
-    </block>
+    </view>
+
+    <view class="section sort-tabs">
+      <view
+        wx:for="{{sortOptions}}"
+        wx:key="key"
+        class="sort-tab {{sortKey === item.key ? 'active' : ''}}"
+        data-key="{{item.key}}"
+        bindtap="onSortTap"
+        hover-class="hover-dim"
+      >{{item.label}}{{sortKey === item.key ? (sortDesc ? ' ↓' : ' ↑') : ''}}</view>
+    </view>
+
+    <view id="perf-primary-content" class="section">
+      <view class="result-row">
+        <view wx:if="{{compareMode}}" class="compare-hint">{{compareHint}}</view>
+        <view wx:else class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{rows.length}}</view>
+        <view class="result-actions">
+          <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+            <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+            <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+            <text class="tool-label">{{shareCopied ? '已复制' : '分享'}}</text>
+          </view>
+          <block wx:if="{{compareMode}}">
+            <text wx:if="{{compareIds.length === 2}}" class="action" bindtap="onOpenCompareSheet" hover-class="hover-dim">对比</text>
+            <text class="action-muted" bindtap="onToggleCompare" hover-class="hover-dim">取消</text>
+          </block>
+          <view wx:else class="tool-btn tool-btn-labeled" bindtap="onToggleCompare" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/compare.svg" mode="aspectFit" />
+            <text class="tool-label">对比</text>
+          </view>
+        </view>
+      </view>
+      <app-empty-state
+        wx:if="{{displayedRows.length === 0}}"
+        title="{{resultsEmptyTitle}}"
+        description="{{resultsEmptyDescription}}"
+        actionText="{{resultsEmptyActionText}}"
+        bind:action="onEmptyResultsAction"
+      />
+      <view wx:else class="board {{compareMode ? 'is-compare' : ''}}">
+        <view class="board-head">
+          <view wx:if="{{compareMode}}" class="col-check"></view>
+          <text class="col-rank">#</text>
+          <text class="col-team">球队</text>
+          <text class="col-num col-played">出场</text>
+          <text class="col-num col-gw">GW</text>
+          <text class="col-num col-hit">扣分</text>
+          <text class="col-num">净</text>
+          <text class="col-num col-total">总分</text>
+        </view>
+        <view
+          wx:for="{{displayedRows}}"
+          wx:key="entry"
+          class="board-row {{item.isMe ? 'me' : ''}} {{item.pinned ? 'pinned' : ''}} {{item.compared ? 'compared' : ''}} {{item.compareDisabled ? 'locked' : ''}}"
+          data-entry-id="{{item.entry}}"
+          bindtap="onOpenEntry"
+          hover-class="hover-dim"
+        >
+          <view wx:if="{{compareMode}}" class="col-check">
+            <view class="row-check {{item.compared ? 'on' : ''}}">
+              <image wx:if="{{item.compared}}" class="row-check-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+            </view>
+          </view>
+          <text class="col-rank">{{item.visibleRank}}</text>
+          <view class="col-team">
+            <view class="team-line">
+              <text class="team-name">{{item.entryName || '-'}}</text>
+              <text wx:if="{{item.isMe}}" class="me-badge">我</text>
+            </view>
+            <view wx:if="{{item.playerName || item.displayCaptain || item.chipCode}}" class="team-meta">
+              <text wx:if="{{item.playerName}}">{{item.playerName}}</text>
+              <text wx:if="{{item.playerName && item.displayCaptain}}"> · </text>
+              <text wx:if="{{item.displayCaptain}}">{{item.displayCaptain}}</text>
+              <text wx:if="{{item.chipCode}}" class="chip-badge chip-{{item.chipCode}}">{{item.chipCode}}</text>
+            </view>
+          </view>
+          <text class="col-num col-played">{{item.playedText || '-'}}</text>
+          <text class="col-num col-gw">{{item.displayLive}}</text>
+          <text class="col-num col-hit {{item.transferCost > 0 ? 'hit' : ''}}">{{item.displayHit || '0'}}</text>
+          <text class="col-num">{{item.displayNet}}</text>
+          <text class="col-num col-total">{{item.displayTotal}}</text>
+        </view>
+        <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore" hover-class="hover-dim">再显示 20 队</view>
+      </view>
+    </view>
+  </block>
+
+  <view wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
+    <view class="cmp-mask" bindtap="onCloseCompare"></view>
+    <view class="cmp-sheet">
+      <view class="cmp-head">
+        <view class="cmp-title">对比两队</view>
+        <text class="compare-action" bindtap="onCloseCompare">关闭</text>
+      </view>
+      <view class="cmp-grid">
+        <text class="cmp-label"></text>
+        <text class="cmp-side">{{compareLeft.entryName}}</text>
+        <text class="cmp-side">{{compareRight.entryName}}</text>
+        <text class="cmp-label">经理</text>
+        <text>{{compareLeft.playerName || '-'}}</text>
+        <text>{{compareRight.playerName || '-'}}</text>
+        <text class="cmp-label">GW</text>
+        <text>{{compareLeft.displayLive}}</text>
+        <text>{{compareRight.displayLive}}</text>
+        <text class="cmp-label">净分</text>
+        <text>{{compareLeft.displayNet}}</text>
+        <text>{{compareRight.displayNet}}</text>
+        <text class="cmp-label">总分</text>
+        <text>{{compareLeft.displayTotal}}</text>
+        <text>{{compareRight.displayTotal}}</text>
+        <text class="cmp-label">队长</text>
+        <text>{{compareLeft.captainName || '-'}}</text>
+        <text>{{compareRight.captainName || '-'}}</text>
+        <text class="cmp-label">开卡</text>
+        <text>{{compareLeft.chipCode || '无'}}</text>
+        <text>{{compareRight.chipCode || '无'}}</text>
+        <text class="cmp-label">上场</text>
+        <text>{{compareLeft.playedText}}</text>
+        <text>{{compareRight.playedText}}</text>
+        <text class="cmp-label">扣分</text>
+        <text>{{compareLeft.displayHit || '0'}}</text>
+        <text>{{compareRight.displayHit || '0'}}</text>
+      </view>
+    </view>
   </view>
+  <view wx:if="{{filterSheetOpen}}" class="flt-root">
+    <view class="flt-mask" bindtap="onCloseFilterSheet"></view>
+    <view class="flt-sheet">
+      <view class="flt-head">
+        <view class="flt-title">筛选</view>
+        <text class="flt-clear" bindtap="onClearAllFilters" hover-class="hover-dim">清除全部</text>
+      </view>
+      <scroll-view scroll-y class="flt-body">
+        <view class="filter-section flt-first">
+          <view class="filter-section-head">
+            <text class="filter-section-title">Chip</text>
+            <text class="filter-section-summary">{{chipFilters.length ? chipFilters.join('、') : '未筛选'}}</text>
+          </view>
+          <view class="filter-tags">
+            <view
+              wx:for="{{chipOptions}}"
+              wx:key="value"
+              class="filter-tag {{item.on ? 'on' : ''}}"
+              data-value="{{item.value}}"
+              bindtap="onToggleChip"
+              hover-class="hover-dim"
+            >{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="filter-section">
+          <view class="filter-section-head">
+            <text class="filter-section-title">队长</text>
+            <text class="filter-section-summary">{{captainFilters.length ? captainFilters.join('、') : '未筛选'}}</text>
+          </view>
+          <view class="filter-tags">
+            <view
+              wx:for="{{captainOptions}}"
+              wx:key="name"
+              class="filter-tag {{item.on ? 'on' : ''}}"
+              data-name="{{item.name}}"
+              bindtap="onToggleCaptain"
+              hover-class="hover-dim"
+            >{{item.name}}</view>
+          </view>
+        </view>
+
+        <view class="filter-section">
+          <view class="filter-section-head">
+            <text class="filter-section-title">球员持有</text>
+            <text class="filter-section-summary">{{ownershipSummary}}{{ownershipMatchedText}}</text>
+          </view>
+          <view class="ownership-search">
+            <input
+              class="ownership-search-input"
+              placeholder="输入球员名字搜索"
+              placeholder-class="ownership-search-ph"
+              value="{{ownershipSearch}}"
+              confirm-type="search"
+              bindinput="onOwnershipSearchInput"
+            />
+          </view>
+          <view wx:if="{{ownershipSearchResults.length}}" class="ownership-results">
+            <view
+              wx:for="{{ownershipSearchResults}}"
+              wx:key="element"
+              class="ownership-result"
+              data-element="{{item.element}}"
+              bindtap="onOwnershipSearchPick"
+              hover-class="hover-dim"
+            >
+              <text class="ownership-result-name">{{item.name}}</text>
+              <text class="ownership-result-meta">{{item.meta}}</text>
+            </view>
+          </view>
+          <view wx:elif="{{ownershipSearch}}" class="ownership-empty">赛事阵容里无匹配球员</view>
+          <view class="ownership-picker-grid">
+            <picker mode="selector" range="{{ownershipTeamNames}}" value="{{selectedOwnershipTeamIndex}}" bindchange="onOwnershipTeamChange">
+              <view class="filter-picker">{{selectedOwnershipTeam ? selectedOwnershipTeam.name : '先选球队'}}</view>
+            </picker>
+            <picker mode="selector" range="{{ownershipPositionOptions}}" value="{{selectedOwnershipPositionIndex}}" bindchange="onOwnershipPositionChange">
+              <view class="filter-picker {{selectedOwnershipTeam ? '' : 'disabled'}}">{{selectedOwnershipPosition || '再选位置'}}</view>
+            </picker>
+          </view>
+          <picker mode="selector" range="{{ownershipAvailablePlayerNames}}" bindchange="onOwnershipPlayerChange">
+            <view class="filter-picker {{selectedOwnershipPosition ? '' : 'disabled'}}">{{selectedOwnershipPosition ? '选择球员' : '先选择球队和位置'}}</view>
+          </picker>
+          <view wx:if="{{selectedOwnershipPlayers.length}}" class="selected-tags">
+            <view
+              wx:for="{{selectedOwnershipPlayers}}"
+              wx:key="element"
+              class="selected-tag"
+              data-element="{{item.element}}"
+              bindtap="onRemoveOwnershipPlayer"
+              hover-class="hover-dim"
+            >{{item.name}}{{item.meta ? ' · ' + item.meta : ''}} ×</view>
+          </view>
+          <view class="segmented">
+            <view class="segment {{ownershipScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onOwnershipScopeTap" hover-class="hover-dim">全部</view>
+            <view class="segment {{ownershipScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onOwnershipScopeTap" hover-class="hover-dim">首发</view>
+            <view class="segment {{ownershipScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onOwnershipScopeTap" hover-class="hover-dim">替补</view>
+          </view>
+          <view class="segmented">
+            <view class="segment {{ownershipCaptainMode === 'any' ? 'active' : ''}}" data-mode="any" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">任意</view>
+            <view class="segment {{ownershipCaptainMode === 'captain' ? 'active' : ''}}" data-mode="captain" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">队长</view>
+            <view class="segment {{ownershipCaptainMode === 'vice' ? 'active' : ''}}" data-mode="vice" bindtap="onOwnershipCaptainTap" hover-class="hover-dim">副队</view>
+          </view>
+          <view wx:if="{{selectedOwnershipPlayers.length}}" class="filter-clear" bindtap="onClearOwnershipFilter" hover-class="hover-dim">清除球员持有筛选</view>
+        </view>
+
+        <view class="filter-section">
+          <view class="filter-section-head">
+            <text class="filter-section-title">球队人数</text>
+            <text class="filter-section-summary">{{teamExposureSummary}}{{teamExposureMatchedText}}</text>
+          </view>
+          <view class="ownership-picker-grid">
+            <picker mode="selector" range="{{teamExposureTeamNames}}" value="{{pendingExposureTeamIndex}}" bindchange="onTeamExposureTeamChange">
+              <view class="filter-picker">{{pendingExposureTeam ? pendingExposureTeam.name : '选择球队'}}</view>
+            </picker>
+            <picker mode="selector" range="{{teamExposureCountNames}}" bindchange="onTeamExposureCountChange">
+              <view class="filter-picker {{pendingExposureTeam ? '' : 'disabled'}}">{{pendingExposureTeam ? '恰好人数' : '先选球队'}}</view>
+            </picker>
+          </view>
+          <view wx:if="{{teamExposureRules.length}}" class="selected-tags">
+            <view
+              wx:for="{{teamExposureRules}}"
+              wx:key="teamShortName"
+              class="selected-tag"
+              data-shortname="{{item.teamShortName}}"
+              bindtap="onRemoveTeamExposureRule"
+              hover-class="hover-dim"
+            >{{item.name}} · 恰好{{item.count}}人 ×</view>
+          </view>
+          <view class="segmented">
+            <view class="segment {{teamExposureScope === 'any' ? 'active' : ''}}" data-scope="any" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">全部</view>
+            <view class="segment {{teamExposureScope === 'starter' ? 'active' : ''}}" data-scope="starter" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">首发</view>
+            <view class="segment {{teamExposureScope === 'bench' ? 'active' : ''}}" data-scope="bench" bindtap="onTeamExposureScopeTap" hover-class="hover-dim">替补</view>
+          </view>
+          <view wx:if="{{teamExposureRules.length}}" class="filter-clear" bindtap="onClearTeamExposureFilter" hover-class="hover-dim">清除球队人数筛选</view>
+        </view>
+      </scroll-view>
+      <view class="flt-foot">
+        <view class="flt-done" bindtap="onCloseFilterSheet" hover-class="hover-dim">完成</view>
+      </view>
+    </view>
+  </view>
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

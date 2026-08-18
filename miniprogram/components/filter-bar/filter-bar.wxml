@@ -1,5 +1,5 @@
 <view class="filter-bar">
-  <input class="input filter-input" placeholder="{{placeholder}}" value="{{keyword}}" confirm-type="search" bindinput="onInput" bindconfirm="onConfirm" />
-  <button class="filter-button primary" size="mini" hover-class="hover-dim" bindtap="onSubmit">{{actionText}}</button>
-  <button class="filter-button" size="mini" hover-class="hover-dim" bindtap="onReset">重置</button>
+  <input class="input filter-input" placeholder="{{placeholder}}" placeholder-class="filter-placeholder" placeholder-style="font-size: 28rpx; line-height: 80rpx;" value="{{draft}}" confirm-type="search" bindinput="onInput" bindconfirm="onConfirm" />
+  <text class="action filter-submit" hover-class="hover-dim" bindtap="onSubmit">{{actionText}}</text>
+  <text class="action action-muted filter-reset" hover-class="hover-dim" bindtap="onReset">重置</text>
 </view>

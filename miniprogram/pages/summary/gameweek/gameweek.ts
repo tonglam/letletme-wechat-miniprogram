@@ -1,4 +1,5 @@
 import { PerformancePage } from "../../../utils/performance-page";
+import { setPageTitle } from "../../../utils/navigation";
 import { getMiniGameweekSummary } from "../../../services/summary.service";
 import type { GameweekOverallSummary } from "../../../models/summary";
 import {
@@ -12,14 +13,37 @@ import {
   firstValue,
   formatCompactNumber,
   formatPoints,
-  type DisplayGroup,
+  numberValue,
   type DisplayMetric,
   type DisplayRow,
   type SummaryRecord
 } from "../../../utils/summary-format";
+import {
+  buildDreamTeamPitchState,
+  type SquadPitchHeader,
+  type SquadPitchPlayer
+} from "../../../utils/squad-pitch";
+import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "../../live/entry/player-detail";
+import type { LivePlayerRow } from "../../../models/live";
+import { indexDreamTeamById, indexEventPlayersByRowId } from "./dream-detail";
 
 type GameweekTab = "summary" | "dreamTeam" | "elite" | "transfers";
 type GameweekResumeStage = "startup" | "data" | "refresh";
+
+interface PitchPlayer {
+  id: string;
+  name: string;
+  team: string;
+  points: string;
+}
+
+interface PitchGroup {
+  id: string;
+  title: string;
+  players: PitchPlayer[];
+  emptyText: string;
+}
 
 interface GameweekSummaryData {
   loading: boolean;
@@ -37,9 +61,10 @@ interface GameweekSummaryData {
   showDreamTeam: boolean;
   showElite: boolean;
   showTransfers: boolean;
-  summaryStats: DisplayMetric[];
+  headlineStats: DisplayMetric[];
+  mostRows: DisplayMetric[];
   chipRows: DisplayRow[];
-  dreamTeamGroups: DisplayGroup[];
+  pitchGroups: PitchGroup[];
   eliteRows: DisplayRow[];
   transfersInRows: DisplayRow[];
   transfersOutRows: DisplayRow[];
@@ -47,6 +72,15 @@ interface GameweekSummaryData {
   hasDreamTeam: boolean;
   hasElite: boolean;
   hasTransfers: boolean;
+  pitchPlayers: SquadPitchPlayer[];
+  pitchBench: SquadPitchPlayer[];
+  pitchHeader: SquadPitchHeader | null;
+  pitchBenchBoost: boolean;
+  dreamTeamById: Record<string, LivePlayerRow>;
+  eliteById: Record<string, LivePlayerRow>;
+  shareBusy: boolean;
+  playerDetailOpen: boolean;
+  playerDetail: PlayerLiveDetailView | null;
 }
 
 PerformancePage({
@@ -66,16 +100,26 @@ PerformancePage({
     showDreamTeam: false,
     showElite: false,
     showTransfers: false,
-    summaryStats: [],
+    headlineStats: [],
+    mostRows: [],
     chipRows: [],
-    dreamTeamGroups: [],
+    pitchGroups: [],
     eliteRows: [],
     transfersInRows: [],
     transfersOutRows: [],
     hasSummary: false,
     hasDreamTeam: false,
     hasElite: false,
-    hasTransfers: false
+    hasTransfers: false,
+    pitchPlayers: [],
+    pitchBench: [],
+    pitchHeader: null,
+    pitchBenchBoost: false,
+    dreamTeamById: {},
+    eliteById: {},
+    shareBusy: false,
+    playerDetailOpen: false,
+    playerDetail: null
   } as GameweekSummaryData,
 
   pageVisible: false,
@@ -151,6 +195,7 @@ PerformancePage({
     this.startupPending = false;
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.setData({ event: currentGw, maxGw: currentGw });
+    setPageTitle(`GW${currentGw} 总结`);
     await this.loadData(false, trace, lifecycleRevision);
   },
 
@@ -203,7 +248,8 @@ PerformancePage({
           result.summary,
           result.dreamTeam,
           result.elite,
-          result.transfers
+          result.transfers,
+          this.data.event
         ),
         summaryError: result.errors.summary,
         dreamTeamError: result.errors.dreamTeam,
@@ -244,6 +290,7 @@ PerformancePage({
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.setData({ event: event.detail.value });
+    setPageTitle(`GW${event.detail.value} 总结`);
     this.loadData();
   },
 
@@ -268,6 +315,47 @@ PerformancePage({
 
   onRetry() {
     this.loadData();
+  },
+
+  onDreamPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
+    this.openPlayerDetail(this.data.dreamTeamById[String(event.detail?.playerId || "")]);
+  },
+
+  onElitePlayerTap(event: WechatMiniprogram.TouchEvent) {
+    this.openPlayerDetail(this.data.eliteById[String(event.currentTarget.dataset.id || "")]);
+  },
+
+  openPlayerDetail(player?: LivePlayerRow) {
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player)
+    });
+  },
+
+  onCloseDreamPlayer() {
+    this.setData({
+      playerDetailOpen: false
+    });
+  },
+
+  async onShareDreamPitch() {
+    if (this.data.shareBusy) return;
+    const pitch = this.selectComponent("#dream-squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
+      exportShareImage?: () => Promise<string>;
+    } | null;
+    if (!pitch?.exportShareImage) {
+      wx.showToast({ title: "阵容图还没准备好", icon: "none" });
+      return;
+    }
+    this.setData({ shareBusy: true });
+    try {
+      await presentSquadPitchShareImage(await pitch.exportShareImage());
+    } catch {
+      wx.showToast({ title: "阵容图生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareBusy: false });
+    }
   }
 });
 
@@ -275,36 +363,46 @@ function mapGameweekData(
   summary: GameweekOverallSummary | undefined,
   dreamTeam: unknown[],
   elite: unknown[],
-  transfers: unknown
+  transfers: unknown,
+  eventId?: number
 ): Partial<GameweekSummaryData> {
   const summaryRecord = asRecord(summary);
   const transfersRecord = asRecord(transfers);
   const transfersIn = firstValue(transfersRecord, ["transfers_in", "transfersIn", "in"]) || [];
   const transfersOut = firstValue(transfersRecord, ["transfers_out", "transfersOut", "out"]) || [];
   const chipRows = mapChipRows(firstValue(summaryRecord, ["chipPlays", "chips"]));
-  const dreamTeamGroups = mapDreamTeamGroups(dreamTeam);
-  const eliteRows = mapPlayerRows(
-    asArray(elite).filter((player) => playerPoints(asRecord(player), "points") >= 10),
-    "elite",
-    "points"
-  );
+  const pitchGroups = mapPitchGroups(dreamTeam);
+  const dreamPitch = buildDreamTeamPitchState(dreamTeam, eventId);
+  const eliteSource = asArray(elite).filter((player) => playerPoints(asRecord(player), "points") >= 10);
+  const eliteRows = mapPlayerRows(eliteSource, "elite", "points");
   const transfersInRows = mapPlayerRows(transfersIn, "transfers-in", "transfersInEvent");
   const transfersOutRows = mapPlayerRows(transfersOut, "transfers-out", "transfersOutEvent");
   const summaryStats = mapOverallStats(summaryRecord, transfersInRows, transfersOutRows);
+  const headlineStats = summaryStats.filter((stat) => HEADLINE_LABELS.indexOf(stat.label) >= 0);
+  const mostRows = summaryStats.filter((stat) => HEADLINE_LABELS.indexOf(stat.label) < 0);
 
   return {
-    summaryStats,
+    headlineStats,
+    mostRows,
     chipRows,
-    dreamTeamGroups,
+    pitchGroups,
+    pitchPlayers: dreamPitch.pitchPlayers,
+    pitchBench: dreamPitch.pitchBench,
+    pitchHeader: dreamPitch.pitchHeader,
+    pitchBenchBoost: false,
+    dreamTeamById: indexDreamTeamById(dreamPitch.pitchPlayers, dreamTeam),
+    eliteById: indexEventPlayersByRowId(eliteRows, eliteSource, "高分球员"),
     eliteRows,
     transfersInRows,
     transfersOutRows,
     hasSummary: summaryStats.length > 0 || chipRows.length > 0,
-    hasDreamTeam: dreamTeamGroups.some((group) => group.rows.length > 0),
+    hasDreamTeam: dreamPitch.pitchPlayers.length > 0 || pitchGroups.some((group) => group.players.length > 0),
     hasElite: eliteRows.length > 0,
     hasTransfers: transfersInRows.length > 0 || transfersOutRows.length > 0
   };
 }
+
+const HEADLINE_LABELS = ["最高分", "平均分"];
 
 function mapOverallStats(
   summary: SummaryRecord,
@@ -379,32 +477,47 @@ function getTeamFromPlayerTitle(title: string): string {
 }
 
 function mapChipRows(chips: unknown): DisplayRow[] {
-  return asArray(chips).map((item, index) => {
+  const rows = asArray(chips).map((item, index) => {
     const row = asRecord(item);
+    const count = numberValue(firstValue(row, ["numberPlayed", "times", "count"])) ?? 0;
     return {
       id: `chip-${index}`,
       title: fieldText(row, ["chipName", "name"], "Chip"),
-      value: formatCompactNumber(firstValue(row, ["numberPlayed", "times", "count"])),
-      meta: "开卡数量"
+      value: formatCompactNumber(count),
+      meta: "开卡数量",
+      count
     };
   });
+  const maxCount = Math.max(...rows.map((row) => row.count), 1);
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    value: row.value,
+    meta: row.meta,
+    barStyle: `width: ${Math.max(6, Math.round((row.count / maxCount) * 100))}%;`
+  }));
 }
 
-function mapDreamTeamGroups(players: unknown[]): DisplayGroup[] {
+function mapPitchGroups(players: unknown[]): PitchGroup[] {
   const groups = [
-    { id: "gkp", title: "门将", types: ["1", "GKP", "GK"] },
-    { id: "def", title: "后卫", types: ["2", "DEF"] },
-    { id: "mid", title: "中场", types: ["3", "MID"] },
-    { id: "fwd", title: "前锋", types: ["4", "FWD"] }
+    { id: "gkp", title: "GKP", types: ["1", "GKP", "GK"] },
+    { id: "def", title: "DEF", types: ["2", "DEF"] },
+    { id: "mid", title: "MID", types: ["3", "MID"] },
+    { id: "fwd", title: "FWD", types: ["4", "FWD"] }
   ];
 
   return groups.map((group) => ({
     id: group.id,
     title: group.title,
-    rows: players
+    players: players
       .map(asRecord)
       .filter((player) => group.types.indexOf(fieldText(player, ["elementType", "position", "singularNameShort"], "")) >= 0)
-      .map((player, index) => mapPlayerRow(player, `${group.id}-${index}`, "points")),
+      .map((player, index) => ({
+        id: `${group.id}-${index}`,
+        name: fieldText(player, ["webName", "name", "playerName"], "-"),
+        team: fieldText(player, ["teamShortName", "teamName", "team"], ""),
+        points: String(playerPoints(player, "points"))
+      })),
     emptyText: "该位置还没有梦之队球员"
   }));
 }
@@ -435,6 +548,14 @@ function mapPlayerRow(player: SummaryRecord, id: string, valueKey: string): Disp
     title: formatPlayerTeam(fieldText(player, ["webName", "name", "playerName"]), team),
     value: isTransfers ? formatCompactNumber(rawValue) : `${points}分`,
     meta: totalPoints && totalPoints !== points ? `总分 ${totalPoints}` : "",
-    description: fieldText(player, ["selectedByPercent", "nowCost"], "")
+    description: formatRowDescription(player)
   };
+}
+
+function formatRowDescription(player: SummaryRecord): string {
+  const selectedBy = fieldText(player, ["selectedByPercent"], "");
+  if (selectedBy) {
+    return `选择率 ${selectedBy}%`;
+  }
+  return fieldText(player, ["nowCost"], "");
 }

@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "联赛总结",
+  "navigationBarTitleText": "赛事回顾",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",

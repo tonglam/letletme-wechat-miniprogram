@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
 import { routes } from "../../../config/routes";
+import { setPageTitle } from "../../../utils/navigation";
 import { ensureAppContext } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -15,7 +16,8 @@ PerformancePage({
     emptyState: false,
     code: "",
     season: "",
-    player: undefined as PlayerDetail | undefined
+    player: undefined as PlayerDetail | undefined,
+    metrics: [] as Array<{ label: string; value: string }>
   },
 
   routeSeason: "",
@@ -68,7 +70,7 @@ PerformancePage({
   },
 
   async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
-    if (!this.data.code) {
+        if (!this.data.code) {
       this.setData({ loading: false, error: "", emptyState: true });
       return;
     }
@@ -102,7 +104,8 @@ PerformancePage({
       this.setData({ season });
       const player = await getPlayerInfoByCode(this.data.code, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
-      this.setData({ player });
+      this.setData({ player, metrics: buildPlayerMetrics(player) });
+      setPageTitle(player.name || "球员详情");
     } catch (error) {
       if (!isActiveRequest()) return;
       this.setData({ error: error instanceof Error ? error.message : "球员详情加载失败" });
@@ -122,3 +125,13 @@ PerformancePage({
     wx.redirectTo({ url: routes.dataPlayers });
   }
 });
+
+function buildPlayerMetrics(player: PlayerDetail): Array<{ label: string; value: string }> {
+  const selected = player.selectedByPercent;
+  const form = player.form;
+  return [
+    { label: "总分", value: player.totalPoints != null ? String(player.totalPoints) : "-" },
+    { label: "选择率", value: selected !== undefined && selected !== "" ? `${selected}%` : "-" },
+    { label: "状态", value: form !== undefined && form !== "" ? String(form) : "-" }
+  ];
+}

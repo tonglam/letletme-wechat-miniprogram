@@ -15,7 +15,7 @@ test("Home fixture states remain one conditional chain and stale refresh is not 
   const home = source("miniprogram/pages/home/index/index.ts");
   assert.match(
     wxml,
-    /fixtureError[\s\S]*wx:elif="\{\{fixtureLoading\}\}"[\s\S]*wx:elif="\{\{fixtureStaleMessage\}\}"[\s\S]*wx:elif="\{\{fixtureRows\.length === 0\}\}"/
+    /fixtureError && fixtureCount === 0[\s\S]*fixtureLoading && fixtureCount === 0[\s\S]*fixtureStaleMessage[\s\S]*fixtureCount === 0[\s\S]*fixtureCount > 0/
   );
   assert.match(home, /return !fixtureResult\.failed && !fixtureResult\.stale/);
   assert.match(home, /const fixtureFresh = await this\.loadPage\(true, tracker\)/);

@@ -22,6 +22,12 @@ capturedPage = undefined;
 const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
 const teamPage = capturedPage;
 
+test("live tournament defaults to GW sort", () => {
+  assert.equal(tournamentPage.data.sortKey, "livePoints");
+  assert.equal(tournamentPage.data.sortDesc, true);
+  assert.equal(tournamentPage.data.sortOptions[0].key, "livePoints");
+});
+
 test("tournament preseason is a stable business empty state", () => {
   assert.deepEqual(tournamentModule.noLiveEventState(), {
     loading: false,
@@ -34,7 +40,7 @@ test("tournament preseason is a stable business empty state", () => {
     emptyState: "preseason",
     emptyEyebrow: "赛季准备中",
     emptyTitle: "当前赛季暂无实时比赛周",
-    emptyDescription: "比赛周开始后，这里会显示竞赛实时得分和排名",
+    emptyDescription: "比赛周开始后，这里会显示赛事实时得分和排名",
     emptyActionText: "",
     rows: [],
     displayedRows: [],
@@ -529,7 +535,8 @@ test("tournament resume drops a historical selection after a season rollover", a
       ownershipSummary: "Old player",
       selectedOwnershipTeam: { id: 1, name: "Old team" },
       ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
-      selectedTeamExposure: { id: 1, name: "Old team" }
+      teamExposureRules: [{ teamShortName: "ARS", name: "Old team", count: 2 }],
+      pendingExposureTeam: { shortName: "CHE", name: "Old pending" }
     },
     pageVisible: false,
     hasShown: true,
@@ -564,7 +571,8 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.deepEqual(context.data.ownershipAvailablePlayers, []);
   assert.equal(context.data.ownershipSummary, "未筛选");
   assert.equal(context.data.selectedOwnershipTeam, null);
-  assert.equal(context.data.selectedTeamExposure, null);
+  assert.deepEqual(context.data.teamExposureRules, []);
+  assert.equal(context.data.pendingExposureTeam, null);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
 });

@@ -1,51 +1,46 @@
-.home-header {
-  padding: 8rpx 2rpx 4rpx;
-  text-align: center;
-}
-
-/* Notice — soft pitch-green strip */
 .notice-strip {
   display: flex;
   align-items: flex-start;
   gap: 12rpx;
-  padding: 18rpx 20rpx;
-  background: var(--accent-tint);
-  border: 1rpx solid var(--green-ink-a25);
+  padding: 16rpx 20rpx;
   border-radius: 12rpx;
+  background: var(--accent-tint);
 }
 
 .notice-icon {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 30rpx;
   height: 30rpx;
   border-radius: 50%;
   background: var(--green-ink);
-  color: var(--card);
+  color: var(--chalk);
   font-size: 20rpx;
   font-weight: 700;
 }
 
 .notice-text {
   flex: 1;
+  min-width: 0;
   color: var(--green-ink);
   font-size: 24rpx;
   line-height: 1.45;
+  word-break: break-word;
 }
 
 .notice-close {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  min-width: 64rpx;
-  min-height: 64rpx;
-  margin: -16rpx -16rpx -16rpx 0;
+  width: 32rpx;
+  height: 32rpx;
   color: var(--green-ink);
   font-size: 30rpx;
-  line-height: 30rpx;
-  opacity: 0.75;
+  line-height: 1;
+  opacity: 0.7;
 }
 
 /* Deadline — scoreboard panel (dark fascia, electric edge via .scoreboard) */
@@ -124,14 +119,49 @@
 .section-link {
   flex-shrink: 0;
   padding: 8rpx 14rpx;
-  color: var(--green-ink);
-  font-size: 24rpx;
-  font-weight: 700;
 }
 
 .account-link-hint {
   margin-top: 12rpx;
   text-align: center;
+}
+
+.bind-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  box-sizing: border-box;
+}
+
+.bind-strip-account {
+  margin-top: 12rpx;
+  background: var(--accent-tint);
+}
+
+.bind-kicker {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.bind-strip-account .bind-kicker {
+  color: var(--green-ink);
+}
+
+.bind-title {
+  margin-top: 4rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.bind-action {
+  flex-shrink: 0;
 }
 
 .section-status {
@@ -150,12 +180,12 @@
   line-height: 1.45;
 }
 
-/* Price changes */
-.price-card {
+/* Transfer desk — web MarketTeaser */
+.transfer-desk {
   padding-bottom: 20rpx;
 }
 
-.price-head {
+.transfer-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -163,133 +193,158 @@
   margin-bottom: 18rpx;
 }
 
-.price-groups {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14rpx;
+.transfer-head .section-title {
+  margin-bottom: 6rpx;
 }
 
-.price-group {
-  min-width: 0;
-  padding: 14rpx;
-  border: 1rpx solid var(--line);
+.transfer-empty,
+.transfer-empty-inline {
+  padding: 28rpx 16rpx;
+  border: 1rpx dashed var(--line);
   border-radius: 12rpx;
-  background: var(--track);
-}
-
-.price-rise {
-  border-color: var(--green-ink-a30);
-  background: var(--accent-tint);
-}
-
-.price-fall {
-  border-color: var(--danger-a30);
-  background: var(--danger-tint);
-}
-
-.price-group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10rpx;
-  color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 800;
-}
-
-.price-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32rpx;
-  height: 32rpx;
-  padding: 0 8rpx;
-  border-radius: 16rpx;
-  background: var(--plum-a8);
-  color: var(--muted-ink);
-  font-size: 20rpx;
-  box-sizing: border-box;
-}
-
-.price-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10rpx;
-  padding: 12rpx 0;
-  border-top: 1rpx solid var(--plum-a8);
-}
-
-.price-row-first {
-  border-top: 0;
-}
-
-.price-empty {
-  padding: 28rpx 0 18rpx;
   color: var(--muted-ink);
   font-size: 22rpx;
   text-align: center;
 }
 
-.price-player {
+.transfer-empty-inline {
+  padding: 20rpx 12rpx;
+}
+
+.transfer-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
+}
+
+.transfer-col-head {
+  margin-bottom: 12rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.transfer-col-head.transfer-up {
+  color: var(--green-ink);
+}
+
+.transfer-col-head.transfer-down {
+  color: var(--danger);
+}
+
+.transfer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-height: 88rpx;
+  padding: 14rpx 16rpx;
+  border: 0;
+  border-radius: 12rpx;
+  background: var(--track);
+  margin-bottom: 10rpx;
+  box-sizing: border-box;
+}
+
+.transfer-player {
   min-width: 0;
   flex: 1;
 }
 
-.price-name-line {
+.transfer-name-line {
   display: flex;
   align-items: center;
-  gap: 6rpx;
+  gap: 8rpx;
   min-width: 0;
 }
 
-.price-name {
+.transfer-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 22rpx;
+  font-size: 26rpx;
   font-weight: 700;
 }
 
-.price-team {
+.transfer-meta {
   display: block;
   margin-top: 4rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--muted-ink);
   font-size: 20rpx;
 }
 
-.price-values {
+.transfer-delta {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.price-current {
-  font-size: 22rpx;
+  font-size: 26rpx;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
-.price-change {
-  margin-top: 3rpx;
+.transfer-up {
+  color: var(--green-ink);
+}
+
+.transfer-down {
+  color: var(--danger);
+}
+
+.transfer-watch {
+  margin-top: 28rpx;
+}
+
+.watch-row {
+  padding: 16rpx;
+  border: 0;
+  border-radius: 12rpx;
+  background: var(--track);
+  margin-bottom: 10rpx;
+}
+
+.watch-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.watch-status {
+  flex-shrink: 0;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: var(--track);
+  color: var(--muted-ink);
   font-size: 18rpx;
   font-weight: 700;
 }
 
-.price-up {
-  color: var(--green-ink);
-}
-
-.price-down {
+.watch-injured,
+.watch-unavailable,
+.watch-suspended {
+  background: var(--danger-tint);
   color: var(--danger);
 }
 
-/* GW stats grid */
+.watch-doubtful {
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+
+.watch-available {
+  background: var(--accent-tint);
+  color: var(--green-ink);
+}
+
+.watch-body {
+  margin-top: 8rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+/* GW stats — dark broadcast band, same language as the team desk metric strip */
 .gw-stats-head {
   margin-bottom: 18rpx;
 }
@@ -297,20 +352,30 @@
 .gw-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12rpx;
+  overflow: hidden;
+  border-radius: 14rpx;
+  background:
+    radial-gradient(ellipse 120% 90% at 50% -30%, var(--plum-a70), rgba(56, 0, 60, 0) 60%),
+    linear-gradient(180deg, var(--fascia-hi), var(--fascia));
 }
 
 .gw-stat-item {
   min-width: 0;
-  padding: 18rpx;
-  border-radius: 12rpx;
-  background: var(--track);
+  padding: 20rpx 24rpx;
+  box-sizing: border-box;
+}
+
+/* Odd counts: last tile spans the full row so the band stays balanced */
+.gw-stat-item:last-of-type:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .gw-stat-label {
   display: block;
-  color: var(--muted-ink);
-  font-size: 22rpx;
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
   line-height: 1.25;
 }
 
@@ -320,19 +385,45 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink);
-  font-size: 28rpx;
+  color: var(--electric);
+  font-size: 30rpx;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   line-height: 1.25;
 }
 
 /* Fixtures */
 .fixture-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20rpx;
+  gap: 16rpx;
   margin-bottom: 16rpx;
+}
+
+.fixture-head-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.fixture-head-copy .section-title {
+  margin-bottom: 0;
+}
+
+.fixture-head-tools {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8rpx;
+}
+
+.fixture-live-link {
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .fixture-stepper {
@@ -341,7 +432,6 @@
   justify-content: flex-end;
   gap: 2rpx;
   flex-shrink: 0;
-  width: auto;
 }
 
 .fixture-arrow {
@@ -370,68 +460,60 @@
   color: var(--line);
 }
 
+.fixture-days {
+  margin-bottom: 8rpx;
+}
+
 .fixture-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 116rpx minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 140rpx minmax(0, 1fr);
   align-items: center;
   gap: 12rpx;
-  padding: 18rpx 0;
+  padding: 16rpx 0;
   border-top: 1rpx solid var(--line);
-  font-size: 26rpx;
+}
+
+.fixture-row:first-of-type {
+  border-top: 0;
 }
 
 .fixture-team {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.team-name {
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--ink);
+  font-size: 24rpx;
   font-weight: 700;
+  line-height: 1.25;
 }
 
-.away-team {
-  align-items: flex-end;
+.home-team {
   text-align: right;
 }
 
-.fixture-center {
+.away-team {
+  text-align: left;
+}
+
+.fixture-board {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 70rpx;
-  padding: 8rpx;
+  min-height: 64rpx;
+  padding: 8rpx 12rpx;
+  border: 1rpx solid var(--electric-a28);
   border-radius: 10rpx;
-  background: var(--track);
+  background: var(--plum);
+  color: var(--electric);
+  font-size: 24rpx;
+  font-weight: 800;
   box-sizing: border-box;
 }
 
-.fixture-vs {
-  color: var(--ink);
-  font-size: 22rpx;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.fixture-time {
-  margin-top: 6rpx;
+.fixture-tz {
+  margin-top: 12rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--line);
   color: var(--muted-ink);
   font-size: 20rpx;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-/* FDR badges — global .fdr scale (app.wxss), aligned per side */
-.fixture-team .fdr {
-  align-self: flex-start;
-}
-
-.away-team .fdr {
-  align-self: flex-end;
+  text-align: center;
 }

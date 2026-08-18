@@ -1,3 +1,4 @@
 <view class="page">
   <view id="perf-primary-content" class="redirect-hint">正在打开探索…</view>
+  <privacy-dialog />
 </view>

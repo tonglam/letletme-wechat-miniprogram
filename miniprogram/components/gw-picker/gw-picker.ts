@@ -11,6 +11,14 @@ Component({
     max: {
       type: Number,
       value: 1
+    },
+    compact: {
+      type: Boolean,
+      value: false
+    },
+    dark: {
+      type: Boolean,
+      value: false
     }
   },
 

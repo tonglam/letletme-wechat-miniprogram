@@ -1481,6 +1481,10 @@ backgroundAudioManager.src = 'http://ws.stream.qqmusic.qq.com/M500001VfvsJ21xFqb
     interface CreateIntersectionObserverOption {
         /** 初始的相交比例，如果调用时检测到的相交比例与这个值不相等且达到阈值，则会触发一次监听器的回调函数。 */
         initialRatio?: number
+        /** 使用原生实现，避免 JS 模拟的 slowest path。
+         *
+         * 最低基础库： `2.19.2` */
+        nativeMode?: boolean
         /** 是否同时观测多个目标节点（而非一个），如果设为 true ，observe 的 targetSelector 将选中多个节点（注意：同时选中过多节点将影响渲染性能）
          *
          * 最低基础库： `2.0.0` */

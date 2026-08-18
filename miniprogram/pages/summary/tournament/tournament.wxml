@@ -1,22 +1,25 @@
 <view class="page page-tabbar">
-  <view class="section summary-header">
-    <view class="header-copy">
-      <view class="title">联赛总结</view>
-      <view wx:if="{{selectedTournamentName}}" class="subtitle">{{selectedTournamentName}} · {{headerSubtitle || '当前赛季'}}</view>
-      <view wx:else class="subtitle">排名、净分与赛季表现</view>
+  <view class="section">
+    <view class="score-card scoreboard">
+      <view class="score-top">
+        <view class="score-identity">
+          <view class="score-team">{{selectedTournamentName || '赛事回顾'}}</view>
+          <view class="score-manager">{{headerSubtitle || '排名 · 净分 · 赛季表现'}}</view>
+        </view>
+        <gw-picker wx:if="{{tournaments.length}}" compact="{{true}}" dark="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
+      </view>
     </view>
-    <gw-picker wx:if="{{tournaments.length}}" value="{{event}}" max="{{maxGw}}" bind:change="onEventChange" />
   </view>
 
   <view wx:if="{{tournaments.length}}" class="section card control-card">
-    <view class="field-label">联赛</view>
+    <view class="field-label">赛事</view>
     <picker mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
-      <view class="picker-value">{{selectedTournamentName || '请选择联赛'}}</view>
+      <view class="picker-value">{{selectedTournamentName || '请选择赛事'}}</view>
     </picker>
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading}}" text="加载联赛总结" />
+  <app-loading wx:elif="{{loading}}" text="加载赛事回顾" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section empty-state-section">
     <app-empty-state
       eyebrow="{{emptyEyebrow}}"
@@ -45,7 +48,7 @@
       />
       <block wx:else>
         <view wx:if="{{overviewStats.length}}" class="card summary-card">
-          <view class="section-title-small">我的表现</view>
+          <view class="section-heading">我的表现</view>
           <view class="metric-grid">
             <view wx:for="{{overviewStats}}" wx:key="label" class="metric-card">
               <text class="metric-label">{{item.label}}</text>
@@ -54,7 +57,7 @@
           </view>
         </view>
         <view wx:if="{{tournamentStats.length}}" class="card summary-card">
-          <view class="section-title-small">赛事信息</view>
+          <view class="section-heading">赛事信息</view>
           <view class="metric-grid">
             <view wx:for="{{tournamentStats}}" wx:key="label" class="metric-card">
               <text class="metric-label">{{item.label}}</text>
@@ -69,12 +72,12 @@
       <app-empty-state
         wx:if="{{!hasRankings}}"
         title="本轮排名还没生成"
-        description="联赛完成本轮数据同步后即可查看"
+        description="赛事完成本轮数据同步后即可查看"
         actionText="重新加载"
         bind:action="onRetry"
       />
       <view wx:else class="card ranking-card">
-        <view class="section-title-small">本轮排名</view>
+        <view class="section-heading">本轮排名</view>
         <view wx:for="{{rankingRows}}" wx:key="id" class="ranking-row {{item.isMine ? 'ranking-row-active' : ''}}">
           <view class="rank-badge">#{{item.rank}}</view>
           <view class="ranking-main">
@@ -84,7 +87,7 @@
           </view>
           <view class="ranking-score">
             <view class="score-main">{{item.points}}</view>
-            <view class="score-sub">净 {{item.netPoints}}</view>
+            <view class="points-sub">净 {{item.netPoints}}</view>
           </view>
         </view>
       </view>
@@ -99,7 +102,7 @@
         bind:action="onRetry"
       />
       <view wx:else class="card summary-card">
-        <view class="section-title-small">累计指标</view>
+        <view class="section-heading">累计指标</view>
         <view class="metric-grid">
           <view wx:for="{{entryMetricStats}}" wx:key="label" class="metric-card">
             <text class="metric-label">{{item.label}}</text>

@@ -1,3 +1,14 @@
+.live-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.live-toolbar-status {
+  flex: 1;
+  min-width: 0;
+}
+
 .live-summary {
   display: grid;
   grid-template-columns: 1fr;
@@ -5,33 +16,6 @@
 }
 
 /* Extends global .scoreboard (border/radius/colors live there) */
-.score-card {
-  padding: 28rpx;
-  box-sizing: border-box;
-}
-
-.score-label {
-  color: var(--muted-ink);
-  font-size: 24rpx;
-}
-
-.score-card .score-label {
-  color: var(--chalk-a60);
-}
-
-.score {
-  margin-top: 8rpx;
-  color: var(--electric);
-  font-size: 56rpx;
-  font-weight: 800;
-}
-
-.score-sub {
-  margin-top: 8rpx;
-  color: var(--chalk-a60);
-  font-size: 22rpx;
-}
-
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -62,53 +46,170 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12rpx;
+  padding-top: 16rpx;
+  padding-bottom: 16rpx;
 }
 
 .info-item {
   min-width: 0;
+  text-align: center;
+}
+
+.info-item .score-label,
+.info-value {
+  text-align: center;
 }
 
 .info-value {
-  margin-top: 8rpx;
+  margin-top: 4rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 28rpx;
+  font-size: 24rpx;
   font-weight: 800;
 }
 
-.section-heading {
-  margin-bottom: 8rpx;
-  color: var(--ink);
-  font-size: 28rpx;
-  font-weight: 800;
+/* Lineup & transfer lists — same board language as the live tournament page:
+   borderless shadowed card, tiny tracked header strip, hairline row separators */
+.lineup-card {
+  border: 0;
+  box-shadow: 0 2rpx 8rpx var(--plum-a4);
 }
 
-.transfer-row {
+.lineup-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 0;
+  gap: 16rpx;
+  padding-bottom: 14rpx;
   border-bottom: 1rpx solid var(--line);
 }
 
-.transfer-in {
+.lineup-head .section-heading {
+  margin-bottom: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.live-pitch-section {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 8rpx;
+  margin-bottom: 24rpx;
+  box-sizing: border-box;
+}
+
+.live-pitch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.live-pitch-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.live-pitch-section squad-pitch {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Bench strip joins the starters board — the last starter row's hairline
+   already separates the two groups */
+.lineup-card .bench-heading {
+  margin-top: 14rpx;
+}
+
+.swap-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.swap-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.swap-side {
+  flex: 1;
+  min-width: 0;
+}
+
+.swap-in {
+  text-align: right;
+}
+
+.swap-kicker {
+  display: block;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.swap-name {
+  display: block;
+  margin-top: 4rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   font-size: 26rpx;
-  font-weight: 700;
-}
-
-.transfer-out {
-  margin-top: 6rpx;
-  color: var(--muted-ink);
-  font-size: 22rpx;
-}
-
-.transfer-price {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-  color: var(--ink);
-  font-size: 24rpx;
   font-weight: 800;
+}
+
+.swap-in .swap-name {
+  color: var(--green-ink);
+}
+
+.swap-team {
+  display: block;
+  margin-top: 2rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.swap-mid {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 72rpx;
+}
+
+.swap-mark {
+  width: 36rpx;
+  height: 2rpx;
+  background: var(--line);
+  position: relative;
+}
+
+.swap-mark::after {
+  content: "";
+  position: absolute;
+  top: -5rpx;
+  right: 0;
+  width: 10rpx;
+  height: 10rpx;
+  border-top: 2rpx solid var(--line);
+  border-right: 2rpx solid var(--line);
+  transform: rotate(45deg);
+}
+
+.swap-price {
+  margin-top: 10rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
 }

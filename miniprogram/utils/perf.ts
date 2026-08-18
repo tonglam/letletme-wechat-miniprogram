@@ -130,7 +130,7 @@ export interface ExploreVisitRecord {
   surface: "overview" | "fixtures";
   contractSource: "compat";
   eventId?: number;
-  horizon?: 3 | 5;
+  horizon?: 3 | 5 | 8;
   cacheOutcome?: "fresh" | "last-good" | "miss";
   durationBucket?: string;
   ts: number;

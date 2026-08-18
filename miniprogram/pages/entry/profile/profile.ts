@@ -114,7 +114,7 @@ PerformancePage({
     trace?: PageRequestTrace,
     lifecycleRevision?: number
   ) {
-    if (!Number.isFinite(entryId) || entryId <= 0) {
+        if (!Number.isFinite(entryId) || entryId <= 0) {
       this.setData({ loading: false, error: "", emptyState: true, entry: {} });
       return;
     }

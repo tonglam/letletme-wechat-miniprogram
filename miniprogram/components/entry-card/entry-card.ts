@@ -1,3 +1,5 @@
+import { selectHomeEntryLeagues } from "../../utils/entry-leagues";
+
 interface EntryCardInfo {
   entry?: number;
   entryId?: number;
@@ -54,17 +56,22 @@ Component({
     rich: {
       type: Boolean,
       value: false
+    },
+    leagues: {
+      type: Array,
+      value: []
     }
   },
 
   data: {
     statRows: [] as StatRow[],
+    displayLeagues: [] as Array<{ id: number; name: string; viewerRank?: number }>,
     entryMetaText: "",
     transferText: ""
   },
 
   observers: {
-    "entry, rich": function () {
+    "entry, rich, leagues": function () {
       this.updateRichData();
     }
   },
@@ -84,13 +91,21 @@ Component({
         entry?.region || ""
       ].filter(Boolean);
 
+      const leagues = (this.properties.leagues || []) as Array<{
+        id: number;
+        name: string;
+        viewerRank?: number;
+        rank?: number;
+        officialKind?: string;
+        shortName?: string | null;
+      }>;
       this.setData({
         entryMetaText: metaParts.join(" · "),
+        displayLeagues: selectHomeEntryLeagues(leagues),
         statRows: [
           { label: "总分", value: formatNumber(entry?.totalPoints) },
           { label: "总排名", value: formatRank(entry?.overallRank) },
-          { label: "阵容身价", value: formatCurrency(entry?.teamValue) },
-          { label: "余额", value: formatCurrency(entry?.bank) }
+          { label: "身价", value: formatCurrency(entry?.teamValue) }
         ]
       });
     },

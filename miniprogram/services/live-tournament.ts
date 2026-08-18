@@ -35,9 +35,14 @@ export interface TournamentOwnershipFilter {
   captainMode: TournamentCaptainMode;
 }
 
-export interface TournamentTeamExposureFilter {
+export interface TournamentTeamExposureRule {
   teamShortName: string;
   exactCount: number;
+}
+
+export interface TournamentTeamExposureFilter {
+  /** Multiple club rules, all must hold — same as the web TeamExposureFilter. */
+  rules?: TournamentTeamExposureRule[];
   scope: TournamentOwnershipScope;
 }
 
@@ -144,17 +149,20 @@ export function filterTournamentRowsByTeamExposure(
   rows: LiveTournamentRow[],
   filter: TournamentTeamExposureFilter
 ): LiveTournamentRow[] {
-  if (!filter.teamShortName || !filter.exactCount) {
+  const rules = (filter.rules || []).filter((rule) => (
+    rule.teamShortName && Number.isInteger(rule.exactCount) && rule.exactCount > 0
+  ));
+  if (rules.length === 0) {
     return rows;
   }
-  const teamShortName = filter.teamShortName.toLowerCase();
-  return rows.filter((row) => {
+  return rows.filter((row) => rules.every((rule) => {
+    const teamShortName = rule.teamShortName.toLowerCase();
     const count = (row.picks || []).filter((pick) => (
       (pick.teamShortName || "").toLowerCase() === teamShortName
       && pickInScope(pick, filter.scope)
     )).length;
-    return count === filter.exactCount;
-  });
+    return count === rule.exactCount;
+  }));
 }
 
 export function getTournamentTeamOptions(rows: LiveTournamentRow[]): TournamentTeamOption[] {

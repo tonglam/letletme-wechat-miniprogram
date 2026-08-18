@@ -1,18 +1,12 @@
+/* ---------- Shared (compact row + empty state) ---------- */
+
 .entry-content,
-.entry-empty {
+.entry-empty,
+.entry-desk {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20rpx;
-}
-
-.entry-content-rich {
-  align-items: stretch;
-}
-
-.entry-main {
-  flex: 1;
-  min-width: 0;
 }
 
 .entry-head {
@@ -28,10 +22,10 @@
 }
 
 .entry-title {
+  overflow: hidden;
   color: var(--ink);
   font-size: 30rpx;
-  font-weight: 700;
-  overflow: hidden;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -42,6 +36,12 @@
   font-size: 24rpx;
 }
 
+.entry-head .action,
+.entry-empty .action {
+  flex-shrink: 0;
+  padding: 4rpx 0 4rpx 12rpx;
+}
+
 .entry-meta {
   flex-shrink: 0;
   color: var(--green-ink);
@@ -49,73 +49,130 @@
   font-weight: 700;
 }
 
-.entry-meta-line {
-  margin-top: 14rpx;
-  color: var(--muted-ink);
-  font-size: 22rpx;
+/* ---------- Rich team desk (home) ---------- */
+
+.entry-desk {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }
 
-.entry-stat-grid {
+.entry-desk .entry-title {
+  font-size: 34rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.entry-desk .entry-head .action {
+  padding-top: 10rpx;
+}
+
+/* Metric band — personal scoreboard, echoes the deadline fascia panel */
+.entry-metric-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12rpx;
-  margin-top: 18rpx;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 24rpx;
+  padding: 22rpx 0;
+  overflow: hidden;
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 14rpx;
+  background:
+    radial-gradient(ellipse 120% 90% at 50% -30%, var(--plum-a70), rgba(56, 0, 60, 0) 60%),
+    linear-gradient(180deg, var(--fascia-hi), var(--fascia));
+  box-shadow: inset 0 1rpx 0 var(--electric-a28);
 }
 
-.entry-stat {
-  min-height: 86rpx;
-  padding: 14rpx 16rpx;
-  background: var(--track);
-  border-radius: 12rpx;
+.entry-metric {
+  min-width: 0;
+  padding: 0 8rpx;
+  text-align: center;
   box-sizing: border-box;
 }
 
-.entry-stat-label {
+.entry-metric-value {
   display: block;
+  overflow: hidden;
+  color: var(--electric);
+  font-size: 34rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-metric-label {
+  display: block;
+  margin-top: 8rpx;
+  color: var(--chalk-a60);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+/* Leagues */
+.entry-leagues {
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.entry-leagues-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4rpx;
+}
+
+.entry-leagues-title {
   color: var(--muted-ink);
   font-size: 20rpx;
-}
-
-.entry-stat-value {
-  display: block;
-  margin-top: 6rpx;
-  color: var(--ink);
-  font-size: 28rpx;
-  font-weight: 750;
-}
-
-.entry-transfer {
-  margin-top: 14rpx;
-  color: var(--muted-ink);
-  font-size: 22rpx;
-}
-
-.entry-action {
-  margin-top: 20rpx;
-}
-
-/* Pill CTA — pitch green, plum text (web primary button) */
-.entry-action,
-.entry-action-inline {
-  flex-shrink: 0;
-  padding: 0 24rpx;
-  min-width: 104rpx;
-  min-height: 64rpx;
-  line-height: 64rpx;
-  border-radius: 999rpx;
-  color: var(--cta-ink);
-  background: var(--cta);
-  border-color: transparent;
-  font-size: 22rpx;
   font-weight: 700;
+  letter-spacing: 2rpx;
 }
 
-.entry-action-inline {
-  margin-top: 0;
-  margin-right: 0;
+.entry-leagues-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 10rpx;
+  border-radius: 16rpx;
+  background: var(--plum-a8);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  box-sizing: border-box;
 }
 
-.entry-action::after,
-.entry-action-inline::after {
-  border: 0;
+.entry-league-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--plum-a8);
+}
+
+.entry-league-row:last-of-type {
+  padding-bottom: 4rpx;
+  border-bottom: 0;
+}
+
+.entry-league-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-league-rank {
+  flex-shrink: 0;
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }

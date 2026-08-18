@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22rpx 0;
+  padding: 12rpx 0;
   border-bottom: 1rpx solid var(--line);
 }
 
@@ -24,7 +24,7 @@
 
 .player-main {
   min-width: 0;
-  padding-right: 20rpx;
+  padding-right: 16rpx;
 }
 
 .player-title-line {
@@ -39,51 +39,70 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 28rpx;
-  font-weight: 600;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 /* Captain / vice-captain marker — plum board, electric letter */
 .role-badge {
   flex-shrink: 0;
-  margin-left: 10rpx;
-  padding: 2rpx 8rpx;
+  margin-left: 8rpx;
+  padding: 0 8rpx;
   border-radius: 6rpx;
   background: var(--plum);
   color: var(--electric);
   font-size: 18rpx;
   font-weight: 800;
-  line-height: 28rpx;
+  line-height: 24rpx;
 }
 
 .player-meta {
   display: flex;
   align-items: center;
-  margin-top: 6rpx;
+  margin-top: 4rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted-ink);
-  font-size: 22rpx;
+  font-size: 20rpx;
 }
 
 .player-pos {
-  margin-left: 10rpx;
+  margin-left: 8rpx;
 }
 
 .player-side {
   flex-shrink: 0;
-  min-width: 104rpx;
+  min-width: 80rpx;
   color: var(--green-ink);
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 800;
   text-align: right;
+}
+
+.player-points {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Secondary line under the points value — directory price (web player-stats row). */
+.player-price-sub {
+  display: block;
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.stat-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-text {
   display: block;
-  margin-top: 6rpx;
+  margin-top: 4rpx;
   color: var(--muted-ink);
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 500;
 }
