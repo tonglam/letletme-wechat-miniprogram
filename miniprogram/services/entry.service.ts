@@ -2,6 +2,9 @@ import type { EntryHistory, EntryInfo, EntryLeague, EntrySearchResult, EntryTran
 import { graphqlRequest } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 
+// Documents here are not shared with summary.service: field selections differ
+// (and live vs history cache variants). Merging would change query hashes.
+
 const GET_ENTRY = `
   query GetEntry($id: Int!) {
     entry(id: $id) {
@@ -109,8 +112,21 @@ interface EntryHistoryResponse {
   };
 }
 
+export interface EntryEventResult {
+  eventId?: number | null;
+  eventPoints?: number | null;
+  eventRank?: number | null;
+  overallPoints?: number | null;
+  overallRank?: number | null;
+  eventTransfers?: number | null;
+  eventTransfersCost?: number | null;
+  eventNetPoints?: number | null;
+  teamValue?: number | null;
+  bank?: number | null;
+}
+
 interface EntryEventResultResponse {
-  entryEventResult: unknown;
+  entryEventResult: EntryEventResult | null;
 }
 
 function mapGraphQLEntry(entry: GetEntryResponse["entry"]): EntryInfo | undefined {
@@ -243,12 +259,44 @@ interface GetEntryTransferHistoryResponse {
   entryTransferHistory: EntryGameweekTransfers[];
 }
 
-export async function getEntryEventResult(entry: number, event: number): Promise<unknown> {
+function currentSeasonLabel(): string {
+  try {
+    return String(getApp<IAppOption>().globalData.season || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function transferHistoryCacheVariant(kind: "live" | "history"): string {
+  const season = currentSeasonLabel();
+  return season ? `season:${season}|${kind}` : kind;
+}
+
+function mapTransferRecord(t: EntryEventTransfersData): EntryTransfer {
+  return {
+    event: t.event,
+    playerIn: t.elementInWebName,
+    playerOut: t.elementOutWebName,
+    elementIn: t.elementIn,
+    elementOut: t.elementOut,
+    elementInWebName: t.elementInWebName,
+    elementOutWebName: t.elementOutWebName,
+    elementInTeamShortName: t.elementInTeamShortName,
+    elementOutTeamShortName: t.elementOutTeamShortName,
+    cost: t.elementInCost,
+    time: t.time
+  };
+}
+
+export async function getEntryEventResult(
+  entry: number,
+  event: number
+): Promise<EntryEventResult | undefined> {
   const data = await graphqlRequest<EntryEventResultResponse>(GET_ENTRY_EVENT_RESULT, {
     entryId: entry,
     eventId: event
   });
-  return data.entryEventResult;
+  return data.entryEventResult || undefined;
 }
 
 export async function getEntryEventTransfers(
@@ -270,7 +318,7 @@ export async function getEntryEventTransfers(
     // sharing one key would let a 30-minute history serve stand in for the
     // live view, and a memory-only live write could never replace a
     // persisted stale entry.
-    cacheVariant: isLiveEvent ? "live" : "history",
+    cacheVariant: transferHistoryCacheVariant(isLiveEvent ? "live" : "history"),
     cachePolicy: isLiveEvent ? "live" : "reporting",
     forceRefresh,
     trace
@@ -279,33 +327,15 @@ export async function getEntryEventTransfers(
   if (!gw) {
     return [];
   }
-  return gw.transfers.map((t) => ({
-    event: t.event,
-    playerIn: t.elementInWebName,
-    playerOut: t.elementOutWebName,
-    elementInWebName: t.elementInWebName,
-    elementOutWebName: t.elementOutWebName,
-    elementInTeamShortName: t.elementInTeamShortName,
-    elementOutTeamShortName: t.elementOutTeamShortName,
-    cost: t.elementInCost,
-  }));
+  return gw.transfers.map(mapTransferRecord);
 }
 
 export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
     // Same freshness class as historical per-event views: share their entry.
-    cacheVariant: "history",
+    cacheVariant: transferHistoryCacheVariant("history"),
     cachePolicy: "reporting",
     forceRefresh
   });
-  return (data.entryTransferHistory || []).flatMap((gw) => gw.transfers.map((t) => ({
-    event: t.event,
-    playerIn: t.elementInWebName,
-    playerOut: t.elementOutWebName,
-    elementInWebName: t.elementInWebName,
-    elementOutWebName: t.elementOutWebName,
-    elementInTeamShortName: t.elementInTeamShortName,
-    elementOutTeamShortName: t.elementOutTeamShortName,
-    cost: t.elementInCost,
-  })));
+  return (data.entryTransferHistory || []).flatMap((gw) => gw.transfers.map(mapTransferRecord));
 }

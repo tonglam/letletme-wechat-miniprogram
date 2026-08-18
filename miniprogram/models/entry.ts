@@ -31,7 +31,14 @@ export interface EntryTransfer {
   event?: number;
   playerIn?: string;
   playerOut?: string;
+  elementIn?: number;
+  elementOut?: number;
+  elementInWebName?: string;
+  elementOutWebName?: string;
+  elementInTeamShortName?: string;
+  elementOutTeamShortName?: string;
   cost?: number;
+  time?: string;
 }
 
 export interface EntryLeague {

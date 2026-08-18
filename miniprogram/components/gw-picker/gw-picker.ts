@@ -61,7 +61,10 @@ Component({
 
     onPickerChange(event: WechatMiniprogram.PickerChange) {
       const min = Math.max(1, Number(this.properties.min) || 1);
-      const next = this.boundedValue(min + Number(event.detail.value));
+      const index = Number(event.detail.value);
+      if (!Number.isFinite(index)) return;
+      const next = this.boundedValue(min + index);
+      if (!Number.isFinite(next)) return;
       this.triggerEvent("change", { value: next });
     }
   }

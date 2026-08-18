@@ -16,14 +16,14 @@
   <app-loading wx:elif="{{loading}}" text="加载 GW 总结" />
 
   <block wx:else>
-    <view class="section tab-strip">
+    <view id="perf-primary-content" class="section tab-strip">
       <view class="tab-item {{showSummary ? 'tab-active' : ''}}" data-tab="summary" catchtap="onTabTap" hover-class="hover-dim">总览</view>
       <view class="tab-item {{showDreamTeam ? 'tab-active' : ''}}" data-tab="dreamTeam" catchtap="onTabTap" hover-class="hover-dim">梦之队</view>
       <view class="tab-item {{showElite ? 'tab-active' : ''}}" data-tab="elite" catchtap="onTabTap" hover-class="hover-dim">高分</view>
       <view class="tab-item {{showTransfers ? 'tab-active' : ''}}" data-tab="transfers" catchtap="onTabTap" hover-class="hover-dim">转会</view>
     </view>
 
-    <view id="perf-primary-content" wx:if="{{showSummary}}" class="section">
+    <view wx:if="{{showSummary}}" class="section">
       <app-error-state wx:if="{{summaryError}}" message="{{summaryError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasSummary}}"
@@ -58,7 +58,7 @@
       </block>
     </view>
 
-    <view id="perf-primary-content" wx:if="{{showDreamTeam}}" class="section">
+    <view wx:if="{{showDreamTeam}}" class="section">
       <app-error-state wx:if="{{dreamTeamError}}" message="{{dreamTeamError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasDreamTeam}}"
@@ -89,7 +89,7 @@
       </view>
     </view>
 
-    <view id="perf-primary-content" wx:if="{{showElite}}" class="section card">
+    <view wx:if="{{showElite}}" class="section card">
       <app-error-state wx:if="{{eliteError}}" message="{{eliteError}}" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasElite}}"
@@ -115,7 +115,7 @@
       </block>
     </view>
 
-    <view id="perf-primary-content" wx:if="{{showTransfers}}" class="section transfer-grid">
+    <view wx:if="{{showTransfers}}" class="section transfer-grid">
       <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
       <block wx:else>
       <view class="card flow-card">
@@ -160,6 +160,6 @@
     </view>
   </block>
 
-  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onCloseDreamPlayer" />
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onCloseDreamPlayer" />
   <bottomNavBar active="explore" />
 </view>

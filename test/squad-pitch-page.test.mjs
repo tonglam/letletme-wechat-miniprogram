@@ -18,7 +18,8 @@ test("share image is generated from the hidden canvas helper, not a viewport sna
   assert.match(component, /exportSquadPitchShareImage/);
   assert.match(template, /id="squad-pitch-share-canvas"/);
   assert.match(canvas, /drawSharePlan/);
-  assert.match(canvas, /if \(inFlight\) return inFlight/);
+  assert.match(canvas, /if \(inFlight && inFlightKey === key\) return inFlight/);
+  assert.match(canvas, /if \(generation === shareGeneration && seq === exportSeq\)/);
   assert.match(canvas, /if \(cachedPath && cachedKey === key\) return Promise.resolve\(cachedPath\)/);
   assert.doesNotMatch(canvas, /createSelectorQuery\(\)[\s\S]*boundingClientRect/);
 });
@@ -52,8 +53,12 @@ test("gameweek dream team tab uses the reusable squad pitch", () => {
   assert.match(template, /bind:playertap="onDreamPlayerTap"/);
   assert.match(page, /onDreamPlayerTap/);
   assert.match(page, /onElitePlayerTap/);
-  assert.match(page, /dreamTeamById/);
-  assert.match(page, /eliteById/);
+  assert.match(page, /this\.dreamTeamById = mapped\.dreamTeamById/);
+  assert.match(page, /this\.eliteById = mapped\.eliteById/);
+  const pageDataBlock = page.slice(page.indexOf("pageData: {"), page.indexOf("dreamTeamById:", page.indexOf("pageData: {")));
+  assert.doesNotMatch(pageDataBlock, /dreamTeamById/);
+  assert.doesNotMatch(pageDataBlock, /eliteById/);
+  assert.doesNotMatch(pageDataBlock, /pitchGroups:/);
   assert.match(page, /buildPlayerLiveDetail/);
   assert.match(template, /bindtap="onElitePlayerTap"/);
   assert.match(json, /player-live-sheet/);

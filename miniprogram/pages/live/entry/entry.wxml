@@ -127,7 +127,7 @@
       <app-loading wx:if="{{transfersLoading && transfers.length === 0}}" text="加载本周转会" />
       <app-error-state wx:elif="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{transfers.length === 0}}" title="本周保持原阵容" description="GW{{event}} 没有转会记录" />
-      <view wx:for="{{transfers}}" wx:key="inName" class="swap-row">
+      <view wx:for="{{transfers}}" wx:key="rowKey" class="swap-row">
         <view class="swap-side">
           <text class="swap-kicker">转出</text>
           <text class="swap-name" user-select="{{true}}">{{item.outName}}</text>
@@ -145,7 +145,7 @@
       </view>
     </view>
   </block>
-  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

@@ -119,6 +119,8 @@ PerformancePage({
   resumeTournamentForceRefresh: false,
   activeStatsForceRefresh: false,
   resumeStatsForceRefresh: false,
+  directoryRequestId: 0,
+  shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
 
   async onLoad() {
     this.pageVisible = true;
@@ -198,6 +200,8 @@ PerformancePage({
     this.resumeStatsForceRefresh = this.resumeStage === "stats"
       && this.activeStatsForceRefresh;
     this.lifecycleRevision += 1;
+    this.directoryRequestId += 1;
+    this.clearShareCopiedTimer();
   },
 
   onUnload() {
@@ -209,6 +213,8 @@ PerformancePage({
     this.activeTournamentForceRefresh = false;
     this.activeStatsForceRefresh = false;
     this.lifecycleRevision += 1;
+    this.directoryRequestId += 1;
+    this.clearShareCopiedTimer();
   },
 
   onPullDownRefresh() {
@@ -237,7 +243,10 @@ PerformancePage({
 
   async loadTournaments(forceRefresh = false, originatingTrace?: PageRequestTrace): Promise<void> {
     const lifecycleRevision = this.lifecycleRevision;
-    const isActiveLifecycle = () => this.pageVisible && lifecycleRevision === this.lifecycleRevision;
+    const requestId = ++this.directoryRequestId;
+    const isActiveLifecycle = () => this.pageVisible
+      && lifecycleRevision === this.lifecycleRevision
+      && requestId === this.directoryRequestId;
     const trace = originatingTrace || capturePageRequestTrace({
       callerSurface: "data-selections",
       trigger: forceRefresh ? "refresh" : "load"
@@ -291,7 +300,13 @@ PerformancePage({
         return;
       }
 
-      const storedId = Number(wx.getStorageSync(storageKeys.selectedDataSelectionsTournamentId));
+      const storedId = Number((() => {
+        try {
+          return wx.getStorageSync(storageKeys.selectedDataSelectionsTournamentId);
+        } catch {
+          return 0;
+        }
+      })());
       const storedIndex = tournaments.findIndex((item) => Number(item.id) === storedId);
       const selectedTournamentIndex = storedIndex >= 0 ? storedIndex : 0;
       const selectedTournament = tournaments[selectedTournamentIndex] || tournaments[0];
@@ -371,17 +386,30 @@ PerformancePage({
   },
 
   onTournamentChange(event: WechatMiniprogram.PickerChange) {
-    const selectedTournamentIndex = Number(event.detail.value) || 0;
+    const selectedTournamentIndex = Number(event.detail.value);
+    if (!Number.isFinite(selectedTournamentIndex)) return;
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
+    this.clearShareCopiedTimer();
     this.setData({
       selectedTournamentIndex,
-      selectedTournamentName: selectedTournament?.name || ""
+      selectedTournamentName: selectedTournament?.name || "",
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
     });
     this.loadStats();
   },
 
   onEventChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: Number(event.detail.value) || this.data.event });
+    const next = Number(event.detail.value);
+    if (!Number.isFinite(next) || next <= 0) return;
+    this.clearShareCopiedTimer();
+    this.setData({
+      event: next,
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
+    });
     this.loadStats();
   },
 
@@ -389,12 +417,16 @@ PerformancePage({
     const activeTab = String(event.currentTarget.dataset.tab || "selected") as SelectionTab;
     const emptyCopy = selectionEmptyCopy(activeTab, this.data.event);
     const activeTabLabel = TABS.find((item) => item.key === activeTab)?.label || "选择率";
+    this.clearShareCopiedTimer();
     this.setData({
       activeTab,
       activeTabLabel,
       visibleRows: getRowsForTab(this.data, activeTab),
       statsEmptyTitle: emptyCopy.title,
-      statsEmptyDescription: emptyCopy.description
+      statsEmptyDescription: emptyCopy.description,
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
     });
   },
 
@@ -414,6 +446,13 @@ PerformancePage({
     this.loadTournaments(true);
   },
 
+  clearShareCopiedTimer() {
+    if (this.shareCopiedTimer) {
+      clearTimeout(this.shareCopiedTimer);
+      this.shareCopiedTimer = undefined;
+    }
+  },
+
   onCopyShare() {
     try {
       if (this.data.visibleRows.length === 0) {
@@ -430,7 +469,8 @@ PerformancePage({
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ shareCopied: true, shareSheetOpen: false });
-          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          this.clearShareCopiedTimer();
+          this.shareCopiedTimer = setTimeout(() => this.setData({ shareCopied: false }), 2000);
           return;
         }
         this.setData({ shareSheetOpen: true, shareText: text });

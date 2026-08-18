@@ -8,7 +8,6 @@ import {
 } from "./auth.service";
 import { recordApi, recordPageOperation } from "../utils/perf";
 import type { ApiRecordSource } from "../utils/perf";
-import { storagePrefixes } from "../config/storage-keys";
 import {
   graphQLErrorMessage,
   httpErrorMessage,
@@ -24,6 +23,26 @@ import type {
   GraphQLAuthMode,
   GraphQLCachePolicyName
 } from "./graphql-cache-policy";
+import {
+  CACHE_VERSION,
+  buildGraphQLRequestCacheKey,
+  forgetServedFromCache,
+  getServedStoredAt,
+  getStorageCacheKey,
+  hashKey,
+  readCacheEntry,
+  recordServedFromCache,
+  writeCacheEntry,
+  type CacheEntry
+} from "./graphql-cache";
+import { registerGraphQLInFlightClear } from "./graphql-session-hooks";
+
+export {
+  buildGraphQLRequestCacheKey,
+  purgeGraphQLStorageCache
+} from "./graphql-cache";
+
+export { clearGraphQLMemoryCache } from "./graphql-session-hooks";
 
 export interface GraphQLErrorInfo {
   message?: string;
@@ -36,15 +55,6 @@ export interface GraphQLErrorInfo {
 interface GraphQLResponse<T> {
   data?: T;
   errors?: GraphQLErrorInfo[];
-}
-
-interface CacheEntry {
-  version: 2;
-  requestKey: string;
-  data: unknown;
-  freshUntil: number;
-  staleUntil: number;
-  storedAt: number;
 }
 
 export interface GraphQLOptions {
@@ -130,11 +140,6 @@ interface ResolvedRequestPolicy {
   cacheable: boolean;
 }
 
-interface CachedRead {
-  entry: CacheEntry;
-  source: "memory" | "storage";
-}
-
 class GraphQLTransportError extends Error {
   statusCode?: number;
   transient: boolean;
@@ -154,10 +159,6 @@ class GraphQLApplicationError extends Error {
   }
 }
 
-const CACHE_VERSION = 2;
-const MEMORY_CACHE_LIMIT = 120;
-const STORAGE_CACHE_LIMIT = 150;
-const MIN_PERSIST_TTL_MS = 60 * 1000;
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
   "fixtures",
   "player-picker",
@@ -165,43 +166,10 @@ const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
 ]);
 
 const inFlightRequests = new Map<string, Promise<GraphQLReadResult<unknown>>>();
-const memoryCache = new Map<string, CacheEntry>();
-const servedFromCache = new Map<string, number>();
+registerGraphQLInFlightClear(() => {
+  inFlightRequests.clear();
+});
 
-export function purgeGraphQLStorageCache(now = Date.now()): void {
-  try {
-    const { keys } = wx.getStorageInfoSync();
-    const valid: Array<{ key: string; storedAt: number }> = [];
-    keys
-      .filter((key) => key.startsWith(storagePrefixes.graphqlCache))
-      .forEach((key) => {
-        try {
-          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
-          const currentVersion =
-            key.startsWith(storagePrefixes.graphqlPublicCache)
-            || key.startsWith(storagePrefixes.graphqlSessionCache);
-          if (
-            !currentVersion
-            || entry?.version !== CACHE_VERSION
-            || typeof entry.staleUntil !== "number"
-            || now >= entry.staleUntil
-          ) {
-            wx.removeStorageSync(key);
-            return;
-          }
-          valid.push({ key, storedAt: Number(entry.storedAt) || 0 });
-        } catch {
-          try { wx.removeStorageSync(key); } catch {}
-        }
-      });
-    valid
-      .sort((left, right) => left.storedAt - right.storedAt)
-      .slice(0, Math.max(0, valid.length - STORAGE_CACHE_LIMIT))
-      .forEach(({ key }) => {
-        try { wx.removeStorageSync(key); } catch {}
-      });
-  } catch {}
-}
 let lastStaleNoticeAt = 0;
 
 function extractOpName(query: string): string {
@@ -222,44 +190,6 @@ export function buildGraphQLRequestPayload(
     variables,
     operationName: extractOpName(query)
   };
-}
-
-function hashKey(str: string): string {
-  let first = 0x811c9dc5;
-  let second = 0x9e3779b9;
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    first = Math.imul(first ^ code, 0x01000193);
-    second = Math.imul(second ^ code, 0x85ebca6b);
-  }
-  return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stableValue);
-  }
-  if (value && typeof value === "object") {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .reduce<Record<string, unknown>>((result, key) => {
-        result[key] = stableValue((value as Record<string, unknown>)[key]);
-        return result;
-      }, {});
-  }
-  return value;
-}
-
-export function buildGraphQLRequestCacheKey(
-  query: string,
-  variables: Record<string, unknown>,
-  token: string | null,
-  cacheVariant = ""
-): string {
-  const audience = token ? `session:${hashKey(token)}` : "public";
-  const variablesKey = JSON.stringify(stableValue(variables)) || "{}";
-  const variant = cacheVariant ? `:${hashKey(cacheVariant)}` : "";
-  return `${audience}:${hashKey(query)}:${hashKey(variablesKey)}${variant}`;
 }
 
 function currentSeason(): string {
@@ -300,108 +230,6 @@ function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequest
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry))
   };
-}
-
-function getStorageCacheKey(requestKey: string, authMode: GraphQLAuthMode): string {
-  const prefix = authMode === "session"
-    ? storagePrefixes.graphqlSessionCache
-    : storagePrefixes.graphqlPublicCache;
-  return `${prefix}${hashKey(requestKey)}`;
-}
-
-function evictOldestMemoryEntry(): void {
-  const oldest = memoryCache.keys().next().value as string | undefined;
-  if (oldest) memoryCache.delete(oldest);
-}
-
-function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
-  if (!memoryCache.has(cacheKey) && memoryCache.size >= MEMORY_CACHE_LIMIT) {
-    evictOldestMemoryEntry();
-  }
-  memoryCache.delete(cacheKey);
-  memoryCache.set(cacheKey, entry);
-}
-
-function recordServedFromCache(requestKey: string, storedAt: number): void {
-  if (!servedFromCache.has(requestKey) && servedFromCache.size >= MEMORY_CACHE_LIMIT) {
-    const oldest = servedFromCache.keys().next().value as string | undefined;
-    if (oldest) servedFromCache.delete(oldest);
-  }
-  servedFromCache.set(requestKey, storedAt);
-}
-
-function isV2Entry(value: unknown, requestKey: string): value is CacheEntry {
-  const entry = value as Partial<CacheEntry> | undefined;
-  return Boolean(
-    entry
-    && entry.version === CACHE_VERSION
-    && entry.requestKey === requestKey
-    && typeof entry.freshUntil === "number"
-    && typeof entry.staleUntil === "number"
-    && typeof entry.storedAt === "number"
-  );
-}
-
-function readCacheEntry(cacheKey: string, requestKey: string): CachedRead | undefined {
-  const now = Date.now();
-  const fromMemory = memoryCache.get(cacheKey);
-  if (fromMemory) {
-    if (fromMemory.requestKey === requestKey && now < fromMemory.staleUntil) {
-      memoryCache.delete(cacheKey);
-      memoryCache.set(cacheKey, fromMemory);
-      return { entry: fromMemory, source: "memory" };
-    }
-    memoryCache.delete(cacheKey);
-  }
-
-  try {
-    const fromStorage = wx.getStorageSync(cacheKey);
-    if (isV2Entry(fromStorage, requestKey) && now < fromStorage.staleUntil) {
-      writeMemoryCache(cacheKey, fromStorage);
-      return { entry: fromStorage, source: "storage" };
-    }
-    if (fromStorage !== undefined && fromStorage !== null && fromStorage !== "") {
-      try { wx.removeStorageSync(cacheKey); } catch {}
-    }
-  } catch {}
-  return undefined;
-}
-
-function enforceStorageLimit(): void {
-  try {
-    const { keys } = wx.getStorageInfoSync();
-    const cacheKeys = keys.filter((key) =>
-      key.startsWith(storagePrefixes.graphqlPublicCache)
-      || key.startsWith(storagePrefixes.graphqlSessionCache)
-    );
-    if (cacheKeys.length <= STORAGE_CACHE_LIMIT) return;
-
-    const ordered = cacheKeys
-      .map((key) => {
-        try {
-          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
-          return { key, storedAt: Number(entry?.storedAt) || 0 };
-        } catch {
-          return { key, storedAt: 0 };
-        }
-      })
-      .sort((left, right) => left.storedAt - right.storedAt);
-
-    ordered
-      .slice(0, Math.max(0, ordered.length - STORAGE_CACHE_LIMIT))
-      .forEach(({ key }) => {
-        try { wx.removeStorageSync(key); } catch {}
-      });
-  } catch {}
-}
-
-function writeCacheEntry(cacheKey: string, entry: CacheEntry, persist: boolean): void {
-  writeMemoryCache(cacheKey, entry);
-  if (!persist || entry.freshUntil - Date.now() < MIN_PERSIST_TTL_MS) return;
-  try {
-    wx.setStorageSync(cacheKey, entry);
-    enforceStorageLimit();
-  } catch {}
 }
 
 function cacheAgeBucket(storedAt: number | undefined): string | undefined {
@@ -622,7 +450,7 @@ export function getServedCacheStoredAt(
   const policy = resolvePolicy(query);
   const token = policy.authMode === "session" ? getApiSessionToken() : null;
   const { requestKey } = requestIdentity(query, variables, policy, token);
-  return servedFromCache.get(requestKey);
+  return getServedStoredAt(requestKey);
 }
 
 function resolveFreshUntil(
@@ -757,6 +585,9 @@ export async function graphqlRead<T>(
     | undefined;
 
   if (inFlight) {
+    // forceRefresh joins this in-flight network request (not a cache hit).
+    // The coalesced flight is already on the wire; starting a second identical
+    // POST would not make the first response any fresher.
     try {
       const result = await inFlight;
       recordRequest(
@@ -830,7 +661,7 @@ export async function graphqlRead<T>(
             storedAt
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
-          servedFromCache.delete(responseIdentity.requestKey);
+          forgetServedFromCache(responseIdentity.requestKey);
         }
       }
 

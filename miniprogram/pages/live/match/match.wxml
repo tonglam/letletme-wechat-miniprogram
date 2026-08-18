@@ -78,7 +78,7 @@
             </view>
             <text class="hl-label hl-label-{{event.kind}}">{{event.label}}</text>
             <view class="hl-items">
-              <view wx:for="{{event.items}}" wx:for-item="chip" wx:key="name" class="hl-item">
+              <view wx:for="{{event.items}}" wx:for-item="chip" wx:key="key" class="hl-item">
                 <text class="hl-name">{{chip.name}}</text>
                 <text wx:if="{{chip.team}}" class="hl-team">({{chip.team}})</text>
                 <text wx:if="{{chip.display}}" class="hl-val hl-val-{{event.kind}}">{{chip.display}}</text>

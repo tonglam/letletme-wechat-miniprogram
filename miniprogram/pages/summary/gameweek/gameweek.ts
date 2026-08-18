@@ -64,7 +64,6 @@ interface GameweekSummaryData {
   headlineStats: DisplayMetric[];
   mostRows: DisplayMetric[];
   chipRows: DisplayRow[];
-  pitchGroups: PitchGroup[];
   eliteRows: DisplayRow[];
   transfersInRows: DisplayRow[];
   transfersOutRows: DisplayRow[];
@@ -76,8 +75,6 @@ interface GameweekSummaryData {
   pitchBench: SquadPitchPlayer[];
   pitchHeader: SquadPitchHeader | null;
   pitchBenchBoost: boolean;
-  dreamTeamById: Record<string, LivePlayerRow>;
-  eliteById: Record<string, LivePlayerRow>;
   shareBusy: boolean;
   playerDetailOpen: boolean;
   playerDetail: PlayerLiveDetailView | null;
@@ -103,7 +100,6 @@ PerformancePage({
     headlineStats: [],
     mostRows: [],
     chipRows: [],
-    pitchGroups: [],
     eliteRows: [],
     transfersInRows: [],
     transfersOutRows: [],
@@ -115,8 +111,6 @@ PerformancePage({
     pitchBench: [],
     pitchHeader: null,
     pitchBenchBoost: false,
-    dreamTeamById: {},
-    eliteById: {},
     shareBusy: false,
     playerDetailOpen: false,
     playerDetail: null
@@ -130,6 +124,8 @@ PerformancePage({
   resumeStage: null as GameweekResumeStage | null,
   activeLoadForceRefresh: false,
   resumeForceRefresh: false,
+  dreamTeamById: {} as Record<string, LivePlayerRow>,
+  eliteById: {} as Record<string, LivePlayerRow>,
 
   async onLoad() {
     this.pageVisible = true;
@@ -239,18 +235,27 @@ PerformancePage({
       if (!isActiveRequest()) return;
       const sectionErrors = Object.values(result.errors);
       if (sectionErrors.every(Boolean)) {
-        this.setData({ error: sectionErrors[0] || "GW 总结加载失败" });
+        this.dreamTeamById = {};
+        this.eliteById = {};
+        this.setData({
+          error: sectionErrors[0] || "GW 总结加载失败",
+          playerDetailOpen: false,
+          playerDetail: null
+        });
         return;
       }
 
+      const mapped = mapGameweekData(
+        result.summary,
+        result.dreamTeam,
+        result.elite,
+        result.transfers,
+        this.data.event
+      );
+      this.dreamTeamById = mapped.dreamTeamById;
+      this.eliteById = mapped.eliteById;
       this.setData({
-        ...mapGameweekData(
-          result.summary,
-          result.dreamTeam,
-          result.elite,
-          result.transfers,
-          this.data.event
-        ),
+        ...mapped.pageData,
         summaryError: result.errors.summary,
         dreamTeamError: result.errors.dreamTeam,
         eliteError: result.errors.elite,
@@ -259,7 +264,13 @@ PerformancePage({
       });
     } catch (error) {
       if (!isActiveRequest()) return;
-      this.setData({ error: error instanceof Error ? error.message : "GW 总结加载失败" });
+      this.dreamTeamById = {};
+      this.eliteById = {};
+      this.setData({
+        error: error instanceof Error ? error.message : "GW 总结加载失败",
+        playerDetailOpen: false,
+        playerDetail: null
+      });
     } finally {
       if (isActiveRequest()) {
         this.setData({ loading: false });
@@ -289,8 +300,14 @@ PerformancePage({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ event: event.detail.value });
-    setPageTitle(`GW${event.detail.value} 总结`);
+    const next = Number(event.detail.value);
+    if (!Number.isFinite(next) || next <= 0) return;
+    this.setData({
+      event: next,
+      playerDetailOpen: false,
+      playerDetail: null
+    });
+    setPageTitle(`GW${next} 总结`);
     this.loadData();
   },
 
@@ -318,11 +335,11 @@ PerformancePage({
   },
 
   onDreamPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
-    this.openPlayerDetail(this.data.dreamTeamById[String(event.detail?.playerId || "")]);
+    this.openPlayerDetail(this.dreamTeamById[String(event.detail?.playerId || "")]);
   },
 
   onElitePlayerTap(event: WechatMiniprogram.TouchEvent) {
-    this.openPlayerDetail(this.data.eliteById[String(event.currentTarget.dataset.id || "")]);
+    this.openPlayerDetail(this.eliteById[String(event.currentTarget.dataset.id || "")]);
   },
 
   openPlayerDetail(player?: LivePlayerRow) {
@@ -365,7 +382,11 @@ function mapGameweekData(
   elite: unknown[],
   transfers: unknown,
   eventId?: number
-): Partial<GameweekSummaryData> {
+): {
+  pageData: Partial<GameweekSummaryData>;
+  dreamTeamById: Record<string, LivePlayerRow>;
+  eliteById: Record<string, LivePlayerRow>;
+} {
   const summaryRecord = asRecord(summary);
   const transfersRecord = asRecord(transfers);
   const transfersIn = firstValue(transfersRecord, ["transfers_in", "transfersIn", "in"]) || [];
@@ -382,23 +403,24 @@ function mapGameweekData(
   const mostRows = summaryStats.filter((stat) => HEADLINE_LABELS.indexOf(stat.label) < 0);
 
   return {
-    headlineStats,
-    mostRows,
-    chipRows,
-    pitchGroups,
-    pitchPlayers: dreamPitch.pitchPlayers,
-    pitchBench: dreamPitch.pitchBench,
-    pitchHeader: dreamPitch.pitchHeader,
-    pitchBenchBoost: false,
+    pageData: {
+      headlineStats,
+      mostRows,
+      chipRows,
+      pitchPlayers: dreamPitch.pitchPlayers,
+      pitchBench: dreamPitch.pitchBench,
+      pitchHeader: dreamPitch.pitchHeader,
+      pitchBenchBoost: false,
+      eliteRows,
+      transfersInRows,
+      transfersOutRows,
+      hasSummary: summaryStats.length > 0 || chipRows.length > 0,
+      hasDreamTeam: dreamPitch.pitchPlayers.length > 0 || pitchGroups.some((group) => group.players.length > 0),
+      hasElite: eliteRows.length > 0,
+      hasTransfers: transfersInRows.length > 0 || transfersOutRows.length > 0
+    },
     dreamTeamById: indexDreamTeamById(dreamPitch.pitchPlayers, dreamTeam),
-    eliteById: indexEventPlayersByRowId(eliteRows, eliteSource, "高分球员"),
-    eliteRows,
-    transfersInRows,
-    transfersOutRows,
-    hasSummary: summaryStats.length > 0 || chipRows.length > 0,
-    hasDreamTeam: dreamPitch.pitchPlayers.length > 0 || pitchGroups.some((group) => group.players.length > 0),
-    hasElite: eliteRows.length > 0,
-    hasTransfers: transfersInRows.length > 0 || transfersOutRows.length > 0
+    eliteById: indexEventPlayersByRowId(eliteRows, eliteSource, "高分球员")
   };
 }
 

@@ -147,6 +147,7 @@ export type MatchHighlightKind =
   | "owngoal";
 
 export interface MatchHighlightItem {
+  key: string;
   name: string;
   team: string;
   text: string;
@@ -207,12 +208,18 @@ function sortedHighlightItems(
     .map((player) => ({ player, value: read(player) }))
     .filter((row) => row.value > 0)
     .sort((left, right) => right.value - left.value)
-    .map((row) => ({
-      name: playerShortName(row.player),
-      team: playerTeam(row.player),
-      text: format(row.value),
-      display: format(row.value)
-    }));
+    .map((row) => {
+      const name = playerShortName(row.player);
+      const team = playerTeam(row.player);
+      const display = format(row.value);
+      return {
+        key: [name, team, display].join(":"),
+        name,
+        team,
+        text: display,
+        display
+      };
+    });
 }
 
 /** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
@@ -390,6 +397,8 @@ Page({
     shareText: ""
   },
 
+  copiedMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
@@ -527,6 +536,13 @@ Page({
     if (this.contextDeadlineTimer !== undefined) {
       clearTimeout(this.contextDeadlineTimer);
       this.contextDeadlineTimer = undefined;
+    }
+  },
+
+  clearCopiedMatchTimer() {
+    if (this.copiedMatchTimer) {
+      clearTimeout(this.copiedMatchTimer);
+      this.copiedMatchTimer = undefined;
     }
   },
 
@@ -721,15 +737,25 @@ Page({
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
-        this.setData({ matches: [], groups: [], hasData: false, fixtureStaleMessage: "", lastUpdated: "" });
+        this.clearCopiedMatchTimer();
+        this.setData({
+          matches: [],
+          groups: [],
+          hasData: false,
+          fixtureStaleMessage: "",
+          lastUpdated: "",
+          copiedMatchId: "",
+          shareSheetOpen: false,
+          shareText: ""
+        });
         this.liveRefresh?.sync();
         await this.loadData({ forceRefresh: true });
         this.syncDisplayState();
         return;
       }
     }
-    if (resumeInterruptedLoad && !this.data.hasData) {
-      await this.loadData({ forceRefresh: true });
+    if (resumeInterruptedLoad) {
+      await this.loadData({ background: this.data.hasData, forceRefresh: true });
       return;
     }
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
@@ -749,15 +775,17 @@ Page({
     this.resumeLoadAfterShow = this.resumeLoadAfterShow
       || (!this.resumeForcedRefreshAfterShow && (this.startupPending
         || this.refreshContextPending
-        || Boolean(this.liveRequest && !this.data.hasData)));
+        || Boolean(this.liveRequest)));
     if (this.liveRequest) {
       this.liveRequestId += 1;
       this.liveRequest = null;
       this.liveRequestKey = "";
+      if (this.data.refreshing) this.setData({ refreshing: false });
     }
     this.liveRefresh?.stop();
     this.clearKickoffTransition();
     this.clearContextDeadline();
+    this.clearCopiedMatchTimer();
     this.perfTracker?.disconnect();
   },
 
@@ -776,6 +804,7 @@ Page({
     this.liveRefresh?.dispose();
     this.clearKickoffTransition();
     this.clearContextDeadline();
+    this.clearCopiedMatchTimer();
     this.perfTracker?.disconnect();
   },
 
@@ -1002,7 +1031,9 @@ Page({
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ copiedMatchId: match.matchId || "", shareSheetOpen: false });
-          setTimeout(() => {
+          this.clearCopiedMatchTimer();
+          this.copiedMatchTimer = setTimeout(() => {
+            this.copiedMatchTimer = undefined;
             if (this.data.copiedMatchId === match.matchId) {
               this.setData({ copiedMatchId: "" });
             }

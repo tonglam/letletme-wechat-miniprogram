@@ -116,6 +116,11 @@ export interface CompareView {
 
 const ELEMENT_TYPE_SHORT: Record<number, string> = { 1: "GKP", 2: "DEF", 3: "MID", 4: "FWD" };
 
+function pickerIndex(value: unknown): number | null {
+  const index = Number(value);
+  return Number.isFinite(index) ? index : null;
+}
+
 function compareNumber(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -250,7 +255,6 @@ PerformancePage({
     loadMoreError: "",
     keyword: "",
     players: [] as PlayerOption[],
-    displayedPlayers: [] as PlayerOption[],
     nextCursor: null as number | null,
     totalCount: 0,
     hasMore: false,
@@ -300,6 +304,7 @@ PerformancePage({
   searchPendingForceRefresh: false,
   resumeSearchAfterShow: false,
   resumeSearchForceRefresh: false,
+  searchEditedWhileLoading: false,
 
   async onLoad(options: Record<string, string | undefined>) {
     this.pageVisible = true;
@@ -381,6 +386,7 @@ PerformancePage({
     this.paginationCursor = null;
     this.pageVisible = false;
     this.requestRevision += 1;
+    this.searchEditedWhileLoading = false;
   },
 
   onUnload() {
@@ -393,6 +399,7 @@ PerformancePage({
     this.searchPendingForceRefresh = false;
     this.resumeSearchAfterShow = false;
     this.resumeSearchForceRefresh = false;
+    this.searchEditedWhileLoading = false;
     this.requestRevision += 1;
   },
 
@@ -408,6 +415,7 @@ PerformancePage({
   async startSearch(keyword: string, forceRefresh = false): Promise<void> {
     this.searchPending = true;
     this.searchPendingForceRefresh = forceRefresh;
+    this.searchEditedWhileLoading = false;
     this.paginationPending = false;
     this.paginationCursor = null;
     this.resumePaginationAfterShow = false;
@@ -429,7 +437,6 @@ PerformancePage({
       error: "",
       loadMoreError: "",
       players: [],
-      displayedPlayers: [],
       nextCursor: null,
       totalCount: 0,
       hasMore: false
@@ -486,7 +493,8 @@ PerformancePage({
 
   onTeamFilterChange(event: WechatMiniprogram.PickerChange) {
     if (this.data.filtersLocked) return;
-    const selectedTeamIndex = Number(event.detail.value);
+    const selectedTeamIndex = pickerIndex(event.detail.value);
+    if (selectedTeamIndex === null) return;
     const option = this.data.teamOptions[selectedTeamIndex] || this.data.teamOptions[0];
     this.setData({ selectedTeamIndex, teamFilter: option.value });
     this.startSearch("");
@@ -494,14 +502,16 @@ PerformancePage({
 
   onPositionFilterChange(event: WechatMiniprogram.PickerChange) {
     if (this.data.filtersLocked) return;
-    const selectedPositionIndex = Number(event.detail.value);
+    const selectedPositionIndex = pickerIndex(event.detail.value);
+    if (selectedPositionIndex === null) return;
     const option = this.data.positionOptions[selectedPositionIndex] || this.data.positionOptions[0];
     this.setData({ selectedPositionIndex, positionFilter: option.value });
     this.startSearch("");
   },
 
   onSortChange(event: WechatMiniprogram.PickerChange) {
-    const selectedSortIndex = Number(event.detail.value);
+    const selectedSortIndex = pickerIndex(event.detail.value);
+    if (selectedSortIndex === null) return;
     const option = this.data.sortOptions[selectedSortIndex] || this.data.sortOptions[0];
     const sortField = option.value as PlayerSortField;
     const sortDir = defaultSortDir(sortField);
@@ -525,7 +535,8 @@ PerformancePage({
 
   onMaxPriceChange(event: WechatMiniprogram.PickerChange) {
     if (this.data.filtersLocked) return;
-    const selectedMaxPriceIndex = Number(event.detail.value);
+    const selectedMaxPriceIndex = pickerIndex(event.detail.value);
+    if (selectedMaxPriceIndex === null) return;
     const option = this.data.maxPriceOptions[selectedMaxPriceIndex] || this.data.maxPriceOptions[0];
     this.setData({
       selectedMaxPriceIndex,
@@ -536,7 +547,8 @@ PerformancePage({
 
   onOwnBandChange(event: WechatMiniprogram.PickerChange) {
     if (this.data.filtersLocked) return;
-    const selectedOwnBandIndex = Number(event.detail.value);
+    const selectedOwnBandIndex = pickerIndex(event.detail.value);
+    if (selectedOwnBandIndex === null) return;
     const option = this.data.ownBandOptions[selectedOwnBandIndex] || this.data.ownBandOptions[0];
     this.setData({ selectedOwnBandIndex, ownBand: option.value });
     this.startSearch("");
@@ -587,13 +599,25 @@ PerformancePage({
         trace
       });
       if (!this.pageVisible || !shouldApplyPlayerResponse(revision, this.requestRevision)) return;
+      if (!append) {
+        const keyword = resolveKeywordAfterPlayerLoad(
+          this.data.activeKeyword,
+          this.data.keyword,
+          this.searchEditedWhileLoading
+        );
+        if (keyword.trim() !== this.data.activeKeyword.trim()) {
+          this.searchEditedWhileLoading = false;
+          void this.startSearch(keyword, forceRefresh);
+          return;
+        }
+        this.searchEditedWhileLoading = false;
+      }
 
       const items = page.items.map(withStatText);
       const merged = append ? mergePlayerPages(this.data.players, items) : items;
       const players = sortPlayerOptions(merged, this.data.sortField, this.data.sortDir);
       this.setData({
         players,
-        displayedPlayers: players,
         nextCursor: page.nextCursor,
         totalCount: page.totalCount,
         hasMore: page.nextCursor !== null,
@@ -638,6 +662,7 @@ PerformancePage({
   },
 
   onKeywordDraft(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
+    if (this.data.loading) this.searchEditedWhileLoading = true;
     this.setData({ keyword: String(event.detail.keyword || "") });
   },
 

@@ -8,6 +8,7 @@ import {
 } from "../utils/request-error";
 import { commitEntryBindingState as commitEntryBinding } from "./app-context-state";
 import { isStoredSessionUsable, MiniProgramLinkRequiredError } from "./auth-session";
+import { clearGraphQLMemoryCache } from "./graphql-session-hooks";
 
 export interface MiniProgramProfile {
   id: string;
@@ -100,6 +101,7 @@ function clearStoredGraphQLSessionCache(): void {
       )
       .forEach((key) => wx.removeStorageSync(key));
   } catch {}
+  clearGraphQLMemoryCache();
 }
 
 // In-memory mirror of the platform-encrypted session so hot paths (every

@@ -7,6 +7,7 @@ export interface TransferRow {
   outName: string;
   outTeam: string;
   priceText: string;
+  rowKey: string;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -34,6 +35,13 @@ export function normalizeTransfer(transfer: EntryTransfer): TransferRow {
     inTeam,
     outName,
     outTeam,
-    priceText: formatPrice(price)
+    priceText: formatPrice(price),
+    rowKey: [
+      raw.event ?? "",
+      raw.elementOut ?? outName,
+      raw.elementIn ?? inName,
+      formatPrice(price),
+      textValue(raw.time, "")
+    ].join(":")
   };
 }

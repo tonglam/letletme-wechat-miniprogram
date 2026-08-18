@@ -70,7 +70,7 @@ export function noLiveEventState() {
     emptyTitle: "当前赛季暂无实时比赛周",
     emptyDescription: "比赛周开始后，这里会显示赛事实时得分和排名",
     emptyActionText: "",
-    rows: [] as DisplayTournamentRow[],
+    rowCount: 0,
     displayedRows: [] as DisplayTournamentRow[],
     filteredCount: 0,
     lastUpdated: ""
@@ -134,7 +134,7 @@ interface LiveTournamentData {
   tournamentNames: string[];
   selectedTournamentIndex: number;
   selectedTournament: TournamentOption | null;
-  rows: DisplayTournamentRow[];
+  rowCount: number;
   displayedRows: DisplayTournamentRow[];
   sortOptions: SortOption[];
   sortKey: SortKey;
@@ -143,7 +143,6 @@ interface LiveTournamentData {
   ownershipExpanded: boolean;
   ownershipScope: TournamentOwnershipScope;
   ownershipCaptainMode: TournamentCaptainMode;
-  ownershipPlayers: OwnershipPlayerOption[];
   ownershipSearch: string;
   ownershipSearchResults: OwnershipPlayerOption[];
   ownershipMatchedText: string;
@@ -189,7 +188,6 @@ interface LiveTournamentData {
   compareOpen: boolean;
   compareLeft: DisplayTournamentRow | null;
   compareRight: DisplayTournamentRow | null;
-  shareRows: DisplayTournamentRow[];
   shareLabel: string;
   shareCopied: boolean;
   shareSheetOpen: boolean;
@@ -205,6 +203,11 @@ interface LiveTournamentLoadOptions {
 function numberValue(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function pickerIndex(value: unknown): number | null {
+  const index = Number(value);
+  return Number.isFinite(index) ? index : null;
 }
 
 function textValue(value: unknown, fallback = "-"): string {
@@ -268,6 +271,20 @@ function compareHintText(count: number): string {
   if (count >= 2) return "已选 2 支";
   if (count === 1) return "再选 1 支";
   return "勾选 2 支队伍";
+}
+
+function emptyCompareState() {
+  return {
+    compareMode: false,
+    compareIds: [] as number[],
+    compareHint: compareHintText(0),
+    compareOpen: false,
+    compareLeft: null as DisplayTournamentRow | null,
+    compareRight: null as DisplayTournamentRow | null,
+    filterSheetOpen: false,
+    shareSheetOpen: false,
+    shareText: ""
+  };
 }
 
 function buildTournamentStats(rows: DisplayTournamentRow[]) {
@@ -379,6 +396,16 @@ function filterOwnershipPlayers(
   ));
 }
 
+function clearTournamentBoard(page: {
+  rows: DisplayTournamentRow[];
+  ownershipPlayers: OwnershipPlayerOption[];
+  shareRows: DisplayTournamentRow[];
+}): void {
+  page.rows = [];
+  page.ownershipPlayers = [];
+  page.shareRows = [];
+}
+
 PerformancePage({
   data: {
     loading: false,
@@ -407,7 +434,7 @@ PerformancePage({
     tournamentNames: [],
     selectedTournamentIndex: 0,
     selectedTournament: null,
-    rows: [],
+    rowCount: 0,
     displayedRows: [],
     sortOptions: [
       { key: "livePoints", label: "GW" },
@@ -422,7 +449,6 @@ PerformancePage({
     ownershipExpanded: false,
     ownershipScope: "any",
     ownershipCaptainMode: "any",
-    ownershipPlayers: [],
     ownershipSearch: "",
     ownershipSearchResults: [],
     ownershipMatchedText: "",
@@ -473,7 +499,6 @@ PerformancePage({
     compareOpen: false,
     compareLeft: null,
     compareRight: null,
-    shareRows: [],
     shareLabel: "复制分享",
     shareCopied: false,
     shareSheetOpen: false,
@@ -483,6 +508,9 @@ PerformancePage({
   rowsRequest: null as Promise<void> | null,
   rowsRequestKey: "",
   rowsRequestId: 0,
+  rows: [] as DisplayTournamentRow[],
+  ownershipPlayers: [] as OwnershipPlayerOption[],
+  shareRows: [] as DisplayTournamentRow[],
   tournamentListRequestId: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
@@ -504,6 +532,7 @@ PerformancePage({
   startupPending: false,
   startupForceRefresh: false,
   startupGeneration: 0,
+  shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
 
   ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
     return ensureAppContext({ reason, forceRefresh });
@@ -560,6 +589,7 @@ PerformancePage({
       await this.loadTournaments(forceRefresh, trace);
     } else {
       this.liveRefresh?.stop();
+      clearTournamentBoard(this);
       this.setData(noLiveEventState());
     }
     this.syncDisplayState();
@@ -675,8 +705,9 @@ PerformancePage({
         this.cachedLiveStoredAt = undefined;
         this.failedEntryCount = 0;
         this.retainedRowCount = 0;
+        clearTournamentBoard(this);
         const eventState = nextEventId === 0 ? noLiveEventState() : {
-          rows: [] as DisplayTournamentRow[],
+          rowCount: 0,
           displayedRows: [] as DisplayTournamentRow[],
           hasData: false,
           lastUpdated: "",
@@ -695,11 +726,11 @@ PerformancePage({
         this.setData({
           event: nextEventId,
           maxGw: nextEventId,
+          ...emptyCompareState(),
           ...(seasonChanged ? {
               tournaments: [],
               tournamentNames: [],
               selectedTournament: null,
-              ownershipPlayers: [],
               ownershipTeamOptions: [],
               ownershipTeamNames: [],
               ownershipPositionOptions: [],
@@ -783,6 +814,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.liveRefresh?.stop();
+    this.clearShareCopiedTimer();
   },
 
   onUnload() {
@@ -800,6 +832,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.liveRefresh?.dispose();
+    this.clearShareCopiedTimer();
   },
 
   onPullDownRefresh() {
@@ -834,6 +867,7 @@ PerformancePage({
         return this.loadTournaments(true);
       }
       this.liveRefresh?.stop();
+      clearTournamentBoard(this);
       this.setData(noLiveEventState());
       return;
     }
@@ -842,6 +876,10 @@ PerformancePage({
 
   onReachBottom() {
     this.loadMore();
+  },
+
+  resetBoardRows() {
+    clearTournamentBoard(this);
   },
 
   restartForPrincipalChange(entryId: number): boolean {
@@ -856,6 +894,7 @@ PerformancePage({
     this.rowsRequestId += 1;
     this.rowsRequest = null;
     this.rowsRequestKey = "";
+    clearTournamentBoard(this);
     this.setData({
       entryId: nextEntryId,
       loading: false,
@@ -868,9 +907,10 @@ PerformancePage({
       tournaments: [],
       tournamentNames: [],
       selectedTournament: null,
-      rows: [],
+      rowCount: 0,
       displayedRows: [],
-      lastUpdated: ""
+      lastUpdated: "",
+      ...emptyCompareState()
     });
     void this.loadTournaments(true);
     return true;
@@ -887,6 +927,7 @@ PerformancePage({
       this.liveSnapshot = null;
       this.failedEntryCount = 0;
       this.cachedLiveStoredAt = undefined;
+      clearTournamentBoard(this);
       this.setData({
         loading: false,
         hasData: false,
@@ -902,7 +943,7 @@ PerformancePage({
         tournaments: [],
         tournamentNames: [],
         selectedTournament: null,
-        rows: [],
+        rowCount: 0,
         displayedRows: []
       });
       return;
@@ -934,11 +975,12 @@ PerformancePage({
         this.liveSnapshot = null;
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
+        clearTournamentBoard(this);
         this.setData({
           tournaments: [],
           tournamentNames: [],
           selectedTournament: null,
-          rows: [],
+          rowCount: 0,
           displayedRows: [],
           hasData: false,
           emptyState: "tournaments",
@@ -963,6 +1005,7 @@ PerformancePage({
         this.liveSnapshot = null;
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
+        clearTournamentBoard(this);
       }
       this.setData({
         tournaments,
@@ -970,7 +1013,7 @@ PerformancePage({
         selectedTournamentIndex,
         selectedTournament,
         emptyState: "",
-        ...(selectionChanged ? { hasData: false, rows: [], displayedRows: [], lastUpdated: "" } : {})
+        ...(selectionChanged ? { hasData: false, rowCount: 0, displayedRows: [], lastUpdated: "" } : {})
       });
       this.persistSelectedTournament(selectedTournament);
       if (selectedTournament.participantCount === 0 || this.data.event <= 0) {
@@ -978,8 +1021,9 @@ PerformancePage({
         this.liveSnapshot = null;
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
+        clearTournamentBoard(this);
         this.setData({
-          rows: [],
+          rowCount: 0,
           displayedRows: [],
           hasData: true,
           loading: false,
@@ -1032,20 +1076,23 @@ PerformancePage({
     });
     const entryId = this.data.entryId;
     if (!entryId) {
-      this.setData({ rows: [], displayedRows: [], hasMore: false });
+      clearTournamentBoard(this);
+      this.setData({ rowCount: 0, displayedRows: [], hasMore: false });
       return Promise.resolve();
     }
     const selected = this.data.selectedTournament;
     if (!selected) {
-      this.setData({ rows: [], displayedRows: [], hasMore: false });
+      clearTournamentBoard(this);
+      this.setData({ rowCount: 0, displayedRows: [], hasMore: false });
       return Promise.resolve();
     }
 
     const eventId = this.data.event;
     const hasNoParticipants = selected.participantCount === 0;
     if (hasNoParticipants || !Number.isSafeInteger(eventId) || eventId <= 0) {
+      clearTournamentBoard(this);
       this.setData({
-        rows: [],
+        rowCount: 0,
         displayedRows: [],
         hasMore: false,
         loading: false,
@@ -1063,7 +1110,7 @@ PerformancePage({
       return Promise.resolve();
     }
     const keyword = this._submittedKeyword;
-    const requestKey = `${entryId}:${selected.id}:${eventId}:${keyword}`;
+    const requestKey = `${entryId}:${selected.id}:${eventId}:${keyword}:${options.forceRefresh === true}`;
     if (this.rowsRequest && this.rowsRequestKey === requestKey) {
       return this.rowsRequest;
     }
@@ -1111,7 +1158,7 @@ PerformancePage({
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         const refreshedEntryIds = new Set(refreshedRows.map((row) => numberValue(row.entry)));
         const retainedRows = preserveData
-          ? this.data.rows.filter((row) => (
+          ? this.rows.filter((row: DisplayTournamentRow) => (
               failedEntryIds.has(numberValue(row.entry))
               && !refreshedEntryIds.has(numberValue(row.entry))
             ))
@@ -1274,11 +1321,13 @@ PerformancePage({
       .map((row) => textValue(row.captainName))
       .filter((name) => name && name !== "-" && name !== "无队长")))
       .sort((left, right) => left.localeCompare(right));
+    this.rows = rows;
+    this.ownershipPlayers = ownershipPlayers;
+    this.shareRows = sortedRows;
     this.setData({
       hasData: true,
-      rows,
+      rowCount: rows.length,
       displayedRows: takeVisibleWithPinMe(sortedRows, nextSize, viewerId),
-      shareRows: sortedRows,
       filteredCount: sortedRows.length,
       hasMore: sortedRows.length > nextSize,
       highestText: stats.highestText,
@@ -1295,7 +1344,6 @@ PerformancePage({
         ? "清除搜索或球员持有、球队人数筛选后再看"
         : "比赛开始或赛事数据同步后会显示实时排名",
       resultsEmptyActionText: resultsFiltered ? "清除全部筛选" : "重新加载",
-      ownershipPlayers,
       ownershipTeamOptions: teamOptions,
       ownershipTeamNames: teamOptions.map(formatTeamName),
       selectedOwnershipTeam,
@@ -1340,6 +1388,13 @@ PerformancePage({
     });
   },
 
+  clearShareCopiedTimer() {
+    if (this.shareCopiedTimer) {
+      clearTimeout(this.shareCopiedTimer);
+      this.shareCopiedTimer = undefined;
+    }
+  },
+
   persistSelectedTournament(selected?: TournamentOption) {
     if (!selected) {
       return;
@@ -1350,8 +1405,8 @@ PerformancePage({
 
   onKeyword(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
     this.setData({ keyword: event.detail.keyword });
-    if (this.data.rows.length > 0) {
-      this.applyRows(this.data.rows, true);
+    if (this.rows.length > 0) {
+      this.applyRows(this.rows, true);
     }
   },
 
@@ -1384,16 +1439,20 @@ PerformancePage({
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    const next = Number(event.detail.value);
+    if (!Number.isFinite(next) || next <= 0) return;
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
+    clearTournamentBoard(this);
     this.setData({
-      event: event.detail.value,
+      event: next,
       hasData: false,
-      rows: [],
+      rowCount: 0,
       displayedRows: [],
-      lastUpdated: ""
+      lastUpdated: "",
+      ...emptyCompareState()
     });
     this.liveRefresh?.sync();
     this.loadRows();
@@ -1401,19 +1460,22 @@ PerformancePage({
 
   onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const selectedTournamentIndex = Number(event.detail.value);
+    if (!Number.isFinite(selectedTournamentIndex)) return;
     const selectedTournament = this.data.tournaments[selectedTournamentIndex];
     if (!selectedTournament) return;
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.failedEntryCount = 0;
     this.cachedLiveStoredAt = undefined;
+    clearTournamentBoard(this);
     this.setData({
       selectedTournamentIndex,
       selectedTournament,
-      rows: [],
+      rowCount: 0,
       displayedRows: [],
       hasData: false,
-      lastUpdated: ""
+      lastUpdated: "",
+      ...emptyCompareState()
     });
     this.persistSelectedTournament(selectedTournament);
     this.liveRefresh?.sync();
@@ -1424,7 +1486,7 @@ PerformancePage({
     const sortKey = event.currentTarget.dataset.key;
     const sortDesc = this.data.sortKey === sortKey ? !this.data.sortDesc : sortKey !== "overallRank" && sortKey !== "entryName";
     this.setData({ sortKey, sortDesc });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onToggleChip(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { value: string }>) {
@@ -1436,7 +1498,7 @@ PerformancePage({
       ? this.data.chipFilters.filter((item) => item !== value)
       : [...this.data.chipFilters, value];
     this.setData({ chipFilters });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onToggleCaptain(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { name: string }>) {
@@ -1448,7 +1510,7 @@ PerformancePage({
       ? this.data.captainFilters.filter((item) => item !== name)
       : [...this.data.captainFilters, name];
     this.setData({ captainFilters });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onToggleAdvanced() {
@@ -1475,7 +1537,7 @@ PerformancePage({
         compareLeft: null,
         compareRight: null
       });
-      this.applyRows(this.data.rows, true);
+      this.applyRows(this.rows, true);
       return;
     }
     this.setData({
@@ -1486,7 +1548,7 @@ PerformancePage({
       compareLeft: null,
       compareRight: null
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onCloseCompare() {
@@ -1510,8 +1572,8 @@ PerformancePage({
     } else {
       current.push(entry);
     }
-    const left = current[0] ? this.data.rows.find((row) => row.entry === current[0]) || null : null;
-    const right = current[1] ? this.data.rows.find((row) => row.entry === current[1]) || null : null;
+    const left = current[0] ? this.rows.find((row: DisplayTournamentRow) => row.entry === current[0]) || null : null;
+    const right = current[1] ? this.rows.find((row: DisplayTournamentRow) => row.entry === current[1]) || null : null;
     this.setData({
       compareIds: current,
       compareHint: compareHintText(current.length),
@@ -1519,7 +1581,7 @@ PerformancePage({
       compareRight: right,
       compareOpen: current.length === 2
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onToggleOwnership() {
@@ -1528,18 +1590,19 @@ PerformancePage({
 
   onOwnershipScopeTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { scope: TournamentOwnershipScope }>) {
     this.setData({ ownershipScope: event.currentTarget.dataset.scope });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onOwnershipCaptainTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { mode: TournamentCaptainMode }>) {
     this.setData({ ownershipCaptainMode: event.currentTarget.dataset.mode });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onOwnershipTeamChange(event: WechatMiniprogram.PickerChange) {
     const selectedOwnershipTeamIndex = Number(event.detail.value);
+    if (!Number.isFinite(selectedOwnershipTeamIndex)) return;
     const selectedOwnershipTeam = this.data.ownershipTeamOptions[selectedOwnershipTeamIndex];
-    const ownershipPositionOptions = collectOwnershipPositions(this.data.ownershipPlayers, selectedOwnershipTeam);
+    const ownershipPositionOptions = collectOwnershipPositions(this.ownershipPlayers, selectedOwnershipTeam);
     this.setData({
       selectedOwnershipTeamIndex,
       selectedOwnershipTeam,
@@ -1553,9 +1616,10 @@ PerformancePage({
 
   onOwnershipPositionChange(event: WechatMiniprogram.PickerChange) {
     const selectedOwnershipPositionIndex = Number(event.detail.value);
+    if (!Number.isFinite(selectedOwnershipPositionIndex)) return;
     const selectedOwnershipPosition = this.data.ownershipPositionOptions[selectedOwnershipPositionIndex] || "";
     const ownershipAvailablePlayers = filterOwnershipPlayers(
-      this.data.ownershipPlayers,
+      this.ownershipPlayers,
       this.data.selectedOwnershipTeam,
       selectedOwnershipPosition
     );
@@ -1568,25 +1632,27 @@ PerformancePage({
   },
 
   onOwnershipPlayerChange(event: WechatMiniprogram.PickerChange) {
-    const player = this.data.ownershipAvailablePlayers[Number(event.detail.value)];
+    const index = Number(event.detail.value);
+    if (!Number.isFinite(index)) return;
+    const player = this.data.ownershipAvailablePlayers[index];
     if (!player || this.data.selectedOwnershipPlayers.some((selected) => selected.element === player.element)) {
       return;
     }
     this.setData({ selectedOwnershipPlayers: [...this.data.selectedOwnershipPlayers, player] });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onOwnershipSearchInput(event: WechatMiniprogram.Input) {
     const ownershipSearch = textValue(event.detail.value, "");
     this.setData({
       ownershipSearch,
-      ownershipSearchResults: computeOwnershipSearchResults(this.data.ownershipPlayers, ownershipSearch, this.data.selectedOwnershipPlayers)
+      ownershipSearchResults: computeOwnershipSearchResults(this.ownershipPlayers, ownershipSearch, this.data.selectedOwnershipPlayers)
     });
   },
 
   onOwnershipSearchPick(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { element: string }>) {
     const element = Number(event.currentTarget.dataset.element);
-    const player = this.data.ownershipPlayers.find((option) => option.element === element);
+    const player = this.ownershipPlayers.find((option: OwnershipPlayerOption) => option.element === element);
     if (!player || this.data.selectedOwnershipPlayers.some((selected) => selected.element === element)) {
       return;
     }
@@ -1595,13 +1661,13 @@ PerformancePage({
       ownershipSearch: "",
       ownershipSearchResults: []
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onRemoveOwnershipPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { element: string }>) {
     const element = Number(event.currentTarget.dataset.element);
     this.setData({ selectedOwnershipPlayers: this.data.selectedOwnershipPlayers.filter((player) => player.element !== element) });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onClearOwnershipFilter() {
@@ -1618,7 +1684,7 @@ PerformancePage({
       ownershipSearch: "",
       ownershipSearchResults: []
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onToggleTeamExposure() {
@@ -1627,11 +1693,12 @@ PerformancePage({
 
   onTeamExposureScopeTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { scope: TournamentOwnershipScope }>) {
     this.setData({ teamExposureScope: event.currentTarget.dataset.scope });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onTeamExposureTeamChange(event: WechatMiniprogram.PickerChange) {
     const pendingExposureTeamIndex = Number(event.detail.value);
+    if (!Number.isFinite(pendingExposureTeamIndex)) return;
     const pendingExposureTeam = this.data.teamExposureTeams[pendingExposureTeamIndex] || null;
     this.setData({ pendingExposureTeamIndex, pendingExposureTeam });
   },
@@ -1642,11 +1709,13 @@ PerformancePage({
     if (!pendingExposureTeam) {
       return;
     }
-    const count = Number(event.detail.value) + 1;
+    const countIndex = Number(event.detail.value);
+    if (!Number.isFinite(countIndex)) return;
+    const count = countIndex + 1;
     const rules = this.data.teamExposureRules.filter((rule) => rule.teamShortName !== pendingExposureTeam.shortName);
     rules.push({ teamShortName: pendingExposureTeam.shortName, name: pendingExposureTeam.name, count });
     this.setData({ teamExposureRules: rules, pendingExposureTeam: null, pendingExposureTeamIndex: 0 });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onRemoveTeamExposureRule(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { shortname?: string }>) {
@@ -1654,7 +1723,7 @@ PerformancePage({
     this.setData({
       teamExposureRules: this.data.teamExposureRules.filter((rule) => rule.teamShortName !== shortName)
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   onClearTeamExposureFilter() {
@@ -1664,14 +1733,14 @@ PerformancePage({
       pendingExposureTeamIndex: 0,
       teamExposureScope: "any"
     });
-    this.applyRows(this.data.rows, true);
+    this.applyRows(this.rows, true);
   },
 
   loadMore() {
     if (!this.data.hasMore) {
       return;
     }
-    this.applyRows(this.data.rows, false);
+    this.applyRows(this.rows, false);
   },
 
   onOpenEntry(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { entryId?: string; entry?: string }>) {
@@ -1704,8 +1773,8 @@ PerformancePage({
 
   onCopyShare() {
     try {
-      const rows = (this.data.shareRows && this.data.shareRows.length > 0)
-        ? this.data.shareRows
+      const rows = (this.shareRows && this.shareRows.length > 0)
+        ? this.shareRows
         : (this.data.displayedRows || []);
       if (rows.length === 0) {
         wx.showToast({ title: "还没有可分享的榜单", icon: "none" });
@@ -1723,7 +1792,8 @@ PerformancePage({
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ shareCopied: true, shareSheetOpen: false });
-          setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          this.clearShareCopiedTimer();
+          this.shareCopiedTimer = setTimeout(() => this.setData({ shareCopied: false }), 2000);
           return;
         }
         this.setData({ shareSheetOpen: true, shareText: text });

@@ -12,7 +12,7 @@ test("Live Match resumed startup owns errors and initializes recovery polling", 
   );
   assert.match(
     page,
-    /if \(resumeInterruptedLoad\) \{[\s\S]*this\.initLiveRefresh\(\);[\s\S]*if \(resumeInterruptedLoad && !this\.data\.hasData\) \{[\s\S]*loadData\(\{ forceRefresh: true \}\)/
+    /if \(resumeInterruptedLoad\) \{[\s\S]*this\.initLiveRefresh\(\);[\s\S]*if \(resumeInterruptedLoad\) \{[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/
   );
 });
 

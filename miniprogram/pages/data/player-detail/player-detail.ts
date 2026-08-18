@@ -121,6 +121,10 @@ PerformancePage({
     this.loadData("refresh", true);
   },
 
+  onPullDownRefresh() {
+    return this.loadData("refresh", true).finally(() => wx.stopPullDownRefresh());
+  },
+
   onBackToPlayers() {
     wx.redirectTo({ url: routes.dataPlayers });
   }

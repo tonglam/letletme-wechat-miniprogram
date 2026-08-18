@@ -435,11 +435,18 @@ export async function renderSquadPitchShareImage(options: RenderShareImageOption
 }
 
 let inFlight: Promise<string> | null = null;
+let inFlightKey = "";
+let shareGeneration = 0;
+let exportSeq = 0;
 let cachedKey = "";
 let cachedPath = "";
+let exportTail: Promise<void> = Promise.resolve();
 
 export function resetShareImageCache(): void {
+  shareGeneration += 1;
+  exportSeq += 1;
   inFlight = null;
+  inFlightKey = "";
   cachedKey = "";
   cachedPath = "";
 }
@@ -447,17 +454,33 @@ export function resetShareImageCache(): void {
 export function exportSquadPitchShareImage(options: RenderShareImageOptions): Promise<string> {
   const key = shareCacheKey(options.input);
   if (cachedPath && cachedKey === key) return Promise.resolve(cachedPath);
-  if (inFlight) return inFlight;
-  inFlight = renderSquadPitchShareImage(options)
-    .then((path) => {
-      cachedKey = key;
-      cachedPath = path;
-      return path;
+  if (inFlight && inFlightKey === key) return inFlight;
+  const generation = shareGeneration;
+  const seq = ++exportSeq;
+  const request = exportTail
+    .catch(() => undefined)
+    .then(() => {
+      if (cachedPath && cachedKey === key && generation === shareGeneration) {
+        return cachedPath;
+      }
+      return renderSquadPitchShareImage(options).then((path) => {
+        if (generation === shareGeneration && seq === exportSeq) {
+          cachedKey = key;
+          cachedPath = path;
+        }
+        return path;
+      });
     })
     .finally(() => {
-      inFlight = null;
+      if (inFlight === request) {
+        inFlight = null;
+        inFlightKey = "";
+      }
     });
-  return inFlight;
+  inFlight = request;
+  inFlightKey = key;
+  exportTail = request.then(() => undefined, () => undefined);
+  return request;
 }
 
 function authorizeAlbum(): Promise<void> {

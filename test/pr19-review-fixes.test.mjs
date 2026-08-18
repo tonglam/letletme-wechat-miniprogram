@@ -11,6 +11,8 @@ globalThis.Page = (definition) => {
 
 const homeModule = await import("../miniprogram/pages/home/index/index.ts");
 capturedPage = undefined;
+const liveIndexModule = await import("../miniprogram/pages/live/index/index.ts");
+capturedPage = undefined;
 await import("../miniprogram/pages/live/entry/entry.ts");
 const entryPage = capturedPage;
 capturedPage = undefined;
@@ -160,6 +162,13 @@ test("home revalidates on context change or one-minute domain freshness expiry",
   assert.match(home, /fixtureStaleStoredAt: staleStoredAt/);
 });
 
+test("live landing warm show reloads only after identity change or the 60s window", () => {
+  assert.equal(liveIndexModule.shouldReloadLiveIndex(1_000, 4, 4, 9, 9, 1_100), false);
+  assert.equal(liveIndexModule.shouldReloadLiveIndex(1_000, 4, 4, 9, 9, 61_000), true);
+  assert.equal(liveIndexModule.shouldReloadLiveIndex(1_000, 4, 5, 9, 9, 1_100), true);
+  assert.equal(liveIndexModule.shouldReloadLiveIndex(1_000, 4, 4, 9, 10, 1_100), true);
+});
+
 test("manual Live Entry force refresh runs once after an ordinary in-flight read", async () => {
   let resolveCurrent;
   const current = new Promise((resolve) => {
@@ -268,7 +277,7 @@ test("Home selected-GW reads preserve stale metadata and discard superseded resp
   const start = home.indexOf("async loadFixtureGw");
   const load = home.slice(start, home.indexOf("onRetryFixtures", start));
   assert.match(load, /readCoreEventFixtureSchedule/);
-  assert.match(load, /requestId !== this\._fixtureGwRequestId \|\| event !== this\.data\.selectedFixtureGw/);
+  assert.match(load, /!this\._pageVisible \|\| requestId !== this\._fixtureGwRequestId \|\| event !== this\.data\.selectedFixtureGw/);
   assert.match(load, /fixtureStaleMessage: read\.meta\.stale \? fixtureStaleMessage\(staleStoredAt\) : ""/);
   assert.match(load, /fixtureStaleStoredAt: staleStoredAt/);
 });
@@ -289,9 +298,9 @@ test("Live Tournament rejects event zero before any row request", async () => {
       ...tournamentPage.data,
       entryId: 123,
       event: 0,
-      selectedTournament: { id: "league-1", name: "League" },
-      rows: [{ entry: 123 }]
+      selectedTournament: { id: "league-1", name: "League" }
     },
+    rows: [{ entry: 123 }],
     _submittedKeyword: "",
     setData(update) {
       Object.assign(this.data, update);
@@ -299,14 +308,14 @@ test("Live Tournament rejects event zero before any row request", async () => {
     syncDisplayState() {}
   };
   await tournamentPage.loadRows.call(context);
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
   assert.equal(context.data.loading, false);
 
   context.data.event = 33;
   context.data.selectedTournament = { id: "league-1", name: "League", participantCount: 0 };
-  context.data.rows = [{ entry: 123 }];
+  context.rows = [{ entry: 123 }];
   await tournamentPage.loadRows.call(context);
-  assert.deepEqual(context.data.rows, []);
+  assert.deepEqual(context.rows, []);
   assert.equal(context.data.resultsEmptyTitle, "当前赛事还没有参赛球队");
 });
 

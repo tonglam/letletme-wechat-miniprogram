@@ -26,6 +26,7 @@ import {
 import type { MiniChartPoint } from "../../../utils/mini-chart";
 import { recordMyFplVisit } from "../../../utils/perf";
 import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
+import { getAppContextSnapshot } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
   type PageRequestTrace
@@ -164,6 +165,44 @@ interface LeaguesData {
 const DIRECTORY_CACHE_KEY = "my-fpl:tournaments";
 const LAST_PICK_KEY = "my-fpl:tournament:last";
 const PAGE_STEP = 20;
+/** Leagues warm-show skip window (aligned with home/live index at 60s; team is 5 min). */
+export const LEAGUES_REVALIDATE_MS = 60 * 1000;
+export const SEASON_PATH_RECENT_WINDOW = 8;
+
+export function shouldReloadLeagues(
+  lastLoadAt: number,
+  loadedEntryId: number,
+  currentEntryId: number,
+  loadedSeason: string | undefined,
+  currentSeason: string | undefined,
+  loadedEvent: number,
+  currentEvent: number,
+  loadedContextRevision: number,
+  currentContextRevision: number,
+  now = Date.now()
+): boolean {
+  return !lastLoadAt
+    || loadedEntryId !== currentEntryId
+    || Boolean(loadedSeason && currentSeason && loadedSeason !== currentSeason)
+    || loadedEvent !== currentEvent
+    || loadedContextRevision !== currentContextRevision
+    || now - lastLoadAt >= LEAGUES_REVALIDATE_MS;
+}
+
+export function seasonPathWindow(
+  start: number,
+  end: number,
+  windowSize = SEASON_PATH_RECENT_WINDOW
+): { recentStart: number; recentEnd: number; hasOlder: boolean; olderEnd: number } {
+  const recentEnd = Math.max(start, end);
+  const recentStart = Math.max(start, recentEnd - windowSize + 1);
+  return {
+    recentStart,
+    recentEnd,
+    hasOlder: recentStart > start,
+    olderEnd: recentStart - 1
+  };
+}
 
 const SEASON_SORT_OPTIONS: SortOption[] = [
   { key: "rank", label: "排名", asc: true },
@@ -319,6 +358,11 @@ PerformancePage({
   pathRequestId: 0,
   hasShown: false,
   loadedSeason: undefined as string | undefined,
+  lastLoadAt: 0,
+  loadedEntryId: 0,
+  loadedEvent: 0,
+  loadedContextRevision: 0,
+  pathLoadedKey: "",
   pageVisible: false,
   lifecycleRevision: 0,
   startupPending: false,
@@ -350,6 +394,7 @@ PerformancePage({
     this.hasShown = true;
     if (resumed || this.resumeOnShow) {
       const forceRefresh = this.resumeForceRefresh;
+      const resumeIncomplete = this.resumeOnShow;
       const lifecycleRevision = this.lifecycleRevision;
       const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "show" });
       await waitForAuthoritativeFollow();
@@ -362,15 +407,39 @@ PerformancePage({
       }
       this.resumeOnShow = false;
       this.resumeForceRefresh = false;
-      await this.loadLeagues(forceRefresh, trace, lifecycleRevision);
+      const app = getApp<IAppOption>();
+      const snapshot = getAppContextSnapshot();
+      // Compare against the picker GW, not current/next GW: browsing a
+      // historical round must not force a directory reload on every show.
+      if (
+        forceRefresh
+        || resumeIncomplete
+        || shouldReloadLeagues(
+          this.lastLoadAt,
+          this.loadedEntryId,
+          currentFollowEntryId() ?? 0,
+          this.loadedSeason,
+          app.globalData.season || undefined,
+          this.loadedEvent,
+          this.data.event,
+          this.loadedContextRevision,
+          snapshot?.contextRevision ?? 0
+        )
+      ) {
+        await this.loadLeagues(forceRefresh, trace, lifecycleRevision);
+      }
     }
   },
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.resumeOnShow || this.startupPending || this.data.loading || this.loadPending;
+    this.resumeOnShow = this.resumeOnShow || this.startupPending || this.data.loading || this.loadPending
+      || this.data.viewLoading || this.data.pathLoading;
     if (this.loadPending) {
       this.resumeForceRefresh = this.resumeForceRefresh || this.loadForceRefresh;
+    }
+    if (this.data.viewLoading || this.data.pathLoading) {
+      this.setData({ viewLoading: false, pathLoading: false });
     }
     this.lifecycleRevision += 1;
     this.requestId += 1;
@@ -442,6 +511,7 @@ PerformancePage({
     const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
     if (principalChanged || seasonChanged) {
       this.loadedSeason = undefined;
+      this.pathLoadedKey = "";
       this.setData({ tournaments: [], tournamentNames: [], selectedTournament: null, fromCache: false });
     }
     // On a cold offline launch the persisted cache season is the only known
@@ -479,6 +549,10 @@ PerformancePage({
         fromCache: false
       });
       this.loadedSeason = currentSeason || cached?.season;
+      this.lastLoadAt = Date.now();
+      this.loadedEntryId = entryId;
+      this.loadedEvent = this.data.event;
+      this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
       try {
         if (currentSeason) {
           wx.setStorageSync(DIRECTORY_CACHE_KEY, {
@@ -550,6 +624,7 @@ PerformancePage({
       this.seasonRows = [];
       this.gwRows = [];
       this.pathRequestId += 1;
+      this.pathLoadedKey = "";
       this.setData({
         hasSeasonData: false,
         hasGwData: false,
@@ -564,7 +639,9 @@ PerformancePage({
   },
 
   onTournamentChange(event: WechatMiniprogram.PickerChange) {
-    this.pickTournament(Number(event.detail.value));
+    const index = Number(event.detail.value);
+    if (!Number.isFinite(index) || index < 0) return;
+    this.pickTournament(index);
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
@@ -631,29 +708,35 @@ PerformancePage({
           Number(tournament.id),
           entryId,
           forceRefresh,
+          requestId,
           trace,
           options?.reloadPath !== false
         );
       } else {
-        await this.loadGameweekView(Number(tournament.id), entryId, forceRefresh, trace);
+        await this.loadGameweekView(Number(tournament.id), entryId, forceRefresh, requestId, trace);
       }
-      if (requestId !== this.viewRequestId) return;
+      if (!this.isActiveViewRequest(requestId)) return;
     } catch (error) {
-      if (requestId !== this.viewRequestId) return;
+      if (!this.isActiveViewRequest(requestId)) return;
       this.setData({
         viewError: error instanceof Error ? error.message : "赛事数据加载失败"
       });
     } finally {
-      if (requestId === this.viewRequestId) {
+      if (this.isActiveViewRequest(requestId)) {
         this.setData({ viewLoading: false });
       }
     }
+  },
+
+  isActiveViewRequest(requestId: number): boolean {
+    return this.pageVisible && requestId === this.viewRequestId;
   },
 
   async loadSeasonView(
     tournamentId: number,
     entryId: number,
     forceRefresh: boolean,
+    requestId: number,
     trace?: PageRequestTrace,
     reloadPath = true
   ) {
@@ -662,6 +745,7 @@ PerformancePage({
       getTournamentSeasonSnapshot(tournamentId, event, forceRefresh, trace),
       getTournamentSummary(tournamentId, event, entryId, forceRefresh, trace)
     ]);
+    if (!this.isActiveViewRequest(requestId)) return;
     if (!snapshot || !snapshot.standings.length) {
       this.seasonRows = [];
       this.setData({
@@ -698,7 +782,11 @@ PerformancePage({
       this.setData({ boardRows: this.seasonRows });
       this.syncBoard();
     }
-    if (reloadPath) void this.loadSeasonPath(tournamentId, entryId, forceRefresh, trace);
+    const pathKey = `${tournamentId}:${entryId}`;
+    const needsPath = forceRefresh
+      || this.pathLoadedKey !== pathKey
+      || this.data.pathPoints.length < 2;
+    if (reloadPath && needsPath) void this.loadSeasonPath(tournamentId, entryId, forceRefresh, trace);
   },
 
   async loadSeasonPath(
@@ -709,16 +797,27 @@ PerformancePage({
   ) {
     const start = Math.max(1, Number(this.data.selectedTournament?.groupStartedEventId) || 1);
     const end = Math.max(start, this.data.event);
+    const pathKey = `${tournamentId}:${entryId}`;
+    const keepExisting = !forceRefresh
+      && this.pathLoadedKey === pathKey
+      && this.data.pathPoints.length > 0;
+    if (forceRefresh) this.pathLoadedKey = "";
     const requestId = ++this.pathRequestId;
-    this.setData({
-      pathLoading: true,
-      pathVisible: false,
-      pathPoints: [],
-      pathSeries: []
-    });
+    this.setData(keepExisting
+      ? { pathLoading: true }
+      : {
+          pathLoading: true,
+          pathVisible: false,
+          pathPoints: [],
+          pathSeries: []
+        });
+    let accumulated: Array<{ gameweek: number; rows: TournamentEventResult[] }> = [];
     const publish = (pages: Array<{ gameweek: number; rows: TournamentEventResult[] }>) => {
-      if (requestId !== this.pathRequestId) return false;
-      const points = pages
+      if (requestId !== this.pathRequestId || !this.pageVisible) return false;
+      const byGw = new Map(accumulated.map((page) => [page.gameweek, page]));
+      for (const page of pages) byGw.set(page.gameweek, page);
+      accumulated = [...byGw.values()].sort((left, right) => left.gameweek - right.gameweek);
+      const points = accumulated
         .map((page) => buildTournamentPathPoint(page.gameweek, entryId, page.rows))
         .filter((point): point is TournamentPathPoint => Boolean(point));
       this.setData({
@@ -727,21 +826,39 @@ PerformancePage({
       });
       return true;
     };
+    const window = seasonPathWindow(start, end);
     try {
-      const pages = await loadTournamentSeasonPath(
+      const recent = await loadTournamentSeasonPath(
         tournamentId,
         entryId,
-        start,
-        end,
+        window.recentStart,
+        window.recentEnd,
         forceRefresh,
         trace,
         publish
       );
-      if (requestId !== this.pathRequestId) return;
-      publish(pages);
+      if (requestId !== this.pathRequestId || !this.pageVisible) return;
+      publish(recent);
+      if (window.hasOlder) {
+        const older = await loadTournamentSeasonPath(
+          tournamentId,
+          entryId,
+          start,
+          window.olderEnd,
+          forceRefresh,
+          trace,
+          publish
+        );
+        if (requestId !== this.pathRequestId || !this.pageVisible) return;
+        publish(older);
+      }
+      this.pathLoadedKey = pathKey;
       this.setData({ pathLoading: false });
     } catch {
-      if (requestId !== this.pathRequestId) return;
+      if (requestId !== this.pathRequestId || !this.pageVisible) return;
+      if (!(keepExisting && this.data.pathPoints.length >= 2)) {
+        this.pathLoadedKey = "";
+      }
       this.setData({ pathLoading: false, pathVisible: this.data.pathPoints.length >= 2 });
     }
   },
@@ -760,14 +877,22 @@ PerformancePage({
     this.setData(pathPageState(this.data.pathPoints, this.data.pathMode, gw));
   },
 
-  async loadGameweekView(tournamentId: number, entryId: number, forceRefresh: boolean, trace?: PageRequestTrace) {
+  async loadGameweekView(
+    tournamentId: number,
+    entryId: number,
+    forceRefresh: boolean,
+    requestId: number,
+    trace?: PageRequestTrace
+  ) {
     let event = this.data.event;
     let payload = await getTournamentSummary(tournamentId, event, entryId, forceRefresh, trace);
+    if (!this.isActiveViewRequest(requestId)) return;
     let notice = "";
     if (!payload.tournamentEventResults.length && event > 1) {
       // Web parity: fall back one GW when this round's results are not ready.
       const fallback = event - 1;
       const retried = await getTournamentSummary(tournamentId, fallback, entryId, forceRefresh, trace);
+      if (!this.isActiveViewRequest(requestId)) return;
       if (retried.tournamentEventResults.length) {
         notice = `第 ${event} 轮赛事结果尚未就绪 · 当前显示第 ${fallback} 轮数据`;
         event = fallback;
@@ -789,6 +914,7 @@ PerformancePage({
     const previous = event > 1
       ? await getTournamentSummary(tournamentId, event - 1, entryId, forceRefresh, trace).catch(() => null)
       : null;
+    if (!this.isActiveViewRequest(requestId)) return;
     const prevRankByEntry = new Map<number, number>();
     (previous?.tournamentEventResults || []).forEach((row) => {
       if (row.eventGroupRank) prevRankByEntry.set(row.entryId, row.eventGroupRank);

@@ -270,7 +270,7 @@ export async function getPlayersForPickerPage(
     {
       authMode: "public",
       cachePolicy: "player-picker",
-      cacheVariant: `season:${currentSeason()}`,
+      season: currentSeason(),
       forceRefresh: options.forceRefresh === true,
       trace: options.trace
     }
@@ -385,7 +385,7 @@ export async function getPlayerStatsDesk(
     {
       authMode: "public",
       cachePolicy: "player-picker",
-      cacheVariant: `season:${currentSeason()}`,
+      season: currentSeason(),
       forceRefresh,
       trace
     }
@@ -473,10 +473,6 @@ export async function getPlayerDetailByElement(element: number): Promise<PlayerD
     selectedByPercent: detail.selectedByPercent ?? undefined,
     form: detail.form ?? undefined
   };
-}
-
-export function getTeamFixtureByShortName(_shortName: string, _season?: string): Promise<unknown[]> {
-  return Promise.resolve([]);
 }
 
 export async function getFilterPlayers(_season: string): Promise<PlayerFilterRow[]> {

@@ -3,6 +3,10 @@ import type { GraphQLReadMeta, GraphQLErrorInfo, PageRequestTrace } from "./grap
 import type { GameweekOverallSummary } from "../models/summary";
 import { getAppContextSnapshot } from "./app-context.service";
 
+// Documents here are not shared with entry.service: field selections differ
+// (transfer history also uses live:true). Merging would change query hashes
+// and therefore cache keys.
+
 export const MINI_GAMEWEEK_SUMMARY_QUERY = `
   query MiniGameweekSummary($eventId: Int!, $limit: Int!) {
     eventOverallResult {
