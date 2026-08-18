@@ -259,6 +259,7 @@ export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
         .sort((left, right) => numberValue(right.bps) - numberValue(left.bps))
         .slice(0, 5)
         .map((player) => ({
+          key: [playerShortName(player), playerTeam(player), player.bps].join(":"),
           name: playerShortName(player),
           team: playerTeam(player),
           text: String(numberValue(player.bps)),

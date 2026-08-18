@@ -74,7 +74,7 @@ test("transfer row keys include time so repeated swaps stay unique", () => {
 
 test("entry transfer history cache keys include season", () => {
   const service = source("miniprogram/services/entry.service.ts");
-  assert.match(service, /function transferHistoryCacheVariant/);
-  assert.match(service, /cacheVariant: transferHistoryCacheVariant\(isLiveEvent \? "live" : "history"\)/);
-  assert.match(service, /cacheVariant: transferHistoryCacheVariant\("history"\)/);
+  const graphql = source("miniprogram/services/graphql.service.ts");
+  assert.match(service, /cacheVariant: isLiveEvent \? "live" : "history"/);
+  assert.match(graphql, /SEASON_SCOPED_POLICIES[\s\S]*"reporting"[\s\S]*"historical"/);
 });

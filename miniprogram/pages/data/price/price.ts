@@ -1,5 +1,6 @@
 import {
   getPlayersForPickerPage,
+  PLAYER_PICKER_PAGE_LIMIT,
   type PlayerPickerFilter
 } from "../../../services/player.service";
 import { getTeamList } from "../../../services/common.service";
@@ -882,7 +883,7 @@ Page({
       const page = await getPlayersForPickerPage({
         search: teamSearchId !== null ? "" : this.data.playerKeyword,
         filter: Object.keys(filter).length ? filter : undefined,
-        limit: 50,
+        limit: PLAYER_PICKER_PAGE_LIMIT,
         cursor,
         forceRefresh
       });

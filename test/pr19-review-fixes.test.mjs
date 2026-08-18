@@ -58,7 +58,7 @@ test("player detail consumes an explicit route season when shared context is una
   const playerService = source("miniprogram/services/player.service.ts");
   assert.match(
     playerService,
-    /getPlayerInfoByCode\([\s\S]*code: number \| string,[\s\S]*season\?: string,[\s\S]*trace\?:[\s\S]*cacheVariant: `season:\$\{currentSeason\(season\)\}`,[\s\S]*trace/
+    /getPlayerInfoByCode\([\s\S]*code: number \| string,[\s\S]*season\?: string,[\s\S]*trace\?:[\s\S]*season: seasonName,[\s\S]*cacheVariant: `season:\$\{seasonName\}`,[\s\S]*trace/
   );
   assert.doesNotMatch(playerService, /getPlayerInfoByCode\([^)]*_season/);
 });

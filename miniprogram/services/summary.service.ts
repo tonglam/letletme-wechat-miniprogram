@@ -1,5 +1,10 @@
 import { graphqlRead, graphqlRequest } from "./graphql.service";
-import type { GraphQLReadMeta, GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
+import type {
+  GraphQLReadMeta,
+  GraphQLReadResult,
+  GraphQLErrorInfo,
+  PageRequestTrace
+} from "./graphql.service";
 import type { GameweekOverallSummary } from "../models/summary";
 import { getAppContextSnapshot } from "./app-context.service";
 
@@ -7,75 +12,52 @@ import { getAppContextSnapshot } from "./app-context.service";
 // (transfer history also uses live:true). Merging would change query hashes
 // and therefore cache keys.
 
-export const MINI_GAMEWEEK_SUMMARY_QUERY = `
-  query MiniGameweekSummary($eventId: Int!, $limit: Int!) {
-    eventOverallResult {
-      event
-      averageScore
-      highestScore
-      highestScoringEntry
-      transfersMade
-      mostViceCaptainedPlayer { id webName }
-      mostTransferInPlayer { id webName }
-      mostSelectedPlayer { id webName }
-      mostCaptainedPlayer { id webName }
-      topElementInfo {
-        element
-        points
-        teamShortName
-        player { ...MiniSummaryPlayerFields }
-      }
-      chipPlays { chipName numberPlayed }
-    }
+// Keep the summary panels as separate documents. The production GraphQL
+// endpoint enforces both a weighted complexity budget and a 200-node AST
+// limit; the old all-in-one document exceeded the latter before execution.
+const SUMMARY_PLAYER_FIELDS = `
+  player { id webName team { name shortName } position }
+  totalPoints
+  minutes
+  goalsScored
+  assists
+  cleanSheets
+  saves
+  bonus
+  bps
+  yellowCards
+  redCards
+  ownGoals
+  penaltiesSaved
+  penaltiesMissed
+`;
+
+export const EVENT_DREAM_TEAM_QUERY = `
+  query EventDreamTeam($eventId: Int!) {
     eventLive(eventId: $eventId) {
-      dreamTeam {
-        player { ...MiniSummaryPlayerFields }
-        totalPoints
-        minutes
-        goalsScored
-        assists
-        cleanSheets
-        saves
-        bonus
-        bps
-        yellowCards
-        redCards
-        ownGoals
-        penaltiesSaved
-        penaltiesMissed
-      }
-      topPerformers(limit: 20) {
-        player { ...MiniSummaryPlayerFields }
-        totalPoints
-        minutes
-        goalsScored
-        assists
-        cleanSheets
-        saves
-        bonus
-        bps
-        yellowCards
-        redCards
-        ownGoals
-        penaltiesSaved
-        penaltiesMissed
-      }
+      dreamTeam { ${SUMMARY_PLAYER_FIELDS} }
     }
+  }
+`;
+
+export const EVENT_ELITE_ELEMENTS_QUERY = `
+  query EventEliteElements($eventId: Int!, $limit: Int!) {
+    eventLive(eventId: $eventId) {
+      topPerformers(limit: $limit) { ${SUMMARY_PLAYER_FIELDS} }
+    }
+  }
+`;
+
+export const EVENT_OVERALL_TRANSFERS_QUERY = `
+  query EventOverallTransfers($eventId: Int!, $limit: Int!) {
     topTransfersIn(eventId: $eventId, limit: $limit) {
       transfersInEvent
-      player { ...MiniSummaryPlayerFields }
+      player { id webName team { name shortName } position }
     }
     topTransfersOut(eventId: $eventId, limit: $limit) {
       transfersOutEvent
-      player { ...MiniSummaryPlayerFields }
+      player { id webName team { name shortName } position }
     }
-  }
-
-  fragment MiniSummaryPlayerFields on Player {
-    id
-    webName
-    team { name shortName }
-    position
   }
 `;
 
@@ -239,13 +221,26 @@ interface GraphQLEventPlayer {
   penaltiesMissed?: number;
 }
 
-interface MiniGameweekSummaryResponse extends EventOverallResultResponse {
+interface EventDreamTeamResponse {
   eventLive: {
     dreamTeam: GraphQLEventPlayer[];
+  } | null;
+}
+
+interface EventEliteElementsResponse {
+  eventLive: {
     topPerformers: GraphQLEventPlayer[];
   } | null;
+}
+
+interface EventOverallTransfersResponse {
   topTransfersIn: GraphQLEventPlayer[];
   topTransfersOut: GraphQLEventPlayer[];
+}
+
+interface SummarySegment<T> {
+  result?: GraphQLReadResult<T>;
+  error?: unknown;
 }
 
 export interface MiniGameweekSummaryResult {
@@ -457,6 +452,46 @@ function hasGraphQLError(
   });
 }
 
+async function readSummarySegment<T>(
+  request: Promise<GraphQLReadResult<T>>
+): Promise<SummarySegment<T>> {
+  try {
+    return { result: await request };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function segmentErrors<T>(segment: SummarySegment<T>): GraphQLErrorInfo[] {
+  if (segment.result) return segment.result.errors;
+  return [{
+    message: segment.error instanceof Error ? segment.error.message : "数据加载失败"
+  }];
+}
+
+function isExpectedLiveUnavailable(errors: GraphQLErrorInfo[]): boolean {
+  return errors.some((error) => (
+    error.extensions?.code === "LIVE_PUBLICATION_UNAVAILABLE"
+      || String(error.message || "").includes("LIVE_PUBLICATION_UNAVAILABLE")
+  ));
+}
+
+function hasSummaryData(summary?: GameweekOverallSummary): summary is GameweekOverallSummary {
+  if (!summary) return false;
+  return Boolean(
+    Number(summary.averageScore) > 0
+      || Number(summary.highestScore) > 0
+      || Number(summary.highestScoringEntry) > 0
+      || Number(summary.transfersMade) > 0
+      || summary.mostSelectedPlayer
+      || summary.mostCaptainedPlayer
+      || summary.mostViceCaptainedPlayer
+      || summary.mostTransferInPlayer
+      || summary.topElementInfo?.player
+      || (summary.chipPlays?.length || 0) > 0
+  );
+}
+
 function attachTeamNames(summary: GameweekOverallSummary): GameweekOverallSummary {
   const record = summary as unknown as Record<string, unknown>;
   [
@@ -481,26 +516,62 @@ export async function getMiniGameweekSummary(
   forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<MiniGameweekSummaryResult> {
-  const result = await graphqlRead<MiniGameweekSummaryResponse>(
-    MINI_GAMEWEEK_SUMMARY_QUERY,
-    { eventId: event, limit: 10 },
-    {
-      authMode: "public",
-      cachePolicy: "historical",
-      cacheVariant: `event:${event}`,
-      forceRefresh,
-      trace
-    }
-  );
-  const data = result.data;
-  const summary = pickEventOverallResult(data.eventOverallResult, event);
-  const dreamTeam = (data.eventLive?.dreamTeam || []).map(mapEventPlayer);
-  const elite = (data.eventLive?.topPerformers || []).map(mapEventPlayer);
-  const transfersIn = (data.topTransfersIn || []).map(mapEventPlayer);
-  const transfersOut = (data.topTransfersOut || []).map(mapEventPlayer);
+  const readOptions = {
+    authMode: "public" as const,
+    cachePolicy: "historical" as const,
+    cacheVariant: `event:${event}`,
+    forceRefresh,
+    trace
+  };
+  const [overallSegment, dreamTeamSegment, eliteSegment, transfersSegment] = await Promise.all([
+    readSummarySegment(graphqlRead<EventOverallResultResponse>(
+      HOME_EVENT_OVERALL_RESULT,
+      {},
+      readOptions
+    )),
+    readSummarySegment(graphqlRead<EventDreamTeamResponse>(
+      EVENT_DREAM_TEAM_QUERY,
+      { eventId: event },
+      readOptions
+    )),
+    readSummarySegment(graphqlRead<EventEliteElementsResponse>(
+      EVENT_ELITE_ELEMENTS_QUERY,
+      { eventId: event, limit: 20 },
+      readOptions
+    )),
+    readSummarySegment(graphqlRead<EventOverallTransfersResponse>(
+      EVENT_OVERALL_TRANSFERS_QUERY,
+      { eventId: event, limit: 10 },
+      readOptions
+    ))
+  ]);
+
+  const firstMeta = overallSegment.result?.meta
+    || dreamTeamSegment.result?.meta
+    || eliteSegment.result?.meta
+    || transfersSegment.result?.meta;
+  if (!firstMeta) {
+    const firstError = [overallSegment, dreamTeamSegment, eliteSegment, transfersSegment]
+      .find((segment) => segment.error)?.error;
+    throw firstError instanceof Error ? firstError : new Error(`GW${event} 总结加载失败`);
+  }
+
+  const overallErrors = segmentErrors(overallSegment);
+  const dreamTeamErrors = segmentErrors(dreamTeamSegment);
+  const eliteErrors = segmentErrors(eliteSegment);
+  const transfersErrors = segmentErrors(transfersSegment);
+  const rawSummary = pickEventOverallResult(overallSegment.result?.data.eventOverallResult || null, event);
+  const summary = hasSummaryData(rawSummary) ? attachTeamNames(rawSummary) : undefined;
+  const dreamTeamRows = dreamTeamSegment.result?.data.eventLive?.dreamTeam;
+  const eliteRows = eliteSegment.result?.data.eventLive?.topPerformers;
+  const transferData = transfersSegment.result?.data;
+  const dreamTeam = (Array.isArray(dreamTeamRows) ? dreamTeamRows : []).map(mapEventPlayer);
+  const elite = (Array.isArray(eliteRows) ? eliteRows : []).map(mapEventPlayer);
+  const transfersIn = (Array.isArray(transferData?.topTransfersIn) ? transferData.topTransfersIn : []).map(mapEventPlayer);
+  const transfersOut = (Array.isArray(transferData?.topTransfersOut) ? transferData.topTransfersOut : []).map(mapEventPlayer);
 
   return {
-    summary: summary ? attachTeamNames(summary) : undefined,
+    summary,
     dreamTeam,
     elite,
     transfers: {
@@ -508,21 +579,28 @@ export async function getMiniGameweekSummary(
       transfers_out: transfersOut
     },
     errors: {
-      summary: !summary || hasGraphQLError(result.errors, "eventOverallResult")
-        ? `GW${event} 暂时还没有总结数据`
+      summary: overallSegment.error || hasGraphQLError(overallErrors, "eventOverallResult")
+        ? (overallSegment.error instanceof Error
+          ? overallSegment.error.message
+          : `GW${event} 总结暂时无法加载`)
         : "",
-      dreamTeam: hasGraphQLError(result.errors, "eventLive", "dreamTeam")
+      dreamTeam: !Array.isArray(dreamTeamRows)
+        ? (isExpectedLiveUnavailable(dreamTeamErrors) ? "" : "梦之队加载失败")
+        : dreamTeamErrors.length > 0 && !isExpectedLiveUnavailable(dreamTeamErrors)
         ? "梦之队加载失败"
         : "",
-      elite: hasGraphQLError(result.errors, "eventLive", "topPerformers")
+      elite: !Array.isArray(eliteRows)
+        ? (isExpectedLiveUnavailable(eliteErrors) ? "" : "高分球员加载失败")
+        : eliteErrors.length > 0 && !isExpectedLiveUnavailable(eliteErrors)
         ? "高分球员加载失败"
         : "",
-      transfers: hasGraphQLError(result.errors, "topTransfersIn")
-        || hasGraphQLError(result.errors, "topTransfersOut")
+      transfers: !Array.isArray(transferData?.topTransfersIn)
+        || !Array.isArray(transferData?.topTransfersOut)
+        || (transfersErrors.length > 0 && !isExpectedLiveUnavailable(transfersErrors))
         ? "转会趋势加载失败"
         : ""
     },
-    meta: result.meta
+    meta: firstMeta
   };
 }
 

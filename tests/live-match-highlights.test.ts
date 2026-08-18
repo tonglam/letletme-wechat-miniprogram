@@ -1,6 +1,6 @@
 import type { LiveMatch, LivePlayerRow } from "../miniprogram/models/live";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(`assertion failed: ${message}`);
   }
@@ -84,6 +84,7 @@ async function main(): Promise<void> {
   assert(byKind.bonus.items.some((item) => item.text === "+3" && item.name === "Saka"), "Saka +3 bonus");
   assert(byKind.bps, "BPS group is present");
   assertEqual(byKind.bps.items.length, 5, "BPS keeps the top 5");
+  assert(byKind.bps.items.every((item) => item.key), "BPS rows have stable keys");
   assertEqual(byKind.bps.items[0].name, "Saka", "highest BPS first");
   assert(byKind.defensive, "DC group is present");
   assert(byKind.defensive.items.some((item) => item.name === "Rice" && item.text === "16"), "Rice DC");

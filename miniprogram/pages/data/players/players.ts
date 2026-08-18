@@ -2,6 +2,7 @@ import { PerformancePage } from "../../../utils/performance-page";
 import {
   getPlayersForPickerPage,
   getPlayerStatsDesk,
+  PLAYER_PICKER_PAGE_LIMIT,
   type PlayerPickerFilter,
   type PlayerPickerOwnershipBand,
   type PlayerPickerPageResult,
@@ -593,7 +594,7 @@ PerformancePage({
         filter: this.browseFilter(),
         sort: this.data.sortBy,
         ownershipBand: this.browseOwnershipBand(),
-        limit: 50,
+        limit: PLAYER_PICKER_PAGE_LIMIT,
         cursor,
         forceRefresh,
         trace
