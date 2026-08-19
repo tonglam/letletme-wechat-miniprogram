@@ -92,3 +92,10 @@
 .error-action {
   margin: 28rpx auto 0;
 }
+
+.error-report {
+  margin: 18rpx auto 0;
+  color: var(--muted-ink);
+  font-size: 24rpx;
+  font-weight: 700;
+}

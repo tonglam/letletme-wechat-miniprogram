@@ -3,6 +3,7 @@
     "pages/home/index/index",
     "pages/account/index/index",
     "pages/account/link/link",
+    "pages/account/report/report",
     "pages/live/index/index",
     "pages/data/index/index",
     "pages/entry/search/search",

@@ -2,6 +2,7 @@ export const routes = {
   home: "/pages/home/index/index",
   accountIndex: "/pages/account/index/index",
   accountLink: "/pages/account/link/link",
+  accountReport: "/pages/account/report/report",
   entrySearch: "/pages/entry/search/search",
   entryProfile: "/pages/entry/profile/profile",
   liveIndex: "/pages/live/index/index",

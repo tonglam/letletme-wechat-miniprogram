@@ -1,0 +1,27 @@
+<view class="page">
+  <view id="perf-primary-content" class="section card">
+    <view wx:if="{{publicId}}" class="received">收到了，编号 {{publicId}}</view>
+    <view class="subtitle">用自己的话说就行。截图可以加上，没有图也能发给我们。</view>
+    <textarea
+      class="input report-body"
+      maxlength="500"
+      placeholder="比如「首页一直转圈」或「实时积分对不上」"
+      value="{{body}}"
+      bindinput="onBodyInput"
+    />
+    <view class="legal-note">{{body.length}}/500</view>
+    <button class="btn-secondary btn-block link-button" bindtap="onPickScreenshot">有图可以加上（不用也行）</button>
+    <view wx:if="{{screenshotName}}" class="screenshot-row">
+      <text>{{screenshotName}}</text>
+      <text class="action" bindtap="onClearScreenshot">去掉</text>
+    </view>
+    <button
+      class="btn-primary btn-block link-button"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmit"
+    >发给我们</button>
+    <view wx:if="{{error}}" class="inline-error">{{error}}</view>
+  </view>
+  <privacy-dialog />
+</view>

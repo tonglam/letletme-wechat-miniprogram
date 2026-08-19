@@ -21,6 +21,13 @@
       </view>
       <text class="action">复制链接 ›</text>
     </view>
+    <view class="me-strip" bindtap="onGoReport" hover-class="hover-dim">
+      <view class="me-strip-main">
+        <view class="me-strip-kicker">帮助</view>
+        <view class="me-strip-title">遇到问题了？</view>
+      </view>
+      <text class="action">去说明 ›</text>
+    </view>
   </view>
 
   <bottomNavBar active="me" />

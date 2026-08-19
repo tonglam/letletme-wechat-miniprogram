@@ -9,4 +9,5 @@
   <view class="error-message">{{message}}</view>
   <view class="error-description">{{description || '请稍后重试，当前页面不会丢失已有内容。'}}</view>
   <button class="error-action btn-primary" hover-class="hover-dim" bindtap="onRetry">{{retryText}}</button>
+  <view wx:if="{{reportText}}" class="error-report" hover-class="hover-dim" bindtap="onReport">{{reportText}}</view>
 </view>
