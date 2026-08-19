@@ -38,7 +38,7 @@ import {
 } from "../../../utils/page-request";
 
 type PriceMode = "daily" | "player";
-type MarketPeriod = MarketOwnershipPeriod;
+type MarketPeriod = MarketOwnershipPeriod | "LINEUP";
 type PriceResumeStage = "daily" | "player" | "history" | "search";
 
 interface FilterOption {
@@ -133,6 +133,8 @@ interface PricePageData {
   availabilityExpanded: boolean;
   availabilityLoading: boolean;
   newPlayerRows: PulseListRow[];
+  lineupSlots: LineupSlot[];
+  lineupFormation: string;
   shareCopied: boolean;
   shareSheetOpen: boolean;
   shareText: string;
@@ -172,6 +174,149 @@ interface GlanceTile {
   valueText: string;
   subText: string;
   tone: "" | "good" | "bad";
+}
+
+interface LineupSlot {
+  player: MarketPulsePlayer;
+  x: number;
+  y: number;
+}
+
+/** DEF-MID-FWD counts for each valid FPL formation. */
+const VALID_FORMATIONS: ReadonlyArray<readonly [number, number, number]> = [
+  [4, 4, 2],
+  [4, 3, 3],
+  [3, 5, 2],
+  [3, 4, 3],
+  [4, 5, 1],
+  [5, 3, 2],
+  [5, 4, 1],
+  [5, 2, 3],
+];
+
+/**
+ * Pitch positions for each formation, ordered as:
+ * [GK, DEF×N, MID×M, FWD×K] — must match the selection order.
+ * Coordinates are percentages of the pitch container (x from left, y from top).
+ * GK at bottom (85%), FWD at top (15%).
+ */
+const FORMATION_LAYOUTS: Record<string, ReadonlyArray<{ readonly x: number; readonly y: number }>> = {
+  "4-4-2": [
+    { x: 50, y: 85 },
+    { x: 15, y: 62 }, { x: 37, y: 62 }, { x: 63, y: 62 }, { x: 85, y: 62 },
+    { x: 15, y: 38 }, { x: 37, y: 38 }, { x: 63, y: 38 }, { x: 85, y: 38 },
+    { x: 35, y: 15 }, { x: 65, y: 15 },
+  ],
+  "4-3-3": [
+    { x: 50, y: 85 },
+    { x: 15, y: 62 }, { x: 37, y: 62 }, { x: 63, y: 62 }, { x: 85, y: 62 },
+    { x: 25, y: 38 }, { x: 50, y: 38 }, { x: 75, y: 38 },
+    { x: 20, y: 15 }, { x: 50, y: 15 }, { x: 80, y: 15 },
+  ],
+  "3-5-2": [
+    { x: 50, y: 85 },
+    { x: 25, y: 62 }, { x: 50, y: 62 }, { x: 75, y: 62 },
+    { x: 10, y: 38 }, { x: 30, y: 38 }, { x: 50, y: 38 }, { x: 70, y: 38 }, { x: 90, y: 38 },
+    { x: 35, y: 15 }, { x: 65, y: 15 },
+  ],
+  "3-4-3": [
+    { x: 50, y: 85 },
+    { x: 25, y: 62 }, { x: 50, y: 62 }, { x: 75, y: 62 },
+    { x: 15, y: 38 }, { x: 37, y: 38 }, { x: 63, y: 38 }, { x: 85, y: 38 },
+    { x: 20, y: 15 }, { x: 50, y: 15 }, { x: 80, y: 15 },
+  ],
+  "4-5-1": [
+    { x: 50, y: 85 },
+    { x: 15, y: 62 }, { x: 37, y: 62 }, { x: 63, y: 62 }, { x: 85, y: 62 },
+    { x: 10, y: 38 }, { x: 30, y: 38 }, { x: 50, y: 38 }, { x: 70, y: 38 }, { x: 90, y: 38 },
+    { x: 50, y: 15 },
+  ],
+  "5-3-2": [
+    { x: 50, y: 85 },
+    { x: 10, y: 62 }, { x: 30, y: 62 }, { x: 50, y: 62 }, { x: 70, y: 62 }, { x: 90, y: 62 },
+    { x: 25, y: 38 }, { x: 50, y: 38 }, { x: 75, y: 38 },
+    { x: 35, y: 15 }, { x: 65, y: 15 },
+  ],
+  "5-4-1": [
+    { x: 50, y: 85 },
+    { x: 10, y: 62 }, { x: 30, y: 62 }, { x: 50, y: 62 }, { x: 70, y: 62 }, { x: 90, y: 62 },
+    { x: 15, y: 38 }, { x: 37, y: 38 }, { x: 63, y: 38 }, { x: 85, y: 38 },
+    { x: 50, y: 15 },
+  ],
+  "5-2-3": [
+    { x: 50, y: 85 },
+    { x: 10, y: 62 }, { x: 30, y: 62 }, { x: 50, y: 62 }, { x: 70, y: 62 }, { x: 90, y: 62 },
+    { x: 35, y: 38 }, { x: 65, y: 38 },
+    { x: 20, y: 15 }, { x: 50, y: 15 }, { x: 80, y: 15 },
+  ],
+};
+
+/**
+ * TEMPORARY: frontend formation selection from mostSelected pool.
+ * This should be a backend query (e.g. `marketLineup`) that returns the
+ * optimal XI under formation constraints, with correct position assignment
+ * and proper time-scoped "new player" / ownership data.
+ * Keep this until the backend endpoint is ready.
+ */
+export function buildLineup(
+  players: ReadonlyArray<MarketPulsePlayer>,
+): { formation: string; slots: LineupSlot[] } | null {
+  if (players.length < 11) return null;
+
+  const byPos: Record<string, MarketPulsePlayer[]> = {
+    GOALKEEPER: [],
+    DEFENDER: [],
+    MIDFIELDER: [],
+    FORWARD: [],
+  };
+  for (const p of players) {
+    (byPos[p.position] ??= []).push(p);
+  }
+  for (const key of Object.keys(byPos)) {
+    byPos[key].sort((a, b) => b.selectedByPercent - a.selectedByPercent);
+  }
+  if (byPos.GOALKEEPER.length < 1) return null;
+
+  let bestKey = "";
+  let bestSum = -1;
+
+  for (const [def, mid, fwd] of VALID_FORMATIONS) {
+    if (byPos.DEFENDER.length < def) continue;
+    if (byPos.MIDFIELDER.length < mid) continue;
+    if (byPos.FORWARD.length < fwd) continue;
+
+    const sum =
+      byPos.GOALKEEPER[0].selectedByPercent +
+      byPos.DEFENDER.slice(0, def).reduce((s, p) => s + p.selectedByPercent, 0) +
+      byPos.MIDFIELDER.slice(0, mid).reduce((s, p) => s + p.selectedByPercent, 0) +
+      byPos.FORWARD.slice(0, fwd).reduce((s, p) => s + p.selectedByPercent, 0);
+
+    if (sum > bestSum) {
+      bestSum = sum;
+      bestKey = `${def}-${mid}-${fwd}`;
+    }
+  }
+
+  if (!bestKey) return null;
+
+  const [def, mid, fwd] = bestKey.split("-").map(Number);
+  const selected: MarketPulsePlayer[] = [
+    byPos.GOALKEEPER[0],
+    ...byPos.DEFENDER.slice(0, def),
+    ...byPos.MIDFIELDER.slice(0, mid),
+    ...byPos.FORWARD.slice(0, fwd),
+  ];
+  const layout = FORMATION_LAYOUTS[bestKey];
+  if (!layout) return null;
+
+  return {
+    formation: bestKey,
+    slots: selected.map((player, i) => ({
+      player,
+      x: layout[i].x,
+      y: layout[i].y,
+    })),
+  };
 }
 
 function pulsePlayerMeta(player: MarketPulsePlayer): string {
@@ -214,7 +359,7 @@ function mapOwnershipRows(
     ...moves.map((move) => Math.abs(move.changePercentagePoints)),
     0,
   );
-  return moves.slice(0, 8).map((move) => ({
+  return moves.map((move) => ({
     ...toBasicRow(
       move.player,
       signedPercentagePoints(move.changePercentagePoints),
@@ -259,7 +404,6 @@ export function buildPulseView(pulse: MarketPulse): {
     coverageText,
     pulseStale: coverage?.stale === true,
     mostSelectedRows: pulse.mostSelected
-      .slice(0, 8)
       .map((player) =>
         toBasicRow(
           player,
@@ -268,7 +412,7 @@ export function buildPulseView(pulse: MarketPulse): {
           player.selectedByPercent,
         ),
       ),
-    transferRows: pulse.transferMovers.slice(0, 8).map((move) => ({
+    transferRows: pulse.transferMovers.map((move) => ({
       ...toBasicRow(
         move.player,
         signedCompact(move.netTransfers),
@@ -278,7 +422,6 @@ export function buildPulseView(pulse: MarketPulse): {
     })),
     availabilityRows: pulse.availabilityHighlights.map(mapAvailabilityRow),
     newPlayerRows: pulse.newPlayers
-      .slice(0, 6)
       .map((item) =>
         toBasicRow(
           item.player,
@@ -495,6 +638,8 @@ Page({
     availabilityExpanded: false,
     availabilityLoading: false,
     newPlayerRows: [],
+    lineupSlots: [],
+    lineupFormation: "",
     shareCopied: false,
     shareSheetOpen: false,
     shareText: "",
@@ -765,7 +910,9 @@ Page({
       ownershipFallerRows: [],
       glanceTiles: [],
     });
-    void this.loadMarketOwnership();
+    if (period !== "LINEUP") {
+      void this.loadMarketOwnership();
+    }
   },
 
   onMarketDateSelect(
@@ -909,8 +1056,10 @@ Page({
       const pulse = await getMarketPulse(forceRefresh);
       if (!this.pageActive || revision !== this.pulseRevision) return;
       this.pulseData = pulse;
+      const pulseView = buildPulseView(pulse);
+      const lineup = buildLineup(pulse.mostSelected);
       this.setData({
-        ...buildPulseView(pulse),
+        ...pulseView,
         pulseLoaded: true,
         pulseError: "",
         availabilityUpdateCount: pulse.availabilityUpdateCount,
@@ -921,6 +1070,8 @@ Page({
                 pulse.snapshot?.snapshotDate || this.data.ownershipSelectedDate,
               )
             : this.data.ownershipDateOptions,
+        lineupSlots: lineup?.slots ?? [],
+        lineupFormation: lineup?.formation ?? "",
       });
       this.rebuildGlanceTiles();
     } catch (error) {
@@ -935,6 +1086,7 @@ Page({
   async loadMarketOwnership(forceRefresh = false): Promise<void> {
     const revision = ++this.ownershipRevision;
     const period = this.data.marketPeriod;
+    if (period === "LINEUP") return;
     const date = period === "DAILY" ? this.data.marketDate || null : null;
     this.ownershipPending = true;
     this.ownershipData = null;

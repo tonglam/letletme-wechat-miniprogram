@@ -222,6 +222,22 @@ function sortedHighlightItems(
     });
 }
 
+/** Top N by BPS, including all players tied at the cutoff position. */
+function bpsHighlightItemsWithTies(players: LivePlayerRow[], limit: number): MatchHighlightItem[] {
+  const sorted = players
+    .filter((player) => player.bps != null && Number.isFinite(Number(player.bps)))
+    .sort((left, right) => numberValue(right.bps) - numberValue(left.bps));
+  const withTies = sorted.length <= limit
+    ? sorted
+    : sorted.filter((player) => numberValue(player.bps) >= numberValue(sorted[limit - 1].bps));
+  return withTies.map((player) => {
+    const name = playerShortName(player);
+    const team = playerTeam(player);
+    const display = String(numberValue(player.bps));
+    return { key: [name, team, player.bps].join(":"), name, team, text: display, display };
+  });
+}
+
 /** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
 export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
   const status = String(match.status || match.playStatus || "");
@@ -254,17 +270,7 @@ export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
     {
       kind: "bps",
       label: HIGHLIGHT_LABELS.bps,
-      items: players
-        .filter((player) => player.bps != null && Number.isFinite(Number(player.bps)))
-        .sort((left, right) => numberValue(right.bps) - numberValue(left.bps))
-        .slice(0, 5)
-        .map((player) => ({
-          key: [playerShortName(player), playerTeam(player), player.bps].join(":"),
-          name: playerShortName(player),
-          team: playerTeam(player),
-          text: String(numberValue(player.bps)),
-          display: String(numberValue(player.bps))
-        }))
+      items: bpsHighlightItemsWithTies(players, 5)
     }
   ];
   const countKinds = new Set<MatchHighlightKind>(["goals", "assists", "saves", "yellow", "red", "cleansheet", "pensaved", "penmissed", "owngoal"]);

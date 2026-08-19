@@ -9,10 +9,10 @@
     </view>
     <view class="me-strip" bindtap="onGoAccountLink" hover-class="hover-dim">
       <view class="me-strip-main">
-        <view class="me-strip-kicker">网页版账户</view>
-        <view class="me-strip-title">关联账户</view>
+        <view class="me-strip-kicker">{{accountLinked ? (accountEmail || '网页版账户') : '网页版账户'}}</view>
+        <view class="me-strip-title">{{accountLinked ? '已关联' : '关联账户'}}</view>
       </view>
-      <text class="action">去关联 ›</text>
+      <text class="action">{{accountLinked ? '管理 ›' : '去关联 ›'}}</text>
     </view>
     <view class="me-strip" bindtap="onOpenWebsite" hover-class="hover-dim">
       <view class="me-strip-main">

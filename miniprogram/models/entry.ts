@@ -4,6 +4,8 @@ export interface EntrySearchResult {
   playerName?: string;
   entryName?: string;
   teamName?: string;
+  overallRank?: number;
+  totalPoints?: number;
 }
 
 export interface EntryInfo {

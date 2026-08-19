@@ -29,10 +29,15 @@ describe("home public read path", () => {
     assert.match(home, /getMiniHomeSupplement/);
   });
 
-  it("commits fixtures before starting secondary data", () => {
-    const fixtureCommit = home.indexOf("recordRenderCommit");
+  it("starts secondary data with fixtures, not after fixture commit", () => {
     const secondaryStart = home.indexOf("void this.loadSecondaryData");
-    assert.ok(fixtureCommit >= 0 && secondaryStart > fixtureCommit);
+    const fixtureAwait = home.indexOf("const fixtureResult = await fixtureTask");
+    const fixtureCommit = home.indexOf("fixtureDeskState(fixtureResult.fixtures)");
+    assert.ok(
+      secondaryStart >= 0 &&
+        fixtureAwait > secondaryStart &&
+        fixtureCommit > fixtureAwait,
+    );
   });
 
   it("refreshes event context only when missing or expired", () => {

@@ -1,9 +1,9 @@
 import {
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
-import { getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.service";
+import { getEntryInfo, getEntryClassicLeagues, getEntryH2hLeagues } from "../../../services/entry.service";
 import type { EntryLeague } from "../../../models/entry";
-import { getApiSessionToken } from "../../../services/auth.service";
+import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../services/auth.service";
 import {
   getMiniHomeMarket,
   getMiniHomeSupplement
@@ -39,6 +39,7 @@ interface HomeData {
   error: string;
   entryError: string;
   priceError: string;
+  marketUnavailable: boolean;
   gameweekStatsError: string;
   supplementLoading: boolean;
   entry: EntryInfo;
@@ -65,6 +66,8 @@ interface HomeData {
   countdown: CountdownParts;
   noticeText: string;
   noticeClosed: boolean;
+  accountLinked: boolean;
+  accountLinkReady: boolean;
 }
 
 export interface HomeFixtureMatch {
@@ -112,6 +115,13 @@ export function fixtureStaleMessage(storedAt?: number | null): string {
   return `当前为上次成功赛程 · ${hours}:${minutes}`;
 }
 
+/** Yellow desk banners only when prior content remains on screen. */
+export function retainedDeskMessage(base: string, retained: boolean): string {
+  const message = base.trim();
+  if (!message) return "";
+  return retained ? `${message}，已保留上次成功数据` : message;
+}
+
 Page({
   data: {
     loading: false,
@@ -123,6 +133,7 @@ Page({
     error: "",
     entryError: "",
     priceError: "",
+    marketUnavailable: false,
     gameweekStatsError: "",
     supplementLoading: false,
     entry: {},
@@ -148,7 +159,9 @@ Page({
     utcDeadline: "",
     countdown: formatCountdown(0),
     noticeText: "",
-    noticeClosed: false
+    noticeClosed: false,
+    accountLinked: false,
+    accountLinkReady: false
   } as HomeData,
 
   countdownTimer: undefined as number | undefined,
@@ -211,6 +224,7 @@ Page({
         || tracker !== this._perfTracker
       ) return;
       tracker.mark("contextReadyAt");
+      await this.syncAccountLink();
       this.syncAppState();
       if (shouldReloadHome(
         this._lastLoadAt,
@@ -327,6 +341,8 @@ Page({
       : originatingTracker;
     const requestId = ++this._loadRequestId;
     const app = getApp<IAppOption>();
+    await this.syncAccountLink();
+    if (!this._pageVisible || requestId !== this._loadRequestId) return false;
     if (!app.globalData.gw) {
       const context = await ensureAppContext({ reason: "page-load" });
       if (!this._pageVisible || requestId !== this._loadRequestId) return false;
@@ -391,6 +407,10 @@ Page({
           fixtureStaleMessage: hadFixtureRows ? "刷新较慢，当前继续显示上次成功赛程" : ""
         });
       });
+      // Entry/leagues + market/supplement start with fixtures — do not wait for
+      // the fixture response. Personal desk is above the fold; public desks are
+      // independent and must not gate each other.
+      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);
       const fixtureResult = await fixtureTask;
       if (!this._pageVisible || requestId !== this._loadRequestId) return;
       const fixtureResponseAt = Date.now();
@@ -442,7 +462,6 @@ Page({
       if (!this._pageVisible || requestId !== this._loadRequestId) return;
 
       this._lastLoadAt = Date.now();
-      void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);
       return !fixtureResult.failed && !fixtureResult.stale;
     } catch (error) {
       if (requestId === this._loadRequestId) {
@@ -564,6 +583,7 @@ Page({
     this.setData({
       supplementLoading: true,
       priceError: "",
+      marketUnavailable: false,
       gameweekStatsError: "",
       entryError: ""
     });
@@ -578,16 +598,37 @@ Page({
         const entryTrace: PageRequestTrace | null = primaryTrace
           ? { ...primaryTrace, callerSurface: "home-entry" }
           : null;
-        const [entry, leagues] = await Promise.all([
-          getEntryInfo(entryId, forceRefresh, entryTrace),
-          getEntryLeagueInfo(entryId, forceRefresh, entryTrace || undefined).catch(() => [] as EntryLeague[])
-        ]);
-        if (isActiveSecondary()) this.setData({ entry, leagues, entryError: "" });
+        const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
+        if (!isActiveSecondary()) return;
+        this.setData({ entry, entryError: "" });
       } catch (error) {
         if (isActiveSecondary()) {
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
         }
       }
+      // Classic and h2h leagues load independently — each panel renders
+      // as soon as its data arrives, without waiting for the other.
+      const classicTrace: PageRequestTrace | null = primaryTrace
+        ? { ...primaryTrace, callerSurface: "home-classic-leagues" }
+        : null;
+      const h2hTrace: PageRequestTrace | null = primaryTrace
+        ? { ...primaryTrace, callerSurface: "home-h2h-leagues" }
+        : null;
+      let classicLeagues: EntryLeague[] = [];
+      let h2hLeagues: EntryLeague[] = [];
+      const classicTask = getEntryClassicLeagues(entryId, forceRefresh, classicTrace || undefined)
+        .then((result) => {
+          classicLeagues = result;
+          if (isActiveSecondary()) this.setData({ leagues: [...classicLeagues, ...h2hLeagues] });
+        })
+        .catch(() => {});
+      const h2hTask = getEntryH2hLeagues(entryId, forceRefresh, h2hTrace || undefined)
+        .then((result) => {
+          h2hLeagues = result;
+          if (isActiveSecondary()) this.setData({ leagues: [...classicLeagues, ...h2hLeagues] });
+        })
+        .catch(() => {});
+      await Promise.allSettled([classicTask, h2hTask]);
     })();
     const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
@@ -617,14 +658,14 @@ Page({
     if (!isActiveSecondary()) return;
     const market = marketResult.value;
     const hasPreviousMarket =
-      this.data.marketMode !== "empty" ||
       this.data.marketLeadRows.length > 0 ||
       this.data.marketRisers.length > 0 ||
       this.data.marketFallers.length > 0 ||
       this.data.availabilityRows.length > 0;
     const marketPatch = market
       ? {
-          priceError: market.error,
+          priceError: "",
+          marketUnavailable: false,
           marketMode: market.mode,
           marketCoverage: market.coverage,
           marketLeadTitle: market.leadTitle,
@@ -633,23 +674,45 @@ Page({
           marketFallers: market.fallers,
           availabilityRows: market.availability,
         }
-      : {
-          priceError: marketResult.error ||
-            (hasPreviousMarket ? "市场动态刷新失败" : "市场动态暂不可用"),
-        };
+      : hasPreviousMarket
+        ? {
+            priceError: retainedDeskMessage(
+              marketResult.error || "市场动态刷新失败",
+              true
+            ),
+            marketUnavailable: false,
+          }
+        : {
+            // No last-good desk: stay quiet — soft empty + retry, no alarm bar.
+            priceError: "",
+            marketUnavailable: true,
+            marketMode: "empty" as MiniHomeMarketMode,
+            marketLeadRows: [],
+            marketRisers: [],
+            marketFallers: [],
+            availabilityRows: [],
+          };
     const nextNotice = this.data.noticeClosed || supplement.errors.notice
       ? this.data.noticeText
       : (supplement.notice || "");
+    const hadGwStats = this.data.gameweekStats.length > 0;
+    const gwStats = supplement.summary
+      ? mapHomeGameweekStats(supplement.summary)
+      : null;
     this.setData({
       ...marketPatch,
-      gameweekStatsError: supplement.errors.summary,
+      // Alarm only when prior GW stats remain; otherwise omit the empty error card.
+      gameweekStatsError:
+        gwStats
+          ? ""
+          : hadGwStats
+            ? retainedDeskMessage(supplement.errors.summary || "GW 数据刷新失败", true)
+            : "",
       ...(this.data.noticeClosed || supplement.errors.notice
         ? {}
         : { noticeText: nextNotice }),
       supplementLoading: false,
-      ...(supplement.errors.summary && !supplement.summary
-        ? {}
-        : { gameweekStats: mapHomeGameweekStats(supplement.summary) })
+      ...(gwStats ? { gameweekStats: gwStats } : {})
     });
     if (!isActiveSecondary()) return;
     this._secondaryPending = false;
@@ -690,6 +753,14 @@ Page({
       utcDeadline: app.globalData.utcDeadline,
       countdown: formatCountdown(getDeadlineDiffMs(app.globalData.utcDeadline)),
       ...extra
+    });
+  },
+
+  async syncAccountLink() {
+    const snapshot = await awaitLinkedAccountSnapshot();
+    this.setData({
+      accountLinkReady: true,
+      accountLinked: snapshot.linked
     });
   },
 
@@ -767,6 +838,10 @@ Page({
 
   onOpenEntry() {
     navigateTo(routes.myFplTeam);
+  },
+
+  onOpenLeagues() {
+    navigateTo(routes.myFplLeagues);
   },
 
   onOpenPriceChanges() {

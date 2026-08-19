@@ -9,11 +9,11 @@
     <view class="bind-strip" bindtap="onChangeEntry" hover-class="hover-dim">
       <view>
         <view class="bind-kicker">选择我的球队</view>
-        <view class="bind-title">输入 Entry ID</view>
+        <view class="bind-title">输入 ID 或名字</view>
       </view>
       <text class="action bind-action">去选择</text>
     </view>
-    <view class="bind-strip bind-strip-account" bindtap="onGoAccountLink" hover-class="hover-dim">
+    <view wx:if="{{accountLinkReady && !accountLinked}}" class="bind-strip bind-strip-account" bindtap="onGoAccountLink" hover-class="hover-dim">
       <view>
         <view class="bind-kicker">已有网页账户</view>
         <view class="bind-title">同步已验证球队</view>
@@ -62,7 +62,7 @@
         <app-error-state message="{{entryError}}" bind:retry="onRetry" />
         <view class="action section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
       </block>
-      <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" />
+      <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" bind:openleagues="onOpenLeagues" />
     </view>
 
     <view class="section card transfer-desk">
@@ -73,8 +73,8 @@
         </view>
         <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
       </view>
-      <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}，已保留上次成功数据" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-      <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0}}" class="section-status">转会台加载中</view>
+      <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0 && !marketUnavailable}}" class="section-status">转会台加载中</view>
       <block wx:else>
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
           <view class="transfer-col">
@@ -119,6 +119,10 @@
             <text class="transfer-delta {{item.rising ? 'transfer-up' : 'transfer-down'}}">{{item.changeText}}</text>
           </view>
         </view>
+        <view wx:elif="{{marketUnavailable}}" class="transfer-empty">
+          市场动态暂时无法加载
+          <text class="action transfer-empty-retry" bindtap="onRetry" hover-class="hover-dim">重试</text>
+        </view>
         <view wx:elif="{{marketMode === 'empty' && availabilityRows.length === 0}}" class="transfer-empty">今日无可计算的每日持有率变化</view>
 
         <view wx:if="{{availabilityRows.length > 0}}" class="transfer-watch">
@@ -135,11 +139,11 @@
       </block>
     </view>
 
-    <view wx:if="{{supplementLoading || gameweekStatsError || gameweekStats.length > 0}}" class="section card gw-stats-card">
+    <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
       <view class="gw-stats-head">
         <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
       </view>
-      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}，已保留上次成功数据" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
         <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">

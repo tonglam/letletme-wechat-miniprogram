@@ -1,6 +1,7 @@
 <view class="page">
   <view id="perf-primary-content" class="section card">
     <view wx:if="{{publicId}}" class="received">收到了，编号 {{publicId}}</view>
+    <view wx:if="{{prefilledHint}}" class="prefilled-hint">{{prefilledHint}}</view>
     <view class="subtitle">用自己的话说就行。截图可以加上，没有图也能发给我们。</view>
     <textarea
       class="input report-body"

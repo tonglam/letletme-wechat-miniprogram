@@ -49,6 +49,20 @@ const GET_ENTRY_LEAGUES = `
   }
 `;
 
+const GET_ENTRY_LEAGUES_BY_TYPE = `
+  query EntryLeaguesByType($entryId: Int!, $type: LeagueType!) {
+    entryLeagues(entryId: $entryId, type: $type) {
+      id
+      name
+      type
+      officialKind
+      shortName
+      startedEvent
+      entryRank
+    }
+  }
+`;
+
 const GET_ENTRY_HISTORY = `
   query EntryHistory($entryId: Int!) {
     entryHistory(entryId: $entryId) {
@@ -149,14 +163,55 @@ function mapGraphQLEntry(entry: GetEntryResponse["entry"]): EntryInfo | undefine
   };
 }
 
-export async function searchEntries(keyword: string): Promise<EntrySearchResult[]> {
-  const entryId = Number(keyword.trim());
-  if (!Number.isInteger(entryId) || entryId <= 0) {
+const SEARCH_ENTRIES = `
+  query SearchEntries($query: String!, $limit: Int) {
+    searchEntries(query: $query, limit: $limit) {
+      id
+      entryName
+      playerName
+      overallPoints
+      overallRank
+    }
+  }
+`;
+
+interface SearchEntriesResponse {
+  searchEntries: Array<{
+    id: number;
+    entryName: string;
+    playerName: string;
+    overallPoints?: number | null;
+    overallRank?: number | null;
+  }>;
+}
+
+export async function searchEntries(
+  keyword: string,
+  limit = 10,
+  trace?: PageRequestTrace | null
+): Promise<EntrySearchResult[]> {
+  const query = keyword.trim();
+  if (query.length < 2) {
     return [];
   }
 
-  const entry = await getEntryInfo(entryId);
-  return entry ? [entry] : [];
+  const data = await graphqlRequest<SearchEntriesResponse>(
+    SEARCH_ENTRIES,
+    { query, limit },
+    {
+      cachePolicy: "reporting",
+      trace
+    }
+  );
+  return (data.searchEntries || []).map((entry) => ({
+    entry: entry.id,
+    entryId: entry.id,
+    entryName: entry.entryName,
+    teamName: entry.entryName,
+    playerName: entry.playerName,
+    overallRank: entry.overallRank ?? undefined,
+    totalPoints: entry.overallPoints ?? undefined
+  }));
 }
 
 export async function getEntryInfo(
@@ -184,6 +239,49 @@ export async function getEntryLeagueInfo(
   const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES, { entryId: entry }, {
     cachePolicy: "reporting",
     forceRefresh,
+    trace
+  });
+  return (data.entryLeagues || []).map((league) => ({
+    id: league.id,
+    name: league.name,
+    rank: league.entryRank ?? undefined,
+    officialKind:
+      league.officialKind === "SYSTEM" ||
+      league.officialKind === "INVITATIONAL" ||
+      league.officialKind === "PUBLIC"
+        ? league.officialKind
+        : undefined,
+    type: league.type ?? undefined,
+    shortName: league.shortName ?? undefined
+  }));
+}
+
+export async function getEntryClassicLeagues(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryLeague[]> {
+  return getEntryLeaguesByType(entry, "CLASSIC", forceRefresh, trace);
+}
+
+export async function getEntryH2hLeagues(
+  entry: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<EntryLeague[]> {
+  return getEntryLeaguesByType(entry, "H2H", forceRefresh, trace);
+}
+
+async function getEntryLeaguesByType(
+  entry: number,
+  type: "CLASSIC" | "H2H",
+  forceRefresh: boolean,
+  trace?: PageRequestTrace
+): Promise<EntryLeague[]> {
+  const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES_BY_TYPE, { entryId: entry, type }, {
+    cachePolicy: "reporting",
+    forceRefresh,
+    cacheVariant: type.toLowerCase(),
     trace
   });
   return (data.entryLeagues || []).map((league) => ({

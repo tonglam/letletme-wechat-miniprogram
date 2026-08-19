@@ -62,15 +62,15 @@ test("Home entry errors retain a team-switch escape", () => {
   );
 });
 
-test("Home commits Fixtures before starting secondary network reads", () => {
+test("Home starts secondary network reads with Fixtures, not after commit", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
+  const secondaryStart = home.indexOf("void this.loadSecondaryData");
   const fixtureResult = home.indexOf("const fixtureResult = await fixtureTask");
   const fixtureCommit = home.indexOf("await new Promise<void>", fixtureResult);
-  const secondaryStart = home.indexOf("void this.loadSecondaryData", fixtureCommit);
 
-  assert.ok(fixtureResult >= 0);
+  assert.ok(secondaryStart >= 0);
+  assert.ok(fixtureResult > secondaryStart);
   assert.ok(fixtureCommit > fixtureResult);
-  assert.ok(secondaryStart > fixtureCommit);
   assert.match(
     home,
     /const contextMissing = !app\.globalData\.season[\s\S]*!app\.globalData\.gw[\s\S]*!app\.globalData\.nextGw[\s\S]*const refreshContext = contextMissing \|\| deadlineExpired[\s\S]*if \(refreshContext\) \{[\s\S]*forceRefresh: true,[\s\S]*reason: "pull-refresh"[\s\S]*await this\.loadPage\(true, tracker\)/
@@ -119,6 +119,11 @@ test("entry lookup results are guarded by request generation and input identity"
   assert.match(source("miniprogram/services/entry-sync.service.ts"), /\/entry-sync/);
   assert.match(search, /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/);
   assert.match(search, /if \(requestId === this\.lookupRequestId\)/);
+  assert.match(search, /searchEntries\(keyword, 10\)/);
+  assert.match(search, /parseExactEntryId/);
+  assert.match(source("miniprogram/pages/entry/search/search.wxml"), /onSelectSearchHit/);
+  assert.match(source("miniprogram/pages/entry/search/search.wxml"), /如何用名字搜索/);
+  assert.match(source("miniprogram/pages/entry/search/search.wxml"), /网页绑过、用 ID 查过、或进过 LetLetMe 赛事/);
 });
 
 test("tournament status reports only rows actually retained", () => {
@@ -200,9 +205,9 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.doesNotMatch(common, /query EventFixtures/);
   assert.match(home, /readCoreEventFixtureSchedule/);
   assert.ok(
-    home.indexOf("const fixtureResult = await fixtureTask") <
-      home.indexOf("void this.loadSecondaryData"),
-    "the fixture response releases the first screen before auxiliary Home data settles"
+    home.indexOf("void this.loadSecondaryData") <
+      home.indexOf("const fixtureResult = await fixtureTask"),
+    "entry/market/supplement start with fixtures so the personal desk is not gated"
   );
   assert.match(service, /fragment FixtureWindowFields on Fixture/);
   assert.match(service, /if \(!season\) throw new Error/);

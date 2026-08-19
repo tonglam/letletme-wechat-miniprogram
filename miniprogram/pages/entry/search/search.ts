@@ -1,7 +1,7 @@
 import { PerformancePage } from "../../../utils/performance-page";
-import { getEntryInfo } from "../../../services/entry.service";
+import { getEntryInfo, searchEntries } from "../../../services/entry.service";
 import { enqueueMiniProgramEntrySync } from "../../../services/entry-sync.service";
-import type { EntryInfo } from "../../../models/entry";
+import type { EntryInfo, EntrySearchResult } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { clearEntryId, clearEntryScopedStorage, setEntryId } from "../../../utils/storage";
@@ -11,6 +11,23 @@ import { commitEntryBinding } from "../../../services/app-context.service";
 function extractEntryId(raw: string): string {
   const urlMatch = raw.match(/\/entry\/(\d+)/);
   return urlMatch ? urlMatch[1] : raw.trim();
+}
+
+function parseExactEntryId(raw: string): number | null {
+  const extracted = extractEntryId(raw);
+  if (!/^\d+$/.test(extracted)) {
+    return null;
+  }
+  const entryId = Number(extracted);
+  return Number.isInteger(entryId) && entryId > 0 ? entryId : null;
+}
+
+interface EntryNameHit {
+  entryId: number;
+  entryName: string;
+  playerName: string;
+  totalPoints: string;
+  overallRank: string;
 }
 
 interface EntrySearchData {
@@ -27,6 +44,7 @@ interface EntrySearchData {
   previewTotalPoints: string;
   previewOverallRank: string;
   isCurrentEntry: boolean;
+  searchHits: EntryNameHit[];
 }
 
 PerformancePage({
@@ -43,7 +61,8 @@ PerformancePage({
     previewSubtitle: "",
     previewTotalPoints: "-",
     previewOverallRank: "-",
-    isCurrentEntry: false
+    isCurrentEntry: false,
+    searchHits: []
   } as EntrySearchData,
 
   lookupRequestId: 0,
@@ -58,11 +77,13 @@ PerformancePage({
   },
 
   onManualEntryInput(event: WechatMiniprogram.Input) {
+    this.applyManualEntry(String(event.detail.value || ""));
+  },
+
+  applyManualEntry(raw: string) {
     this.lookupRequestId += 1;
-    const raw = String(event.detail.value || "");
-    const extracted = extractEntryId(raw);
     this.setData({
-      manualEntryId: extracted,
+      manualEntryId: extractEntryId(raw),
       loading: false,
       buttonText: "查找球队",
       error: "",
@@ -72,7 +93,8 @@ PerformancePage({
       previewSubtitle: "",
       previewTotalPoints: "-",
       previewOverallRank: "-",
-      isCurrentEntry: false
+      isCurrentEntry: false,
+      searchHits: []
     });
   },
 
@@ -81,11 +103,20 @@ PerformancePage({
   },
 
   async onLookupEntry() {
-    const entryId = Number(extractEntryId(this.data.manualEntryId));
-    if (!Number.isInteger(entryId) || entryId <= 0) {
-      this.setData({ error: "请输入有效的参赛 ID" });
+    const keyword = extractEntryId(this.data.manualEntryId);
+    const entryId = parseExactEntryId(keyword);
+    if (entryId !== null) {
+      await this.lookupByEntryId(entryId);
       return;
     }
+    if (keyword.length < 2) {
+      this.setData({ error: "请输入参赛 ID，或至少 2 个字符的球队名 / 经理名" });
+      return;
+    }
+    await this.lookupByName(keyword);
+  },
+
+  async lookupByEntryId(entryId: number) {
     const requestId = ++this.lookupRequestId;
 
     this.setData({
@@ -98,7 +129,8 @@ PerformancePage({
       previewSubtitle: "",
       previewTotalPoints: "-",
       previewOverallRank: "-",
-      isCurrentEntry: false
+      isCurrentEntry: false,
+      searchHits: []
     });
     try {
       const entry = await getEntryInfo(entryId, true);
@@ -120,6 +152,89 @@ PerformancePage({
         this.setData({ loading: false, buttonText: "查找球队" });
       }
     }
+  },
+
+  async lookupByName(keyword: string) {
+    const requestId = ++this.lookupRequestId;
+    this.setData({
+      loading: true,
+      buttonText: "查找中...",
+      error: "",
+      hasPreview: false,
+      previewEntryId: 0,
+      previewTitle: "",
+      previewSubtitle: "",
+      previewTotalPoints: "-",
+      previewOverallRank: "-",
+      isCurrentEntry: false,
+      searchHits: []
+    });
+    try {
+      const hits = await searchEntries(keyword, 10);
+      if (requestId !== this.lookupRequestId || extractEntryId(this.data.manualEntryId) !== keyword) {
+        return;
+      }
+      if (hits.length === 0) {
+        this.setData({ error: "没有找到匹配的球队，可改用参赛 ID 再试" });
+        return;
+      }
+      const [only] = hits;
+      if (hits.length === 1 && only) {
+        const hitEntryId = only.entryId || only.entry || 0;
+        if (hitEntryId > 0) {
+          enqueueMiniProgramEntrySync(hitEntryId);
+        }
+        this.setData({
+          ...mapPreviewData(toEntryInfo(only), hitEntryId),
+          searchHits: []
+        });
+        wx.showToast({ title: "已找到球队", icon: "success" });
+        return;
+      }
+      this.setData({
+        searchHits: hits.map(toNameHit),
+        error: ""
+      });
+    } catch (error) {
+      if (requestId !== this.lookupRequestId) {
+        return;
+      }
+      this.setData({
+        error: error instanceof Error ? error.message : "查找球队失败，请稍后再试"
+      });
+    } finally {
+      if (requestId === this.lookupRequestId) {
+        this.setData({ loading: false, buttonText: "查找球队" });
+      }
+    }
+  },
+
+  onSelectSearchHit(event: WechatMiniprogram.TouchEvent) {
+    const entryId = Number(event.currentTarget.dataset.entryId);
+    if (!Number.isInteger(entryId) || entryId <= 0) {
+      return;
+    }
+    const hit = this.data.searchHits.find((item) => item.entryId === entryId);
+    this.lookupRequestId += 1;
+    enqueueMiniProgramEntrySync(entryId);
+    this.setData({
+      manualEntryId: String(entryId),
+      error: "",
+      ...(hit
+        ? mapPreviewData(
+            {
+              entryId: hit.entryId,
+              entry: hit.entryId,
+              entryName: hit.entryName,
+              teamName: hit.entryName,
+              playerName: hit.playerName,
+              totalPoints: hit.totalPoints === "-" ? undefined : Number(hit.totalPoints),
+              overallRank: hit.overallRank === "-" ? undefined : Number(hit.overallRank)
+            },
+            entryId
+          )
+        : {})
+    });
   },
 
   onSetMyEntry() {
@@ -160,7 +275,8 @@ PerformancePage({
           hasEntry: false,
           currentEntryId: 0,
           hasPreview: false,
-          isCurrentEntry: false
+          isCurrentEntry: false,
+          searchHits: []
         });
         wx.showToast({ title: "已解除绑定", icon: "success" });
       }
@@ -185,5 +301,28 @@ function mapPreviewData(entry: EntryInfo, fallbackEntryId: number): Partial<Entr
     previewTotalPoints: entry.totalPoints === undefined ? "-" : String(entry.totalPoints),
     previewOverallRank: entry.overallRank === undefined ? "-" : String(entry.overallRank),
     isCurrentEntry: getApp<IAppOption>().globalData.entryId === entryId
+  };
+}
+
+function toEntryInfo(hit: EntrySearchResult): EntryInfo {
+  return {
+    entry: hit.entryId || hit.entry,
+    entryId: hit.entryId || hit.entry,
+    entryName: hit.entryName,
+    teamName: hit.teamName || hit.entryName,
+    playerName: hit.playerName,
+    overallRank: hit.overallRank,
+    totalPoints: hit.totalPoints
+  };
+}
+
+function toNameHit(hit: EntrySearchResult): EntryNameHit {
+  const entryId = hit.entryId || hit.entry || 0;
+  return {
+    entryId,
+    entryName: hit.entryName || hit.teamName || `球队 #${entryId}`,
+    playerName: hit.playerName || "",
+    totalPoints: hit.totalPoints === undefined ? "-" : String(hit.totalPoints),
+    overallRank: hit.overallRank === undefined ? "-" : String(hit.overallRank)
   };
 }

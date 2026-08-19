@@ -3,6 +3,7 @@ import { isPrivacyScopeUndeclared } from "../../../utils/privacy";
 import {
   BUG_REPORT_BODY_MAX,
   BUG_REPORT_BODY_MIN,
+  consumePendingBugReportDraft,
   screenshotWithinLimit,
   submitMiniProgramBugReport
 } from "../../../services/bug-report.service";
@@ -15,17 +16,32 @@ PerformancePage({
     screenshotName: "",
     submitting: false,
     publicId: "",
-    error: ""
+    error: "",
+    prefilledHint: ""
   },
 
   screenshotBase64: null as string | null,
   screenshotMime: null as string | null,
+  pendingDiagnostic: "" as string,
+
+  onLoad() {
+    const draft = consumePendingBugReportDraft();
+    if (!draft?.body) return;
+    this.pendingDiagnostic = draft.diagnostic || "";
+    this.setData({
+      body: draft.body.slice(0, BUG_REPORT_BODY_MAX),
+      prefilledHint: "已带上刚才的情况说明，改完再发就行",
+      error: "",
+      publicId: ""
+    });
+  },
 
   onBodyInput(event: WechatMiniprogram.Input) {
     this.setData({
       body: event.detail.value.slice(0, BUG_REPORT_BODY_MAX),
       error: "",
-      publicId: ""
+      publicId: "",
+      prefilledHint: ""
     });
   },
 
@@ -100,14 +116,17 @@ PerformancePage({
       const publicId = await submitMiniProgramBugReport({
         body: this.data.body,
         screenshotBase64: this.screenshotBase64,
-        screenshotMime: this.screenshotMime
+        screenshotMime: this.screenshotMime,
+        diagnostic: this.pendingDiagnostic || null
       });
       this.screenshotBase64 = null;
       this.screenshotMime = null;
+      this.pendingDiagnostic = "";
       this.setData({
         publicId,
         screenshotName: "",
-        body: ""
+        body: "",
+        prefilledHint: ""
       });
     } catch (error) {
       this.setData({

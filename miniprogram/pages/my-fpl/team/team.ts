@@ -38,6 +38,7 @@ import type { MiniChartPoint, MiniChartType } from "../../../utils/mini-chart";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import { currentFollowEntryId } from "../../../utils/follow";
+import { canReadEventReporting } from "../../../utils/event-context";
 import {
   ensureAppContext,
   getAppContextSnapshot,
@@ -870,6 +871,7 @@ Page({
       }
       this.perfTracker?.mark("primaryRequestStartAt");
       const eventResult = selectedEvent > 0
+        && canReadEventReporting(selectedEvent, getApp<IAppOption>().globalData.currentGw)
         ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh, trace)
         : undefined;
       if (!this.pageVisible || requestId !== this.loadRequestId) return;

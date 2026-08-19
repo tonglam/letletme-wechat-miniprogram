@@ -207,6 +207,10 @@
   text-align: center;
 }
 
+.transfer-empty-retry {
+  margin-left: 12rpx;
+}
+
 .transfer-empty-inline {
   padding: 20rpx 12rpx;
 }

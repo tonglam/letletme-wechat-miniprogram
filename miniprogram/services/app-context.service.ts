@@ -1,6 +1,7 @@
 import { readCurrentEventAndDeadline } from "./common.service";
 import type { PageRequestTrace } from "./graphql.service";
 import { formatDeadline } from "../utils/date";
+import { positiveEventId } from "../utils/event-context";
 import {
   commitEntryBindingState,
   currentEntryBinding,
@@ -58,8 +59,8 @@ async function loadContext(
   trace?: PageRequestTrace | null
 ): Promise<AppContextSnapshot> {
   const read = await readCurrentEventAndDeadline({ forceRefresh, trace });
-  const currentEvent = read.data.currentEvent || null;
-  const nextEvent = read.data.nextEvent || null;
+  const currentEvent = positiveEventId(read.data.currentEvent);
+  const nextEvent = positiveEventId(read.data.nextEvent);
   const deadlineTime = read.data.utcDeadline ? new Date(read.data.utcDeadline).getTime() : NaN;
   const nextDeadlineAt = Number.isFinite(deadlineTime) ? deadlineTime : null;
   const storedAt = read.meta.storedAt || Date.now();

@@ -13,6 +13,7 @@ import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import { canReadEventReporting } from "../../../utils/event-context";
 
 type TournamentSummaryTab = "overview" | "rankings" | "metrics";
 type TournamentEmptyState = "" | "entry" | "tournaments";
@@ -60,6 +61,9 @@ interface SummaryData {
   tournamentStats: MetricCard[];
   entryMetricStats: MetricCard[];
   rankingRows: RankingRow[];
+  allRankingRows: RankingRow[];
+  displayedRankingCount: number;
+  hasMoreRankings: boolean;
   hasOverview: boolean;
   hasRankings: boolean;
   hasMetrics: boolean;
@@ -90,6 +94,9 @@ PerformancePage({
     tournamentStats: [],
     entryMetricStats: [],
     rankingRows: [],
+    allRankingRows: [],
+    displayedRankingCount: 30,
+    hasMoreRankings: false,
     hasOverview: false,
     hasRankings: false,
     hasMetrics: false
@@ -327,6 +334,19 @@ PerformancePage({
     this.activeLoadForceRefresh = forceRefresh;
     this.setData({ loading: true, error: "" });
     try {
+      if (!canReadEventReporting(requestedEvent, getAppContextSnapshot()?.currentEvent)) {
+        if (!isActiveRequest()) return;
+        this.setData({
+          ...mapTournamentSummaryData(
+            tournament,
+            [],
+            {} as TournamentEntryRankingSummary,
+            requestedEntryId,
+            requestedEvent
+          )
+        });
+        return;
+      }
       const payload = await getTournamentSummary(
         tournament.id,
         requestedEvent,
@@ -394,6 +414,16 @@ PerformancePage({
     });
   },
 
+  loadMoreRankings() {
+    const { allRankingRows, displayedRankingCount } = this.data;
+    const nextCount = displayedRankingCount + 30;
+    this.setData({
+      rankingRows: allRankingRows.slice(0, nextCount),
+      displayedRankingCount: nextCount,
+      hasMoreRankings: allRankingRows.length > nextCount
+    });
+  },
+
   onRetry() {
     this.loadTournaments(true);
   },
@@ -413,14 +443,17 @@ function mapTournamentSummaryData(
   results: TournamentEventResult[],
   summary: TournamentEntryRankingSummary,
   entryId: number,
-  event: number
+  event: number,
+  displayedRankingCount: number = 30
 ): Partial<SummaryData> {
   const currentRow = results.find((row) => row.entryId === entryId);
-  const rankingRows = results.slice(0, 30).map((row, index) => mapRankingRow(row, index, entryId));
-  const currentRankVisible = rankingRows.some((row) => row.isMine);
+  const allRankingRows = results.map((row, index) => mapRankingRow(row, index, entryId));
+  const currentRankVisible = allRankingRows.some((row) => row.isMine);
   if (currentRow && !currentRankVisible) {
-    rankingRows.push(mapRankingRow(currentRow, rankingRows.length, entryId));
+    allRankingRows.push(mapRankingRow(currentRow, allRankingRows.length, entryId));
   }
+  const rankingRows = allRankingRows.slice(0, displayedRankingCount);
+  const hasMoreRankings = allRankingRows.length > displayedRankingCount;
 
   const overviewStats = [
     { label: "本轮得分", value: formatPoints(currentRow?.eventPoints) },
@@ -454,8 +487,10 @@ function mapTournamentSummaryData(
     tournamentStats,
     entryMetricStats,
     rankingRows,
+    allRankingRows,
+    hasMoreRankings,
     hasOverview: overviewStats.length > 0 || tournamentStats.length > 0,
-    hasRankings: rankingRows.length > 0,
+    hasRankings: allRankingRows.length > 0,
     hasMetrics: entryMetricStats.length > 0
   };
 }

@@ -1,3 +1,7 @@
+import {
+  userFacingErrorMessage
+} from "../../utils/request-error";
+
 interface DataStatusHost {
   transientTimer?: ReturnType<typeof setTimeout>;
 }
@@ -40,17 +44,30 @@ Component({
   },
 
   data: {
-    visible: true
+    visible: true,
+    displayMessage: "数据暂时不可用"
   },
 
   observers: {
     "message,status,transient,transientDuration": function () {
+      this.setData({
+        displayMessage: userFacingErrorMessage(
+          this.properties.message,
+          "数据暂时不可用，请稍后重试"
+        )
+      });
       this.scheduleTransientHide();
     }
   },
 
   lifetimes: {
     attached() {
+      this.setData({
+        displayMessage: userFacingErrorMessage(
+          this.properties.message,
+          "数据暂时不可用，请稍后重试"
+        )
+      });
       this.scheduleTransientHide();
     },
     detached() {
