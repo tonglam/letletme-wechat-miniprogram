@@ -1,5 +1,5 @@
 import {
-  SQUAD_PITCH_BG,
+  squadPitchBackgroundSrc,
   buildBenchViews,
   buildPitchRows,
   formatSquadPitchHeaderView,
@@ -62,7 +62,7 @@ Component({
   },
 
   data: {
-    pitchBg: SQUAD_PITCH_BG,
+    pitchBg: squadPitchBackgroundSrc(),
     hasBench: false,
     benchTitle: "替补",
     rows: [],
@@ -113,6 +113,7 @@ Component({
       const hasBench = benchPlayers.length > 0;
       const size = shareCanvasSize(hasBench);
       this.setData({
+        pitchBg: squadPitchBackgroundSrc(),
         hasBench,
         benchTitle: locale === "en" ? "Substitutes" : "替补",
         rows: buildPitchRows(players, hasBench),

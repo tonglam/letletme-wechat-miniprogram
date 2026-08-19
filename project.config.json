@@ -48,7 +48,20 @@
   },
   "libVersion": "trial",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "assets/squad-pitch/kits"
+      },
+      {
+        "type": "file",
+        "value": "assets/squad-pitch/pitch-background.jpg"
+      },
+      {
+        "type": "file",
+        "value": "assets/squad-pitch/pitch-background.svg"
+      }
+    ],
     "include": []
   },
   "appid": "touristappid"
