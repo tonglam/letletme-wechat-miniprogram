@@ -101,6 +101,10 @@
   border-radius: 12rpx;
 }
 
+.guide + .guide {
+  margin-top: 12rpx;
+}
+
 .guide-title {
   color: var(--green-ink);
   font-size: 24rpx;
@@ -143,6 +147,48 @@
 
 .search-button {
   margin: 28rpx 0 0;
+}
+
+.hits-card {
+  padding: 24rpx 28rpx;
+}
+
+.search-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.search-hit:last-child {
+  border-bottom: 0;
+  padding-bottom: 4rpx;
+}
+
+.hit-main {
+  min-width: 0;
+}
+
+.hit-name {
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.hit-meta {
+  margin-top: 4rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.hit-id {
+  flex-shrink: 0;
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .preview-title {

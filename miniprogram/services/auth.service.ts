@@ -210,6 +210,7 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
 
   sessionMemory = { token: session.token, expiresAt: session.expiresAt };
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
+  persistProfileEmail(session.profile.email);
   // Every persisted session carries a freshly fetched authoritative profile,
   // so the 24h revalidation throttle keys off this write.
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
@@ -240,12 +241,16 @@ export function clearApiSession(): void {
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   clearEntryScopedStorage();
-  [storageKeys.apiSessionToken, storageKeys.apiSessionExpiresAt, storageKeys.entryId]
-    .forEach((key) => {
-      try {
-        wx.removeStorageSync(key);
-      } catch {}
-    });
+  [
+    storageKeys.apiSessionToken,
+    storageKeys.apiSessionExpiresAt,
+    storageKeys.apiProfileEmail,
+    storageKeys.entryId
+  ].forEach((key) => {
+    try {
+      wx.removeStorageSync(key);
+    } catch {}
+  });
   try {
     getApp<IAppOption>().globalData.entryId = undefined;
   } catch {}
@@ -275,11 +280,52 @@ export function getApiSessionToken(): string | null {
 export function clearSessionCredentials(): void {
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
-  [storageKeys.apiSessionToken, storageKeys.apiSessionExpiresAt].forEach((key) => {
+  [
+    storageKeys.apiSessionToken,
+    storageKeys.apiSessionExpiresAt,
+    storageKeys.apiProfileEmail
+  ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
     } catch {}
   });
+}
+
+function persistProfileEmail(email: string | null | undefined): void {
+  const trimmed = typeof email === "string" ? email.trim() : "";
+  if (trimmed) {
+    wx.setStorageSync(storageKeys.apiProfileEmail, trimmed);
+    return;
+  }
+  try {
+    wx.removeStorageSync(storageKeys.apiProfileEmail);
+  } catch {}
+}
+
+export interface LinkedAccountSnapshot {
+  linked: boolean;
+  email: string;
+}
+
+/** Display-only: token presence plus the last profile email written at login. */
+export function getLinkedAccountSnapshot(): LinkedAccountSnapshot {
+  const linked = Boolean(getApiSessionToken());
+  if (!linked) return { linked: false, email: "" };
+  let email = "";
+  try {
+    const stored = wx.getStorageSync(storageKeys.apiProfileEmail);
+    if (typeof stored === "string") email = stored.trim();
+  } catch {}
+  return { linked: true, email };
+}
+
+export async function awaitLinkedAccountSnapshot(): Promise<LinkedAccountSnapshot> {
+  if (!getApiSessionToken()) {
+    try {
+      await getApp<IAppOption>().authReady;
+    } catch {}
+  }
+  return getLinkedAccountSnapshot();
 }
 
 async function performLogout(): Promise<void> {

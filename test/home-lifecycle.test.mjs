@@ -9,17 +9,18 @@ const homeModule = await import("../miniprogram/pages/home/index/index.ts");
 const source = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("home paints Core fixtures before starting independent secondary sections", () => {
+test("home starts entry/market/supplement with fixtures, not after fixture commit", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
+  const secondaryStart = page.indexOf("void this.loadSecondaryData");
   const fixtureAwait = page.indexOf("const fixtureResult = await fixtureTask");
   const primaryCommit = page.indexOf(
     "fixtureDeskState(fixtureResult.fixtures)",
   );
-  const secondaryStart = page.indexOf("void this.loadSecondaryData");
   assert.ok(
-    fixtureAwait >= 0 &&
-      primaryCommit > fixtureAwait &&
-      secondaryStart > primaryCommit,
+    secondaryStart >= 0 &&
+      fixtureAwait > secondaryStart &&
+      primaryCommit > fixtureAwait,
+    "secondary must start before awaiting fixtures so the personal desk is not gated",
   );
   assert.match(
     page,
@@ -36,7 +37,11 @@ test("home paints Core fixtures before starting independent secondary sections",
   assert.match(page, /Promise\.all\(\[marketTask, supplementTask\]\)/);
   assert.match(
     page,
-    /getEntryInfo[\s\S]*this\.setData\(\{ entry, leagues, entryError: "" \}\)/,
+    /getEntryInfo[\s\S]*this\.setData\(\{ entry, entryError: "" \}\)/,
+  );
+  assert.match(
+    page,
+    /getEntryClassicLeagues[\s\S]*getEntryH2hLeagues/,
   );
   assert.match(page, /getMiniHomeMarket/);
   assert.match(page, /getMiniHomeSupplement/);
@@ -128,6 +133,7 @@ test("home first viewport order matches the web: deadline, team desk, market, th
   assert.match(page, /scheduleNoticeAutoClose/);
   assert.doesNotMatch(template, /section-title">身价变化/);
   assert.match(template, /bind-team[\s\S]*onChangeEntry[\s\S]*onGoAccountLink/);
+  assert.match(template, /accountLinkReady && !accountLinked/);
   assert.doesNotMatch(template, /选择球队后开始/);
 });
 
@@ -250,5 +256,28 @@ test("preseason GW summary with highestScore 0 hides the home stats card", () =>
       ["highestScore", "98"],
       ["viceCaptain", "Haaland"],
     ],
+  );
+});
+
+test("home desk errors only claim retained data when content remains", () => {
+  assert.equal(
+    homeModule.retainedDeskMessage("网络连接失败，请检查网络后重试", false),
+    "网络连接失败，请检查网络后重试",
+  );
+  assert.equal(
+    homeModule.retainedDeskMessage("网络连接失败，请检查网络后重试", true),
+    "网络连接失败，请检查网络后重试，已保留上次成功数据",
+  );
+  const template = source("miniprogram/pages/home/index/index.wxml");
+  assert.doesNotMatch(template, /priceError\}\}，已保留上次成功数据/);
+  assert.doesNotMatch(template, /gameweekStatsError\}\}，已保留上次成功数据/);
+  assert.match(template, /marketUnavailable[\s\S]*市场动态暂时无法加载/);
+  assert.match(
+    template,
+    /supplementLoading \|\| gameweekStats\.length > 0/,
+  );
+  assert.doesNotMatch(
+    template,
+    /supplementLoading \|\| gameweekStatsError \|\| gameweekStats\.length/,
   );
 });

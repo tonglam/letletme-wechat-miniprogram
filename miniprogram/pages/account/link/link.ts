@@ -1,5 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import {
+  awaitLinkedAccountSnapshot,
   confirmMiniProgramEmailLink,
   logoutMiniProgramSession,
   startMiniProgramEmailLink,
@@ -7,7 +8,32 @@ import {
 import { switchToHome } from '../../../utils/navigation';
 
 PerformancePage({
-  data: { email: '', code: '', sending: false, confirming: false, error: '' },
+  data: {
+    email: '',
+    code: '',
+    sending: false,
+    confirming: false,
+    error: '',
+    accountLinked: false,
+    accountEmail: ''
+  },
+
+  onLoad() {
+    return this.syncAccount();
+  },
+
+  onShow() {
+    return this.syncAccount();
+  },
+
+  async syncAccount() {
+    const snapshot = await awaitLinkedAccountSnapshot();
+    this.setData({
+      accountLinked: snapshot.linked,
+      accountEmail: snapshot.email,
+      error: snapshot.linked ? '' : this.data.error
+    });
+  },
 
   onEmailInput(event: WechatMiniprogram.Input) {
     this.setData({ email: event.detail.value.trim(), error: '' });
@@ -56,6 +82,13 @@ PerformancePage({
     this.setData({ error: '' });
     try {
       await logoutMiniProgramSession();
+      this.setData({
+        accountLinked: false,
+        accountEmail: '',
+        email: '',
+        code: '',
+        error: ''
+      });
       wx.showToast({ title: '已退出登录', icon: 'success' });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '退出失败，请重试' });

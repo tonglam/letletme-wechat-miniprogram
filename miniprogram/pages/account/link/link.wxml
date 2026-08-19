@@ -1,5 +1,12 @@
 <view class="page">
-  <view id="perf-primary-content" class="section card">
+  <view wx:if="{{accountLinked}}" id="perf-primary-content" class="section card">
+    <view class="subtitle">此设备已关联网页账户，无需再次验证。</view>
+    <view class="linked-email">{{accountEmail || '会话有效'}}</view>
+    <view class="legal-note">退出后需要重新用邮箱验证码关联。不关联也可以在查找球队页手动选择。</view>
+    <view wx:if="{{error}}" class="inline-error">{{error}}</view>
+    <button class="btn-text link-text" bindtap="logout">退出当前设备</button>
+  </view>
+  <view wx:else id="perf-primary-content" class="section card">
     <view class="subtitle">可选。关联后会同步网页端已验证的球队。</view>
     <input class="input" type="text" placeholder="邮箱" value="{{email}}" bindinput="onEmailInput" />
     <button class="btn-secondary btn-block link-button" loading="{{sending}}" disabled="{{sending}}" bindtap="sendCode">发送验证码</button>

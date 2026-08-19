@@ -6,6 +6,7 @@ import {
   capturePageRequestTrace,
   type PageRequestTrace
 } from "../../../services/graphql.service";
+import { canReadEventReporting } from "../../../utils/event-context";
 import {
   asArray,
   asRecord,
@@ -231,6 +232,31 @@ PerformancePage({
       staleNotice: ""
     });
     try {
+      if (!canReadEventReporting(this.data.event, getApp<IAppOption>().globalData.currentGw)) {
+        if (!isActiveRequest()) return;
+        this.setData({
+          error: "",
+          summaryError: "",
+          dreamTeamError: "",
+          eliteError: "",
+          transfersError: "",
+          staleNotice: "",
+          headlineStats: [],
+          mostRows: [],
+          chipRows: [],
+          eliteRows: [],
+          transfersInRows: [],
+          transfersOutRows: [],
+          hasSummary: false,
+          hasDreamTeam: false,
+          hasElite: false,
+          hasTransfers: false,
+          pitchPlayers: [],
+          pitchBench: [],
+          pitchHeader: null
+        });
+        return;
+      }
       const result = await getMiniGameweekSummary(this.data.event, forceRefresh, requestTrace);
       if (!isActiveRequest()) return;
       const sectionErrors = Object.values(result.errors);

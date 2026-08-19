@@ -15,14 +15,39 @@
       </view>
     </view>
 
-    <view wx:if="{{rich && leagues.length}}" class="entry-leagues">
-      <view class="entry-leagues-head">
-        <text class="entry-leagues-title">我的联赛</text>
-        <text class="entry-leagues-count">{{leagues.length}}</text>
+    <view wx:if="{{rich && hasLeaguePanels}}" class="entry-league-stack">
+      <view wx:if="{{classicPanel}}" class="entry-league-panel">
+        <view class="entry-leagues-head">
+          <view class="entry-leagues-title-row">
+            <text class="entry-leagues-title">{{classicPanel.title}}</text>
+            <text class="entry-leagues-count">{{classicPanel.total}}</text>
+          </view>
+          <text class="action" catchtap="onOpenAllLeagues">全部</text>
+        </view>
+        <view wx:for="{{classicPanel.items}}" wx:key="id" class="entry-league-row">
+          <text class="entry-league-name">{{item.name}}</text>
+          <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
+        </view>
+        <view wx:if="{{classicPanel.hasMore}}" class="entry-league-more" hover-class="hover-dim" catchtap="onLoadMoreClassic">
+          <text class="action">加载更多</text>
+        </view>
       </view>
-      <view wx:for="{{displayLeagues}}" wx:key="id" class="entry-league-row">
-        <text class="entry-league-name">{{item.name}}</text>
-        <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
+
+      <view wx:if="{{h2hPanel}}" class="entry-league-panel">
+        <view class="entry-leagues-head">
+          <view class="entry-leagues-title-row">
+            <text class="entry-leagues-title">{{h2hPanel.title}}</text>
+            <text class="entry-leagues-count">{{h2hPanel.total}}</text>
+          </view>
+          <text class="action" catchtap="onOpenAllLeagues">全部</text>
+        </view>
+        <view wx:for="{{h2hPanel.items}}" wx:key="id" class="entry-league-row">
+          <text class="entry-league-name">{{item.name}}</text>
+          <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
+        </view>
+        <view wx:if="{{h2hPanel.hasMore}}" class="entry-league-more" hover-class="hover-dim" catchtap="onLoadMoreH2h">
+          <text class="action">加载更多</text>
+        </view>
       </view>
     </view>
 

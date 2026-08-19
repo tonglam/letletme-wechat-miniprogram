@@ -373,8 +373,7 @@ function computeOwnershipSearchResults(
   }
   const chosen = new Set(selected.map((player) => player.element));
   return players
-    .filter((player) => !chosen.has(player.element) && player.name.toLowerCase().includes(term))
-    .slice(0, 8);
+    .filter((player) => !chosen.has(player.element) && player.name.toLowerCase().includes(term));
 }
 
 function filterOwnershipPlayers(

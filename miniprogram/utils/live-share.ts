@@ -162,6 +162,13 @@ function matchShareItem(kind: string, item: { name: string; team: string; text: 
   return `${who} ×${item.text}`;
 }
 
+function includeBpsWithTies<T extends { text: string }>(items: T[], limit: number): T[] {
+  if (items.length <= limit) return items;
+  const sorted = [...items].sort((a, b) => Number(b.text) - Number(a.text));
+  const cutoffBps = Number(sorted[limit - 1].text);
+  return sorted.filter((item) => Number(item.text) >= cutoffBps);
+}
+
 export function formatLiveMatchShareText(match: LiveMatch): string {
   const home = textValue(match.homeTeamDisplay || match.homeTeamShortName || match.homeTeamName, "-");
   const away = textValue(match.awayTeamDisplay || match.awayTeamShortName || match.awayTeamName, "-");
@@ -175,7 +182,7 @@ export function formatLiveMatchShareText(match: LiveMatch): string {
   MATCH_SHARE_KIND_ORDER.forEach((kind) => {
     const group = groups.find((item) => item.kind === kind);
     if (!group || group.items.length === 0) return;
-    const items = kind === "bps" ? group.items.slice(0, 3) : group.items;
+    const items = kind === "bps" ? includeBpsWithTies(group.items, 3) : group.items;
     lines.push(`${group.label}: ${items.map((item) => matchShareItem(kind, item)).join("、")}`);
   });
 

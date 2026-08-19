@@ -1,4 +1,13 @@
 import { routes } from "../../config/routes";
+import {
+  buildBugReportDraftFromError,
+  writePendingBugReportDraft
+} from "../../services/bug-report.service";
+import {
+  diagnosticErrorDetail,
+  looksTechnicalErrorMessage,
+  userFacingErrorMessage
+} from "../../utils/request-error";
 
 Component({
   properties: {
@@ -24,12 +33,46 @@ Component({
     }
   },
 
+  data: {
+    displayMessage: "加载失败"
+  },
+
+  observers: {
+    message: function (message: string) {
+      this.setData({
+        displayMessage: userFacingErrorMessage(message, "加载失败，请稍后重试")
+      });
+    }
+  },
+
+  lifetimes: {
+    attached() {
+      this.setData({
+        displayMessage: userFacingErrorMessage(
+          this.properties.message,
+          "加载失败，请稍后重试"
+        )
+      });
+    }
+  },
+
   methods: {
     onRetry() {
       this.triggerEvent("retry");
     },
 
     onReport() {
+      const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
+      const route = pages.length ? String(pages[pages.length - 1]?.route || "") : "";
+      const raw = diagnosticErrorDetail(this.properties.message);
+      writePendingBugReportDraft({
+        body: buildBugReportDraftFromError({
+          message: this.data.displayMessage,
+          route
+        }),
+        source: "error-state",
+        diagnostic: looksTechnicalErrorMessage(raw) ? raw : ""
+      });
       wx.navigateTo({ url: routes.accountReport });
     }
   }

@@ -48,6 +48,7 @@ test("AppContext source enforces deadline freshness, unresolved backoff and forc
     new URL("../miniprogram/services/app-context.service.ts", import.meta.url),
     "utf8"
   );
+  assert.match(source, /positiveEventId\(read\.data\.currentEvent\)/);
   assert.match(source, /displayEvent: currentEvent \|\| nextEvent/);
   assert.match(source, /nextDeadlineAt && nextDeadlineAt > Date\.now\(\)[\s\S]*\? nextDeadlineAt/);
   assert.match(source, /currentEvent === 38 && !nextEvent[\s\S]*24 \* 60 \* 60 \* 1000/);

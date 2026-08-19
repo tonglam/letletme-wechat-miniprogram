@@ -424,7 +424,7 @@ export interface MarketPulsePlayer {
   selectedByPercent: number;
 }
 
-export type MarketOwnershipPeriod = "DAILY" | "GAMEWEEK" | "ROLLING_7D";
+export type MarketOwnershipPeriod = "DAILY" | "GAMEWEEK";
 
 export type MarketOwnershipCoverageStatus =
   | "READY"

@@ -90,6 +90,9 @@
             <view class="points-sub">净 {{item.netPoints}}</view>
           </view>
         </view>
+        <view wx:if="{{hasMoreRankings}}" class="load-more" bindtap="loadMoreRankings" hover-class="hover-dim">
+          <text class="action">加载更多</text>
+        </view>
       </view>
     </view>
 

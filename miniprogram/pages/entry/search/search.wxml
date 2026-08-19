@@ -1,6 +1,6 @@
 <view class="page">
   <view class="entry-hero section">
-    <view class="subtitle">输入 FPL 参赛 ID 可查看任意球队；设为我的球队后，首页会展示它的内容。</view>
+    <view class="subtitle">用参赛 ID 或名字查找球队；设为我的球队后，首页会跟着它走。</view>
   </view>
 
   <view wx:if="{{hasEntry}}" class="card section current-card">
@@ -12,12 +12,12 @@
   </view>
 
   <view id="perf-primary-content" class="card lookup-card section">
-    <view class="field-label">FPL 参赛 ID</view>
+    <view class="field-label">FPL 参赛 ID / 球队名 / 经理名</view>
     <view class="input-shell">
       <input
         class="entry-input"
         type="text"
-        placeholder="例如 123456，或直接粘贴网址"
+        placeholder="例如 123456、球队名或经理名"
         placeholder-class="input-placeholder"
         value="{{manualEntryId}}"
         confirm-type="done"
@@ -25,7 +25,7 @@
         bindconfirm="onEntryConfirm"
       />
     </view>
-    <view class="field-help">粘贴球队页面网址，可自动提取参赛 ID。</view>
+    <view class="field-help">纯数字或粘贴网址按参赛 ID 查；其他文字按球队名 / 经理名查。</view>
     <view class="guide">
       <view class="guide-title">如何查找参赛 ID</view>
       <view class="guide-steps">
@@ -35,12 +35,39 @@
         <view class="guide-step"><text class="step-num">4</text>网址长这样：…/en/entry/<text class="step-hl">123456</text>/history</view>
       </view>
     </view>
+    <view class="guide">
+      <view class="guide-title">如何用名字搜索</view>
+      <view class="guide-steps">
+        <view class="guide-step"><text class="step-num">1</text>输入球队名或经理名，<text class="step-hl">至少 2 个字符</text>，不必写全</view>
+        <view class="guide-step"><text class="step-num">2</text>点查找；多条结果时点选一支，再设为我的球队</view>
+        <view class="guide-step"><text class="step-num">3</text>名字只搜本赛季已在本站出现过的球队：网页绑过、用 ID 查过、或进过 LetLetMe 赛事</view>
+        <view class="guide-step"><text class="step-num">4</text>本站没出现过的球队请用<text class="step-hl">参赛 ID</text>，可查任意有效 FPL 球队</view>
+      </view>
+    </view>
     <button class="btn-primary btn-block search-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onLookupEntry">
       {{buttonText}}
     </button>
   </view>
 
   <view wx:if="{{error}}" class="live-refresh-error section">{{error}}</view>
+
+  <view wx:if="{{searchHits.length}}" class="card hits-card section">
+    <view class="field-label">匹配结果</view>
+    <view
+      wx:for="{{searchHits}}"
+      wx:key="entryId"
+      class="search-hit"
+      hover-class="hover-dim"
+      data-entry-id="{{item.entryId}}"
+      bindtap="onSelectSearchHit"
+    >
+      <view class="hit-main">
+        <view class="hit-name">{{item.entryName}}</view>
+        <view class="hit-meta">{{item.playerName}} #{{item.entryId}}</view>
+      </view>
+      <view class="hit-id">选这个</view>
+    </view>
+  </view>
 
   <view wx:if="{{hasPreview}}" class="card preview-card section">
     <view class="preview-title">{{previewTitle}}</view>

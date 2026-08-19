@@ -10,6 +10,7 @@ import { goToEntrySearch } from "../../../utils/navigation";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import { canReadEventReporting } from "../../../utils/event-context";
 import { copyShareText } from "../../../utils/live-share";
 import { formatSelectionsShareText } from "../../../utils/explore-share";
 import { formatCompactNumber } from "../../../utils/summary-format";
@@ -356,6 +357,14 @@ PerformancePage({
     );
     this.setData({ loadingStats: true, error: "" });
     try {
+      if (!canReadEventReporting(requestedEvent, getAppContextSnapshot()?.currentEvent)) {
+        if (!isActiveLifecycle() || !isActiveContext()) return;
+        this.setData({
+          loadingStats: false,
+          ...mapSelectionStats(tournament, requestedEvent, null, this.data.activeTab)
+        });
+        return;
+      }
       const stats = await getTournamentSelectionStats(tournamentId, requestedEvent, STATS_LIMIT, forceRefresh, trace);
       if (!isActiveLifecycle() || !isActiveContext()) {
         // Superseded by a tournament/GW change or a list refresh while in

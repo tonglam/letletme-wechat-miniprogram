@@ -31,6 +31,7 @@ import {
   capturePageRequestTrace,
   type PageRequestTrace
 } from "../../../services/graphql.service";
+import { canReadEventReporting } from "../../../utils/event-context";
 
 /** 我的赛事 — content mirrors the web my-fpl/competitions review page; the UI
  *  language mirrors the live tournament desk (toolbar, stat strip, board). */
@@ -694,6 +695,20 @@ PerformancePage({
     const tournament = this.data.selectedTournament;
     const entryId = this.data.entryId;
     if (!tournament || !entryId || this.data.event <= 0) return;
+    if (!canReadEventReporting(this.data.event, getAppContextSnapshot()?.currentEvent)) {
+      this.seasonRows = [];
+      this.gwRows = [];
+      this.setData({
+        viewLoading: false,
+        viewError: "",
+        hasSeasonData: false,
+        hasGwData: false,
+        pathLoading: false,
+        boardRows: [],
+        displayedRows: []
+      });
+      return;
+    }
     const requestId = ++this.viewRequestId;
     const trace = originatingTrace
       ? { ...originatingTrace, callerSurface: "my-fpl-leagues-view", trigger: forceRefresh ? "refresh" as const : "tab" as const }

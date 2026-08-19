@@ -5,6 +5,7 @@ import {
   clearApiSession,
   clearSessionCredentials,
   getApiSessionToken,
+  getLinkedAccountSnapshot,
   logoutMiniProgramSession,
   restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
@@ -101,6 +102,39 @@ test("legacy plaintext session tokens migrate to encrypted storage", async () =>
     assert.equal(encryptedWrite.data, "legacy-token");
     assert.equal(removed.includes("api-session-token"), true);
     clearSessionCredentials();
+  } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("linked snapshot surfaces stored display email until credentials clear", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const removed = [];
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => {
+        if (key === "api-session-expires-at") return "2099-01-01T00:00:00.000Z";
+        if (key === "api-profile-email") return "fpl@example.com";
+        return undefined;
+      },
+      canIUse: () => true,
+      getStorage: ({ success }) => success({ data: "token", errMsg: "getStorage:ok" }),
+      removeStorageSync: (key) => removed.push(key)
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+
+    await restoreApiSessionCredentials();
+    assert.deepEqual(getLinkedAccountSnapshot(), {
+      linked: true,
+      email: "fpl@example.com"
+    });
+    clearSessionCredentials();
+    assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });
+    assert.equal(removed.includes("api-profile-email"), true);
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;

@@ -32,7 +32,8 @@ test("Live Tournament skips live rows for empty metadata or no current event", (
 test("EntryLeagues operation exists only in the entry service", () => {
   const entry = source("miniprogram/services/entry.service.ts");
   const common = source("miniprogram/services/common.service.ts");
-  assert.equal((entry.match(/query EntryLeagues/g) || []).length, 1);
+  assert.equal((entry.match(/query EntryLeagues\b/g) || []).length, 1);
+  assert.equal((entry.match(/query EntryLeaguesByType\b/g) || []).length, 1);
   assert.doesNotMatch(common, /query EntryLeagues/);
   assert.match(common, /getEntryLeagueInfo\(entryId\)/);
 });

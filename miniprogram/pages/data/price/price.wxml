@@ -108,7 +108,24 @@
     <view class="section mode-tabs market-period-tabs">
       <view class="mode-tab {{marketPeriod === 'DAILY' ? 'active' : ''}}" data-period="DAILY" bindtap="onMarketPeriodChange">每日</view>
       <view class="mode-tab {{marketPeriod === 'GAMEWEEK' ? 'active' : ''}}" data-period="GAMEWEEK" bindtap="onMarketPeriodChange">GW</view>
-      <view class="mode-tab {{marketPeriod === 'ROLLING_7D' ? 'active' : ''}}" data-period="ROLLING_7D" bindtap="onMarketPeriodChange">近 7 日</view>
+      <view class="mode-tab {{marketPeriod === 'LINEUP' ? 'active' : ''}}" data-period="LINEUP" bindtap="onMarketPeriodChange">阵容</view>
+    </view>
+    <view wx:if="{{marketPeriod === 'LINEUP'}}" class="section card lineup-card">
+      <view class="panel-head">
+        <text>持有率最佳阵容</text>
+        <text wx:if="{{lineupFormation}}" class="panel-count">{{lineupFormation}}</text>
+      </view>
+      <view wx:if="{{!lineupSlots.length}}" class="lineup-empty">球员数据不足，无法组建阵容</view>
+      <view wx:else class="pitch">
+        <view class="pitch-center-line"></view>
+        <view class="pitch-center-circle"></view>
+        <view class="pitch-box pitch-top-box"></view>
+        <view class="pitch-box pitch-bottom-box"></view>
+        <view wx:for="{{lineupSlots}}" wx:key="player.playerId" class="lineup-slot" style="left: {{item.x}}%; top: {{item.y}}%">
+          <view class="lineup-name">{{item.player.webName}}</view>
+          <view class="lineup-pct">{{item.player.selectedByPercent}}%</view>
+        </view>
+      </view>
     </view>
     <view wx:if="{{marketPeriod === 'DAILY' && ownershipDateOptions.length}}" class="section ownership-date-strip">
       <view wx:for="{{ownershipDateOptions}}" wx:key="*this" class="date-chip {{item === ownershipSelectedDate ? 'active' : ''}}" data-date="{{item}}" bindtap="onMarketDateSelect">{{item}}</view>
@@ -147,7 +164,7 @@
       </view>
     </view>
 
-    <view class="section card pulse-card ownership-card">
+    <view wx:if="{{marketPeriod !== 'LINEUP'}}" class="section card pulse-card ownership-card">
       <view class="panel-head">
         <text>持有率百分点变化</text>
       </view>
