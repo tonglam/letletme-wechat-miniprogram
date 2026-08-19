@@ -18,8 +18,8 @@ const explicitP0 = new Set([
   "pages/my-fpl/team/team"
 ]);
 
-test("all 23 registered pages expose a viewport-visible primary boundary and tracker", () => {
-  assert.equal(routes.length, 23);
+test("all registered pages expose a viewport-visible primary boundary and tracker", () => {
+  assert.equal(routes.length, 24);
   for (const route of routes) {
     const source = fs.readFileSync(path.join(root, "miniprogram", `${route}.ts`), "utf8");
     const template = fs.readFileSync(path.join(root, "miniprogram", `${route}.wxml`), "utf8");

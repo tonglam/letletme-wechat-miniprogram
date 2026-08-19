@@ -36,6 +36,7 @@ import {
   type CacheEntry
 } from "./graphql-cache";
 import { registerGraphQLInFlightClear } from "./graphql-session-hooks";
+import { recordBugReportDiagnostic } from "../utils/bug-report-diagnostics";
 
 export {
   buildGraphQLRequestCacheKey,
@@ -275,6 +276,14 @@ function recordRequest(
     cacheVariantHash: trace?.cacheVariantHash || cacheVariantHash,
     requestId
   });
+  if (requestId || !ok) {
+    recordBugReportDiagnostic({
+      at: new Date().toISOString(),
+      requestId,
+      operation: operationName,
+      message: ok ? undefined : source
+    });
+  }
 }
 
 function notifyStaleFallback(): void {

@@ -1,0 +1,32 @@
+.input.report-body {
+  min-height: 240rpx;
+  height: 240rpx;
+  padding: 20rpx 24rpx;
+  margin: 18rpx 0;
+  line-height: 1.55;
+}
+
+.screenshot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  color: var(--muted-ink);
+  font-size: 24rpx;
+}
+
+.received {
+  margin-bottom: 16rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.link-button {
+  margin-top: 18rpx;
+}
+
+.legal-note {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}

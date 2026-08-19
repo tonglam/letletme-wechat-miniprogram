@@ -32,6 +32,10 @@ PerformancePage({
     navigateTo(routes.accountLink);
   },
 
+  onGoReport() {
+    navigateTo(routes.accountReport);
+  },
+
   onOpenWebsite() {
     openWebsiteAction(canonicalAction("OPEN_HOME"));
   }

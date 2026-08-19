@@ -1,3 +1,5 @@
+import { routes } from "../../config/routes";
+
 Component({
   properties: {
     eyebrow: {
@@ -15,12 +17,20 @@ Component({
     retryText: {
       type: String,
       value: "重试"
+    },
+    reportText: {
+      type: String,
+      value: "告诉我们可以看一看"
     }
   },
 
   methods: {
     onRetry() {
       this.triggerEvent("retry");
+    },
+
+    onReport() {
+      wx.navigateTo({ url: routes.accountReport });
     }
   }
 });
