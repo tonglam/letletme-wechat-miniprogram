@@ -114,6 +114,9 @@ test("match rollover detaches same-status in-flight work", () => {
 
 test("entry lookup results are guarded by request generation and input identity", () => {
   const search = source("miniprogram/pages/entry/search/search.ts");
+  assert.match(search, /getEntryInfo\(entryId, true\)/);
+  assert.match(search, /enqueueMiniProgramEntrySync\(entryId\)/);
+  assert.match(source("miniprogram/services/entry-sync.service.ts"), /\/entry-sync/);
   assert.match(search, /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/);
   assert.match(search, /if \(requestId === this\.lookupRequestId\)/);
 });

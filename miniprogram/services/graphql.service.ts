@@ -481,6 +481,17 @@ function hasEmptyItemsPayload(data: unknown): boolean {
   });
 }
 
+/** Missing GetEntry rows must not become a sticky miss after a later FPL/sync hit. */
+export function shouldCacheGraphQLData(operationName: string, data: unknown): boolean {
+  if (operationName !== "GetEntry") {
+    return true;
+  }
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  return (data as { entry?: unknown }).entry != null;
+}
+
 export async function graphqlRead<T>(
   query: string,
   variables: Record<string, unknown> = {},
@@ -649,7 +660,7 @@ export async function graphqlRead<T>(
           policy.authMode === "public"
           || response.token === getApiSessionToken();
 
-        if (producingSessionStillActive) {
+        if (producingSessionStillActive && shouldCacheGraphQLData(policy.operationName, response.body.data)) {
           const freshUntil = resolveFreshUntil(response.body.data, policy, options);
           const entry: CacheEntry = {
             version: CACHE_VERSION,

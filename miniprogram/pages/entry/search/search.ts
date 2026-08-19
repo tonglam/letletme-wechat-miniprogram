@@ -1,5 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
+import { enqueueMiniProgramEntrySync } from "../../../services/entry-sync.service";
 import type { EntryInfo } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
@@ -100,7 +101,8 @@ PerformancePage({
       isCurrentEntry: false
     });
     try {
-      const entry = await getEntryInfo(entryId);
+      const entry = await getEntryInfo(entryId, true);
+      enqueueMiniProgramEntrySync(entryId);
       if (requestId !== this.lookupRequestId || Number(this.data.manualEntryId) !== entryId) {
         return;
       }
@@ -134,6 +136,7 @@ PerformancePage({
     }
     setEntryId(entryId);
     commitEntryBinding(entryId, "rebind");
+    enqueueMiniProgramEntrySync(entryId);
     this.setData({ hasEntry: true, currentEntryId: entryId });
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
     // A fresh Home load renders the newly followed team right away — a plain
