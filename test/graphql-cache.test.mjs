@@ -4,7 +4,8 @@ import test from "node:test";
 import {
   buildGraphQLRequestCacheKey,
   buildGraphQLRequestPayload,
-  isTransientGraphQLStatus
+  isTransientGraphQLStatus,
+  shouldCacheGraphQLData
 } from "../miniprogram/services/graphql.service.ts";
 import { getGraphQLOperationPolicy } from "../miniprogram/services/graphql-cache-policy.ts";
 import { storagePrefixes } from "../miniprogram/config/storage-keys.ts";
@@ -137,3 +138,10 @@ test("only gateway failures are transient HTTP failures", () => {
   assert.equal(isTransientGraphQLStatus(400), false);
   assert.equal(isTransientGraphQLStatus(401), false);
 });
+
+test("GetEntry misses are not cached", () => {
+  assert.equal(shouldCacheGraphQLData("GetEntry", { entry: null }), false);
+  assert.equal(shouldCacheGraphQLData("GetEntry", { entry: { id: 1 } }), true);
+  assert.equal(shouldCacheGraphQLData("EntryLeagues", { entryLeagues: [] }), true);
+});
+
