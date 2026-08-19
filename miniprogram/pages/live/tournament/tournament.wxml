@@ -33,8 +33,22 @@
     <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink" hover-class="hover-dim">创建和管理赛事请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
   <block wx:else>
-    <view wx:if="{{tournamentListError}}" class="live-refresh-error">{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}</view>
-    <view wx:elif="{{error}}" class="live-refresh-error">{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}</view>
+    <data-status
+      wx:if="{{tournamentListError}}"
+      status="stale"
+      message="{{tournamentListError}}{{tournamentListErrorSuffix ? '，' + tournamentListErrorSuffix : ''}}"
+      transient="{{true}}"
+      showRetry="{{true}}"
+      bind:retry="onRetry"
+    />
+    <data-status
+      wx:elif="{{error}}"
+      status="stale"
+      message="{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}"
+      transient="{{true}}"
+      showRetry="{{true}}"
+      bind:retry="onRetry"
+    />
 
     <view class="section stat-strip">
       <view class="stat">

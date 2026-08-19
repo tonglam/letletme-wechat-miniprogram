@@ -4,6 +4,7 @@
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "app-error-state": "../../../components/app-error-state/app-error-state",
+    "data-status": "../../../components/data-status/data-status",
     "gw-picker": "../../../components/gw-picker/gw-picker",
     "fixture-chip": "../../../components/fixture-chip/fixture-chip",
     "evidence-source": "../../../components/evidence-source/evidence-source"

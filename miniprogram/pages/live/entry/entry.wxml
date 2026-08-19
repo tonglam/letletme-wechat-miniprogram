@@ -35,7 +35,7 @@
     />
   </view>
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" class="section live-summary">
       <view class="score-card scoreboard">
         <view class="score-top">

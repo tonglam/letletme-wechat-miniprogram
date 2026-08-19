@@ -5,7 +5,7 @@ let networkRequests = 0;
 let networkTypeCalls = 0;
 let networkStatusListener;
 let requestHandler = () => undefined;
-const staleToasts = [];
+let staleToastCalls = 0;
 globalThis.getApp = () => ({ globalData: { season: "2025-26", contextRevision: 1 } });
 globalThis.wx = {
   getStorageSync: () => undefined,
@@ -23,8 +23,8 @@ globalThis.wx = {
       complete?.({ networkType: "none" });
     }, 20);
   },
-  showToast: ({ title }) => {
-    staleToasts.push(title);
+  showToast: () => {
+    staleToastCalls += 1;
   },
   request: (options) => {
     networkRequests += 1;
@@ -52,7 +52,7 @@ test("cold offline GraphQL read awaits one initial probe and never starts transp
   assert.ok(Date.now() - startedAt < 300, "offline fast-fail exceeded 300ms");
 });
 
-test("offline stale fast path notifies graphqlRequest callers before returning cached data", async () => {
+test("offline stale fast path returns cached data without a global toast", async () => {
   assert.equal(typeof networkStatusListener, "function");
   networkStatusListener({ isConnected: true, networkType: "wifi" });
   requestHandler = (options) => options.success({
@@ -83,7 +83,7 @@ test("offline stale fast path notifies graphqlRequest callers before returning c
     assert.equal(stale.meta.source, "stale");
     assert.equal(stale.meta.stale, true);
     assert.equal(networkRequests, requestsAfterSeed);
-    assert.equal(staleToasts.length, 1);
+    assert.equal(staleToastCalls, 0);
   } finally {
     Date.now = realDateNow;
   }

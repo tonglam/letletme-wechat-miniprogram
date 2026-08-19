@@ -173,8 +173,6 @@ registerGraphQLInFlightClear(() => {
   inFlightRequests.clear();
 });
 
-let lastStaleNoticeAt = 0;
-
 function extractOpName(query: string): string {
   const match = /(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/i.exec(query);
   return match ? match[1] : "GraphQL";
@@ -284,22 +282,6 @@ function recordRequest(
       message: ok ? undefined : source
     });
   }
-}
-
-function notifyStaleFallback(): void {
-  const now = Date.now();
-  if (now - lastStaleNoticeAt < 30 * 1000) return;
-  lastStaleNoticeAt = now;
-  try {
-    const api = wx as unknown as {
-      showToast?: (options: { title: string; icon: "none"; duration: number }) => void;
-    };
-    api.showToast?.({
-      title: "当前为上次成功数据",
-      icon: "none",
-      duration: 2500
-    });
-  } catch {}
 }
 
 export function isTransientGraphQLStatus(statusCode: number): boolean {
@@ -560,7 +542,6 @@ export async function graphqlRead<T>(
   if (isKnownOffline()) {
     if (staleCandidate) {
       recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
-      notifyStaleFallback();
       recordRequest(
         policy.operationName,
         startedAt,
@@ -711,7 +692,6 @@ export async function graphqlRead<T>(
     } catch (error) {
       if (staleCandidate && isTransientFailure(error)) {
         recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
-        notifyStaleFallback();
         recordRequest(
           policy.operationName,
           startedAt,

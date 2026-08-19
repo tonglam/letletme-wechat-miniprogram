@@ -73,7 +73,7 @@
         </view>
         <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
       </view>
-      <view wx:if="{{priceError}}" class="section-status section-status-error">{{priceError}}，已保留上次成功数据</view>
+      <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}，已保留上次成功数据" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0}}" class="section-status">转会台加载中</view>
       <block wx:else>
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
@@ -139,7 +139,7 @@
       <view class="gw-stats-head">
         <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
       </view>
-      <view wx:if="{{gameweekStatsError}}" class="section-status section-status-error">{{gameweekStatsError}}，已保留上次成功数据</view>
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}，已保留上次成功数据" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
         <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
@@ -170,7 +170,7 @@
       <app-error-state wx:if="{{fixtureError && fixtureCount === 0}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
       <app-loading wx:elif="{{fixtureLoading && fixtureCount === 0}}" text="加载赛程" />
       <block wx:else>
-        <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
+        <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
         <app-empty-state
           wx:if="{{fixtureCount === 0}}"
           title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"

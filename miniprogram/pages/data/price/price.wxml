@@ -33,7 +33,7 @@
       </picker>
     </view>
 
-    <data-status wx:if="{{staleMessage}}" status="stale" message="{{staleMessage}}" />
+    <data-status wx:if="{{staleMessage}}" status="stale" message="{{staleMessage}}" transient="{{true}}" />
     <view wx:if="{{refreshing}}" class="section-status">正在刷新 {{changeDate}}</view>
     <view id="perf-primary-content">
     <app-error-state wx:if="{{error && riseChanges.length === 0 && fallChanges.length === 0}}" message="{{error}}" bind:retry="onRetry" />

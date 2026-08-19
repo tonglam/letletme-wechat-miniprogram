@@ -28,9 +28,7 @@
     <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
   <block wx:else>
-    <view wx:if="{{error}}" class="section">
-      <app-error-state message="{{error}}" bind:retry="onRetry" />
-    </view>
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view wx:if="{{glanceCards.length}}" class="section glance-grid">
       <view
         wx:for="{{glanceCards}}"
