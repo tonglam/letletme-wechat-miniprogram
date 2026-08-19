@@ -520,6 +520,8 @@ Page({
   startupPending: false,
   resumeStage: null as PriceResumeStage | null,
   resumeStageForceRefresh: false,
+  ownershipPending: false,
+  resumeOwnershipAfterShow: false,
   historyRequestRevision: 0,
   dailyRequestForceRefresh: false,
   paginationPending: false,
@@ -568,10 +570,12 @@ Page({
     tracker.mark("contextReadyAt");
     const resumeStage = this.resumeStage;
     const resumeStageForceRefresh = this.resumeStageForceRefresh;
+    const resumeOwnership = this.resumeOwnershipAfterShow;
     const resumePagination = this.resumePaginationAfterShow;
     const resumePaginationCursor = this.resumePaginationCursor;
     this.resumeStage = null;
     this.resumeStageForceRefresh = false;
+    this.resumeOwnershipAfterShow = false;
     if (resumePlayerRefresh) {
       this.setData({
         playerLoading: false,
@@ -621,6 +625,10 @@ Page({
       void this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
       return;
     }
+    if (resumeOwnership) {
+      void this.loadMarketOwnership(resumeStageForceRefresh);
+      return;
+    }
     wx.nextTick(() => tracker.observePrimary(selector));
   },
 
@@ -631,6 +639,8 @@ Page({
       this.playerSearchTimer = undefined;
     }
     this.resumePlayerRefreshAfterShow = this.playerRefreshPending;
+    this.resumeOwnershipAfterShow =
+      this.resumeOwnershipAfterShow || this.ownershipPending;
     this.resumePaginationAfterShow =
       this.resumePaginationAfterShow || this.paginationPending;
     if (this.paginationPending && this.paginationCursor !== null) {
@@ -663,6 +673,7 @@ Page({
     this.pageActive = false;
     this.resumeStage = null;
     this.resumeStageForceRefresh = false;
+    this.resumeOwnershipAfterShow = false;
     this.dailyRequestForceRefresh = false;
     this.paginationPending = false;
     this.paginationCursor = null;
@@ -898,6 +909,12 @@ Page({
         pulseError: "",
         availabilityUpdateCount: pulse.availabilityUpdateCount,
         availabilityExpanded: false,
+        ownershipDateOptions:
+          this.data.marketPeriod === "DAILY"
+            ? ownershipDateOptions(
+                pulse.snapshot?.snapshotDate || this.data.ownershipSelectedDate,
+              )
+            : this.data.ownershipDateOptions,
       });
       this.rebuildGlanceTiles();
     } catch (error) {
@@ -913,6 +930,15 @@ Page({
     const revision = ++this.ownershipRevision;
     const period = this.data.marketPeriod;
     const date = period === "DAILY" ? this.data.marketDate || null : null;
+    this.ownershipPending = true;
+    this.ownershipData = null;
+    this.setData({
+      ownershipLoaded: false,
+      ownershipError: "",
+      ownershipRiserRows: [],
+      ownershipFallerRows: [],
+      glanceTiles: [],
+    });
     try {
       const ownership = await getMarketOwnership(period, date, forceRefresh);
       if (!this.pageActive || revision !== this.ownershipRevision) return;
@@ -922,7 +948,9 @@ Page({
           ? ownership.date || ownership.coverage.toDate || ""
           : ownership.coverage.toDate || "";
       const latestDate =
-        ownership.coverage.latestDate || this.pulseData?.snapshot?.snapshotDate;
+        ownership.coverage.latestDate ||
+        selectedDate ||
+        this.pulseData?.snapshot?.snapshotDate;
       this.setData({
         ownershipLoaded: true,
         ownershipError: "",
@@ -944,7 +972,13 @@ Page({
           error instanceof Error ? error.message : "市场持有率加载失败",
         ownershipRiserRows: [],
         ownershipFallerRows: [],
+        glanceTiles: [],
       });
+      this.ownershipData = null;
+    } finally {
+      if (revision === this.ownershipRevision) {
+        this.ownershipPending = false;
+      }
     }
   },
 

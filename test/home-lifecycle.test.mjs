@@ -79,6 +79,21 @@ test("breaking market contract is protected by a non-cancelable update gate", ()
   assert.match(app, /updateManager\.applyUpdate\(\)/);
 });
 
+test("market ownership requests clear stale tiles and resume after a hidden page", () => {
+  const page = source("miniprogram/pages/data/price/price.ts");
+  assert.match(page, /ownershipPending: false/);
+  assert.match(page, /resumeOwnershipAfterShow/);
+  assert.match(
+    page,
+    /this\.resumeOwnershipAfterShow\s*=\s*this\.resumeOwnershipAfterShow\s*\|\|\s*this\.ownershipPending/,
+  );
+  assert.match(page, /this\.ownershipData = null;/);
+  assert.match(
+    page,
+    /ownershipDateOptions\(\s*pulse\.snapshot\?\.snapshotDate/,
+  );
+});
+
 test("home first viewport order matches the web: deadline, team desk, market, then fixtures last", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
   const template = source("miniprogram/pages/home/index/index.wxml");
