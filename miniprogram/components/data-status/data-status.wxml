@@ -1,4 +1,4 @@
-<view class="data-status data-status-{{status}}" role="status">
+<view wx:if="{{visible}}" class="data-status data-status-{{status}}" role="status">
   <view class="data-status-dot"></view>
   <view class="data-status-copy">
     <text class="data-status-message">{{message}}</text>

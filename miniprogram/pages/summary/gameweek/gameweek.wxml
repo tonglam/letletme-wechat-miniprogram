@@ -1,5 +1,5 @@
 <view class="page page-tabbar">
-  <view wx:if="{{staleNotice}}" class="last-good-notice">{{staleNotice}}</view>
+  <data-status wx:if="{{staleNotice}}" status="stale" message="{{staleNotice}}" transient="{{true}}" />
   <view class="section">
     <view class="score-card scoreboard">
       <view class="score-top">

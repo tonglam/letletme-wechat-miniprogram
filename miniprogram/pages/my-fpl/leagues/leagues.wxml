@@ -34,8 +34,8 @@
   </view>
 
   <block wx:else>
-    <view wx:if="{{error}}" class="live-refresh-error">{{error}}</view>
-    <view wx:if="{{viewError && ((showSeason && hasSeasonData) || (showGameweek && hasGwData))}}" class="live-refresh-error">{{viewError}}</view>
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{viewError && ((showSeason && hasSeasonData) || (showGameweek && hasGwData))}}" status="stale" message="{{viewError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <app-error-state
       id="perf-primary-content"
       wx:if="{{viewError && ((showSeason && !hasSeasonData) || (showGameweek && !hasGwData))}}"

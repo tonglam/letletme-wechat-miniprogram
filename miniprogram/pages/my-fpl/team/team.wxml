@@ -41,7 +41,7 @@
   </view>
 
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData}}" class="section">
       <app-empty-state
         eyebrow="{{emptyEyebrow}}"
@@ -118,10 +118,7 @@
     </view>
 
     <view wx:if="{{showTransfer}}" class="section">
-      <view wx:if="{{transferError && hasTransfers}}" class="inline-error">
-        <text>{{transferError}} · 当前显示上次成功结果</text>
-        <view class="inline-error-retry" bindtap="onRetry" hover-class="hover-dim">重试</view>
-      </view>
+      <data-status wx:if="{{transferError && hasTransfers}}" status="stale" message="{{transferError}} · 当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <app-error-state wx:if="{{transferError && !hasTransfers}}" message="{{transferError}}" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{!hasTransfers}}" title="还没有转会记录" description="产生转会后会按比赛周显示在这里" />
       <block wx:else>
