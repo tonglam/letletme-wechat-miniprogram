@@ -61,6 +61,10 @@ export async function submitMiniProgramBugReport(input: {
           resolve(publicId);
           return;
         }
+        if (response.statusCode === 401) {
+          reject(new Error(response.data?.error || "登录过期了，请先打开「我」再发"));
+          return;
+        }
         reject(new Error(response.data?.error || "这次没发出去，请稍后再试"));
       },
       fail(error) {
