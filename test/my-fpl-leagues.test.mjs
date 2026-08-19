@@ -63,6 +63,19 @@ test("league view loaders discard superseded responses and resume interrupted vi
   );
 });
 
+test("league view failures take precedence over misleading empty states", async () => {
+  const { readFileSync } = await import("node:fs");
+  const template = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.wxml", import.meta.url), "utf8");
+  assert.match(
+    template,
+    /<app-error-state[\s\S]*wx:if="\{\{viewError && \(\(showSeason && !hasSeasonData\) \|\| \(showGameweek && !hasGwData\)\)\}\}"[\s\S]*message="\{\{viewError\}\}"[\s\S]*bind:retry="onRetry"/
+  );
+  assert.match(template, /!hasSeasonData && !viewError/);
+  assert.match(template, /!hasGwData && !viewError/);
+  assert.match(template, /showSeason && !viewLoading && \(!viewError \|\| hasSeasonData\)/);
+  assert.match(template, /showGameweek && !viewLoading && \(!viewError \|\| hasGwData\)/);
+});
+
 test("season path window loads the latest 8 gameweeks first", () => {
   assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
     recentStart: 31,
