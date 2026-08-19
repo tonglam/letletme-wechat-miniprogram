@@ -54,6 +54,10 @@ function getDeviceId(): string {
   return generated;
 }
 
+export function getMiniProgramDeviceId(): string {
+  return getDeviceId();
+}
+
 function requestWebAuth(path: string, data: Record<string, unknown>): Promise<ApiResponse> {
   const t0 = Date.now();
   return new Promise((resolve, reject) => {

@@ -1,7 +1,7 @@
 import { getMiniProgramApiBase, REQUEST_TIMEOUT_MS } from "../config/env";
 import { collectMiniProgramBugReportMeta } from "../utils/bug-report-diagnostics";
 import { networkErrorMessage } from "../utils/request-error";
-import { getApiSessionToken } from "./auth.service";
+import { getApiSessionToken, getMiniProgramDeviceId } from "./auth.service";
 
 export const BUG_REPORT_BODY_MIN = 8;
 export const BUG_REPORT_BODY_MAX = 500;
@@ -45,6 +45,7 @@ export async function submitMiniProgramBugReport(input: {
       header,
       data: {
         body,
+        deviceId: getMiniProgramDeviceId(),
         clientMeta: collectMiniProgramBugReportMeta(),
         screenshotBase64: input.screenshotBase64 ?? null,
         screenshotMime: input.screenshotMime ?? null
