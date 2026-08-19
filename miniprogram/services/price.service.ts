@@ -104,7 +104,10 @@ function movementClass(changeType: string): string {
   return "movement-flat";
 }
 
-function formatTransferText(transfersIn?: number | null, transfersOut?: number | null): string {
+function formatTransferText(
+  transfersIn?: number | null,
+  transfersOut?: number | null,
+): string {
   const parts: string[] = [];
   if (typeof transfersIn === "number") {
     parts.push(`转入 ${transfersIn.toLocaleString()}`);
@@ -137,7 +140,10 @@ function formatUtc8Date(value?: string): string {
 
   const utc8 = new Date(time + 8 * 60 * 60 * 1000);
   const year = utc8.getUTCFullYear();
-  const month = utc8.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  const month = utc8.toLocaleString("en-US", {
+    month: "long",
+    timeZone: "UTC",
+  });
   const day = utc8.getUTCDate();
 
   return `${month} ${day}, ${year}`;
@@ -146,9 +152,14 @@ function formatUtc8Date(value?: string): string {
 function enrichPriceChange(change: PlayerValueChange): PlayerValueChange {
   const oldValue = change.oldValue ?? change.lastValue;
   const newValue = change.newValue ?? change.value;
-  const computedType = typeof oldValue === "number" && typeof newValue === "number"
-    ? newValue > oldValue ? "RISE" : newValue < oldValue ? "FALL" : "UNCHANGED"
-    : "UNCHANGED";
+  const computedType =
+    typeof oldValue === "number" && typeof newValue === "number"
+      ? newValue > oldValue
+        ? "RISE"
+        : newValue < oldValue
+          ? "FALL"
+          : "UNCHANGED"
+      : "UNCHANGED";
   const changeType = change.changeType || computedType;
 
   return {
@@ -161,7 +172,7 @@ function enrichPriceChange(change: PlayerValueChange): PlayerValueChange {
     movementText: movementText(changeType),
     movementClass: movementClass(changeType),
     transferText: formatTransferText(change.transfersIn, change.transfersOut),
-    changeType
+    changeType,
   };
 }
 
@@ -181,7 +192,12 @@ function mapPlayerValueChange(value: PlayerValue): PlayerValueChange {
     value: value.value,
     transfersIn: value.transfersIn ?? undefined,
     transfersOut: value.transfersOut ?? undefined,
-    changeType: value.value > value.lastValue ? "RISE" : value.value < value.lastValue ? "FALL" : "UNCHANGED"
+    changeType:
+      value.value > value.lastValue
+        ? "RISE"
+        : value.value < value.lastValue
+          ? "FALL"
+          : "UNCHANGED",
   });
 }
 
@@ -200,67 +216,94 @@ function priceCacheTtl(changeDate: string): number {
   return key >= localTodayKey() ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
 }
 
-export async function getPlayerValueByDate(changeDate: string, forceRefresh = false): Promise<PlayerValueChange[]> {
+export async function getPlayerValueByDate(
+  changeDate: string,
+  forceRefresh = false,
+): Promise<PlayerValueChange[]> {
   return (await readPlayerValueByDate(changeDate, { forceRefresh })).data;
 }
 
 export async function readPlayerValueByDate(
   changeDate: string,
-  options: ServiceReadOptions = {}
+  options: ServiceReadOptions = {},
 ): Promise<DomainRead<PlayerValueChange[]>> {
-  const result = await graphqlRead<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
-    cachePolicy: "market",
-    getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
-    forceRefresh: options.forceRefresh,
-    trace: options.trace
-  });
+  const result = await graphqlRead<PlayerValuesResponse>(
+    PLAYER_VALUES,
+    { changeDate: toDateKey(changeDate) },
+    {
+      cachePolicy: "market",
+      getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
+      forceRefresh: options.forceRefresh,
+      trace: options.trace,
+    },
+  );
   if (result.errors.length > 0) {
     throw new Error(
-      result.errors.map((error) => error.message).filter(Boolean).join("; ")
-      || "身价变化数据暂时不可用，请稍后重试"
+      result.errors
+        .map((error) => error.message)
+        .filter(Boolean)
+        .join("; ") || "身价变化数据暂时不可用，请稍后重试",
     );
   }
   return {
     data: (result.data.playerValues || [])
       .filter((value) => value.value !== value.lastValue)
       .map(mapPlayerValueChange),
-    meta: result.meta
+    meta: result.meta,
   };
 }
 
-export async function getPlayerValueByElement(element: number, forceRefresh = false): Promise<PlayerValueChange[]> {
+export async function getPlayerValueByElement(
+  element: number,
+  forceRefresh = false,
+): Promise<PlayerValueChange[]> {
   const season = getAppContextSnapshot()?.season;
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
-  const data = await graphqlRequest<PlayerValueHistoryResponse>(PLAYER_VALUE_HISTORY, { playerId: element }, {
-    cachePolicy: "historical",
-    cacheVariant: `season:${season}`,
-    forceRefresh
-  });
-  return (data.playerValueHistory || []).map((item) => enrichPriceChange({
-    element: item.playerId,
-    playerId: item.playerId,
-    oldValue: item.oldValue,
-    newValue: item.newValue,
-    lastValue: item.oldValue,
-    value: item.newValue,
-    changeDate: item.changeDate,
-    transfersIn: item.transfersIn ?? undefined,
-    transfersOut: item.transfersOut ?? undefined,
-    changeType: item.changeType
-  }));
+  const data = await graphqlRequest<PlayerValueHistoryResponse>(
+    PLAYER_VALUE_HISTORY,
+    { playerId: element },
+    {
+      cachePolicy: "historical",
+      cacheVariant: `season:${season}`,
+      forceRefresh,
+    },
+  );
+  return (data.playerValueHistory || []).map((item) =>
+    enrichPriceChange({
+      element: item.playerId,
+      playerId: item.playerId,
+      oldValue: item.oldValue,
+      newValue: item.newValue,
+      lastValue: item.oldValue,
+      value: item.newValue,
+      changeDate: item.changeDate,
+      transfersIn: item.transfersIn ?? undefined,
+      transfersOut: item.transfersOut ?? undefined,
+      changeType: item.changeType,
+    }),
+  );
 }
 
-export async function getPlayerValues(changeDate: string, forceRefresh = false): Promise<PlayerValue[]> {
-  const data = await graphqlRequest<PlayerValuesResponse>(PLAYER_VALUES, { changeDate: toDateKey(changeDate) }, {
-    cachePolicy: "market",
-    getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
-    forceRefresh
-  });
+export async function getPlayerValues(
+  changeDate: string,
+  forceRefresh = false,
+): Promise<PlayerValue[]> {
+  const data = await graphqlRequest<PlayerValuesResponse>(
+    PLAYER_VALUES,
+    { changeDate: toDateKey(changeDate) },
+    {
+      cachePolicy: "market",
+      getCacheExpiry: () => Date.now() + priceCacheTtl(changeDate),
+      forceRefresh,
+    },
+  );
   return data.playerValues || [];
 }
 
 export function refreshPlayerValue(changeDate?: string): Promise<unknown> {
-  return changeDate ? getPlayerValueByDate(changeDate, true) : getPlayerValues(changeDate || formatDateKey(), true);
+  return changeDate
+    ? getPlayerValueByDate(changeDate, true)
+    : getPlayerValues(changeDate || formatDateKey(), true);
 }
 
 /* ---------- Market pulse (web /explore/market parity) ---------- */
@@ -286,10 +329,6 @@ const MARKET_PULSE = `
     marketPulse(days: $days) {
       coverage { requestedDays observedDays latestDate capturedAt complete stale }
       mostSelected { ${MARKET_PLAYER_FIELDS} }
-      ownershipMovers {
-        risers { player { ${MARKET_PLAYER_FIELDS} } previousSelectedByPercent selectedByPercent change }
-        fallers { player { ${MARKET_PLAYER_FIELDS} } previousSelectedByPercent selectedByPercent change }
-      }
       transferMovers { player { ${MARKET_PLAYER_FIELDS} } transfersIn transfersOut netTransfers }
       availabilityUpdateCount
       availabilityHighlights {
@@ -301,6 +340,58 @@ const MARKET_PULSE = `
         chanceOfPlayingThisRound
       }
       newPlayers { player { ${MARKET_PLAYER_FIELDS} } firstObservedDate }
+    }
+  }
+`;
+
+const MARKET_OWNERSHIP_FIELDS = `
+  coverage {
+    status
+    requestedDays
+    observedDays
+    firstDate
+    latestDate
+    fromDate
+    toDate
+    missingDates
+    capturedAt
+    complete
+    stale
+  }
+  risers {
+    player { ${MARKET_PLAYER_FIELDS} }
+    fromSelectedByPercent
+    toSelectedByPercent
+    changePercentagePoints
+    fromDate
+    toDate
+  }
+  fallers {
+    player { ${MARKET_PLAYER_FIELDS} }
+    fromSelectedByPercent
+    toSelectedByPercent
+    changePercentagePoints
+    fromDate
+    toDate
+  }
+`;
+
+const MARKET_OWNERSHIP_OVERVIEW = `
+  query MiniMarketOwnershipOverview($period: MarketOwnershipPeriod!, $limit: Int!) {
+    marketOwnershipOverview(period: $period, limit: $limit) {
+      period
+      gameweek { id name deadlineTime }
+      ${MARKET_OWNERSHIP_FIELDS}
+    }
+  }
+`;
+
+const MARKET_OWNERSHIP_DAY = `
+  query MiniMarketOwnershipDay($date: Date, $limit: Int!) {
+    marketOwnershipDay(date: $date, limit: $limit) {
+      period
+      date
+      ${MARKET_OWNERSHIP_FIELDS}
     }
   }
 `;
@@ -320,8 +411,8 @@ const MARKET_AVAILABILITY = `
   }
 `;
 
-/** Web marketPulse window (lib/market days param). */
-export const MARKET_PULSE_DAYS = 14;
+/** Non-ownership market lookback needed for the compact market sections. */
+export const MARKET_PULSE_DAYS = 7;
 
 export interface MarketPulsePlayer {
   playerId: number;
@@ -333,11 +424,53 @@ export interface MarketPulsePlayer {
   selectedByPercent: number;
 }
 
-export interface MarketOwnershipMove {
+export type MarketOwnershipPeriod = "DAILY" | "GAMEWEEK" | "ROLLING_7D";
+
+export type MarketOwnershipCoverageStatus =
+  | "READY"
+  | "PARTIAL"
+  | "NO_DATA"
+  | "BASELINE_MISSING"
+  | "NO_PREVIOUS_GAMEWEEK"
+  | "NO_UPCOMING_GAMEWEEK";
+
+export interface MarketOwnershipCoverage {
+  status: MarketOwnershipCoverageStatus;
+  requestedDays: number;
+  observedDays: number;
+  firstDate?: string | null;
+  latestDate?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  missingDates: string[];
+  capturedAt?: string | null;
+  complete: boolean;
+  stale: boolean;
+}
+
+export interface MarketOwnershipChange {
   player: MarketPulsePlayer;
-  previousSelectedByPercent: number;
-  selectedByPercent: number;
-  change: number;
+  fromSelectedByPercent: number;
+  toSelectedByPercent: number;
+  changePercentagePoints: number;
+  fromDate: string;
+  toDate: string;
+}
+
+export interface MarketOwnershipOverview {
+  period: MarketOwnershipPeriod;
+  gameweek?: { id: number; name: string; deadlineTime: string } | null;
+  coverage: MarketOwnershipCoverage;
+  risers: MarketOwnershipChange[];
+  fallers: MarketOwnershipChange[];
+}
+
+export interface MarketOwnershipDay {
+  period: "DAILY";
+  date?: string | null;
+  coverage: MarketOwnershipCoverage;
+  risers: MarketOwnershipChange[];
+  fallers: MarketOwnershipChange[];
 }
 
 export interface MarketTransferMove {
@@ -371,12 +504,13 @@ export interface MarketPulse {
     stale: boolean;
   } | null;
   mostSelected: MarketPulsePlayer[];
-  ownershipRisers: MarketOwnershipMove[];
-  ownershipFallers: MarketOwnershipMove[];
   transferMovers: MarketTransferMove[];
   availabilityHighlights: MarketAvailabilityItem[];
   availabilityUpdateCount: number;
-  newPlayers: Array<{ player: MarketPulsePlayer; firstObservedDate?: string | null }>;
+  newPlayers: Array<{
+    player: MarketPulsePlayer;
+    firstObservedDate?: string | null;
+  }>;
 }
 
 interface MarketPulseResponse {
@@ -384,14 +518,13 @@ interface MarketPulseResponse {
   marketPulse?: {
     coverage?: MarketPulse["coverage"];
     mostSelected?: MarketPulsePlayer[];
-    ownershipMovers?: {
-      risers?: MarketOwnershipMove[];
-      fallers?: MarketOwnershipMove[];
-    };
     transferMovers?: MarketTransferMove[];
     availabilityUpdateCount?: number;
     availabilityHighlights?: MarketAvailabilityItem[];
-    newPlayers?: Array<{ player: MarketPulsePlayer; firstObservedDate?: string | null }>;
+    newPlayers?: Array<{
+      player: MarketPulsePlayer;
+      firstObservedDate?: string | null;
+    }>;
     availabilityUpdates?: MarketAvailabilityItem[];
   };
 }
@@ -402,38 +535,107 @@ function mapPulse(data: MarketPulseResponse | undefined): MarketPulse {
     snapshot: data?.marketSnapshotContext ?? null,
     coverage: pulse?.coverage ?? null,
     mostSelected: pulse?.mostSelected ?? [],
-    ownershipRisers: pulse?.ownershipMovers?.risers ?? [],
-    ownershipFallers: pulse?.ownershipMovers?.fallers ?? [],
     transferMovers: pulse?.transferMovers ?? [],
     availabilityHighlights: pulse?.availabilityHighlights ?? [],
     availabilityUpdateCount: pulse?.availabilityUpdateCount ?? 0,
-    newPlayers: pulse?.newPlayers ?? []
+    newPlayers: pulse?.newPlayers ?? [],
   };
 }
 
-/** Latest snapshot board: ownership / transfers / availability / new players. */
-export async function getMarketPulse(forceRefresh = false, trace?: ServiceReadOptions["trace"]): Promise<MarketPulse> {
-  const result = await graphqlRead<MarketPulseResponse>(MARKET_PULSE, { days: MARKET_PULSE_DAYS }, {
-    authMode: "public",
-    cachePolicy: "market",
-    forceRefresh,
-    trace
-  });
+interface MarketOwnershipOverviewResponse {
+  marketOwnershipOverview: MarketOwnershipOverview;
+}
+
+interface MarketOwnershipDayResponse {
+  marketOwnershipDay: MarketOwnershipDay;
+}
+
+function ownershipError(
+  errors: Array<{ message?: string }> | undefined,
+): Error | null {
+  if (!errors || errors.length === 0) return null;
+  return new Error(
+    errors
+      .map((error) => error.message)
+      .filter(Boolean)
+      .join("; ") || "市场持有率数据暂时不可用，请稍后重试",
+  );
+}
+
+export async function getMarketOwnership(
+  period: MarketOwnershipPeriod,
+  date?: string | null,
+  forceRefresh = false,
+  trace?: ServiceReadOptions["trace"],
+): Promise<MarketOwnershipOverview | MarketOwnershipDay> {
+  if (period === "DAILY" && date) {
+    const result = await graphqlRead<MarketOwnershipDayResponse>(
+      MARKET_OWNERSHIP_DAY,
+      { date, limit: 8 },
+      {
+        authMode: "public",
+        cachePolicy: "market",
+        forceRefresh,
+        trace,
+      },
+    );
+    const error = ownershipError(result.errors);
+    if (error) throw error;
+    return result.data.marketOwnershipDay;
+  }
+  const result = await graphqlRead<MarketOwnershipOverviewResponse>(
+    MARKET_OWNERSHIP_OVERVIEW,
+    { period, limit: 8 },
+    {
+      authMode: "public",
+      cachePolicy: "market",
+      forceRefresh,
+      trace,
+    },
+  );
+  const error = ownershipError(result.errors);
+  if (error) throw error;
+  return result.data.marketOwnershipOverview;
+}
+
+/** Latest snapshot board: price / transfers / availability / new players. */
+export async function getMarketPulse(
+  forceRefresh = false,
+  trace?: ServiceReadOptions["trace"],
+): Promise<MarketPulse> {
+  const result = await graphqlRead<MarketPulseResponse>(
+    MARKET_PULSE,
+    { days: MARKET_PULSE_DAYS },
+    {
+      authMode: "public",
+      cachePolicy: "market",
+      forceRefresh,
+      trace,
+    },
+  );
   if (result.errors.length > 0) {
     throw new Error(
-      result.errors.map((error) => error.message).filter(Boolean).join("; ")
-      || "市场动态数据暂时不可用，请稍后重试"
+      result.errors
+        .map((error) => error.message)
+        .filter(Boolean)
+        .join("; ") || "市场动态数据暂时不可用，请稍后重试",
     );
   }
   return mapPulse(result.data);
 }
 
 /** Full availability list — lazy-loaded behind the 伤情动态 disclosure (web pattern). */
-export async function getMarketAvailability(forceRefresh = false): Promise<MarketAvailabilityItem[]> {
-  const data = await graphqlRequest<MarketPulseResponse>(MARKET_AVAILABILITY, { days: MARKET_PULSE_DAYS }, {
-    authMode: "public",
-    cachePolicy: "market",
-    forceRefresh
-  });
+export async function getMarketAvailability(
+  forceRefresh = false,
+): Promise<MarketAvailabilityItem[]> {
+  const data = await graphqlRequest<MarketPulseResponse>(
+    MARKET_AVAILABILITY,
+    { days: MARKET_PULSE_DAYS },
+    {
+      authMode: "public",
+      cachePolicy: "market",
+      forceRefresh,
+    },
+  );
   return data?.marketPulse?.availabilityUpdates ?? [];
 }

@@ -3,8 +3,8 @@
     <view class="score-card scoreboard">
       <view class="score-top">
         <view class="score-identity">
-          <view class="score-team">身价变化</view>
-          <view class="score-manager">{{activeMode === 'daily' ? '每日调价 · 涨跌榜' : '单个球员的身价轨迹'}}</view>
+          <view class="score-team">市场动态</view>
+          <view class="score-manager">{{activeMode === 'daily' ? '每日市场动态 · 涨跌榜' : '球员历史'}}</view>
         </view>
         <view wx:if="{{activeMode === 'daily'}}" class="score-hero">
           <view class="score-label">上涨</view>
@@ -15,7 +15,7 @@
   </view>
 
   <view class="section mode-tabs">
-    <view class="mode-tab {{activeMode === 'daily' ? 'active' : ''}}" data-mode="daily" hover-class="hover-dim" bindtap="onModeChange">每日变化</view>
+    <view class="mode-tab {{activeMode === 'daily' ? 'active' : ''}}" data-mode="daily" hover-class="hover-dim" bindtap="onModeChange">市场动态</view>
     <view class="mode-tab {{activeMode === 'player' ? 'active' : ''}}" data-mode="player" hover-class="hover-dim" bindtap="onModeChange">球员历史</view>
   </view>
 
@@ -37,7 +37,7 @@
     <view wx:if="{{refreshing}}" class="section-status">正在刷新 {{changeDate}}</view>
     <view id="perf-primary-content">
     <app-error-state wx:if="{{error && riseChanges.length === 0 && fallChanges.length === 0}}" message="{{error}}" bind:retry="onRetry" />
-    <app-loading wx:elif="{{loading}}" text="加载身价变化" />
+    <app-loading wx:elif="{{loading}}" text="加载市场动态" />
     <block wx:else>
     <view wx:if="{{error}}" class="inline-error">{{error}}，当前保留已有数据</view>
     <view wx:if="{{riseChanges.length === 0 && fallChanges.length === 0}}" class="section card">
@@ -100,10 +100,24 @@
     </view>
 
     <view class="section pulse-heading-row">
-      <view class="section-heading">市场全景</view>
+      <view class="section-heading">市场动态</view>
       <text wx:if="{{coverageText}}" class="coverage-text">{{coverageText}}{{pulseStale ? ' · 数据可能滞后' : ''}}</text>
     </view>
     <view wx:if="{{pulseError}}" class="section inline-error">{{pulseError}}</view>
+
+    <view class="section mode-tabs market-period-tabs">
+      <view class="mode-tab {{marketPeriod === 'DAILY' ? 'active' : ''}}" data-period="DAILY" bindtap="onMarketPeriodChange">每日</view>
+      <view class="mode-tab {{marketPeriod === 'GAMEWEEK' ? 'active' : ''}}" data-period="GAMEWEEK" bindtap="onMarketPeriodChange">GW</view>
+      <view class="mode-tab {{marketPeriod === 'ROLLING_7D' ? 'active' : ''}}" data-period="ROLLING_7D" bindtap="onMarketPeriodChange">近 7 日</view>
+    </view>
+    <view wx:if="{{marketPeriod === 'DAILY' && ownershipDateOptions.length}}" class="section ownership-date-strip">
+      <view wx:for="{{ownershipDateOptions}}" wx:key="*this" class="date-chip {{item === ownershipSelectedDate ? 'active' : ''}}" data-date="{{item}}" bindtap="onMarketDateSelect">{{item}}</view>
+    </view>
+    <view wx:if="{{ownershipCoverageText}}" class="section ownership-coverage">
+      <text class="coverage-text">{{ownershipStatusText}} · {{ownershipCoverageText}}</text>
+      <text wx:if="{{ownershipGameweekText}}" class="coverage-text">{{ownershipGameweekText}}</text>
+      <text wx:if="{{ownershipMissingDatesText}}" class="coverage-missing">{{ownershipMissingDatesText}}</text>
+    </view>
 
     <view wx:if="{{glanceTiles.length}}" class="section glance-grid">
       <view wx:for="{{glanceTiles}}" wx:key="key" class="glance-card">
@@ -133,14 +147,17 @@
       </view>
     </view>
 
-    <view wx:if="{{ownershipRiserRows.length || ownershipFallerRows.length}}" class="section card pulse-card">
+    <view class="section card pulse-card ownership-card">
       <view class="panel-head">
-        <text>持有率摆动</text>
+        <text>持有率百分点变化</text>
       </view>
-      <view class="swing-columns">
+      <app-error-state wx:if="{{ownershipError}}" message="{{ownershipError}}" bind:retry="onRetry" />
+      <app-loading wx:elif="{{!ownershipLoaded}}" text="加载持有率周期" />
+      <app-empty-state wx:elif="{{!ownershipRiserRows.length && !ownershipFallerRows.length}}" title="{{ownershipStatusText || '当日无快照'}}" description="{{ownershipMissingDatesText || ownershipCoverageText || '没有可计算的比较'}}" />
+      <view wx:if="{{ownershipRiserRows.length || ownershipFallerRows.length}}" class="swing-columns">
         <view class="swing-col">
-          <view class="swing-title good">增持</view>
-          <app-empty-state wx:if="{{ownershipRiserRows.length === 0}}" title="暂无增持" description="观察期内没有明显增持" />
+          <view class="swing-title good">上升</view>
+          <app-empty-state wx:if="{{ownershipRiserRows.length === 0}}" title="暂无上升" description="当前周期没有正向百分点变化" />
           <view wx:for="{{ownershipRiserRows}}" wx:key="id" class="swing-row">
             <view class="swing-main">
               <view class="pulse-top">
@@ -154,8 +171,8 @@
           </view>
         </view>
         <view class="swing-col">
-          <view class="swing-title bad">减持</view>
-          <app-empty-state wx:if="{{ownershipFallerRows.length === 0}}" title="暂无减持" description="观察期内没有明显减持" />
+          <view class="swing-title bad">下降</view>
+          <app-empty-state wx:if="{{ownershipFallerRows.length === 0}}" title="暂无下降" description="当前周期没有负向百分点变化" />
           <view wx:for="{{ownershipFallerRows}}" wx:key="id" class="swing-row">
             <view class="swing-main">
               <view class="pulse-top">

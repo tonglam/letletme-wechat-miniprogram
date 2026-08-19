@@ -3,7 +3,7 @@ import {
   getApiSessionToken,
   isLogoutInFlight,
   refreshWechatApiSession,
-  restoreApiSessionCredentials
+  restoreApiSessionCredentials,
 } from "./services/auth.service";
 import { purgeGraphQLStorageCache } from "./services/graphql.service";
 import { routes } from "./config/routes";
@@ -11,7 +11,7 @@ import { storageKeys } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import {
   commitEntryBinding,
-  ensureAppContext
+  ensureAppContext,
 } from "./services/app-context.service";
 import { installPrivacyAuthorizationHandler } from "./utils/privacy";
 
@@ -27,7 +27,7 @@ App<IAppOption>({
     entryId: undefined,
     openid: undefined,
     authRevision: 0,
-    contextRevision: 0
+    contextRevision: 0,
   },
 
   _pendingInit: null as Promise<void> | null,
@@ -41,6 +41,7 @@ App<IAppOption>({
 
   async onLaunch() {
     const launchStart = Date.now();
+    this.installMandatoryUpdateGuard();
     // Older builds persisted openid even though the current session contract
     // does not consume it. Remove the legacy identifier during migration.
     wx.removeStorageSync("openid");
@@ -59,9 +60,37 @@ App<IAppOption>({
     // when it is merely scheduled.
     void initialization.then(
       () => recordLaunch(Date.now() - launchStart),
-      () => recordLaunch(Date.now() - launchStart)
+      () => recordLaunch(Date.now() - launchStart),
     );
     this.purgeExpiredGraphQLCache();
+  },
+
+  /**
+   * The market ownership contract is intentionally breaking. Once WeChat has
+   * downloaded a newer bundle, the current bundle must not continue serving
+   * pages against the removed GraphQL fields.
+   */
+  installMandatoryUpdateGuard() {
+    if (typeof wx.getUpdateManager !== "function") return;
+    const updateManager = wx.getUpdateManager();
+    updateManager.onUpdateReady(() => {
+      void wx
+        .showModal({
+          title: "需要更新",
+          content: "市场动态已升级，请更新后继续使用。",
+          showCancel: false,
+          confirmText: "立即更新",
+        })
+        .then(() => updateManager.applyUpdate());
+    });
+    updateManager.onUpdateFailed(() => {
+      void wx.showModal({
+        title: "更新失败",
+        content: "当前版本无法继续访问，请检查网络后重新打开小程序。",
+        showCancel: false,
+        confirmText: "知道了",
+      });
+    });
   },
 
   onShow() {
@@ -69,7 +98,9 @@ App<IAppOption>({
   },
 
   reportError(message: string) {
-    (wx as unknown as { reportError?: (message: string) => void }).reportError?.(message);
+    (
+      wx as unknown as { reportError?: (message: string) => void }
+    ).reportError?.(message);
   },
 
   onError(error: string) {
@@ -127,15 +158,17 @@ App<IAppOption>({
         return;
       }
       refreshWechatApiSession().catch(() => {
-        // Account linking is optional and sync is best-effort: link-required
-        // and network failures alike leave the locally followed team alone.
-        // Pages render their own no-entry state instead of being redirected.
-      }).finally(markAuthReady);
+          // Account linking is optional and sync is best-effort: link-required
+          // and network failures alike leave the locally followed team alone.
+          // Pages render their own no-entry state instead of being redirected.
+        })
+        .finally(markAuthReady);
     } catch {
       refreshWechatApiSession().catch(() => {
-        // Restore failed; still attempt a WeChat session so authReady is not
-        // "ready with no login attempt".
-      }).finally(markAuthReady);
+          // Restore failed; still attempt a WeChat session so authReady is not
+          // "ready with no login attempt".
+        })
+        .finally(markAuthReady);
     }
   },
 
@@ -147,25 +180,28 @@ App<IAppOption>({
    * 401 recoveries count too) without blocking cold starts.
    */
   revalidateSessionProfile() {
-    const lastChecked = Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
+    const lastChecked =
+      Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
     if (lastChecked && Date.now() - lastChecked < 24 * 60 * 60 * 1000) {
       return;
     }
     const boundEntryAtStart = this.globalData.entryId;
-    refreshWechatApiSession().then(() => {
-      // storeApiSession has applied the fresh binding to globalData and
-      // cleared stale caches. If the binding actually changed, the open page
-      // is still showing the previously bound team — rebuild it.
-      // storeApiSession retains a local display-only follow when the profile
-      // has no verified entry, so compare the state it actually applied.
-      const nextEntry = this.globalData.entryId;
-      if (nextEntry !== boundEntryAtStart) {
-        this.reloadCurrentPageForEntryChange(nextEntry);
-      }
-    }).catch(() => {
-      // Link-required and network failures keep the stored follow and retry
-      // on a later launch — pages own how they render the no-entry state.
-    });
+    refreshWechatApiSession()
+      .then(() => {
+        // storeApiSession has applied the fresh binding to globalData and
+        // cleared stale caches. If the binding actually changed, the open page
+        // is still showing the previously bound team — rebuild it.
+        // storeApiSession retains a local display-only follow when the profile
+        // has no verified entry, so compare the state it actually applied.
+        const nextEntry = this.globalData.entryId;
+        if (nextEntry !== boundEntryAtStart) {
+          this.reloadCurrentPageForEntryChange(nextEntry);
+        }
+      })
+      .catch(() => {
+        // Link-required and network failures keep the stored follow and retry
+        // on a later launch — pages own how they render the no-entry state.
+      });
   },
 
   /** Rebuild the visible page after the authoritative entry binding changed. */
@@ -179,8 +215,7 @@ App<IAppOption>({
       }
       const pages = getCurrentPages();
       const current = pages[pages.length - 1] as
-        | { route?: string; options?: Record<string, unknown> }
-        | undefined;
+        { route?: string; options?: Record<string, unknown> } | undefined;
       if (!current || !current.route) {
         return;
       }
@@ -233,7 +268,7 @@ App<IAppOption>({
     try {
       await ensureAppContext({
         forceRefresh,
-        reason: forceRefresh ? "pull-refresh" : "app-launch"
+        reason: forceRefresh ? "pull-refresh" : "app-launch",
       });
     } catch {
       // Keep launch resilient when shared app data is temporarily unavailable.
@@ -245,5 +280,5 @@ App<IAppOption>({
     setTimeout(() => {
       purgeGraphQLStorageCache();
     }, 0);
-  }
+  },
 });

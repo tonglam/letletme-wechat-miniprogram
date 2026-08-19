@@ -54,13 +54,24 @@ export interface MiniHomeSupplementResult {
 
 function normalizeSummary(
   results: MiniHomeSupplementResponse["eventOverallResult"],
-  eventId: number
+  eventId: number,
 ): GameweekOverallSummary | undefined {
-  const list = Array.isArray(results) ? results.filter(Boolean) : results ? [results] : [];
-  return list.find((result) => Number(result.event) === eventId)
-    || list
-      .filter((result) => typeof result.event === "number" && Number(result.event) <= eventId)
-      .sort((left, right) => Number(right.event || 0) - Number(left.event || 0))[0];
+  const list = Array.isArray(results)
+    ? results.filter(Boolean)
+    : results
+      ? [results]
+      : [];
+  return (
+    list.find((result) => Number(result.event) === eventId) ||
+    list
+      .filter(
+        (result) =>
+          typeof result.event === "number" && Number(result.event) <= eventId,
+      )
+      .sort(
+        (left, right) => Number(right.event || 0) - Number(left.event || 0),
+      )[0]
+  );
 }
 
 function rootError(errors: GraphQLErrorInfo[], root: string): string {
@@ -82,40 +93,39 @@ const HOME_AVAILABILITY_LIMIT = 5;
 const MINI_HOME_MARKET_QUERY = `
   query MiniHomeMarket($days: Int) {
     marketPulse(days: $days) {
-      coverage { observedDays latestDate }
-      mostSelected {
-        playerId
-        webName
-        teamShortName
-        position
-        selectedByPercent
-      }
-      priceChanges {
-        player { playerId webName teamShortName position }
-        oldPrice
-        newPrice
-        change
-        direction
-      }
-      ownershipMovers {
-        risers {
-          player { playerId webName teamShortName position selectedByPercent }
-          previousSelectedByPercent
-          selectedByPercent
-          change
+        availabilityUpdates {
+          player { playerId webName teamShortName selectedByPercent }
+          status
+          previousStatus
+          news
         }
-        fallers {
-          player { playerId webName teamShortName position selectedByPercent }
-          previousSelectedByPercent
-          selectedByPercent
-          change
-        }
-      }
-      availabilityUpdates {
-        player { playerId webName teamShortName selectedByPercent }
+    }
+    marketOwnershipDay(limit: 5) {
+      period
+      date
+      coverage {
         status
-        previousStatus
-        news
+        requestedDays
+        observedDays
+        fromDate
+        toDate
+        missingDates
+      }
+      risers {
+        player { playerId webName teamShortName position selectedByPercent }
+        fromSelectedByPercent
+        toSelectedByPercent
+        changePercentagePoints
+        fromDate
+        toDate
+      }
+      fallers {
+        player { playerId webName teamShortName position selectedByPercent }
+        fromSelectedByPercent
+        toSelectedByPercent
+        changePercentagePoints
+        fromDate
+        toDate
       }
     }
   }
@@ -131,29 +141,6 @@ interface MarketPlayer {
 
 interface MiniHomeMarketResponse {
   marketPulse: {
-    coverage?: { observedDays?: number; latestDate?: string | null };
-    mostSelected?: MarketPlayer[];
-    priceChanges?: Array<{
-      player: MarketPlayer;
-      oldPrice?: number;
-      newPrice?: number;
-      change?: number;
-      direction?: string;
-    }>;
-    ownershipMovers?: {
-      risers?: Array<{
-        player: MarketPlayer;
-        previousSelectedByPercent?: number;
-        selectedByPercent?: number;
-        change?: number;
-      }>;
-      fallers?: Array<{
-        player: MarketPlayer;
-        previousSelectedByPercent?: number;
-        selectedByPercent?: number;
-        change?: number;
-      }>;
-    };
     availabilityUpdates?: Array<{
       player: MarketPlayer;
       status?: string;
@@ -161,9 +148,43 @@ interface MiniHomeMarketResponse {
       news?: string | null;
     }>;
   } | null;
+  marketOwnershipDay: {
+    period: "DAILY";
+    date?: string | null;
+    coverage: {
+      status:
+        | "READY"
+        | "PARTIAL"
+        | "NO_DATA"
+        | "BASELINE_MISSING"
+        | "NO_PREVIOUS_GAMEWEEK"
+        | "NO_UPCOMING_GAMEWEEK";
+      requestedDays?: number;
+      observedDays?: number;
+      fromDate?: string | null;
+      toDate?: string | null;
+      missingDates?: string[];
+    };
+    risers?: Array<{
+      player: MarketPlayer;
+      fromSelectedByPercent?: number;
+      toSelectedByPercent?: number;
+      changePercentagePoints?: number;
+      fromDate?: string;
+      toDate?: string;
+    }>;
+    fallers?: Array<{
+      player: MarketPlayer;
+      fromSelectedByPercent?: number;
+      toSelectedByPercent?: number;
+      changePercentagePoints?: number;
+      fromDate?: string;
+      toDate?: string;
+    }>;
+  } | null;
 }
 
-export type MiniHomeMarketMode = "price" | "ownership" | "selected" | "empty";
+export type MiniHomeMarketMode = "ownership" | "empty";
 
 export interface HomeMarketMover {
   id: string;
@@ -202,13 +223,25 @@ const AVAILABILITY_STATUS: Record<string, string> = {
   injured: "伤病",
   unavailable: "无法出场",
   suspended: "停赛",
-  unknown: "状态已更新"
+  unknown: "状态已更新",
 };
 
-export function marketCoverageCopy(observedDays = 0): string {
-  if (observedDays <= 0) return "首份市场快照尚未采集";
-  if (observedDays < 14) return "每日追踪开始以来的早期信号";
-  return "最近 14 天最值得关注的信号";
+export function marketCoverageCopy(
+  ownership: MiniHomeMarketResponse["marketOwnershipDay"],
+): string {
+  const date = ownership?.date ? ` · ${ownership.date}` : "";
+  switch (ownership?.coverage?.status) {
+    case "READY":
+      return `最新每日持有率变化${date}`;
+    case "PARTIAL":
+      return `每日快照存在缺口${date}`;
+    case "BASELINE_MISSING":
+      return `每日变化等待前一日基准${date}`;
+    case "NO_DATA":
+      return `当日无快照${date}`;
+    default:
+      return "每日持有率变化暂不可用";
+  }
 }
 
 function shortPosition(position?: string): string {
@@ -220,8 +253,14 @@ function shortPosition(position?: string): string {
   return key || "";
 }
 
-function availabilityStatusKey(status?: string): keyof typeof AVAILABILITY_STATUS {
-  switch (String(status || "").trim().toLowerCase()) {
+function availabilityStatusKey(
+  status?: string,
+): keyof typeof AVAILABILITY_STATUS {
+  switch (
+    String(status || "")
+      .trim()
+      .toLowerCase()
+  ) {
     case "a":
     case "available":
       return "available";
@@ -251,7 +290,9 @@ function availabilityBody(update: {
   const news = String(update.news || "").trim();
   if (news) return news;
   const current = availabilityStatusKey(update.status);
-  const previous = update.previousStatus ? availabilityStatusKey(update.previousStatus) : null;
+  const previous = update.previousStatus
+    ? availabilityStatusKey(update.previousStatus)
+    : null;
   if (current === "available" && previous && previous !== "available") {
     return "球员已恢复可用，之前的伤停消息已清除。";
   }
@@ -259,124 +300,124 @@ function availabilityBody(update: {
 }
 
 function mapAvailability(
-  updates: NonNullable<NonNullable<MiniHomeMarketResponse["marketPulse"]>["availabilityUpdates"]>
+  updates: NonNullable<
+    NonNullable<MiniHomeMarketResponse["marketPulse"]>["availabilityUpdates"]
+  >,
 ): HomeAvailabilityRow[] {
-  const preferred = updates.filter((item) => Number(item.player.selectedByPercent) >= 1);
-  const rest = updates.filter((item) => Number(item.player.selectedByPercent) < 1);
-  return [...preferred, ...rest].slice(0, HOME_AVAILABILITY_LIMIT).map((item) => {
-    const statusKey = availabilityStatusKey(item.status);
-    return {
-      id: String(item.player.playerId),
-      name: item.player.webName || "-",
-      team: item.player.teamShortName || "-",
-      owned: `${Number(item.player.selectedByPercent || 0).toFixed(1)}%`,
-      status: AVAILABILITY_STATUS[statusKey],
-      statusKey,
-      body: availabilityBody(item)
-    };
-  });
+  const preferred = updates.filter(
+    (item) => Number(item.player.selectedByPercent) >= 1,
+  );
+  const rest = updates.filter(
+    (item) => Number(item.player.selectedByPercent) < 1,
+  );
+  return [...preferred, ...rest]
+    .slice(0, HOME_AVAILABILITY_LIMIT)
+    .map((item) => {
+      const statusKey = availabilityStatusKey(item.status);
+      return {
+        id: String(item.player.playerId),
+        name: item.player.webName || "-",
+        team: item.player.teamShortName || "-",
+        owned: `${Number(item.player.selectedByPercent || 0).toFixed(1)}%`,
+        status: AVAILABILITY_STATUS[statusKey],
+        statusKey,
+        body: availabilityBody(item),
+      };
+    });
 }
 
 export async function getMiniHomeMarket(
   forceRefresh = false,
-  trace?: PageRequestTrace | null
+  trace?: PageRequestTrace | null,
 ): Promise<MiniHomeMarketResult> {
   const result = await graphqlRead<MiniHomeMarketResponse>(
     MINI_HOME_MARKET_QUERY,
-    { days: 14 },
+    { days: 7 },
     {
       authMode: "public",
       cachePolicy: "market",
       forceRefresh,
-      trace
-    }
+      trace,
+    },
   );
   const pulse = result.data.marketPulse;
-  const priceChanges = pulse?.priceChanges || [];
-  const risers = pulse?.ownershipMovers?.risers || [];
-  const fallers = pulse?.ownershipMovers?.fallers || [];
-  const mostSelected = pulse?.mostSelected || [];
+  const ownership = result.data.marketOwnershipDay;
   const availability = mapAvailability(pulse?.availabilityUpdates || []);
-  const coverage = marketCoverageCopy(Number(pulse?.coverage?.observedDays) || 0);
-  const error = rootError(result.errors, "marketPulse");
+  const coverage = marketCoverageCopy(ownership);
+  const error = [
+    rootError(result.errors, "marketPulse"),
+    rootError(result.errors, "marketOwnershipDay"),
+  ]
+    .filter(Boolean)
+    .join("；");
 
-  if (priceChanges.length > 0) {
-    return {
-      mode: "price",
-      coverage,
-      leadTitle: "最新真实身价变化",
-      leadRows: priceChanges.slice(0, HOME_TEASER_LIMIT).map((change) => {
-        const rising = String(change.direction || "").toUpperCase() === "RISE" || Number(change.change) > 0;
-        const delta = Math.abs(Number(change.change) || 0) / 10;
-        return {
-          id: String(change.player.playerId),
-          name: change.player.webName || "-",
-          team: change.player.teamShortName || "-",
-          position: shortPosition(change.player.position),
-          meta: `£${((Number(change.newPrice) || 0) / 10).toFixed(1)}m`,
-          changeText: `${rising ? "+" : "-"}£${delta.toFixed(1)}m`,
-          rising
-        };
-      }),
-      risers: [],
-      fallers: [],
-      availability,
-      error
+  const risers = ownership?.risers || [];
+  const fallers = ownership?.fallers || [];
+
+  if (ownership && (risers.length > 0 || fallers.length > 0)) {
+    const mapMover = (
+      mover: NonNullable<typeof risers>[number],
+      falling = false,
+    ): HomeMarketMover => {
+      const change = Number(mover.changePercentagePoints) || 0;
+      return {
+        id: String(mover.player.playerId),
+        name: mover.player.webName || "-",
+        team: mover.player.teamShortName || "-",
+        position: shortPosition(mover.player.position),
+        meta: `${Number(mover.fromSelectedByPercent || 0).toFixed(1)}% → ${Number(mover.toSelectedByPercent || 0).toFixed(1)}%`,
+        changeText: `${change > 0 ? "+" : ""}${change.toFixed(1)} 个百分点`,
+        rising: !falling,
+      };
     };
-  }
-
-  if (risers.length > 0 || fallers.length > 0) {
-    const mapMover = (mover: NonNullable<typeof risers>[number], falling = false): HomeMarketMover => ({
-      id: String(mover.player.playerId),
-      name: mover.player.webName || "-",
-      team: mover.player.teamShortName || "-",
-      position: shortPosition(mover.player.position),
-      meta: `${Number(mover.previousSelectedByPercent || 0).toFixed(1)}% → ${Number(mover.selectedByPercent || 0).toFixed(1)}%`,
-      changeText: `${falling ? "" : "+"}${Number(mover.change || 0).toFixed(1)}%`,
-      rising: !falling
-    });
     return {
       mode: "ownership",
       coverage,
-      leadTitle: "持有率变化最大",
+      leadTitle: "最新每日持有率变化",
       leadRows: [],
-      risers: [...risers].sort((a, b) => Number(b.change) - Number(a.change)).slice(0, HOME_TEASER_LIMIT).map((row) => mapMover(row)),
-      fallers: [...fallers].sort((a, b) => Number(a.change) - Number(b.change)).slice(0, HOME_TEASER_LIMIT).map((row) => mapMover(row, true)),
+      risers: [...risers]
+        .sort(
+          (a, b) =>
+            Number(b.changePercentagePoints) - Number(a.changePercentagePoints),
+        )
+        .slice(0, HOME_TEASER_LIMIT)
+        .map((row) => mapMover(row)),
+      fallers: [...fallers]
+        .sort(
+          (a, b) =>
+            Number(a.changePercentagePoints) - Number(b.changePercentagePoints),
+        )
+        .slice(0, HOME_TEASER_LIMIT)
+        .map((row) => mapMover(row, true)),
       availability,
-      error
+      error,
     };
   }
 
-  if (mostSelected.length > 0) {
+  // The homepage intentionally does not fall back to a rolling period or an
+  // all-time ranking when the latest daily ownership comparison is empty.
+  if (ownership) {
     return {
-      mode: "selected",
+      mode: "empty",
       coverage,
-      leadTitle: "持有率最高",
-      leadRows: mostSelected.slice(0, HOME_TEASER_LIMIT).map((player) => ({
-        id: String(player.playerId),
-        name: player.webName || "-",
-        team: player.teamShortName || "-",
-        position: shortPosition(player.position),
-        meta: "",
-        changeText: `${Number(player.selectedByPercent || 0).toFixed(1)}%`,
-        rising: true
-      })),
+      leadTitle: "最新每日持有率变化",
+      leadRows: [],
       risers: [],
       fallers: [],
       availability,
-      error
+      error,
     };
   }
 
   return {
     mode: "empty",
     coverage,
-    leadTitle: "即将开始追踪",
+    leadTitle: "最新每日持有率变化",
     leadRows: [],
     risers: [],
     fallers: [],
     availability,
-    error
+    error,
   };
 }
 
@@ -384,7 +425,7 @@ export async function getMiniHomeSupplement(
   eventId: number,
   changeDate: string,
   forceRefresh = false,
-  trace?: PageRequestTrace | null
+  trace?: PageRequestTrace | null,
 ): Promise<MiniHomeSupplementResult> {
   const result = await graphqlRead<MiniHomeSupplementResponse>(
     MINI_HOME_SUPPLEMENT_QUERY,
@@ -394,8 +435,8 @@ export async function getMiniHomeSupplement(
       cachePolicy: "market",
       cacheVariant: `event:${eventId}`,
       forceRefresh,
-      trace
-    }
+      trace,
+    },
   );
   return {
     notice: result.data.miniProgramNotice || "",
@@ -404,7 +445,7 @@ export async function getMiniHomeSupplement(
     errors: {
       notice: rootError(result.errors, "miniProgramNotice"),
       summary: rootError(result.errors, "eventOverallResult"),
-      playerValues: rootError(result.errors, "playerValues")
-    }
+      playerValues: rootError(result.errors, "playerValues"),
+    },
   };
 }

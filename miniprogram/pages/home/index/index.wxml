@@ -68,7 +68,7 @@
     <view class="section card transfer-desk">
       <view class="transfer-head">
         <view>
-          <view class="section-title">转会台</view>
+        <view class="section-title">市场动态</view>
           <view class="section-subtitle">{{marketCoverage}}</view>
         </view>
         <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
@@ -79,7 +79,7 @@
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
           <view class="transfer-col">
             <view class="transfer-col-head transfer-up">持有上升</view>
-            <view wx:if="{{marketRisers.length === 0}}" class="transfer-empty-inline">本窗口尚未观测到持有率上升</view>
+            <view wx:if="{{marketRisers.length === 0}}" class="transfer-empty-inline">今日暂无持有率上升</view>
             <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row">
               <view class="transfer-player">
                 <view class="transfer-name-line">
@@ -93,7 +93,7 @@
           </view>
           <view class="transfer-col">
             <view class="transfer-col-head transfer-down">持有下降</view>
-            <view wx:if="{{marketFallers.length === 0}}" class="transfer-empty-inline">本窗口尚未观测到持有率下降</view>
+            <view wx:if="{{marketFallers.length === 0}}" class="transfer-empty-inline">今日暂无持有率下降</view>
             <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row">
               <view class="transfer-player">
                 <view class="transfer-name-line">
@@ -119,7 +119,7 @@
             <text class="transfer-delta {{item.rising ? 'transfer-up' : 'transfer-down'}}">{{item.changeText}}</text>
           </view>
         </view>
-        <view wx:elif="{{marketMode === 'empty' && availabilityRows.length === 0}}" class="transfer-empty">下一次 09:40 UTC+8 采集后，将记录首份完整球员快照</view>
+        <view wx:elif="{{marketMode === 'empty' && availabilityRows.length === 0}}" class="transfer-empty">今日无可计算的每日持有率变化</view>
 
         <view wx:if="{{availabilityRows.length > 0}}" class="transfer-watch">
           <view class="transfer-col-head">出场状态观察</view>
