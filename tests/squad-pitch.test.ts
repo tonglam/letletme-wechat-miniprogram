@@ -158,7 +158,8 @@ const unknownClub = toSquadPitchPlayer(pick({
 }));
 assertEqual(unknownClub?.teamCode, "", "unknown club is not invented");
 assertEqual(unknownClub?.webName, "Ait-Nouri", "keeps real name");
-assertEqual(kitAsset(""), "/assets/squad-pitch/kits/DEFAULT.png", "placeholder kit");
+assertEqual(kitAsset(""), "https://letletme.top/images/squad-pitch/kits/DEFAULT.png", "placeholder kit");
+assertEqual(kitAsset("ARS"), "https://letletme.top/images/squad-pitch/kits/ARS.png", "club kit uses CDN");
 
 const dream = buildDreamTeamPitchState([
   { webName: "Raya", teamShortName: "ARS", position: "GOALKEEPER", totalPoints: 6 },

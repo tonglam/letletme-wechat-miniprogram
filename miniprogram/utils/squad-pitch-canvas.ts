@@ -6,12 +6,12 @@
  * share image is always redrawn onto a full canvas.
  */
 import {
-  SQUAD_PITCH_BG,
-  SQUAD_PITCH_DEFAULT_KIT,
   buildBenchViews,
   buildPitchRows,
+  defaultKitAsset,
   formatSquadPitchHeaderView,
   kitAsset,
+  squadPitchBackgroundSrc,
   type SquadPitchHeader,
   type SquadPitchLocale,
   type SquadPitchPlayer
@@ -87,10 +87,12 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
   const header = formatSquadPitchHeaderView(input.header, locale);
   const rows = buildPitchRows(input.players, hasBench);
   const bench = buildBenchViews(benchPlayers, locale);
-  const kitSrcs = new Set<string>([SQUAD_PITCH_BG, SQUAD_PITCH_DEFAULT_KIT]);
+  const backgroundSrc = squadPitchBackgroundSrc();
+  const placeholderKit = defaultKitAsset();
+  const kitSrcs = new Set<string>([backgroundSrc, placeholderKit]);
 
   const layers: ShareDrawLayer[] = [
-    { type: "background", src: SQUAD_PITCH_BG },
+    { type: "background", src: backgroundSrc },
     {
       type: "header",
       teamName: header.teamName,
@@ -148,7 +150,7 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
   return {
     width,
     height,
-    backgroundSrc: SQUAD_PITCH_BG,
+    backgroundSrc,
     kitSrcs: Array.from(kitSrcs),
     layers
   };
@@ -236,9 +238,10 @@ async function loadImageMap(
     try {
       images.set(src, await loadCanvasImage(canvas, src));
     } catch {
-      if (src !== SQUAD_PITCH_DEFAULT_KIT && !images.has(SQUAD_PITCH_DEFAULT_KIT)) {
+      const placeholder = defaultKitAsset();
+      if (src !== placeholder && !images.has(placeholder)) {
         try {
-          images.set(SQUAD_PITCH_DEFAULT_KIT, await loadCanvasImage(canvas, SQUAD_PITCH_DEFAULT_KIT));
+          images.set(placeholder, await loadCanvasImage(canvas, placeholder));
         } catch {
           // Placeholder is optional; the player card still renders name + score.
         }
@@ -269,7 +272,8 @@ function drawStarter(
   layer: Extract<ShareDrawLayer, { type: "starter" }>,
   images: Map<string, CanvasImage>
 ) {
-  const kit = images.get(layer.kitSrc) || images.get(SQUAD_PITCH_DEFAULT_KIT) || images.get(kitAsset(""));
+  const placeholder = defaultKitAsset();
+  const kit = images.get(layer.kitSrc) || images.get(placeholder) || images.get(kitAsset(""));
   const kitWidth = layer.width * 0.9;
   const kitHeight = kitWidth * (220 / 240);
   const kitX = layer.x + (layer.width - kitWidth) / 2;
@@ -319,7 +323,7 @@ function drawBench(
 ) {
   ctx.fillStyle = PITCH_CREAM;
   ctx.fillRect(layer.x, layer.y, layer.width, layer.width * 0.62);
-  const kit = images.get(layer.kitSrc) || images.get(SQUAD_PITCH_DEFAULT_KIT);
+  const kit = images.get(layer.kitSrc) || images.get(defaultKitAsset());
   const kitH = layer.width * 0.42;
   if (kit) {
     ctx.drawImage(kit, layer.x + 4, layer.y + 8, kitH * (240 / 220) * 0.72, kitH);
