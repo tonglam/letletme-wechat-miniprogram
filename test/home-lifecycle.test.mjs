@@ -41,7 +41,7 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   );
   assert.match(
     page,
-    /getEntryClassicLeagues[\s\S]*getEntryH2hLeagues/,
+    /getEntryLeagueInfo/,
   );
   assert.match(page, /getMiniHomeMarket/);
   assert.match(page, /getMiniHomeSupplement/);

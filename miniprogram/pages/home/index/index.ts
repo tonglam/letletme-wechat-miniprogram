@@ -1,7 +1,7 @@
 import {
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
-import { getEntryInfo, getEntryClassicLeagues, getEntryH2hLeagues } from "../../../services/entry.service";
+import { getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.service";
 import type { EntryLeague } from "../../../models/entry";
 import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../services/auth.service";
 import {
@@ -606,29 +606,18 @@ Page({
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
         }
       }
-      // Classic and h2h leagues load independently — each panel renders
-      // as soon as its data arrives, without waiting for the other.
-      const classicTrace: PageRequestTrace | null = primaryTrace
-        ? { ...primaryTrace, callerSurface: "home-classic-leagues" }
+      // Load all leagues in a single request, then update UI once
+      const leagueTrace: PageRequestTrace | null = primaryTrace
+        ? { ...primaryTrace, callerSurface: "home-leagues" }
         : null;
-      const h2hTrace: PageRequestTrace | null = primaryTrace
-        ? { ...primaryTrace, callerSurface: "home-h2h-leagues" }
-        : null;
-      let classicLeagues: EntryLeague[] = [];
-      let h2hLeagues: EntryLeague[] = [];
-      const classicTask = getEntryClassicLeagues(entryId, forceRefresh, classicTrace || undefined)
-        .then((result) => {
-          classicLeagues = result;
-          if (isActiveSecondary()) this.setData({ leagues: [...classicLeagues, ...h2hLeagues] });
-        })
-        .catch(() => {});
-      const h2hTask = getEntryH2hLeagues(entryId, forceRefresh, h2hTrace || undefined)
-        .then((result) => {
-          h2hLeagues = result;
-          if (isActiveSecondary()) this.setData({ leagues: [...classicLeagues, ...h2hLeagues] });
-        })
-        .catch(() => {});
-      await Promise.allSettled([classicTask, h2hTask]);
+      try {
+        const allLeagues = await getEntryLeagueInfo(entryId, forceRefresh, leagueTrace || undefined);
+        if (isActiveSecondary()) {
+          this.setData({ leagues: allLeagues });
+        }
+      } catch (error) {
+        // League load failure is non-critical, ignore silently
+      }
     })();
     const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
