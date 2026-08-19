@@ -3,7 +3,7 @@
     <view class="subtitle">查看模式</view>
   </view>
 
-  <view wx:if="{{!emptyState}}" class="section live-toolbar">
+  <view wx:if="{{!emptyState && event > 0}}" class="section live-toolbar">
     <view class="live-toolbar-status">
       <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
     </view>
@@ -14,7 +14,7 @@
     <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时分数" />
-  <view wx:elif="{{emptyState}}" id="perf-primary-content" class="section">
+  <view wx:elif="{{emptyState === 'entry'}}" id="perf-primary-content" class="section">
     <app-empty-state
       eyebrow="需要球队"
       title="先选择我的球队"
@@ -22,6 +22,16 @@
       actionText="去选择球队"
       featured="{{true}}"
       bind:action="onChooseEntry"
+    />
+  </view>
+  <view wx:elif="{{emptyState === 'preseason'}}" id="perf-primary-content" class="section">
+    <app-empty-state
+      eyebrow="赛季准备中"
+      title="当前赛季暂无实时比赛周"
+      description="比赛周开始后，这里会显示实时阵容和得分"
+      actionText="重新检查"
+      featured="{{true}}"
+      bind:action="onRetry"
     />
   </view>
   <view wx:elif="{{noPicks}}" id="perf-primary-content" class="section">

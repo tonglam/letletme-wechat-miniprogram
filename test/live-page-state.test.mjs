@@ -7,7 +7,7 @@ globalThis.Page = (definition) => {
   capturedPage = definition;
 };
 
-await import("../miniprogram/pages/live/entry/entry.ts");
+const entryModule = await import("../miniprogram/pages/live/entry/entry.ts");
 const entryPage = capturedPage;
 
 capturedPage = undefined;
@@ -15,7 +15,7 @@ const tournamentModule = await import("../miniprogram/pages/live/tournament/tour
 const tournamentPage = capturedPage;
 
 capturedPage = undefined;
-await import("../miniprogram/pages/live/match/match.ts");
+const matchModule = await import("../miniprogram/pages/live/match/match.ts");
 const matchPage = capturedPage;
 
 capturedPage = undefined;
@@ -49,6 +49,36 @@ test("tournament preseason is a stable business empty state", () => {
   });
 });
 
+test("entry preseason is a stable business empty state", () => {
+  assert.deepEqual(entryModule.noLiveEventState(), {
+    loading: false,
+    refreshing: false,
+    hasData: false,
+    noPicks: false,
+    error: "",
+    transfersError: "",
+    emptyState: "preseason",
+    event: 0,
+    maxGw: 0,
+    lastUpdated: ""
+  });
+});
+
+test("match offseason is a scheduled empty state, not a request error", () => {
+  assert.deepEqual(matchModule.noScheduleState(), {
+    loading: false,
+    refreshing: false,
+    error: "",
+    hasData: false,
+    scheduleEmpty: true,
+    matches: [],
+    groups: [],
+    displayState: "scheduled",
+    lastUpdated: "",
+    fixtureStaleMessage: ""
+  });
+});
+
 test("tournament cold start commits preseason instead of an error", async () => {
   globalThis.wx = { getStorageSync: () => "" };
   globalThis.getApp = () => ({
@@ -77,6 +107,51 @@ test("tournament cold start commits preseason instead of an error", async () => 
   assert.equal(context.data.error, "");
   assert.deepEqual(context.rows, []);
   assert.deepEqual(calls, ["init", "stop", "display"]);
+});
+
+test("entry cold start commits preseason instead of loading displayEvent GW1", async () => {
+  globalThis.wx = {
+    getStorageSync: () => "",
+    nextTick: (cb) => cb()
+  };
+  globalThis.getApp = () => ({
+    globalData: { entryId: 123, gw: 1, currentGw: 0 },
+    authReady: Promise.resolve()
+  });
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: { ...entryPage.data, error: "old error" },
+    pageVisible: true,
+    perfTracker: { mark() {}, observePrimary() {} },
+    hasRouteEntry: false,
+    routeEntryId: 0,
+    ensureContext: async () => ({ season: "2627", currentEvent: null, nextEvent: 1 }),
+    setData(update, cb) {
+      Object.assign(this.data, update);
+      if (typeof cb === "function") cb();
+    },
+    initLiveRefresh() { calls.push("init"); },
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push("sync"); }
+    },
+    syncDisplayState() { calls.push("display"); },
+    loadData() {
+      calls.push("load");
+      return Promise.resolve();
+    },
+    loadEntryIdentity() { calls.push("identity"); }
+  };
+
+  await entryPage.initializeFromContext.call(context, "page-load", context.perfTracker);
+
+  assert.equal(context.data.event, 0);
+  assert.equal(context.data.maxGw, 0);
+  assert.equal(context.data.emptyState, "preseason");
+  assert.equal(context.data.error, "");
+  assert.ok(!calls.includes("load"));
+  assert.deepEqual(calls, ["identity", "init", "sync", "stop", "display"]);
 });
 
 test("re-arms current-gameweek polling before loading the switched context", () => {
@@ -333,7 +408,7 @@ test("match rollover invalidates an in-flight same-status request", async () => 
 test("entry resume revalidates current-gameweek transfers independently", async () => {
   const calls = [];
   globalThis.getApp = () => ({
-    globalData: { gw: 33 },
+    globalData: { gw: 33, currentGw: 33 },
     initAppData(forceRefresh) {
       calls.push(`init:${forceRefresh}`);
       return Promise.resolve();
@@ -346,7 +421,7 @@ test("entry resume revalidates current-gameweek transfers independently", async 
     hasShown: true,
     ensureContext(reason) {
       calls.push(`context:${reason}`);
-      return Promise.resolve({});
+      return Promise.resolve({ currentEvent: 33 });
     },
     liveRefresh: {
       sync() {
@@ -458,7 +533,8 @@ test("entry resume clears live data when a new season has no event yet", async (
   assert.equal(context.data.maxGw, 0);
   assert.equal(context.data.hasData, false);
   assert.equal(context.data.total, 0);
-  assert.equal(context.data.error, "当前赛季暂无实时比赛周");
+  assert.equal(context.data.error, "");
+  assert.equal(context.data.emptyState, "preseason");
   assert.equal(context.liveRequestId, 8);
   assert.equal(context.transfersRequestId, 5);
   assert.equal(context.liveRequest, null);
@@ -702,6 +778,83 @@ test("tournament recovery keeps preseason distinct from a context failure", asyn
   await tournamentPage.retryWithContext.call(failed);
   assert.equal(failed.data.emptyState, "");
   assert.equal(failed.data.emptyTitle, "");
+  assert.equal(failed.data.error, "赛季上下文刷新失败");
+});
+
+test("entry leaves preseason and reloads live points when GW1 appears", async () => {
+  globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 1, currentGw: 1, entryId: 123 } });
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 0,
+      maxGw: 0,
+      emptyState: "preseason"
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2026/27",
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 1 }),
+    restartForPrincipalChange() { return false; },
+    setData(update) { Object.assign(this.data, update); },
+    loadData(options) {
+      calls.push(`load:${this.data.event}:${options.forceRefresh}:${options.includeTransfers}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.event, 1);
+  assert.equal(context.data.emptyState, "");
+  assert.deepEqual(calls, ["stop", "sync:1", "load:1:true:true", "display"]);
+});
+
+test("entry recovery keeps preseason distinct from a context failure", async () => {
+  globalThis.wx = { nextTick: (cb) => cb() };
+  globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 0, currentGw: 0 } });
+  const calls = [];
+  const preseason = {
+    ...entryPage,
+    data: { ...entryPage.data, event: 0, error: "old error" },
+    pageVisible: true,
+    liveRefresh: { stop() { calls.push("stop"); } },
+    ensureContext: async () => ({ season: "2026/27", currentEvent: 0 }),
+    setData(update) { Object.assign(this.data, update); },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.retryWithContext.call(preseason);
+  assert.equal(preseason.data.emptyState, "preseason");
+  assert.equal(preseason.data.error, "");
+  assert.deepEqual(calls, ["stop", "display"]);
+
+  const failed = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      event: 0,
+      emptyState: "preseason"
+    },
+    pageVisible: true,
+    ensureContext: async () => { throw new Error("赛季上下文刷新失败"); },
+    setData(update, cb) {
+      Object.assign(this.data, update);
+      if (typeof cb === "function") cb();
+    },
+    syncDisplayState() {},
+    perfTracker: { mark() {}, observePrimary() {} }
+  };
+
+  await entryPage.retryWithContext.call(failed);
+  assert.equal(failed.data.emptyState, "");
   assert.equal(failed.data.error, "赛季上下文刷新失败");
 });
 

@@ -3,7 +3,7 @@
     <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" retainedCount="{{retainedRowCount}}" bind:refresh="onRetry" />
   </view>
 
-  <view class="section toolbar">
+  <view wx:if="{{emptyState !== 'preseason'}}" class="section toolbar">
     <view class="row">
       <picker wx:if="{{tournaments.length}}" class="league-picker" mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
         <view class="league-switch">

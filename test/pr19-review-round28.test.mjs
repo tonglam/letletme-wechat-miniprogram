@@ -32,3 +32,10 @@ test("Live landing exposes primary content only after owned context resolution",
   assert.match(page, /loadContext\(reason[\s\S]*await ensureAppContext\(\{ reason \}\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*contextResolved: true/);
   assert.match(template, /id="\{\{contextResolved \? 'perf-primary-content' : ''\}\}" wx:if="\{\{contextResolved\}\}"/);
 });
+
+test("Live landing does not present the next GW as a live gameweek", () => {
+  const template = source("miniprogram/pages/live/index/index.wxml");
+  assert.match(template, /currentGw \? 'LIVE CENTRE' : '赛季准备中'/);
+  assert.match(template, /currentGw \? 'GW ' \+ currentGw : \(event \? '下轮 GW ' \+ event : '-'\)/);
+  assert.doesNotMatch(template, /GW \{\{currentGw \|\| event/);
+});
