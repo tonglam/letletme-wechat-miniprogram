@@ -139,8 +139,25 @@ export const SQUAD_TEAM_CODES: readonly SquadTeamCode[] = [
 
 export const SQUAD_POSITION_ORDER: readonly SquadPosition[] = ["GKP", "DEF", "MID", "FWD"];
 
-export const SQUAD_PITCH_BG = "/assets/squad-pitch/pitch-background.jpg";
-export const SQUAD_PITCH_DEFAULT_KIT = "/assets/squad-pitch/kits/DEFAULT.png";
+/** Apex static files already sit behind Cloudflare / EdgeOne. */
+export const SQUAD_PITCH_CDN_BASE = "https://letletme.top/images/squad-pitch";
+
+function squadPitchAssetBase(): string {
+  try {
+    if (wx.getSystemInfoSync().platform === "devtools") return "/assets/squad-pitch";
+  } catch {
+    // Node tests and missing wx resolve to the published CDN path.
+  }
+  return SQUAD_PITCH_CDN_BASE;
+}
+
+export function squadPitchBackgroundSrc(): string {
+  return `${squadPitchAssetBase()}/pitch-background.jpg`;
+}
+
+export function defaultKitAsset(): string {
+  return `${squadPitchAssetBase()}/kits/DEFAULT.png`;
+}
 
 const TEAM_CODE_SET = new Set<string>(SQUAD_TEAM_CODES);
 
@@ -172,8 +189,8 @@ export function resolveSquadPosition(value: unknown): SquadPosition | null {
 
 export function kitAsset(teamCode: string): string {
   return isSquadTeamCode(teamCode)
-    ? `/assets/squad-pitch/kits/${teamCode}.png`
-    : SQUAD_PITCH_DEFAULT_KIT;
+    ? `${squadPitchAssetBase()}/kits/${teamCode}.png`
+    : defaultKitAsset();
 }
 
 export function normalizeSquadChip(chip?: string | null): string {
