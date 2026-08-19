@@ -26,6 +26,16 @@ test("preseason uses displayEvent schedule without a Live overlay", () => {
   assert.doesNotMatch(statusHandler.slice(0, statusHandler.indexOf("onRetry")), /loadData\(/);
 });
 
+test("match with no displayEvent commits a scheduled empty state", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  assert.match(page, /if \(!targetEvent\) \{[\s\S]*noScheduleState\(\)/);
+  assert.match(page, /if \(!this\.targetEventId\) \{[\s\S]*noScheduleState\(\)/);
+  assert.doesNotMatch(page, /当前赛季暂无赛程/);
+  assert.match(template, /scheduleEmpty/);
+  assert.match(template, /当前赛季暂无赛程/);
+});
+
 test("warm resume observes retained Core schedule without refetching", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("onHide()"));

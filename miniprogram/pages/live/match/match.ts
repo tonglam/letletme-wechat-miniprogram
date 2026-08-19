@@ -324,6 +324,21 @@ export function fixtureScheduleStaleMessage(storedAt?: number): string {
   return `赛程刷新失败，当前显示 ${formatTime(new Date(storedAt))} 的上次成功数据`;
 }
 
+export function noScheduleState() {
+  return {
+    loading: false,
+    refreshing: false,
+    error: "",
+    hasData: false,
+    scheduleEmpty: true,
+    matches: [] as LiveMatch[],
+    groups: [] as MatchGroup[],
+    displayState: "scheduled" as const,
+    lastUpdated: "",
+    fixtureStaleMessage: ""
+  };
+}
+
 function coreMatch(fixture: Fixture): LiveMatch {
   const started = fixture.started === true;
   const status = fixture.finished ? "finished" : started ? "playing" : "not_start";
@@ -385,6 +400,7 @@ Page({
     hasData: false,
     error: "",
     fixtureStaleMessage: "",
+    scheduleEmpty: false,
     displayState: "fresh" as LiveDisplayState,
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
@@ -639,7 +655,12 @@ Page({
 
   showContextError(error: unknown) {
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    this.setData({ loading: false, refreshing: false, error: message }, () => {
+    this.setData({
+      loading: false,
+      refreshing: false,
+      error: message,
+      scheduleEmpty: false
+    }, () => {
       this.perfTracker?.mark("primarySetDataAt");
       wx.nextTick(() => this.perfTracker?.observePrimary());
     });
@@ -664,9 +685,11 @@ Page({
       this.armContextDeadline(context.nextDeadlineAt);
       tracker.mark("contextReadyAt");
       if (!this.targetEventId) {
-        this.setData({ loading: false, refreshing: false, error: "当前赛季暂无赛程" }, () => {
+        this.liveRefresh?.stop();
+        this.setData(noScheduleState(), () => {
           wx.nextTick(() => tracker.observePrimary());
         });
+        this.syncDisplayState();
         return;
       }
       this.initLiveRefresh();
@@ -833,14 +856,22 @@ Page({
     const navigationTracker = tracksNavigation ? this.perfTracker : undefined;
     this.setData(preserveData
       ? { refreshing: true, error: "" }
-      : { loading: true, error: "" });
+      : { loading: true, error: "", scheduleEmpty: false });
 
     const request = (async () => {
       try {
         const context = getAppContextSnapshot()
           || await this.ensureContext("page-load");
         const targetEvent = context.displayEvent || 0;
-        if (!targetEvent) throw new Error("当前没有可展示的比赛周");
+        if (!targetEvent) {
+          this.liveRefresh?.stop();
+          this.setData(noScheduleState(), () => {
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
+          });
+          this.syncDisplayState();
+          return;
+        }
         this.currentEventId = context.currentEvent || 0;
         this.targetEventId = targetEvent;
         this.armContextDeadline(context.nextDeadlineAt);
@@ -879,6 +910,7 @@ Page({
           matches,
           groups: groupMatches(matches, activeStatus),
           hasData: true,
+          scheduleEmpty: false,
           error: "",
           fixtureStaleMessage: coreRead.meta.stale
             ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)

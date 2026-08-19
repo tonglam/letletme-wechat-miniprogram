@@ -44,6 +44,32 @@ interface SummaryTile {
   value: string;
 }
 
+type LiveEntryEmptyState = "" | "entry" | "preseason";
+
+export function noLiveEventState() {
+  return {
+    loading: false,
+    refreshing: false,
+    hasData: false,
+    noPicks: false,
+    error: "",
+    transfersError: "",
+    emptyState: "preseason" as const,
+    event: 0,
+    maxGw: 0,
+    lastUpdated: ""
+  };
+}
+
+function currentLiveEventId(context?: { currentEvent?: number | null } | null): number {
+  if (context && Object.prototype.hasOwnProperty.call(context, "currentEvent")) {
+    return Math.max(0, Number(context.currentEvent) || 0);
+  }
+  const snapshot = getAppContextSnapshot();
+  if (snapshot) return Math.max(0, Number(snapshot.currentEvent) || 0);
+  return Math.max(0, Number(getApp<IAppOption>().globalData.currentGw) || 0);
+}
+
 interface LiveEntryData {
   loading: boolean;
   refreshing: boolean;
@@ -52,7 +78,7 @@ interface LiveEntryData {
   noPicks: boolean;
   error: string;
   transfersError: string;
-  emptyState: boolean;
+  emptyState: LiveEntryEmptyState;
   displayState: LiveDisplayState;
   viewOnly: boolean;
   event: number;
@@ -133,11 +159,11 @@ Page({
     noPicks: false,
     error: "",
     transfersError: "",
-    emptyState: false,
+    emptyState: "",
     displayState: "fresh",
     viewOnly: false,
     event: 0,
-    maxGw: 1,
+    maxGw: 0,
     entryId: 0,
     entryName: "",
     playerName: "",
@@ -251,7 +277,7 @@ Page({
     }
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
-    const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
+    const currentGw = currentLiveEventId(context);
     const followedEntry = app.globalData.entryId;
     const entryId = this.hasRouteEntry ? this.routeEntryId : (followedEntry ?? 0);
     this.setData({
@@ -270,8 +296,11 @@ Page({
     if (!this.data.entryId || currentGw > 0) {
       void this.loadData({ includeTransfers: true });
     } else {
-      this.setData({ loading: false, error: "当前赛季暂无实时比赛周" });
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      this.liveRefresh?.stop();
+      this.setData(noLiveEventState(), () => {
+        this.perfTracker?.mark("primarySetDataAt");
+        wx.nextTick(() => this.perfTracker?.observePrimary());
+      });
     }
     this.syncDisplayState();
   },
@@ -308,7 +337,7 @@ Page({
           surface: "entry",
           season: this.liveSnapshot?.season,
           eventId: this.data.event,
-          isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+          isCurrentEvent: this.data.event === currentLiveEventId(),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
           coverageFailed: this.liveSnapshot?.coverageFailed,
@@ -324,6 +353,7 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    let showContext = getAppContextSnapshot();
     if (resumed) {
       const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
       this.resumeForcedRefreshAfterShow = false;
@@ -344,16 +374,17 @@ Page({
       }
       const app = getApp<IAppOption>();
       try {
-        await this.ensureContext("page-show");
+        showContext = await this.ensureContext("page-show");
         this.perfTracker.mark("contextReadyAt");
       } catch { /* keep the last known event */ }
       if (!this.pageVisible) return;
       if (this.restartForPrincipalChange(this.data.entryId)) return;
-      const nextSeason = app.globalData.season || undefined;
+      const nextSeason = showContext?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
       if (nextSeason) this.loadedSeason = nextSeason;
-      const nextEventId = Number(app.globalData.gw) || 0;
+      const nextEventId = currentLiveEventId(showContext);
       const wasCurrentEvent = this.data.event === this.data.maxGw;
+      const leavingPreseason = nextEventId > 0 && this.data.emptyState === "preseason";
       const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
@@ -369,12 +400,17 @@ Page({
           this.liveRequestKey = "";
         }
         this.setData({
-          event: nextEventId,
-          maxGw: nextEventId,
-          hasData: false,
-          noPicks: false,
-          lastUpdated: "",
-          error: nextEventId > 0 ? "" : "当前赛季暂无实时比赛周",
+          ...(nextEventId > 0
+            ? {
+                event: nextEventId,
+                maxGw: nextEventId,
+                hasData: false,
+                noPicks: false,
+                lastUpdated: "",
+                error: "",
+                ...(leavingPreseason ? { emptyState: "" as const } : {})
+              }
+            : noLiveEventState()),
           transfersError: "",
           total: 0,
           livePoints: 0,
@@ -414,7 +450,7 @@ Page({
     if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
       void this.liveRefresh?.probeNow();
     }
-    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    const currentEventId = currentLiveEventId(showContext);
     const resumeTransfers = this.resumeTransfersAfterShow;
     this.resumeTransfersAfterShow = false;
     if (
@@ -521,7 +557,12 @@ Page({
 
   showContextError(error: unknown) {
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    this.setData({ loading: false, refreshing: false, error: message }, () => {
+    this.setData({
+      loading: false,
+      refreshing: false,
+      error: message,
+      ...(this.data.emptyState === "preseason" ? { emptyState: "" as const } : {})
+    }, () => {
       this.perfTracker?.mark("primarySetDataAt");
       wx.nextTick(() => this.perfTracker?.observePrimary());
     });
@@ -544,14 +585,21 @@ Page({
         this.showContextError(error);
         return;
       }
-      const nextEventId = context.currentEvent || 0;
+      const nextEventId = currentLiveEventId(context);
       if (nextEventId > 0) {
         this.loadedSeason = context.season || app.globalData.season || this.loadedSeason;
-        this.setData({ event: nextEventId, maxGw: nextEventId, error: "", hasData: false });
+        this.setData({
+          event: nextEventId,
+          maxGw: nextEventId,
+          error: "",
+          hasData: false,
+          emptyState: ""
+        });
         this.initLiveRefresh();
         this.liveRefresh?.sync();
       } else {
-        this.setData({ error: "当前赛季暂无实时比赛周" });
+        this.liveRefresh?.stop();
+        this.setData(noLiveEventState());
         this.syncDisplayState();
         return;
       }
@@ -606,7 +654,7 @@ Page({
       noPicks: false,
       error: "",
       transfersError: "",
-      emptyState: !nextEntryId,
+      emptyState: nextEntryId ? "" : "entry",
       total: 0,
       livePoints: 0,
       netPoints: 0,
@@ -638,7 +686,7 @@ Page({
       return Promise.resolve();
     }
     if (!entryId) {
-      this.setData({ loading: false, error: "", emptyState: true, noPicks: false }, () => {
+      this.setData({ loading: false, error: "", emptyState: "entry", noPicks: false }, () => {
         wx.nextTick(() => this.perfTracker?.observePrimary());
       });
       this.syncDisplayState();
@@ -646,6 +694,14 @@ Page({
     }
 
     const eventId = this.data.event;
+    if (!eventId) {
+      this.liveRefresh?.stop();
+      this.setData(noLiveEventState(), () => {
+        wx.nextTick(() => this.perfTracker?.observePrimary());
+      });
+      this.syncDisplayState();
+      return Promise.resolve();
+    }
     const requestKey = `${entryId}:${eventId}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       if (options.forceRefresh && !this.liveRequestForced) {
@@ -703,7 +759,7 @@ Page({
       : {
           loading: true,
           error: "",
-          emptyState: false,
+          emptyState: "",
           noPicks: false
         });
     this.loadTransfersAfterLive = options.includeTransfers === true;
@@ -914,7 +970,7 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId || this.data.noPicks) return false;
-    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    const currentEventId = currentLiveEventId();
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
       currentEventId,
@@ -925,7 +981,7 @@ Page({
 
   revalidateCachedSnapshot(): boolean {
     if (this.data.noPicks) return false;
-    const currentEventId = Number(getApp<IAppOption>().globalData.gw) || 0;
+    const currentEventId = currentLiveEventId();
     if (!shouldRevalidateCachedLiveSnapshot({
       servedStoredAt: this.cachedLiveStoredAt,
       pageVisible: this.pageVisible,
@@ -956,7 +1012,7 @@ Page({
         surface: "entry",
         season: this.liveSnapshot?.season,
         eventId: this.data.event,
-        isCurrentEvent: this.data.event === Number(getApp<IAppOption>().globalData.gw),
+        isCurrentEvent: this.data.event === currentLiveEventId(),
         displayState: next
       });
     }

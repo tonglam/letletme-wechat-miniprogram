@@ -1,10 +1,10 @@
 <view class="page page-tabbar">
   <view class="section live-hero">
     <view>
-      <view class="chyron">LIVE CENTRE</view>
-      <view class="subtitle">比赛进行时追踪球队、比赛和赛事。</view>
+      <view class="chyron">{{currentGw ? 'LIVE CENTRE' : '赛季准备中'}}</view>
+      <view class="subtitle">{{currentGw ? '比赛进行时追踪球队、比赛和赛事。' : '开赛后可追踪实时阵容、比赛和赛事。'}}</view>
     </view>
-    <view class="gw-pill-dark">GW {{currentGw || event || '-'}}</view>
+    <view class="gw-pill-dark">{{currentGw ? 'GW ' + currentGw : (event ? '下轮 GW ' + event : '-')}}</view>
   </view>
 
   <view id="{{contextResolved ? 'perf-primary-content' : ''}}" wx:if="{{contextResolved}}" class="section entry-strip {{entryId ? 'ready' : 'empty'}}" bindtap="onOpenEntryStrip" hover-class="hover-dim">

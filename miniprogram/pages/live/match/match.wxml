@@ -1,29 +1,41 @@
 <view class="page page-tabbar">
-  <view class="match-toolbar">
-    <view class="match-toolbar-status">
-      <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
+  <block wx:if="{{!scheduleEmpty}}">
+    <view class="match-toolbar">
+      <view class="match-toolbar-status">
+        <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
+      </view>
+      <view class="match-count match-count-{{status}}">
+        <text class="match-count-number">{{matches.length}}</text>
+        <text class="match-count-label">{{activeStatusLabel}}</text>
+      </view>
     </view>
-    <view class="match-count match-count-{{status}}">
-      <text class="match-count-number">{{matches.length}}</text>
-      <text class="match-count-label">{{activeStatusLabel}}</text>
-    </view>
-  </view>
 
-  <view class="status-tabs">
-    <view
-      wx:for="{{statusOptions}}"
-      wx:key="key"
-      class="status-tab {{status === item.key ? 'active' : ''}}"
-      data-status="{{item.key}}"
-      bindtap="onStatusTap"
-      hover-class="hover-dim"
-    >{{item.label}}</view>
-  </view>
+    <view class="status-tabs">
+      <view
+        wx:for="{{statusOptions}}"
+        wx:key="key"
+        class="status-tab {{status === item.key ? 'active' : ''}}"
+        data-status="{{item.key}}"
+        bindtap="onStatusTap"
+        hover-class="hover-dim"
+      >{{item.label}}</view>
+    </view>
+  </block>
 
   <view wx:if="{{error && !hasData}}" id="perf-primary-content">
     <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载比赛" />
+  <view wx:elif="{{scheduleEmpty}}" id="perf-primary-content" class="section">
+    <app-empty-state
+      eyebrow="赛季准备中"
+      title="当前赛季暂无赛程"
+      description="赛程公布后，这里会显示比赛状态和比分"
+      actionText="重新检查"
+      featured="{{true}}"
+      bind:action="onRetry"
+    />
+  </view>
   <view wx:else id="perf-primary-content" class="match-content">
     <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />

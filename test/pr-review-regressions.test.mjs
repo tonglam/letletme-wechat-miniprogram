@@ -295,9 +295,9 @@ test("historical Live selections reset when the season changes", () => {
   assert.match(entry, /if \(seasonChanged\) \{[\s\S]*this\.liveRequestId \+= 1[\s\S]*this\.liveRequest = null/);
   assert.match(entry, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
   assert.match(entry, /eventContextChanged && \(seasonChanged \|\| wasCurrentEvent\)/);
-  assert.match(entry, /error: nextEventId > 0 \? "" : "当前赛季暂无实时比赛周"/);
-  assert.match(entry, /const currentGw = Math\.max\(0, Number\(app\.globalData\.gw\)/);
-  assert.match(entry, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*当前赛季暂无实时比赛周/);
+  assert.match(entry, /const currentGw = currentLiveEventId\(context\)/);
+  assert.match(entry, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*noLiveEventState/);
+  assert.match(entry, /nextEventId > 0[\s\S]*noLiveEventState\(\)/);
   const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
   assert.match(tournament, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
   assert.match(tournament, /this\.tournamentListRequestId \+= 1[\s\S]*nextEventId === 0/);

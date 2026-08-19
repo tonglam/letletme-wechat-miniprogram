@@ -33,7 +33,7 @@ test("Match clears a soft-timeout error when current data succeeds", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   const core = match.indexOf("const matches = filterMatches(core, activeStatus)");
   const overlay = match.indexOf("const overlaid = filterMatches(this.coreMatches, overlayStatus)");
-  assert.match(match.slice(core, overlay), /hasData: true,\s+error: ""/);
+  assert.match(match.slice(core, overlay), /hasData: true,\s+scheduleEmpty: false,\s+error: ""/);
   assert.match(match.slice(overlay), /groups: groupMatches\(overlaid, overlayStatus\),\s+error: ""/);
   assert.match(match, /observeSoftTimeout[\s\S]*?navigationTracker\?\.mark\("softFailureAt"\)/);
 });
