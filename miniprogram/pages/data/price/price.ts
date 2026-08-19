@@ -965,7 +965,12 @@ Page({
         ownershipMissingDatesText: ownershipMissingDatesText(ownership),
         ownershipGameweekText: ownershipGameweekText(ownership),
         ownershipDateOptions: ownershipDateOptions(latestDate),
-        ownershipSelectedDate: selectedDate,
+        ...(period === "DAILY"
+          ? {
+              marketDate: selectedDate,
+              ownershipSelectedDate: selectedDate,
+            }
+          : {}),
         ownershipRiserRows: mapOwnershipRows(ownership.risers, "rise"),
         ownershipFallerRows: mapOwnershipRows(ownership.fallers, "fall"),
       });

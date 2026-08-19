@@ -333,6 +333,11 @@ export async function getMiniHomeMarket(
     .filter(Boolean)
     .join("；");
 
+  // Do not turn a partial GraphQL response into an apparent empty market. The
+  // caller can then retain the last complete market desk while surfacing the
+  // refresh error.
+  if (error) throw new Error(error);
+
   const risers = ownership?.risers || [];
   const fallers = ownership?.fallers || [];
 
