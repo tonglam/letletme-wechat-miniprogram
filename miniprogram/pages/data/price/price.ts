@@ -245,8 +245,6 @@ export function buildPulseView(pulse: MarketPulse): {
   coverageText: string;
   pulseStale: boolean;
   mostSelectedRows: PulseListRow[];
-  ownershipRiserRows: PulseListRow[];
-  ownershipFallerRows: PulseListRow[];
   transferRows: PulseListRow[];
   availabilityRows: PulseListRow[];
   newPlayerRows: PulseListRow[];
@@ -270,8 +268,6 @@ export function buildPulseView(pulse: MarketPulse): {
           player.selectedByPercent,
         ),
       ),
-    ownershipRiserRows: [],
-    ownershipFallerRows: [],
     transferRows: pulse.transferMovers.slice(0, 8).map((move) => ({
       ...toBasicRow(
         move.player,
@@ -575,7 +571,11 @@ Page({
     const resumePaginationCursor = this.resumePaginationCursor;
     this.resumeStage = null;
     this.resumeStageForceRefresh = false;
-    this.resumeOwnershipAfterShow = false;
+    const resumeOwnershipIfNeeded = () => {
+      if (!resumeOwnership) return;
+      this.resumeOwnershipAfterShow = false;
+      void this.loadMarketOwnership(resumeStageForceRefresh);
+    };
     if (resumePlayerRefresh) {
       this.setData({
         playerLoading: false,
@@ -583,6 +583,7 @@ Page({
         historyLoading: false,
       });
       void this.runPlayerRefresh(tracker);
+      resumeOwnershipIfNeeded();
       return;
     }
     if (resumePagination && resumePaginationCursor !== null) {
@@ -590,6 +591,7 @@ Page({
       this.paginationPending = false;
       this.paginationCursor = null;
       const task = this.loadMorePlayers(resumePaginationCursor);
+      resumeOwnershipIfNeeded();
       if (this.paginationPending && this.paginationCursor === resumePaginationCursor) {
         this.resumePaginationAfterShow = false;
         this.resumePaginationCursor = null;
@@ -607,26 +609,30 @@ Page({
     }
     if (resumeStage === "daily") {
       this.setData({ loading: false, refreshing: false });
+      this.resumeOwnershipAfterShow = false;
       void this.loadDailyChanges(resumeStageForceRefresh);
       return;
     }
     if (resumeStage === "player") {
       this.setData({ playerLoading: false, loadingMore: false });
       void this.ensurePlayerModeReady();
+      resumeOwnershipIfNeeded();
       return;
     }
     if (resumeStage === "search") {
       this.setData({ playerLoading: false, loadingMore: false });
       void this.startPlayerSearch(false);
+      resumeOwnershipIfNeeded();
       return;
     }
     if (resumeStage === "history" && this.data.selectedPlayer?.element) {
       this.setData({ historyLoading: false });
       void this.loadSelectedPlayerHistory(this.data.selectedPlayer.element);
+      resumeOwnershipIfNeeded();
       return;
     }
     if (resumeOwnership) {
-      void this.loadMarketOwnership(resumeStageForceRefresh);
+      resumeOwnershipIfNeeded();
       return;
     }
     wx.nextTick(() => tracker.observePrimary(selector));

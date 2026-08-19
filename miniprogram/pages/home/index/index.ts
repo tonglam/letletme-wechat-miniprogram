@@ -18,7 +18,7 @@ import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
-import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
+import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 import {
@@ -595,52 +595,58 @@ Page({
     const marketTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-market" }
       : null;
-    const marketTask = getMiniHomeMarket(forceRefresh, marketTrace).catch(() => null);
+    const marketTask = getMiniHomeMarket(forceRefresh, marketTrace)
+      .then((value) => ({ value, error: "" }))
+      .catch((error) => ({
+        value: null,
+        error: error instanceof Error ? error.message : "市场动态加载失败",
+      }));
     const supplementTask = getMiniHomeSupplement(
       currentGw,
-      formatDateKey(),
       forceRefresh,
-      supplementTrace
-    )
-      .catch((error) => ({
+      supplementTrace,
+    ).catch((error) => ({
         notice: "",
         summary: undefined,
-        playerValues: [],
         errors: {
           notice: "",
           summary: error instanceof Error ? error.message : "GW 数据加载失败",
-          playerValues: error instanceof Error ? error.message : "身价数据加载失败"
         }
       }));
-    const [market, supplement] = await Promise.all([marketTask, supplementTask]);
+    const [marketResult, supplement] = await Promise.all([marketTask, supplementTask]);
     if (!isActiveSecondary()) return;
-    const desk = market || {
-      mode: "empty" as const,
-      coverage: "最新每日持有率变化",
-      leadTitle: "最新每日持有率变化",
-      leadRows: [] as HomeMarketMover[],
-      risers: [] as HomeMarketMover[],
-      fallers: [] as HomeMarketMover[],
-      availability: [] as HomeAvailabilityRow[],
-      error: "市场动态暂不可用"
-    };
+    const market = marketResult.value;
+    const hasPreviousMarket =
+      this.data.marketMode !== "empty" ||
+      this.data.marketLeadRows.length > 0 ||
+      this.data.marketRisers.length > 0 ||
+      this.data.marketFallers.length > 0 ||
+      this.data.availabilityRows.length > 0;
+    const marketPatch = market
+      ? {
+          priceError: market.error,
+          marketMode: market.mode,
+          marketCoverage: market.coverage,
+          marketLeadTitle: market.leadTitle,
+          marketLeadRows: market.leadRows,
+          marketRisers: market.risers,
+          marketFallers: market.fallers,
+          availabilityRows: market.availability,
+        }
+      : {
+          priceError: marketResult.error ||
+            (hasPreviousMarket ? "市场动态刷新失败" : "市场动态暂不可用"),
+        };
     const nextNotice = this.data.noticeClosed || supplement.errors.notice
       ? this.data.noticeText
       : (supplement.notice || "");
     this.setData({
-      priceError: desk.error,
+      ...marketPatch,
       gameweekStatsError: supplement.errors.summary,
       ...(this.data.noticeClosed || supplement.errors.notice
         ? {}
         : { noticeText: nextNotice }),
       supplementLoading: false,
-      marketMode: desk.mode,
-      marketCoverage: desk.coverage,
-      marketLeadTitle: desk.leadTitle,
-      marketLeadRows: desk.leadRows,
-      marketRisers: desk.risers,
-      marketFallers: desk.fallers,
-      availabilityRows: desk.availability,
       ...(supplement.errors.summary && !supplement.summary
         ? {}
         : { gameweekStats: mapHomeGameweekStats(supplement.summary) })

@@ -110,14 +110,14 @@ async function main(): Promise<void> {
     "position maps to the short code",
   );
   assertEqual(
-    view.ownershipRiserRows.length,
-    0,
-    "ownership rows are sourced from the dedicated cycle API",
+    "ownershipRiserRows" in view,
+    false,
+    "pulse view does not own dedicated ownership rows",
   );
   assertEqual(
-    view.ownershipFallerRows.length,
-    0,
-    "ownership rows are sourced from the dedicated cycle API",
+    "ownershipFallerRows" in view,
+    false,
+    "pulse view does not own dedicated ownership rows",
   );
   assertEqual(
     view.transferRows[0].valueText,

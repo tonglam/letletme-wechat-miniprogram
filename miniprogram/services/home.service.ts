@@ -1,10 +1,9 @@
 import { graphqlRead } from "./graphql.service";
 import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
-import type { PlayerValue } from "../models/player";
 import type { GameweekOverallSummary } from "../models/summary";
 
 export const MINI_HOME_SUPPLEMENT_QUERY = `
-  query MiniHomeSupplement($changeDate: Date!) {
+  query MiniHomeSupplement {
     miniProgramNotice
     eventOverallResult {
       event
@@ -24,31 +23,20 @@ export const MINI_HOME_SUPPLEMENT_QUERY = `
       }
       chipPlays { chipName numberPlayed }
     }
-    playerValues(changeDate: $changeDate) {
-      playerId
-      playerName
-      teamName
-      position
-      lastValue
-      value
-    }
   }
 `;
 
 interface MiniHomeSupplementResponse {
   miniProgramNotice: string | null;
   eventOverallResult: GameweekOverallSummary | GameweekOverallSummary[] | null;
-  playerValues: PlayerValue[];
 }
 
 export interface MiniHomeSupplementResult {
   notice: string;
   summary?: GameweekOverallSummary;
-  playerValues: PlayerValue[];
   errors: {
     notice: string;
     summary: string;
-    playerValues: string;
   };
 }
 
@@ -79,12 +67,6 @@ function rootError(errors: GraphQLErrorInfo[], root: string): string {
     .filter((error) => String(error.path?.[0] || "") === root)
     .map((error) => error.message || "数据加载失败")
     .join("；");
-}
-
-function normalizeChangeDate(changeDate: string): string {
-  return /^\d{8}$/.test(changeDate)
-    ? `${changeDate.slice(0, 4)}-${changeDate.slice(4, 6)}-${changeDate.slice(6, 8)}`
-    : changeDate;
 }
 
 const HOME_TEASER_LIMIT = 5;
@@ -423,13 +405,12 @@ export async function getMiniHomeMarket(
 
 export async function getMiniHomeSupplement(
   eventId: number,
-  changeDate: string,
   forceRefresh = false,
   trace?: PageRequestTrace | null,
 ): Promise<MiniHomeSupplementResult> {
   const result = await graphqlRead<MiniHomeSupplementResponse>(
     MINI_HOME_SUPPLEMENT_QUERY,
-    { changeDate: normalizeChangeDate(changeDate) },
+    {},
     {
       authMode: "public",
       cachePolicy: "market",
@@ -441,11 +422,9 @@ export async function getMiniHomeSupplement(
   return {
     notice: result.data.miniProgramNotice || "",
     summary: normalizeSummary(result.data.eventOverallResult, eventId),
-    playerValues: result.data.playerValues || [],
     errors: {
       notice: rootError(result.errors, "miniProgramNotice"),
       summary: rootError(result.errors, "eventOverallResult"),
-      playerValues: rootError(result.errors, "playerValues"),
     },
   };
 }
