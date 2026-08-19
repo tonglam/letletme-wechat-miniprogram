@@ -283,6 +283,42 @@
 
 /* ---------- 市场全景 (web /explore/market pulse sections) ---------- */
 
+.market-period-tabs {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ownership-date-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.date-chip {
+  padding: 12rpx 16rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 999rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.date-chip.active {
+  border-color: var(--green-ink);
+  background: var(--accent-tint);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ownership-coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.coverage-missing {
+  color: var(--warning);
+  font-size: 20rpx;
+}
+
 .pulse-heading-row {
   display: flex;
   align-items: baseline;
@@ -441,8 +477,9 @@
 }
 
 .swing-columns {
-  display: flex;
-  gap: 20rpx;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
 }
 
 .swing-col {

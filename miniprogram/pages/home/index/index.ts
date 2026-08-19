@@ -15,13 +15,11 @@ import type {
 } from "../../../services/home.service";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
-import type { PlayerValue } from "../../../models/player";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
-import { formatCountdown, formatDateKey, getDeadlineDiffMs } from "../../../utils/date";
+import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
-import { formatPrice } from "../../../utils/fpl";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 import {
   ensureAppContext,
@@ -83,16 +81,6 @@ export interface HomeFixtureDay {
   rows: HomeFixtureMatch[];
 }
 
-interface HomePriceChangeRow {
-  id: string;
-  name: string;
-  team: string;
-  position: string;
-  oldPrice: string;
-  newPrice: string;
-  changeText: string;
-}
-
 interface HomeStatRow {
   key: string;
   label: string;
@@ -145,8 +133,8 @@ Page({
     fixtureCount: 0,
     gameweekStats: [],
     marketMode: "empty",
-    marketCoverage: "最近 14 天最值得关注的信号",
-    marketLeadTitle: "最新真实身价变化",
+    marketCoverage: "最新每日持有率变化",
+    marketLeadTitle: "最新每日持有率变化",
     marketLeadRows: [],
     marketRisers: [],
     marketFallers: [],
@@ -607,64 +595,58 @@ Page({
     const marketTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-market" }
       : null;
-    const marketTask = getMiniHomeMarket(forceRefresh, marketTrace).catch(() => null);
+    const marketTask = getMiniHomeMarket(forceRefresh, marketTrace)
+      .then((value) => ({ value, error: "" }))
+      .catch((error) => ({
+        value: null,
+        error: error instanceof Error ? error.message : "市场动态加载失败",
+      }));
     const supplementTask = getMiniHomeSupplement(
       currentGw,
-      formatDateKey(),
       forceRefresh,
-      supplementTrace
-    )
-      .catch((error) => ({
+      supplementTrace,
+    ).catch((error) => ({
         notice: "",
         summary: undefined,
-        playerValues: [] as PlayerValue[],
         errors: {
           notice: "",
           summary: error instanceof Error ? error.message : "GW 数据加载失败",
-          playerValues: error instanceof Error ? error.message : "身价数据加载失败"
         }
       }));
-    const [market, supplement] = await Promise.all([marketTask, supplementTask]);
+    const [marketResult, supplement] = await Promise.all([marketTask, supplementTask]);
     if (!isActiveSecondary()) return;
-    const fallbackLead = mapHomePriceChanges(supplement.playerValues);
-    const fallbackRows = [...fallbackLead.rises, ...fallbackLead.falls].map((row) => ({
-      id: row.id,
-      name: row.name,
-      team: row.team,
-      position: row.position,
-      meta: row.newPrice,
-      changeText: row.changeText,
-      rising: !row.changeText.startsWith("-")
-    }));
-    const desk = market && (market.mode !== "empty" || market.availability.length > 0)
-      ? market
+    const market = marketResult.value;
+    const hasPreviousMarket =
+      this.data.marketMode !== "empty" ||
+      this.data.marketLeadRows.length > 0 ||
+      this.data.marketRisers.length > 0 ||
+      this.data.marketFallers.length > 0 ||
+      this.data.availabilityRows.length > 0;
+    const marketPatch = market
+      ? {
+          priceError: market.error,
+          marketMode: market.mode,
+          marketCoverage: market.coverage,
+          marketLeadTitle: market.leadTitle,
+          marketLeadRows: market.leadRows,
+          marketRisers: market.risers,
+          marketFallers: market.fallers,
+          availabilityRows: market.availability,
+        }
       : {
-          mode: fallbackRows.length ? "price" as const : "empty" as const,
-          coverage: market?.coverage || "今日身价涨跌",
-          leadTitle: "最新真实身价变化",
-          leadRows: fallbackRows.slice(0, 5),
-          risers: [] as HomeMarketMover[],
-          fallers: [] as HomeMarketMover[],
-          availability: [] as HomeAvailabilityRow[],
-          error: supplement.errors.playerValues || market?.error || ""
+          priceError: marketResult.error ||
+            (hasPreviousMarket ? "市场动态刷新失败" : "市场动态暂不可用"),
         };
     const nextNotice = this.data.noticeClosed || supplement.errors.notice
       ? this.data.noticeText
       : (supplement.notice || "");
     this.setData({
-      priceError: desk.error,
+      ...marketPatch,
       gameweekStatsError: supplement.errors.summary,
       ...(this.data.noticeClosed || supplement.errors.notice
         ? {}
         : { noticeText: nextNotice }),
       supplementLoading: false,
-      marketMode: desk.mode,
-      marketCoverage: desk.coverage,
-      marketLeadTitle: desk.leadTitle,
-      marketLeadRows: desk.leadRows,
-      marketRisers: desk.risers,
-      marketFallers: desk.fallers,
-      availabilityRows: desk.availability,
       ...(supplement.errors.summary && !supplement.summary
         ? {}
         : { gameweekStats: mapHomeGameweekStats(supplement.summary) })
@@ -966,55 +948,6 @@ function emptyFixtureDesk(): Pick<HomeData, "fixtureDays" | "selectedFixtureDayK
 
 function clampFixtureGw(value: number, min: number): number {
   return Math.min(38, Math.max(min || 1, value || min || 1));
-}
-
-function mapHomePriceChanges(changes: PlayerValue[]): { rises: HomePriceChangeRow[]; falls: HomePriceChangeRow[] } {
-  const rows = changes
-    .filter((change) => typeof change.lastValue === "number" && typeof change.value === "number")
-    .map(mapHomePriceChange);
-
-  return {
-    rises: rows
-      .filter((row) => row.rawChange > 0)
-      .sort((a, b) => b.newValue - a.newValue)
-      .slice(0, 5)
-      .map(stripPriceSortFields),
-    falls: rows
-      .filter((row) => row.rawChange < 0)
-      .sort((a, b) => a.newValue - b.newValue)
-      .slice(0, 5)
-      .map(stripPriceSortFields)
-  };
-}
-
-function mapHomePriceChange(change: PlayerValue): HomePriceChangeRow & { rawChange: number; newValue: number } {
-  const oldValue = change.lastValue || 0;
-  const newValue = change.value || 0;
-  const rawChange = newValue - oldValue;
-
-  return {
-    id: String(change.playerId),
-    name: change.playerName || "-",
-    team: change.teamName || "-",
-    position: change.position || "",
-    oldPrice: formatPrice(oldValue),
-    newPrice: formatPrice(newValue),
-    changeText: `${rawChange > 0 ? "+" : "-"}${formatPrice(Math.abs(rawChange))}`,
-    rawChange,
-    newValue
-  };
-}
-
-function stripPriceSortFields(row: HomePriceChangeRow & { rawChange: number; newValue: number }): HomePriceChangeRow {
-  return {
-    id: row.id,
-    name: row.name,
-    team: row.team,
-    position: row.position,
-    oldPrice: row.oldPrice,
-    newPrice: row.newPrice,
-    changeText: row.changeText
-  };
 }
 
 export function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {

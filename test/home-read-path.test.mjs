@@ -12,14 +12,14 @@ const home = readFileSync(
 );
 
 describe("home public read path", () => {
-  it("uses one three-root public supplement operation", () => {
+  it("uses one compact public supplement operation", () => {
     assert.match(service, /query MiniHomeSupplement/);
     assert.doesNotMatch(service, /\$eventId: Int!/);
+    assert.doesNotMatch(service, /\$changeDate/);
     assert.match(service, /eventOverallResult\s*\{/);
-    assert.match(service, /\{ changeDate: normalizeChangeDate\(changeDate\) \}/);
     assert.match(service, /miniProgramNotice/);
     assert.match(service, /eventOverallResult/);
-    assert.match(service, /playerValues\(changeDate: \$changeDate\)/);
+    assert.doesNotMatch(service, /playerValues/);
     assert.match(service, /authMode: "public"/);
     assert.match(service, /cachePolicy: "market"/);
   });
