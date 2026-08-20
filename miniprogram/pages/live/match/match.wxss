@@ -178,7 +178,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 40rpx;
+  font-size: 38rpx;
   font-weight: 900;
   letter-spacing: 1rpx;
   line-height: 48rpx;
@@ -204,7 +204,7 @@
 
 .score {
   color: var(--electric);
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 900;
   line-height: 40rpx;
 }

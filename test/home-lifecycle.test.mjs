@@ -43,6 +43,16 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     page,
     /getEntryLeagueInfo/,
   );
+  assert.equal(
+    (page.match(/getEntryLeagueInfo\(entryId,/g) || []).length,
+    1,
+    "home should issue one aggregate league request",
+  );
+  assert.doesNotMatch(
+    page,
+    /getEntryClassicLeagues|getEntryH2hLeagues|classicTask|h2hTask/,
+    "home must not retain the former split league request path",
+  );
   assert.match(page, /getMiniHomeMarket/);
   assert.match(page, /getMiniHomeSupplement/);
 });

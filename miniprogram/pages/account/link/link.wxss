@@ -27,7 +27,7 @@
 .linked-email {
   margin-top: 12rpx;
   color: var(--ink);
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 800;
   word-break: break-all;
 }

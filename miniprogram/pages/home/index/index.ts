@@ -615,7 +615,7 @@ Page({
         if (isActiveSecondary()) {
           this.setData({ leagues: allLeagues });
         }
-      } catch (error) {
+      } catch {
         // League load failure is non-critical, ignore silently
       }
     })();

@@ -49,20 +49,6 @@ const GET_ENTRY_LEAGUES = `
   }
 `;
 
-const GET_ENTRY_LEAGUES_BY_TYPE = `
-  query EntryLeaguesByType($entryId: Int!, $type: LeagueType!) {
-    entryLeagues(entryId: $entryId, type: $type) {
-      id
-      name
-      type
-      officialKind
-      shortName
-      startedEvent
-      entryRank
-    }
-  }
-`;
-
 const GET_ENTRY_HISTORY = `
   query EntryHistory($entryId: Int!) {
     entryHistory(entryId: $entryId) {
