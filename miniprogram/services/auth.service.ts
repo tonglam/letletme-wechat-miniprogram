@@ -345,6 +345,8 @@ const pendingRefreshStates = new Set<PendingSessionRefresh>();
 const retainedRefreshTokens = new Set<string>();
 const retainedRefreshTokenExpiry = new Map<string, number>();
 const REVOCATION_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
+const REVOCATION_PERSIST_MAX_ATTEMPTS = 3;
+const REVOCATION_PERSIST_RETRY_DELAY_MS = 100;
 let pendingEmailConfirmation: Promise<ApiSession> | null = null;
 let revocationQueueReady: Promise<void> | null = null;
 let revocationPersistChain = Promise.resolve();
@@ -366,18 +368,26 @@ function revocationQueueSnapshot(): StoredRevocationQueue {
   };
 }
 
-function persistRetainedRefreshTokens(): Promise<void> {
-  if (!supportsEncryptedSessionStorage() || !revocationQueueRestored) {
-    return Promise.resolve();
-  }
-  const snapshot = revocationQueueSnapshot();
-  revocationPersistChain = revocationPersistChain.then(() => new Promise<void>((resolve) => {
+function writeRevocationQueueSnapshot(
+  snapshot: StoredRevocationQueue,
+  attempt = 1
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const retry = () => {
+      if (attempt >= REVOCATION_PERSIST_MAX_ATTEMPTS) {
+        resolve(false);
+        return;
+      }
+      setTimeout(() => {
+        writeRevocationQueueSnapshot(snapshot, attempt + 1).then(resolve);
+      }, REVOCATION_PERSIST_RETRY_DELAY_MS * attempt);
+    };
     try {
       if (snapshot.entries.length === 0) {
         wx.removeStorage({
           key: storageKeys.pendingSessionRevocations,
-          success: () => resolve(),
-          fail: () => resolve()
+          success: () => resolve(true),
+          fail: retry
         });
         return;
       }
@@ -385,13 +395,28 @@ function persistRetainedRefreshTokens(): Promise<void> {
         key: storageKeys.pendingSessionRevocations,
         data: snapshot,
         encrypt: true,
-        success: () => resolve(),
-        fail: () => resolve()
+        success: () => resolve(true),
+        fail: retry
       } as WechatMiniprogram.SetStorageOption);
     } catch {
-      resolve();
+      retry();
     }
-  }));
+  });
+}
+
+function persistRetainedRefreshTokens(): Promise<void> {
+  if (!supportsEncryptedSessionStorage() || !revocationQueueRestored) {
+    return Promise.resolve();
+  }
+  const snapshot = revocationQueueSnapshot();
+  revocationPersistChain = revocationPersistChain.then(async () => {
+    const persisted = await writeRevocationQueueSnapshot(snapshot);
+    if (!persisted) {
+      // Keep the dirty marker so a later logout/launch retries the same
+      // snapshot instead of treating a failed write as durable.
+      revocationQueueWriteDirty = true;
+    }
+  });
   return revocationPersistChain;
 }
 
@@ -581,7 +606,12 @@ async function performLogout(): Promise<LogoutResult> {
   const pendingStates = [...pendingRefreshStates];
   clearApiSession();
   await ensureRevocationQueueRestored();
+  const queueRestoredForLogout = revocationQueueRestored;
   await Promise.all(pendingStates.map((state) => state.promise.catch(() => undefined)));
+  if (queueRestoredForLogout && revocationQueueWriteDirty) {
+    revocationQueueWriteDirty = false;
+    await persistRetainedRefreshTokens();
+  }
 
   discardExpiredRetainedRefreshTokens();
   const tokenExpiries = new Map<string, string | null>();
@@ -600,7 +630,7 @@ async function performLogout(): Promise<LogoutResult> {
   ].filter((value): value is string => Boolean(value)))];
   if (tokens.length === 0) {
     await revocationPersistChain;
-    return { localCleared: true, remoteRevoked: true };
+    return { localCleared: true, remoteRevoked: queueRestoredForLogout };
   }
 
   const revocations = await Promise.all(tokens.map(async (currentToken) => {
@@ -613,7 +643,7 @@ async function performLogout(): Promise<LogoutResult> {
     return revoked;
   }));
   await revocationPersistChain;
-  const remoteRevoked = revocations.every(Boolean);
+  const remoteRevoked = queueRestoredForLogout && revocations.every(Boolean);
   return { localCleared: true, remoteRevoked };
 }
 

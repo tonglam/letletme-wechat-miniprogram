@@ -5,7 +5,11 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const auth = require("../miniprogram/services/auth.service.ts");
 
-function installWechatStorage(initialQueue, requestImpl, { queueReadFailures = 0 } = {}) {
+function installWechatStorage(
+  initialQueue,
+  requestImpl,
+  { queueReadFailures = 0, queueWriteFailures = 0 } = {}
+) {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const storage = new Map();
@@ -42,6 +46,11 @@ function installWechatStorage(initialQueue, requestImpl, { queueReadFailures = 0
     },
     setStorage: (options) => {
       encryptedWrites.push(options);
+      if (options.key === "api-session-revocations" && queueWriteFailures > 0) {
+        queueWriteFailures -= 1;
+        options.fail?.({ errMsg: "setStorage:fail network error" });
+        return;
+      }
       storage.set(options.key, options.data);
       options.success?.({});
     },
@@ -88,13 +97,13 @@ test("restores failed revocations across restart and preserves original expiry",
         options.success?.({ statusCode: 204, data: { success: true } });
       }
     },
-    { queueReadFailures: 1 }
+    { queueReadFailures: 1, queueWriteFailures: 1 }
   );
 
   try {
     assert.deepEqual(await auth.logoutMiniProgramSession(), {
       localCleared: true,
-      remoteRevoked: true
+      remoteRevoked: false
     });
     assert.deepEqual(await auth.logoutMiniProgramSession(), {
       localCleared: true,
