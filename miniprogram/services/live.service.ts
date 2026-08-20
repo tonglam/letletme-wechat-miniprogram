@@ -523,51 +523,58 @@ export async function getLiveMatchByStatusSnapshot(
         // usable live snapshot into a page-level error.
         enriched = mapped;
       } else {
-        const refreshed = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
-          cachePolicy: "live",
-          forceRefresh: true,
-          trace
-        });
-        const refreshedResult = refreshed.liveMatchdayDesk;
-        const refreshedMapped = [...refreshedResult.matches, ...refreshedResult.nextFixtures].map(mapGraphQLMatch);
-        const refreshedRef = {
-          season: refreshedResult.season,
-          eventId: refreshedResult.eventId,
-          revision: refreshedResult.revision
-        };
-        const refreshedCurrent = refreshedMapped.filter((match) =>
-          refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
-        );
-        let refreshedEnriched = refreshedMapped;
-        if (refreshedCurrent.length > 0) {
-          try {
-            const details = await fetchLiveFixturePlayers(
-              refreshedRef,
-              refreshedCurrent.map((match) => Number(match.matchId)),
-              true
-            );
-            refreshedEnriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
-          } catch {
-            // The refreshed score/status desk is authoritative even when its
-            // optional player-detail retry is unavailable.
-            refreshedEnriched = refreshedMapped;
+        try {
+          const refreshed = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
+            cachePolicy: "live",
+            forceRefresh: true,
+            trace
+          });
+          const refreshedResult = refreshed.liveMatchdayDesk;
+          const refreshedMapped = [...refreshedResult.matches, ...refreshedResult.nextFixtures].map(mapGraphQLMatch);
+          const refreshedRef = {
+            season: refreshedResult.season,
+            eventId: refreshedResult.eventId,
+            revision: refreshedResult.revision
+          };
+          const refreshedCurrent = refreshedMapped.filter((match) =>
+            refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
+          );
+          let refreshedEnriched = refreshedMapped;
+          if (refreshedCurrent.length > 0) {
+            try {
+              const details = await fetchLiveFixturePlayers(
+                refreshedRef,
+                refreshedCurrent.map((match) => Number(match.matchId)),
+                true
+              );
+              refreshedEnriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
+            } catch {
+              // The refreshed score/status desk is authoritative even when its
+              // optional player-detail retry is unavailable.
+              refreshedEnriched = refreshedMapped;
+            }
           }
+          enriched = refreshedEnriched;
+          return {
+            data: filterLiveMatchesByStatus(enriched, status),
+            snapshot: refreshedResult.revision
+              ? {
+                  eventId: refreshedResult.eventId,
+                  revision: refreshedResult.revision,
+                  state: refreshedResult.state,
+                  publishedAt: refreshedResult.publishedAt,
+                  checkedAt: refreshedResult.publishedAt,
+                  season: refreshedResult.season
+                }
+              : null,
+            servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
+          };
+        } catch {
+          // Revision recovery exists for optional player details. If the
+          // authoritative desk itself cannot be refreshed, retain the
+          // already valid score/status snapshot instead of failing the page.
+          enriched = mapped;
         }
-        enriched = refreshedEnriched;
-        return {
-          data: filterLiveMatchesByStatus(enriched, status),
-          snapshot: refreshedResult.revision
-            ? {
-                eventId: refreshedResult.eventId,
-                revision: refreshedResult.revision,
-                state: refreshedResult.state,
-                publishedAt: refreshedResult.publishedAt,
-                checkedAt: refreshedResult.publishedAt,
-                season: refreshedResult.season
-              }
-            : null,
-          servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
-        };
       }
     }
   }

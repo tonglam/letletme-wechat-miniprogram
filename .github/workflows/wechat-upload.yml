@@ -47,6 +47,8 @@ jobs:
           test "$INPUT_COMMIT_SHA" = "$checkout_sha"
           test "$checkout_sha" = "$remote_sha"
           echo "Verified main SHA $checkout_sha"
+      - name: Verify production origin
+        run: npm run check:production-origin
       - run: npm run lint:strict && npm run typecheck && npm test && npm run test:coverage && npm run check:style && npm run package:check
       - name: Prepare runtime dependency lock for security scans
         run: |

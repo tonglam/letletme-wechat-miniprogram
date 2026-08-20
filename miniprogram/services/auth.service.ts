@@ -333,6 +333,38 @@ export type LogoutResult = { localCleared: true; remoteRevoked: boolean };
 interface PendingSessionRefresh {
   promise: Promise<ApiSession>;
   issuedToken: string | null;
+  displaced?: boolean;
+}
+
+// Confirmation can temporarily replace a normal refresh in the single-flight
+// slot. Keep every displaced state until it has yielded its issued token so a
+// logout can revoke a rotated credential even when the replacement fails.
+const pendingRefreshStates = new Set<PendingSessionRefresh>();
+const retainedRefreshTokens = new Set<string>();
+
+function registerPendingRefreshState(
+  state: PendingSessionRefresh,
+  promise: Promise<ApiSession>
+): void {
+  if (pendingRefresh && pendingRefresh !== state) {
+    pendingRefresh.displaced = true;
+  }
+  state.promise = promise;
+  pendingRefreshStates.add(state);
+  pendingRefresh = state;
+}
+
+function releasePendingRefreshState(
+  state: PendingSessionRefresh,
+  promise: Promise<ApiSession>
+): void {
+  pendingRefreshStates.delete(state);
+  if (pendingRefresh?.promise === promise) {
+    pendingRefresh = null;
+  }
+  if (state.displaced && state.issuedToken) {
+    retainedRefreshTokens.add(state.issuedToken);
+  }
 }
 
 async function revokeSessionToken(token: string): Promise<boolean> {
@@ -371,13 +403,16 @@ async function performLogout(): Promise<LogoutResult> {
   // while the pending refresh is awaited only so its issued credential can be
   // revoked as well.
   const token = getApiSessionToken();
-  const pending = pendingRefresh;
+  const pendingStates = [...pendingRefreshStates];
   clearApiSession();
-  if (pending) {
-    await pending.promise.catch(() => undefined);
-  }
+  await Promise.all(pendingStates.map((state) => state.promise.catch(() => undefined)));
 
-  const tokens = [...new Set([token, pending?.issuedToken].filter((value): value is string => Boolean(value)))];
+  const tokens = [...new Set([
+    token,
+    ...pendingStates.map((state) => state.issuedToken),
+    ...retainedRefreshTokens
+  ].filter((value): value is string => Boolean(value)))];
+  retainedRefreshTokens.clear();
   if (tokens.length === 0) {
     return { localCleared: true, remoteRevoked: true };
   }
@@ -443,7 +478,9 @@ async function performWechatSessionRefresh(onSessionIssued?: (token: string) => 
     // nor clear the session that superseded it).
     throw new Error("登录状态已变更，请重试");
   }
-  return storeApiSession(session);
+  const stored = storeApiSession(session);
+  retainedRefreshTokens.clear();
+  return stored;
 }
 
 let pendingRefresh: PendingSessionRefresh | null = null;
@@ -476,12 +513,9 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
   const refresh = performWechatSessionRefresh((issuedToken) => {
     state.issuedToken = issuedToken;
   });
-  state.promise = refresh;
-  pendingRefresh = state;
+  registerPendingRefreshState(state, refresh);
   const release = () => {
-    if (pendingRefresh?.promise === refresh) {
-      pendingRefresh = null;
-    }
+    releasePendingRefreshState(state, refresh);
   };
   refresh.then(release, release);
   return refresh;
@@ -532,18 +566,17 @@ export function confirmMiniProgramEmailLink(
       throw new Error("登录状态已变更，请重试");
     }
     sessionEpoch += 1;
-    return storeApiSession(session);
+    const stored = storeApiSession(session);
+    retainedRefreshTokens.clear();
+    return stored;
   })();
   // Occupy the single-flight slot for the whole confirmation: a 401 landing
   // while loginCode()//email/confirm is pending must await this run instead
   // of starting a /wechat/login that would rotate the confirmation token
   // server-side before we ever store it.
-  state.promise = run;
-  pendingRefresh = state;
+  registerPendingRefreshState(state, run);
   const release = () => {
-    if (pendingRefresh?.promise === run) {
-      pendingRefresh = null;
-    }
+    releasePendingRefreshState(state, run);
   };
   run.then(release, release);
   return run;

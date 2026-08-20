@@ -7,10 +7,11 @@ globalThis.wx = {
   getStorageSync: (key) => storage.get(key),
   setStorage: ({ key, data }) => storage.set(key, data),
   removeStorage: ({ key }) => storage.delete(key),
+  removeStorageSync: (key) => storage.delete(key),
   getPerformance: () => ({ now: () => Date.now() })
 };
 
-const { clearPerf, getPerf, recordApi } = await import("../miniprogram/utils/perf.ts");
+const { clearPerf, flushPerfNow, getPerf, recordApi } = await import("../miniprogram/utils/perf.ts");
 const {
   PagePerformanceTracker,
   getActivePagePerformanceTrace
@@ -22,6 +23,34 @@ const {
   formatDuration,
   nearestRankDuration
 } = await import("../miniprogram/utils/performance-summary.ts");
+
+test("a clear supersedes an in-flight native performance write", async () => {
+  const previousSetStorage = globalThis.wx.setStorage;
+  let completeWrite;
+  globalThis.wx.setStorage = ({ key, data, success }) => {
+    completeWrite = () => {
+      storage.set(key, data);
+      success?.({});
+    };
+  };
+
+  try {
+    clearPerf();
+    recordApi("in-flight", 1, true);
+    const flush = flushPerfNow();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(typeof completeWrite, "function");
+
+    clearPerf();
+    completeWrite();
+    await flush;
+
+    assert.equal(storage.has("perf:v1"), false);
+  } finally {
+    globalThis.wx.setStorage = previousSetStorage;
+    clearPerf();
+  }
+});
 
 test("performance buffers remain bounded and page operation counts are separate", () => {
   clearPerf();

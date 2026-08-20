@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   clearApiSession,
   clearSessionCredentials,
+  confirmMiniProgramEmailLink,
   getApiSessionToken,
   getLinkedAccountSnapshot,
   logoutMiniProgramSession,
@@ -127,6 +128,83 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
 
     assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
     assert.deepEqual(revoked, ["Bearer issued-during-logout"]);
+    await assert.rejects(refresh, /登录状态已变更/);
+    assert.equal(getApiSessionToken(), null);
+  } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("logout revokes a displaced refresh credential when email confirmation fails", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const revoked = [];
+  const loginCallbacks = [];
+  let loginRequest;
+  let emailRequest;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: () => undefined,
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => false,
+      login: (options) => loginCallbacks.push(options.success),
+      request: (options) => {
+        if (options.method === "POST") {
+          if (options.url.endsWith("/wechat/login")) loginRequest = options;
+          else emailRequest = options;
+          return;
+        }
+        revoked.push(options.header.Authorization);
+        options.success({ statusCode: 204, data: { success: true } });
+      }
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+    clearSessionCredentials();
+
+    const refresh = refreshWechatApiSession();
+    loginCallbacks.shift()({ code: "old-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(loginRequest);
+
+    const confirm = confirmMiniProgramEmailLink("fpl@example.com", "123456");
+    const logout = logoutMiniProgramSession();
+
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        linked: true,
+        token: "rotated-before-confirm-failure",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: {
+          id: "profile",
+          name: null,
+          email: null,
+          fplEntryId: null,
+          fplEntryVerifiedAt: null,
+          wechatLinked: true
+        }
+      }
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(loginCallbacks.length, 1);
+
+    loginCallbacks.shift()({ code: "confirm-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(emailRequest);
+    emailRequest.success({
+      statusCode: 500,
+      data: { success: false, error: "confirmation failed" }
+    });
+
+    await assert.rejects(confirm);
+    assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
+    assert.deepEqual(revoked, ["Bearer rotated-before-confirm-failure"]);
     await assert.rejects(refresh, /登录状态已变更/);
     assert.equal(getApiSessionToken(), null);
   } finally {
