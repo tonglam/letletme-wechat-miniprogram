@@ -147,7 +147,7 @@ test("cooldown remains active and notifies subscribers when storage fails", asyn
 test("a corrupted future cooldown stays anchored when storage writes fail", () => {
   const runtime = installRuntime(() => undefined);
   const now = Date.parse("2026-08-20T00:00:00.000Z");
-  runtime.storage.set("graphql-cooldown-until", now + 24 * 60 * 60 * 1000);
+  runtime.storage.set("graphql-cooldown-until", now + 5 * 60 * 1000);
   globalThis.wx.setStorageSync = () => {
     throw new Error("storage full");
   };
@@ -162,6 +162,11 @@ test("a corrupted future cooldown stays anchored when storage writes fail", () =
   assert.equal(second.remainingSeconds, 119);
   assert.equal(getGraphQLCooldownState(now + 120_001).active, false);
   assert.equal(getGraphQLCooldownState(now + 130_000).active, false);
+  assert.equal(
+    getGraphQLCooldownState(now + 181_000).active,
+    false,
+    "the quarantined raw value must not become valid again as the clock approaches it",
+  );
 });
 
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {

@@ -100,8 +100,9 @@ export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState 
   const safeStored = Number.isFinite(stored) ? stored : 0;
   const maximumUntil = now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000;
   let normalizedStored = safeStored;
-  if (safeStored > maximumUntil) {
-    if (corruptedStoredCooldownValue !== safeStored) {
+  const isQuarantinedValue = corruptedStoredCooldownValue === safeStored;
+  if (isQuarantinedValue || safeStored > maximumUntil) {
+    if (!isQuarantinedValue) {
       corruptedStoredCooldownValue = safeStored;
       corruptedStoredCooldownUntil = maximumUntil;
     }
