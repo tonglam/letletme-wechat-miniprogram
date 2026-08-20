@@ -517,42 +517,48 @@ export async function getLiveMatchByStatusSnapshot(
       );
       enriched = mergeLiveFixturePlayers(mapped, details, ref);
     } catch (error) {
-      if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE")) throw error;
-      const refreshed = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
-        cachePolicy: "live",
-        forceRefresh: true,
-        trace
-      });
-      const refreshedResult = refreshed.liveMatchdayDesk;
-      const refreshedMapped = [...refreshedResult.matches, ...refreshedResult.nextFixtures].map(mapGraphQLMatch);
-      const refreshedRef = {
-        season: refreshedResult.season,
-        eventId: refreshedResult.eventId,
-        revision: refreshedResult.revision
-      };
-      const refreshedCurrent = refreshedMapped.filter((match) =>
-        refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
-      );
-      const details = await fetchLiveFixturePlayers(
-        refreshedRef,
-        refreshedCurrent.map((match) => Number(match.matchId)),
-        true
-      );
-      enriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
-      return {
-        data: filterLiveMatchesByStatus(enriched, status),
-        snapshot: refreshedResult.revision
-          ? {
-              eventId: refreshedResult.eventId,
-              revision: refreshedResult.revision,
-              state: refreshedResult.state,
-              publishedAt: refreshedResult.publishedAt,
-              checkedAt: refreshedResult.publishedAt,
-              season: refreshedResult.season
-            }
-          : null,
-        servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
-      };
+      if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE")) {
+        // Player enrichment is optional. Keep the authoritative score/status
+        // desk when a transient detail request fails instead of turning a
+        // usable live snapshot into a page-level error.
+        enriched = mapped;
+      } else {
+        const refreshed = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
+          cachePolicy: "live",
+          forceRefresh: true,
+          trace
+        });
+        const refreshedResult = refreshed.liveMatchdayDesk;
+        const refreshedMapped = [...refreshedResult.matches, ...refreshedResult.nextFixtures].map(mapGraphQLMatch);
+        const refreshedRef = {
+          season: refreshedResult.season,
+          eventId: refreshedResult.eventId,
+          revision: refreshedResult.revision
+        };
+        const refreshedCurrent = refreshedMapped.filter((match) =>
+          refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
+        );
+        const details = await fetchLiveFixturePlayers(
+          refreshedRef,
+          refreshedCurrent.map((match) => Number(match.matchId)),
+          true
+        );
+        enriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
+        return {
+          data: filterLiveMatchesByStatus(enriched, status),
+          snapshot: refreshedResult.revision
+            ? {
+                eventId: refreshedResult.eventId,
+                revision: refreshedResult.revision,
+                state: refreshedResult.state,
+                publishedAt: refreshedResult.publishedAt,
+                checkedAt: refreshedResult.publishedAt,
+                season: refreshedResult.season
+              }
+            : null,
+          servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
+        };
+      }
     }
   }
   const matches = filterLiveMatchesByStatus(enriched, status);

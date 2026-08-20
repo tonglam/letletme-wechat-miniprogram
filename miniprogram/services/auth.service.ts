@@ -330,18 +330,14 @@ export async function awaitLinkedAccountSnapshot(): Promise<LinkedAccountSnapsho
 
 export type LogoutResult = { localCleared: true; remoteRevoked: boolean };
 
-async function performLogout(): Promise<LogoutResult> {
-  // Capture the credential, invalidate every local session-dependent cache,
-  // and advance the epoch before touching the network. A refresh that was
-  // already in flight will fail its epoch check and cannot restore a token.
-  const token = getApiSessionToken();
-  clearApiSession();
-  if (!token) {
-    return { localCleared: true, remoteRevoked: true };
-  }
+interface PendingSessionRefresh {
+  promise: Promise<ApiSession>;
+  issuedToken: string | null;
+}
 
+async function revokeSessionToken(token: string): Promise<boolean> {
   const t0 = Date.now();
-  const remoteRevoked = await new Promise<boolean>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}/session`,
       method: "DELETE",
@@ -366,6 +362,28 @@ async function performLogout(): Promise<LogoutResult> {
       }
     });
   });
+}
+
+async function performLogout(): Promise<LogoutResult> {
+  // Capture both the current credential and any refresh that can still create
+  // a server session. Invalidate every local session-dependent cache and
+  // advance the epoch before touching the network: local logout is immediate,
+  // while the pending refresh is awaited only so its issued credential can be
+  // revoked as well.
+  const token = getApiSessionToken();
+  const pending = pendingRefresh;
+  clearApiSession();
+  if (pending) {
+    await pending.promise.catch(() => undefined);
+  }
+
+  const tokens = [...new Set([token, pending?.issuedToken].filter((value): value is string => Boolean(value)))];
+  if (tokens.length === 0) {
+    return { localCleared: true, remoteRevoked: true };
+  }
+
+  const revocations = await Promise.all(tokens.map(revokeSessionToken));
+  const remoteRevoked = revocations.every(Boolean);
   return { localCleared: true, remoteRevoked };
 }
 
@@ -396,13 +414,18 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
 }
 
 /** Uses only web-owned identity. FPL entry IDs are inherited from the verified account. */
-async function performWechatSessionRefresh(): Promise<ApiSession> {
+async function performWechatSessionRefresh(onSessionIssued?: (token: string) => void): Promise<ApiSession> {
   const epoch = sessionEpoch;
   const code = await loginCode();
   const response = await requestWebAuth("/wechat/login", {
     code,
     deviceId: getDeviceId()
   });
+  const session = asSession(response);
+  // The server credential exists even when the local epoch has changed. Keep
+  // it attached to the in-flight refresh so logout can revoke that credential
+  // after local state has already been cleared.
+  onSessionIssued?.(session.token);
   if (epoch !== sessionEpoch) {
     // A logout, session clear, or explicit email-link confirm landed while
     // the login round trip was in flight — this stale response must not
@@ -419,10 +442,10 @@ async function performWechatSessionRefresh(): Promise<ApiSession> {
     clearSessionCredentials();
     throw new MiniProgramLinkRequiredError();
   }
-  return storeApiSession(asSession(response));
+  return storeApiSession(session);
 }
 
-let pendingRefresh: Promise<ApiSession> | null = null;
+let pendingRefresh: PendingSessionRefresh | null = null;
 
 // True for the entire sign-out round trip: a 401 landing mid-DELETE must not
 // start /wechat/login and rotate a fresh server-side session that outlives
@@ -440,15 +463,22 @@ export function isLogoutInFlight(): boolean {
  */
 export function refreshWechatApiSession(): Promise<ApiSession> {
   if (pendingRefresh) {
-    return pendingRefresh;
+    return pendingRefresh.promise;
   }
   if (logoutInFlight) {
     return Promise.reject(new Error("正在退出登录，请稍后重试"));
   }
-  const refresh = performWechatSessionRefresh();
-  pendingRefresh = refresh;
+  const state: PendingSessionRefresh = {
+    promise: Promise.resolve(undefined as never),
+    issuedToken: null
+  };
+  const refresh = performWechatSessionRefresh((issuedToken) => {
+    state.issuedToken = issuedToken;
+  });
+  state.promise = refresh;
+  pendingRefresh = state;
   const release = () => {
-    if (pendingRefresh === refresh) {
+    if (pendingRefresh?.promise === refresh) {
       pendingRefresh = null;
     }
   };
@@ -461,7 +491,7 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
  * instead of clearing the session out from under an active login round trip.
  */
 export function getPendingSessionRefresh(): Promise<ApiSession> | null {
-  return pendingRefresh;
+  return pendingRefresh?.promise ?? null;
 }
 
 export async function startMiniProgramEmailLink(email: string): Promise<void> {
@@ -472,6 +502,11 @@ export function confirmMiniProgramEmailLink(
   email: string,
   emailCode: string
 ): Promise<ApiSession> {
+  const startEpoch = sessionEpoch;
+  const state: PendingSessionRefresh = {
+    promise: Promise.resolve(undefined as never),
+    issuedToken: null
+  };
   const run = (async () => {
     // Settle any in-flight /wechat/login first, same as logout: if the server
     // processes the older login after our /email/confirm, its token rotation
@@ -490,16 +525,22 @@ export function confirmMiniProgramEmailLink(
     // An explicit link confirmation supersedes any background /wechat/login
     // that started before it — bump the epoch so the older response can never
     // overwrite this freshly confirmed session.
+    const session = asSession(response);
+    state.issuedToken = session.token;
+    if (logoutInFlight || startEpoch !== sessionEpoch) {
+      throw new Error("登录状态已变更，请重试");
+    }
     sessionEpoch += 1;
-    return storeApiSession(asSession(response));
+    return storeApiSession(session);
   })();
   // Occupy the single-flight slot for the whole confirmation: a 401 landing
   // while loginCode()//email/confirm is pending must await this run instead
   // of starting a /wechat/login that would rotate the confirmation token
   // server-side before we ever store it.
-  pendingRefresh = run;
+  state.promise = run;
+  pendingRefresh = state;
   const release = () => {
-    if (pendingRefresh === run) {
+    if (pendingRefresh?.promise === run) {
       pendingRefresh = null;
     }
   };

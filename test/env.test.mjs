@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getGraphQLEndpoint,
   getMiniProgramApiBase,
+  getMiniProgramEnv,
   setGraphQLEndpointOverride
 } from "../miniprogram/config/env.ts";
 
@@ -72,6 +73,25 @@ test("develop GraphQL defaults to the local Web proxy", () => {
     installWx("develop", {});
     assert.equal(getGraphQLEndpoint(), "http://localhost:3001/api/graphql");
     assert.equal(getMiniProgramApiBase(), "http://localhost:3001/api/miniprogram");
+  } finally {
+    globalThis.wx = previous;
+  }
+});
+
+test("unknown account metadata fails closed as release", () => {
+  const previous = globalThis.wx;
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => {
+        throw new Error("account metadata unavailable");
+      },
+      getStorageSync: () => "https://attacker.invalid/graphql",
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined
+    };
+    assert.equal(getMiniProgramEnv(), "release");
+    assert.equal(getGraphQLEndpoint(), "https://letletme.top/api/graphql");
+    assert.equal(getMiniProgramApiBase(), "https://letletme.top/api/miniprogram");
   } finally {
     globalThis.wx = previous;
   }

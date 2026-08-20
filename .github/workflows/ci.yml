@@ -24,11 +24,16 @@ jobs:
       - name: Prepare runtime dependency lock for security scans
         run: |
           set -eu
-          scan_dir="$(mktemp -d)"
-          node -e 'const fs = require("node:fs"); const packagePath = process.argv[1]; const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")); delete pkg.devDependencies; delete pkg.scripts; fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)' "$scan_dir/package.json"
-          npm install --prefix "$scan_dir" --package-lock-only --ignore-scripts --omit=dev
           mkdir -p runtime-scan
-          cp "$scan_dir/package-lock.json" runtime-scan/package-lock.json
+          node <<'NODE'
+          const fs = require('node:fs')
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'))
+          const packages = Object.fromEntries(
+            Object.entries(lock.packages).filter(([path, metadata]) => path === '' || !metadata.dev)
+          )
+          delete packages[''].devDependencies
+          fs.writeFileSync('runtime-scan/package-lock.json', `${JSON.stringify({ ...lock, packages }, null, 2)}\n`)
+          NODE
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

@@ -21,7 +21,10 @@ export function getMiniProgramEnv(): MiniProgramEnv {
   try {
     return wx.getAccountInfoSync().miniProgram.envVersion;
   } catch {
-    return "trial";
+    // Unknown platform state must take the most restrictive path. In
+    // particular, diagnostics and internal performance routes must not be
+    // exposed to a release user when account metadata is unavailable.
+    return "release";
   }
 }
 
