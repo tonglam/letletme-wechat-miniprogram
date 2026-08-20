@@ -68,16 +68,22 @@ function getDeviceId(): string {
     deviceIdMemory = existing;
     return existing;
   }
-  if (storageReadable && storedValue) {
-    deviceIdMemory = undefined;
-  }
-  if (deviceIdMemory && SAFE_MINI_PROGRAM_DEVICE_ID.test(deviceIdMemory)) {
-    return deviceIdMemory;
+  const memoryFallback = deviceIdMemory
+    && SAFE_MINI_PROGRAM_DEVICE_ID.test(deviceIdMemory)
+    ? deviceIdMemory
+    : undefined;
+  if ((!storageReadable || !storedValue) && memoryFallback) {
+    return memoryFallback;
   }
 
   const generated = `wx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  try {
+    wx.setStorageSync(storageKeys.deviceId, generated);
+    deviceIdMemory = generated;
+    return generated;
+  } catch {}
+  if (memoryFallback) return memoryFallback;
   deviceIdMemory = generated;
-  try { wx.setStorageSync(storageKeys.deviceId, generated); } catch {}
   return generated;
 }
 

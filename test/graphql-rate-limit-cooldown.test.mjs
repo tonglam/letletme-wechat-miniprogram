@@ -12,10 +12,17 @@ import {
   subscribeGraphQLCooldown,
 } from "../miniprogram/services/graphql-cooldown.ts";
 import { getMiniProgramDeviceId } from "../miniprogram/services/auth.service.ts";
+import { setKnownNetworkStatusForTest } from "../miniprogram/utils/network-status.ts";
+import {
+  clearPerf,
+  getPerf,
+  recordPagePerformance,
+} from "../miniprogram/utils/perf.ts";
 
 function installRuntime(handler) {
   const storage = new Map();
   const requests = [];
+  const toasts = [];
   let requestHandler = handler;
   globalThis.getApp = () => ({ globalData: { season: "2025-26" } });
   globalThis.wx = {
@@ -31,7 +38,7 @@ function installRuntime(handler) {
       storage.delete(key);
       success?.({});
     },
-    showToast: () => undefined,
+    showToast: (options) => toasts.push(options),
     request: (options) => {
       requests.push(options);
       requestHandler(options);
@@ -40,6 +47,7 @@ function installRuntime(handler) {
   return {
     requests,
     storage,
+    toasts,
     setHandler(next) {
       requestHandler = next;
     },
@@ -92,6 +100,20 @@ test("device ID remains stable in memory when synchronous storage is unavailable
   const second = getMiniProgramDeviceId();
   assert.match(first, /^[A-Za-z0-9._:-]{8,128}$/);
   assert.equal(second, first);
+});
+
+test("device ID remains stable when an invalid legacy value is readable but replacement writes fail", () => {
+  const runtime = installRuntime(() => undefined);
+  runtime.storage.set("mini-program-device-id", "unsafe/device");
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+
+  const first = getMiniProgramDeviceId();
+  const second = getMiniProgramDeviceId();
+  assert.match(first, /^[A-Za-z0-9._:-]{8,128}$/);
+  assert.equal(second, first);
+  assert.equal(runtime.storage.get("mini-program-device-id"), "unsafe/device");
 });
 
 test("cooldown remains active and notifies subscribers when storage fails", async () => {
@@ -205,6 +227,83 @@ test("429 serves stale data and every cooldown read performs zero network reques
   assert.equal(secondStale.data.value, "last-good");
   assert.equal(secondStale.meta.rateLimited, true);
   assert.equal(runtime.requests.length, 2);
+});
+
+test("persisted cooldown surfaces a stale-data notice before returning cached data", async () => {
+  const runtime = installRuntime((request) => request.success({
+    statusCode: 200,
+    data: { data: { value: "last-good" } },
+  }));
+  const query = "query PersistedCooldownStaleNotice { value }";
+  const options = {
+    ...policy,
+    cacheTtl: 1,
+    staleTtl: 60_000,
+  };
+
+  await graphqlRead(query, {}, options);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  runtime.storage.set("graphql-cooldown-until", Date.now() + 30_000);
+
+  const stale = await graphqlRead(query, {}, { ...options, forceRefresh: true });
+  assert.equal(stale.meta.rateLimited, true);
+  assert.equal(stale.meta.source, "stale");
+  assert.equal(runtime.requests.length, 1);
+  assert.equal(runtime.toasts.length, 1);
+  assert.match(runtime.toasts[0].title, /当前显示上次成功数据/);
+});
+
+test("a cooldown established during the network probe is not counted as network traffic", async () => {
+  const runtime = installRuntime(() => {
+    throw new Error("cooldown must suppress wx.request");
+  });
+  let finishProbe;
+  globalThis.wx.getNetworkType = ({ success, complete }) => {
+    finishProbe = () => {
+      success?.({ networkType: "wifi" });
+      complete?.({ networkType: "wifi" });
+    };
+  };
+  setKnownNetworkStatusForTest(null, {
+    listenerInstalled: false,
+    lastProbeAt: 0,
+  });
+  clearPerf();
+  const navigationId = "cooldown-probe-race";
+  recordPagePerformance({
+    navigationId,
+    route: "pages/test/cooldown",
+    trigger: "refresh",
+    routeStartedAt: Date.now(),
+    operationCount: 0,
+    networkOperationCount: 0,
+  });
+
+  const read = graphqlRead("query CooldownProbeRace { value }", {}, {
+    ...policy,
+    trace: {
+      navigationId,
+      callerSurface: "cooldown-race",
+      trigger: "refresh",
+      contextRevision: 1,
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof finishProbe, "function");
+  persistGraphQLCooldown(20);
+  finishProbe();
+
+  await assert.rejects(
+    read,
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  const perf = getPerf();
+  const page = perf.pagePerformance.find(
+    (item) => item.navigationId === navigationId,
+  );
+  assert.equal(runtime.requests.length, 0);
+  assert.equal(page.networkOperationCount, 0);
+  assert.equal(perf.apiRecords.at(-1).networkAttempted, false);
 });
 
 test("after cooldown expiry, concurrent refreshes share one in-flight request", async () => {

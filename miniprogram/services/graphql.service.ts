@@ -395,7 +395,8 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   retryOnUnauthorized = true,
-  token = authMode === "session" ? getApiSessionToken() : null
+  token = authMode === "session" ? getApiSessionToken() : null,
+  onNetworkAttempt?: () => void,
 ): Promise<{ body: GraphQLResponse<T>; token: string | null; requestId?: string }> {
   const cooldown = getGraphQLCooldownState();
   if (cooldown.active) {
@@ -417,6 +418,7 @@ function makeRequest<T>(
       getMiniProgramDeviceId(),
     );
 
+    onNetworkAttempt?.();
     wx.request<GraphQLResponse<T>>({
       url: getGraphQLEndpoint(),
       method: "POST",
@@ -435,7 +437,15 @@ function makeRequest<T>(
 
           const currentToken = getApiSessionToken();
           if (currentToken && currentToken !== token) {
-            makeRequest<T>(query, variables, operationName, authMode, false, currentToken)
+            makeRequest<T>(
+              query,
+              variables,
+              operationName,
+              authMode,
+              false,
+              currentToken,
+              onNetworkAttempt,
+            )
               .then(resolve)
               .catch(reject);
             return;
@@ -454,7 +464,8 @@ function makeRequest<T>(
                     operationName,
                     authMode,
                     false,
-                    freshToken
+                    freshToken,
+                    onNetworkAttempt,
                   );
                 }
                 clearSessionCredentials();
@@ -465,7 +476,8 @@ function makeRequest<T>(
                     operationName,
                     authMode,
                     false,
-                    getApiSessionToken()
+                    getApiSessionToken(),
+                    onNetworkAttempt,
                   ));
               })
               .then(resolve)
@@ -481,7 +493,8 @@ function makeRequest<T>(
               operationName,
               authMode,
               false,
-              getApiSessionToken()
+              getApiSessionToken(),
+              onNetworkAttempt,
             ))
             .then(resolve)
             .catch(reject);
@@ -642,6 +655,7 @@ export async function graphqlRead<T>(
   const cooldown = getGraphQLCooldownState(now);
   if (cooldown.active) {
     if (staleCandidate) {
+      showGraphQLCooldownNotice(cooldown, true);
       recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
       recordRequest(
         policy.operationName,
@@ -778,15 +792,19 @@ export async function graphqlRead<T>(
   }
 
   const networkRequest = (async (): Promise<GraphQLReadResult<T>> => {
+    let networkAttempted = false;
     try {
-      if (trace) recordPageOperation(trace.navigationId, "network");
       const response = await makeRequest<T>(
         query,
         variables,
         policy.operationName,
         policy.authMode,
         true,
-        token
+        token,
+        () => {
+          networkAttempted = true;
+          if (trace) recordPageOperation(trace.navigationId, "network");
+        },
       );
       const errors = response.body.errors || [];
       const hasData = response.body.data !== undefined && response.body.data !== null;
@@ -823,7 +841,7 @@ export async function graphqlRead<T>(
         startedAt,
         errors.length === 0,
         "network",
-        true,
+        networkAttempted,
         undefined,
         trace,
         cacheVariantHash,
@@ -858,7 +876,7 @@ export async function graphqlRead<T>(
           startedAt,
           false,
           "stale",
-          true,
+          networkAttempted,
           staleCandidate.storedAt,
           trace,
           cacheVariantHash,
@@ -897,7 +915,7 @@ export async function graphqlRead<T>(
         startedAt,
         false,
         "network",
-        true,
+        networkAttempted,
         undefined,
         trace,
         cacheVariantHash,
