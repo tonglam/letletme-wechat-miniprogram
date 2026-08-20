@@ -341,6 +341,7 @@ interface PendingSessionRefresh {
 // logout can revoke a rotated credential even when the replacement fails.
 const pendingRefreshStates = new Set<PendingSessionRefresh>();
 const retainedRefreshTokens = new Set<string>();
+let pendingEmailConfirmation: Promise<ApiSession> | null = null;
 
 function registerPendingRefreshState(
   state: PendingSessionRefresh,
@@ -537,6 +538,9 @@ export function confirmMiniProgramEmailLink(
   email: string,
   emailCode: string
 ): Promise<ApiSession> {
+  if (pendingEmailConfirmation) {
+    return pendingEmailConfirmation;
+  }
   const startEpoch = sessionEpoch;
   const state: PendingSessionRefresh = {
     promise: Promise.resolve(undefined as never),
@@ -575,8 +579,12 @@ export function confirmMiniProgramEmailLink(
   // of starting a /wechat/login that would rotate the confirmation token
   // server-side before we ever store it.
   registerPendingRefreshState(state, run);
+  pendingEmailConfirmation = run;
   const release = () => {
     releasePendingRefreshState(state, run);
+    if (pendingEmailConfirmation === run) {
+      pendingEmailConfirmation = null;
+    }
   };
   run.then(release, release);
   return run;

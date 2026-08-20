@@ -213,6 +213,63 @@ test("logout revokes a displaced refresh credential when email confirmation fail
   }
 });
 
+test("duplicate email confirmations share the first in-flight request", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const loginCallbacks = [];
+  let emailRequest;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: () => undefined,
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => false,
+      login: (options) => loginCallbacks.push(options.success),
+      request: (options) => {
+        emailRequest = options;
+      }
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+    clearSessionCredentials();
+
+    const first = confirmMiniProgramEmailLink("fpl@example.com", "123456");
+    const duplicate = confirmMiniProgramEmailLink("other@example.com", "654321");
+    assert.strictEqual(duplicate, first);
+    assert.equal(loginCallbacks.length, 1);
+
+    loginCallbacks.shift()({ code: "confirm-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(emailRequest);
+    emailRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        token: "confirmed-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: {
+          id: "profile",
+          name: null,
+          email: "fpl@example.com",
+          fplEntryId: null,
+          fplEntryVerifiedAt: null,
+          wechatLinked: true
+        }
+      }
+    });
+
+    await first;
+    await duplicate;
+    assert.equal(getApiSessionToken(), "confirmed-token");
+    clearSessionCredentials();
+  } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
 test("legacy plaintext session tokens migrate to encrypted storage", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;

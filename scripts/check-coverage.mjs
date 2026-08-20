@@ -7,6 +7,8 @@ const testFiles = [
 ];
 const result = spawnSync(process.execPath, [
   "--experimental-test-coverage",
+  "--test-coverage-include", "miniprogram/**/*.ts",
+  "--test-coverage-exclude", "**/*.d.ts",
   "--import", "tsx",
   "--test",
   ...testFiles
@@ -16,7 +18,7 @@ process.stdout.write(result.stdout || "");
 process.stderr.write(result.stderr || "");
 if (result.status !== 0) process.exit(result.status || 1);
 
-const match = (result.stdout || "").match(/# all files\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|/);
+const match = (result.stdout || "").match(/^\s*[#ℹ]\s+all files\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|/m);
 if (!match) {
   console.error("Coverage summary was not produced by Node");
   process.exit(1);
