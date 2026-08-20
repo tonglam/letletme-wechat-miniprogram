@@ -348,6 +348,8 @@ const REVOCATION_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
 let pendingEmailConfirmation: Promise<ApiSession> | null = null;
 let revocationQueueReady: Promise<void> | null = null;
 let revocationPersistChain = Promise.resolve();
+let revocationQueueRestored = false;
+let revocationQueueWriteDirty = false;
 
 interface StoredRevocationQueue {
   version: 1;
@@ -365,7 +367,9 @@ function revocationQueueSnapshot(): StoredRevocationQueue {
 }
 
 function persistRetainedRefreshTokens(): Promise<void> {
-  if (!supportsEncryptedSessionStorage()) return Promise.resolve();
+  if (!supportsEncryptedSessionStorage() || !revocationQueueRestored) {
+    return Promise.resolve();
+  }
   const snapshot = revocationQueueSnapshot();
   revocationPersistChain = revocationPersistChain.then(() => new Promise<void>((resolve) => {
     try {
@@ -391,10 +395,19 @@ function persistRetainedRefreshTokens(): Promise<void> {
   return revocationPersistChain;
 }
 
+function isMissingRevocationQueue(error: unknown): boolean {
+  const message = typeof error === "object" && error !== null && "errMsg" in error
+    ? String((error as { errMsg?: unknown }).errMsg)
+    : String(error ?? "");
+  return /(?:data|key).*(?:not found|not exist)|not found|no data/i.test(message);
+}
+
 function ensureRevocationQueueRestored(): Promise<void> {
   if (revocationQueueReady) return revocationQueueReady;
-  revocationQueueReady = new Promise<void>((resolve) => {
+  let retryAfterResolve = false;
+  const ready = new Promise<void>((resolve) => {
     if (!supportsEncryptedSessionStorage()) {
+      revocationQueueRestored = true;
       resolve();
       return;
     }
@@ -403,6 +416,7 @@ function ensureRevocationQueueRestored(): Promise<void> {
         key: storageKeys.pendingSessionRevocations,
         encrypt: true,
         success(result) {
+          revocationQueueRestored = true;
           const data = result.data as Partial<StoredRevocationQueue> | undefined;
           const entries = data?.version === 1 && Array.isArray(data.entries)
             ? data.entries
@@ -426,18 +440,43 @@ function ensureRevocationQueueRestored(): Promise<void> {
               }
             });
           }
-          const persisted = dirty
+          const shouldPersist = dirty || revocationQueueWriteDirty;
+          revocationQueueWriteDirty = false;
+          const persisted = shouldPersist
             ? persistRetainedRefreshTokens()
             : Promise.resolve();
           persisted.then(resolve, resolve);
         },
-        fail: () => resolve()
+        fail: (error) => {
+          if (isMissingRevocationQueue(error)) {
+            revocationQueueRestored = true;
+            const shouldPersist = revocationQueueWriteDirty;
+            revocationQueueWriteDirty = false;
+            const persisted = shouldPersist
+              ? persistRetainedRefreshTokens()
+              : Promise.resolve();
+            persisted.then(resolve, resolve);
+            return;
+          }
+          // Keep the previous protected queue untouched and retry on the next
+          // launch/logout rather than treating a transient read as an empty
+          // queue that can be overwritten.
+          retryAfterResolve = true;
+          resolve();
+        }
       } as WechatMiniprogram.GetStorageOption);
     } catch {
+      retryAfterResolve = true;
       resolve();
     }
   });
-  return revocationQueueReady;
+  revocationQueueReady = ready;
+  ready.then(() => {
+    if (retryAfterResolve && revocationQueueReady === ready) {
+      revocationQueueReady = null;
+    }
+  });
+  return ready;
 }
 
 function retainRefreshToken(token: string, expiresAt?: string | null): void {
@@ -451,12 +490,20 @@ function retainRefreshToken(token: string, expiresAt?: string | null): void {
     token,
     Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry)
   );
+  if (!revocationQueueRestored) {
+    revocationQueueWriteDirty = true;
+    return;
+  }
   void persistRetainedRefreshTokens();
 }
 
 function forgetRetainedRefreshToken(token: string): void {
   retainedRefreshTokens.delete(token);
   retainedRefreshTokenExpiry.delete(token);
+  if (!revocationQueueRestored) {
+    revocationQueueWriteDirty = true;
+    return;
+  }
   void persistRetainedRefreshTokens();
 }
 

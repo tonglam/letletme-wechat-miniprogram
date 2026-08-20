@@ -688,10 +688,10 @@ export async function getLivePointsByTournamentSnapshot(
   }
   let resolvedSnapshot = snapshot;
   let resolvedRef = { season: snapshot.season, eventId: snapshot.eventId, revision: snapshot.revision };
-  const variables = { entryId: principalEntryId, selectedTournamentId, ref: resolvedRef };
+  let requestVariables = { entryId: principalEntryId, selectedTournamentId, ref: resolvedRef };
   let data: TournamentLivePointsResponse;
   try {
-    data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
+    data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, requestVariables, {
       cachePolicy: "live",
       forceRefresh,
       trace
@@ -709,9 +709,14 @@ export async function getLivePointsByTournamentSnapshot(
     };
     resolvedRef = refreshedRef;
     resolvedSnapshot = refreshed;
+    requestVariables = {
+      entryId: principalEntryId,
+      selectedTournamentId,
+      ref: refreshedRef
+    };
     data = await graphqlRequest<TournamentLivePointsResponse>(
       TOURNAMENT_LIVE_POINTS,
-      { entryId: principalEntryId, selectedTournamentId, ref: refreshedRef },
+      requestVariables,
       { cachePolicy: "live", forceRefresh: true, trace }
     );
   }
@@ -721,7 +726,7 @@ export async function getLivePointsByTournamentSnapshot(
   ) {
     throw new Error("该轮实时快照返回不匹配，请稍后重试");
   }
-  const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);
+  const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, requestVariables);
   return {
     data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
     snapshot: data.entryLiveCompetitionsDesk.revision

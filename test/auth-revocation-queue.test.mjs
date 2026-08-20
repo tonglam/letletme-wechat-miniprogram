@@ -5,7 +5,7 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const auth = require("../miniprogram/services/auth.service.ts");
 
-function installWechatStorage(initialQueue, requestImpl) {
+function installWechatStorage(initialQueue, requestImpl, { queueReadFailures = 0 } = {}) {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const storage = new Map();
@@ -29,6 +29,11 @@ function installWechatStorage(initialQueue, requestImpl) {
     canIUse: () => true,
     getStorage: (options) => {
       encryptedReads.push(options);
+      if (options.key === "api-session-revocations" && queueReadFailures > 0) {
+        queueReadFailures -= 1;
+        options.fail?.({ errMsg: "getStorage:fail network error" });
+        return;
+      }
       if (storage.has(options.key)) {
         options.success?.({ data: storage.get(options.key), errMsg: "getStorage:ok" });
       } else {
@@ -77,24 +82,24 @@ test("restores failed revocations across restart and preserves original expiry",
       ]
     },
     (options, count) => {
-      if (count < 3) {
+      if (count < 2) {
         options.fail?.({ errMsg: "offline" });
       } else {
         options.success?.({ statusCode: 204, data: { success: true } });
       }
-    }
+    },
+    { queueReadFailures: 1 }
   );
 
   try {
     assert.deepEqual(await auth.logoutMiniProgramSession(), {
       localCleared: true,
-      remoteRevoked: false
+      remoteRevoked: true
     });
     assert.deepEqual(await auth.logoutMiniProgramSession(), {
       localCleared: true,
       remoteRevoked: false
     });
-    await new Promise((resolve) => setImmediate(resolve));
 
     const persisted = harness.storage.get("api-session-revocations");
     assert.equal(persisted.version, 1);
@@ -106,9 +111,8 @@ test("restores failed revocations across restart and preserves original expiry",
       localCleared: true,
       remoteRevoked: true
     });
-    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(harness.storage.has("api-session-revocations"), false);
-    assert.equal(harness.requests.length, 3);
+    assert.equal(harness.requests.length, 2);
   } finally {
     harness.restore();
   }
