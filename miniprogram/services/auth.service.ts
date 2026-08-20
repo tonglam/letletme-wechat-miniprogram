@@ -364,8 +364,8 @@ function revocationQueueSnapshot(): StoredRevocationQueue {
   };
 }
 
-function persistRetainedRefreshTokens(): void {
-  if (!supportsEncryptedSessionStorage()) return;
+function persistRetainedRefreshTokens(): Promise<void> {
+  if (!supportsEncryptedSessionStorage()) return Promise.resolve();
   const snapshot = revocationQueueSnapshot();
   revocationPersistChain = revocationPersistChain.then(() => new Promise<void>((resolve) => {
     try {
@@ -388,6 +388,7 @@ function persistRetainedRefreshTokens(): void {
       resolve();
     }
   }));
+  return revocationPersistChain;
 }
 
 function ensureRevocationQueueRestored(): Promise<void> {
@@ -425,10 +426,10 @@ function ensureRevocationQueueRestored(): Promise<void> {
               }
             });
           }
-          if (dirty) {
-            persistRetainedRefreshTokens();
-          }
-          resolve();
+          const persisted = dirty
+            ? persistRetainedRefreshTokens()
+            : Promise.resolve();
+          persisted.then(resolve, resolve);
         },
         fail: () => resolve()
       } as WechatMiniprogram.GetStorageOption);
@@ -450,13 +451,13 @@ function retainRefreshToken(token: string, expiresAt?: string | null): void {
     token,
     Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry)
   );
-  persistRetainedRefreshTokens();
+  void persistRetainedRefreshTokens();
 }
 
 function forgetRetainedRefreshToken(token: string): void {
   retainedRefreshTokens.delete(token);
   retainedRefreshTokenExpiry.delete(token);
-  persistRetainedRefreshTokens();
+  void persistRetainedRefreshTokens();
 }
 
 function discardExpiredRetainedRefreshTokens(): void {
@@ -551,6 +552,7 @@ async function performLogout(): Promise<LogoutResult> {
     ...retainedRefreshTokens
   ].filter((value): value is string => Boolean(value)))];
   if (tokens.length === 0) {
+    await revocationPersistChain;
     return { localCleared: true, remoteRevoked: true };
   }
 
@@ -563,6 +565,7 @@ async function performLogout(): Promise<LogoutResult> {
     }
     return revoked;
   }));
+  await revocationPersistChain;
   const remoteRevoked = revocations.every(Boolean);
   return { localCleared: true, remoteRevoked };
 }
