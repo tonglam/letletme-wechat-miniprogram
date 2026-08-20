@@ -11,7 +11,7 @@ test("Live Entry preserves a queued historical reload across repeated hides", ()
 });
 
 test("Price preserves forced daily refresh and pagination cursor on resume", () => {
-  const page = read("miniprogram/pages/data/price/price.ts");
+  const page = read("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /dailyRequestForceRefresh: false/);
   assert.match(page, /resumeStageForceRefresh = this\.resumeStageForceRefresh \|\| this\.dailyRequestForceRefresh/);
   assert.match(page, /paginationPending: false[\s\S]*paginationCursor: null/);

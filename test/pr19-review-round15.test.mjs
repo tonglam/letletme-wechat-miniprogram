@@ -30,7 +30,7 @@ test("Home null trace survives through secondary service boundaries", () => {
 });
 
 test("My FPL Team abandons resumed work after the page becomes hidden", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
 
   assert.match(page, /pageVisible: false/);
   assert.match(page, /async onShow\(\) \{\s+this\.pageVisible = true/);

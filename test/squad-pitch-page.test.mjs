@@ -5,7 +5,7 @@ import test from "node:test";
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("team page keeps real data load and only adds a pitch presentation layer", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /await getEntryTeamStatsEventResult/);
   assert.match(page, /pitchStateFromEventResult\(eventResult\)/);
   assert.doesNotMatch(page, /toSquadPitchPlayer\(\{\s*webName:\s*"Haaland"/);

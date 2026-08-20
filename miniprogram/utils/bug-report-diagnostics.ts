@@ -1,9 +1,10 @@
 import { getMiniProgramEnv } from "../config/env";
 
 export type BugReportDiagnostic = {
-  at: string;
+  at?: string;
   requestId?: string;
   message?: string;
+  code?: string;
   operation?: string;
 };
 
@@ -15,6 +16,7 @@ export function recordBugReportDiagnostic(entry: BugReportDiagnostic): void {
     at: entry.at,
     requestId: entry.requestId?.slice(0, 80),
     message: entry.message?.slice(0, 180),
+    code: entry.code?.slice(0, 80),
     operation: entry.operation?.slice(0, 80)
   });
   if (diagnostics.length > MAX_DIAGNOSTICS) diagnostics.shift();
@@ -33,8 +35,6 @@ function readDeviceMeta(): Record<string, unknown> {
     getDeviceInfo?: () => {
       platform?: string;
       system?: string;
-      brand?: string;
-      model?: string;
     };
     getWindowInfo?: () => {
       windowWidth?: number;
@@ -49,15 +49,19 @@ function readDeviceMeta(): Record<string, unknown> {
     const device = api.getDeviceInfo?.() ?? {};
     const windowInfo = api.getWindowInfo?.() ?? {};
     const appBase = api.getAppBaseInfo?.() ?? {};
+    const system = String(device.system || "");
+    const osMajor = system.match(/\d+/)?.[0] || "unknown";
+    const width = Number(windowInfo.windowWidth);
+    const height = Number(windowInfo.windowHeight);
+    const viewportBucket = Number.isFinite(width) && Number.isFinite(height)
+      ? `${Math.round(width / 40) * 40}x${Math.round(height / 100) * 100}`
+      : "unknown";
     return {
-      platform: device.platform,
-      system: device.system,
-      brand: device.brand,
-      model: device.model,
-      SDKVersion: appBase.SDKVersion,
-      language: appBase.language,
-      windowWidth: windowInfo.windowWidth,
-      windowHeight: windowInfo.windowHeight
+      platform: device.platform || "unknown",
+      osMajor,
+      sdkVersion: appBase.SDKVersion || "unknown",
+      language: appBase.language || "unknown",
+      viewportBucket
     };
   } catch {
     return {};
@@ -68,13 +72,18 @@ export function collectMiniProgramBugReportMeta(): Record<string, unknown> {
   const app = typeof getApp === "function" ? getApp<IAppOption>() : undefined;
   const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
   const page = pages.length ? pages[pages.length - 1] : undefined;
+  const device = readDeviceMeta();
   return {
     route: page?.route ?? null,
-    entryId: app?.globalData.entryId ?? null,
-    gw: app?.globalData.gw ?? null,
+    currentGw: app?.globalData.currentGw ?? app?.globalData.gw ?? null,
     envVersion: getMiniProgramEnv(),
     clientTime: new Date().toISOString(),
-    device: readDeviceMeta(),
-    recentRequests: readBugReportDiagnostics()
+    ...device,
+    operations: readBugReportDiagnostics().map((item) => ({
+      requestId: item.requestId,
+      code: item.code,
+      message: item.message,
+      operation: item.operation
+    }))
   };
 }

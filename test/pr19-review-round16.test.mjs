@@ -20,7 +20,7 @@ test("a successful cold login commits its binding only inside auth service", () 
 });
 
 test("My FPL pull refresh waits for the visible deferred tab", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
 
   assert.match(page, /onPullDownRefresh\(\)[\s\S]*await this\.runForcedRefresh\(tracker, trace\)[\s\S]*wx\.stopPullDownRefresh\(\)/);
   assert.match(page, /runForcedRefresh\([\s\S]*await this\.loadData\(true, trace, true\)/);

@@ -32,7 +32,7 @@ test("cold Live Entry startup stops after the originating page hides", () => {
 });
 
 test("Tournament and Match do not chain hidden-page reads", () => {
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     tournament,
@@ -59,7 +59,7 @@ test("Match retries create a refresh tracker", () => {
 });
 
 test("Price player setup preserves its trace and stops after hide", () => {
-  const price = source("miniprogram/pages/data/price/price.ts");
+  const price = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(price, /loadTeamOptions\(forceRefresh = false\)[\s\S]*const tracker = this\.perfTracker[\s\S]*capturePageRequestTrace/);
   assert.match(
     price,

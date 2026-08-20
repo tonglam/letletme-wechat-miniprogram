@@ -314,12 +314,12 @@
 
 - [x] Verify current app source no longer calls legacy REST endpoints.
 - [x] Replace entry binding/profile info source with Web GraphQL `entry(id)`.
-- [ ] Confirm request domain whitelist includes `https://www.letletme.top`.
+- [ ] Confirm request domain whitelist includes `https://letletme.top`; retain `https://www.letletme.top` for one compatibility release.
 - [ ] Verify actual backend response shape for live entry, match, and tournament GraphQL operations.
 - [ ] Verify actual backend response shape for player/team/price/fixture GraphQL operations.
 - [ ] Verify actual backend response shape for summary GraphQL operations.
 - [ ] Update model interfaces and service normalizers after response-shape verification.
-- [ ] Confirm request domain allowlist includes `https://www.letletme.top`.
+- [ ] Confirm request domain allowlist includes `https://letletme.top`; retain `https://www.letletme.top` for one compatibility release.
 
 ## WeChat DevTools And Device Verification
 

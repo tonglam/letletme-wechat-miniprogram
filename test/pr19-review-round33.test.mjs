@@ -11,7 +11,7 @@ test("Live Match pull refresh bypasses unresolved AppContext backoff", () => {
 });
 
 test("My FPL Team retry recovers both failed and unresolved context", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     page,
     /onRetry\(\) \{[\s\S]*this\.contextUnavailable \|\| this\.data\.maxGw <= 0[\s\S]*recoverContext\("pull-refresh"\)/

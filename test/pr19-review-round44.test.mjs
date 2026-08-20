@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const read = (file) => fs.readFileSync(new URL(file, root), "utf8");
 
 test("My FPL event-empty action recovers unresolved context", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /onEmptyAction\(\)[\s\S]*contextUnavailable \|\| this\.data\.maxGw <= 0[\s\S]*recoverContext\("pull-refresh"\)/);
 });
 
@@ -18,7 +18,7 @@ test("team detail Retry forces the cached team read", () => {
 });
 
 test("Live Tournament preserves forced startup across hide and show", () => {
-  const page = read("miniprogram/pages/live/tournament/tournament.ts");
+  const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(page, /resumeStartupForceRefresh/);
   assert.match(page, /startupForceRefresh = forceRefresh/);
   assert.match(page, /resumeStartupForceRefresh = this\.startupForceRefresh/);

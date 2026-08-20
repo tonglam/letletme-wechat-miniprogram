@@ -1,6 +1,18 @@
 {
   "rules": [
     {
+      "action": "disallow",
+      "page": "pages/performance/index/index"
+    },
+    {
+      "action": "disallow",
+      "page": "pages/account/link/link"
+    },
+    {
+      "action": "disallow",
+      "page": "pages/account/report/report"
+    },
+    {
       "action": "allow",
       "page": "*"
     }

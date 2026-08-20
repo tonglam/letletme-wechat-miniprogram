@@ -1,4 +1,4 @@
-import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
+import { getServedCacheStoredAt, graphqlRequest, hasGraphQLErrorCode } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 import type {
   LiveEntryResult,
@@ -54,6 +54,45 @@ export async function getLiveSnapshot(eventId: number): Promise<LiveSnapshotStat
     checkedAt,
     season: context.season
   };
+}
+
+const LIVE_SNAPSHOT_BY_EVENT_QUERY = `
+  query LiveSnapshotByEvent($eventId: Int!) {
+    liveSnapshot(eventId: $eventId) {
+      season
+      eventId
+      revision
+      state
+      publishedAt
+      checkedAt
+    }
+  }
+`;
+
+interface LiveSnapshotByEventResponse {
+  liveSnapshot: {
+    season: string;
+    eventId: number;
+    revision: string;
+    state: LiveSnapshotStatus["state"];
+    publishedAt: string;
+    checkedAt: string;
+  } | null;
+}
+
+export async function getLiveSnapshotByEvent(
+  eventId: number,
+  forceRefresh = false
+): Promise<LiveSnapshotStatus | null> {
+  const variables = { eventId };
+  const data = await graphqlRequest<LiveSnapshotByEventResponse>(
+    LIVE_SNAPSHOT_BY_EVENT_QUERY,
+    variables,
+    { cachePolicy: "live", forceRefresh }
+  );
+  const snapshot = data.liveSnapshot;
+  if (!snapshot || snapshot.eventId !== eventId) return null;
+  return snapshot;
 }
 
 const CALC_LIVE_POINTS_BY_ENTRY = `
@@ -234,8 +273,10 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
+        homeTeamShortName
         awayTeamId
         awayTeamName
+        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
@@ -247,8 +288,10 @@ export const LIVE_MATCHES_QUERY = `
 			eventId
 			homeTeamId
 			homeTeamName
+			homeTeamShortName
 			awayTeamId
 			awayTeamName
+			awayTeamShortName
 			homeScore
 			awayScore
 			kickoffTime
@@ -262,8 +305,12 @@ export const LIVE_MATCHES_QUERY = `
 interface GraphQLMatchData {
   fixtureId: number;
   eventId: number;
+  homeTeamId: number;
   homeTeamName: string;
+  homeTeamShortName: string;
+  awayTeamId: number;
   awayTeamName: string;
+  awayTeamShortName: string;
   homeScore: number | null;
   awayScore: number | null;
   kickoffTime: string | null;
@@ -286,17 +333,162 @@ interface LiveMatchesResponse {
 function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
   return {
     matchId: match.fixtureId,
+    homeTeamId: match.homeTeamId,
     homeTeamName: match.homeTeamName,
-    homeTeamShortName: match.homeTeamName.slice(0, 3).toUpperCase(),
+    homeTeamShortName: match.homeTeamShortName,
     homeScore: match.homeScore ?? 0,
     awayTeamName: match.awayTeamName,
-    awayTeamShortName: match.awayTeamName.slice(0, 3).toUpperCase(),
+    awayTeamId: match.awayTeamId,
+    awayTeamShortName: match.awayTeamShortName,
     awayScore: match.awayScore ?? 0,
     kickoffTime: match.kickoffTime ?? "",
     playStatus: match.finished ? "finished" : match.started ? "playing" : "not_started",
     homeTeamDataList: [],
     awayTeamDataList: []
   };
+}
+
+interface GraphQLLivePerformance {
+  player: {
+    id: number;
+    webName: string;
+    position: "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD";
+    team: { id: number; name: string; shortName: string } | null;
+  } | null;
+  minutes: number | null;
+  goalsScored: number | null;
+  assists: number | null;
+  cleanSheets: number | null;
+  goalsConceded: number | null;
+  ownGoals: number | null;
+  penaltiesSaved: number | null;
+  penaltiesMissed: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+  saves: number | null;
+  bonus: number | null;
+  bps: number | null;
+  defensiveContribution: number | null;
+  totalPoints: number;
+}
+
+interface GraphQLLiveFixturePlayers {
+  season: string;
+  eventId: number;
+  revision: string;
+  fixtureId: number;
+  availability: "READY" | "NOT_STARTED" | "UNAVAILABLE";
+  bonusProvisional: boolean;
+  players: GraphQLLivePerformance[];
+}
+
+type LiveFixturePlayersBatchResponse = Record<string, GraphQLLiveFixturePlayers>;
+
+const POSITION_TYPE: Record<NonNullable<GraphQLLivePerformance["player"]>["position"], number> = {
+  GOALKEEPER: 1,
+  DEFENDER: 2,
+  MIDFIELDER: 3,
+  FORWARD: 4
+};
+
+function liveFixturePlayersSelection(alias: string, variable: string): string {
+  return `
+    ${alias}: liveFixturePlayers(ref: $ref, fixtureId: $${variable}) {
+      season eventId revision fixtureId availability bonusProvisional
+      players {
+        player { id webName position team { id name shortName } }
+        minutes goalsScored assists cleanSheets goalsConceded ownGoals
+        penaltiesSaved penaltiesMissed yellowCards redCards saves bonus bps
+        defensiveContribution totalPoints
+      }
+    }
+  `;
+}
+
+function buildLiveFixturePlayersQuery(count: number): string {
+  const definitions = Array.from({ length: count }, (_, index) => `$fixture${index}: Int!`).join(", ");
+  const selections = Array.from({ length: count }, (_, index) =>
+    liveFixturePlayersSelection(`fixture${index}`, `fixture${index}`)
+  ).join("\n");
+  return `query LiveFixturePlayersBatch($ref: LiveRevisionRefInput!, ${definitions}) { ${selections} }`;
+}
+
+function mapLiveFixturePlayer(row: GraphQLLivePerformance): LivePlayerRow | null {
+  const player = row.player;
+  if (!player || !player.team) return null;
+  return {
+    element: player.id,
+    teamId: player.team.id,
+    webName: player.webName,
+    name: player.webName,
+    team: player.team.name,
+    teamShortName: player.team.shortName,
+    position: player.position,
+    elementType: POSITION_TYPE[player.position],
+    elementTypeName: player.position,
+    points: row.totalPoints,
+    totalPoints: row.totalPoints,
+    minutes: row.minutes ?? 0,
+    goalsScored: row.goalsScored ?? 0,
+    assists: row.assists ?? 0,
+    cleanSheets: row.cleanSheets ?? 0,
+    goalsConceded: row.goalsConceded ?? 0,
+    ownGoals: row.ownGoals ?? 0,
+    penaltiesSaved: row.penaltiesSaved ?? 0,
+    penaltiesMissed: row.penaltiesMissed ?? 0,
+    yellowCards: row.yellowCards ?? 0,
+    redCards: row.redCards ?? 0,
+    saves: row.saves ?? 0,
+    bonus: row.bonus ?? 0,
+    bps: row.bps ?? 0,
+    defensiveContribution: row.defensiveContribution ?? 0
+  };
+}
+
+async function fetchLiveFixturePlayers(
+  ref: { season: string; eventId: number; revision: string },
+  fixtureIds: readonly number[],
+  forceRefresh: boolean
+): Promise<Map<number, GraphQLLiveFixturePlayers>> {
+  const result = new Map<number, GraphQLLiveFixturePlayers>();
+  for (let offset = 0; offset < fixtureIds.length; offset += 5) {
+    const batch = fixtureIds.slice(offset, offset + 5);
+    const query = buildLiveFixturePlayersQuery(batch.length);
+    const variables: Record<string, unknown> = { ref };
+    batch.forEach((fixtureId, index) => { variables[`fixture${index}`] = fixtureId; });
+    const data = await graphqlRequest<LiveFixturePlayersBatchResponse>(query, variables, {
+      cachePolicy: "live",
+      cacheVariant: `${ref.season}:${ref.eventId}:${ref.revision}:${batch.join(",")}`,
+      forceRefresh
+    });
+    batch.forEach((fixtureId, index) => {
+      const detail = data[`fixture${index}`];
+      if (detail) result.set(fixtureId, detail);
+    });
+  }
+  return result;
+}
+
+function mergeLiveFixturePlayers(
+  matches: LiveMatch[],
+  details: Map<number, GraphQLLiveFixturePlayers>,
+  ref: { season: string; eventId: number; revision: string }
+): LiveMatch[] {
+  return matches.map((match) => {
+    const fixtureId = Number(match.matchId ?? match.id);
+    const detail = details.get(fixtureId);
+    if (!detail || detail.season !== ref.season || detail.eventId !== ref.eventId || detail.revision !== ref.revision || detail.fixtureId !== fixtureId) {
+      return match;
+    }
+    const players = detail.availability === "READY"
+      ? detail.players.map(mapLiveFixturePlayer).filter((row): row is LivePlayerRow => row !== null)
+      : [];
+    return {
+      ...match,
+      homeTeamDataList: players.filter((player) => player.teamId === match.homeTeamId),
+      awayTeamDataList: players.filter((player) => player.teamId === match.awayTeamId)
+    };
+  });
 }
 
 export async function getLiveMatchByStatusSnapshot(
@@ -313,22 +505,57 @@ export async function getLiveMatchByStatusSnapshot(
   const result = data.liveMatchdayDesk;
 
   const mapped = [...result.matches, ...result.nextFixtures].map(mapGraphQLMatch);
-  let matches: LiveMatch[];
-  switch (status) {
-    case "playing":
-      matches = mapped.filter((match) => match.playStatus === "playing");
-      break;
-    case "finished":
-      matches = mapped.filter((match) => match.playStatus === "finished");
-      break;
-    case "not_start":
-      matches = mapped.filter((match) => match.playStatus === "not_started");
-      break;
-    case "all":
-    default:
-      matches = mapped;
-      break;
+  const ref = { season: result.season, eventId: result.eventId, revision: result.revision };
+  const currentMatches = mapped.filter((match) => result.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started");
+  let enriched = mapped;
+  if (currentMatches.length > 0) {
+    try {
+      const details = await fetchLiveFixturePlayers(
+        ref,
+        currentMatches.map((match) => Number(match.matchId)),
+        forceRefresh
+      );
+      enriched = mergeLiveFixturePlayers(mapped, details, ref);
+    } catch (error) {
+      if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE")) throw error;
+      const refreshed = await graphqlRequest<LiveMatchesResponse>(LIVE_MATCHES_QUERY, variables, {
+        cachePolicy: "live",
+        forceRefresh: true,
+        trace
+      });
+      const refreshedResult = refreshed.liveMatchdayDesk;
+      const refreshedMapped = [...refreshedResult.matches, ...refreshedResult.nextFixtures].map(mapGraphQLMatch);
+      const refreshedRef = {
+        season: refreshedResult.season,
+        eventId: refreshedResult.eventId,
+        revision: refreshedResult.revision
+      };
+      const refreshedCurrent = refreshedMapped.filter((match) =>
+        refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
+      );
+      const details = await fetchLiveFixturePlayers(
+        refreshedRef,
+        refreshedCurrent.map((match) => Number(match.matchId)),
+        true
+      );
+      enriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
+      return {
+        data: filterLiveMatchesByStatus(enriched, status),
+        snapshot: refreshedResult.revision
+          ? {
+              eventId: refreshedResult.eventId,
+              revision: refreshedResult.revision,
+              state: refreshedResult.state,
+              publishedAt: refreshedResult.publishedAt,
+              checkedAt: refreshedResult.publishedAt,
+              season: refreshedResult.season
+            }
+          : null,
+        servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
+      };
+    }
   }
+  const matches = filterLiveMatchesByStatus(enriched, status);
   return {
     data: matches,
     snapshot: data.liveMatchdayDesk.revision
@@ -343,6 +570,20 @@ export async function getLiveMatchByStatusSnapshot(
       : null,
     servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables)
   };
+}
+
+function filterLiveMatchesByStatus(matches: LiveMatch[], status: string): LiveMatch[] {
+  switch (status) {
+    case "playing":
+      return matches.filter((match) => match.playStatus === "playing");
+    case "finished":
+      return matches.filter((match) => match.playStatus === "finished");
+    case "not_start":
+      return matches.filter((match) => match.playStatus === "not_started");
+    case "all":
+    default:
+      return matches;
+  }
 }
 
 export async function getLiveMatchByStatus(status: string, forceRefresh = false): Promise<LiveMatch[]> {
@@ -411,22 +652,52 @@ function numericId(value: number | string): number {
 
 export async function getLivePointsByTournamentSnapshot(
   tournamentId: number | string,
-  _event: number,
+  event: number,
   forceRefresh = false,
   trace?: PageRequestTrace,
   entryId = 0
 ): Promise<LiveSnapshotResult<LiveTournamentRow[]>> {
   const principalEntryId = numericId(entryId);
-  const variables = {
-    entryId: principalEntryId,
-    selectedTournamentId: numericId(tournamentId),
-    ref: null
-  };
-  const data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
-    cachePolicy: "live",
-    forceRefresh,
-    trace
-  });
+  const selectedTournamentId = numericId(tournamentId);
+  const snapshot = await getLiveSnapshotByEvent(event, forceRefresh);
+  if (!snapshot?.season || snapshot.eventId !== event || !snapshot.revision) {
+    throw new Error("该轮实时快照暂不可用，请稍后重试");
+  }
+  let resolvedSnapshot = snapshot;
+  let resolvedRef = { season: snapshot.season, eventId: snapshot.eventId, revision: snapshot.revision };
+  const variables = { entryId: principalEntryId, selectedTournamentId, ref: resolvedRef };
+  let data: TournamentLivePointsResponse;
+  try {
+    data = await graphqlRequest<TournamentLivePointsResponse>(TOURNAMENT_LIVE_POINTS, variables, {
+      cachePolicy: "live",
+      forceRefresh,
+      trace
+    });
+  } catch (error) {
+    if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE")) throw error;
+    const refreshed = await getLiveSnapshotByEvent(event, true);
+    if (!refreshed?.season || refreshed.eventId !== event || !refreshed.revision) {
+      throw new Error("该轮历史快照已不可用，请重新选择轮次");
+    }
+    const refreshedRef = {
+      season: refreshed.season,
+      eventId: refreshed.eventId,
+      revision: refreshed.revision
+    };
+    resolvedRef = refreshedRef;
+    resolvedSnapshot = refreshed;
+    data = await graphqlRequest<TournamentLivePointsResponse>(
+      TOURNAMENT_LIVE_POINTS,
+      { entryId: principalEntryId, selectedTournamentId, ref: refreshedRef },
+      { cachePolicy: "live", forceRefresh: true, trace }
+    );
+  }
+  if (
+    data.entryLiveCompetitionsDesk.eventId !== event ||
+    data.entryLiveCompetitionsDesk.revision !== resolvedRef.revision
+  ) {
+    throw new Error("该轮实时快照返回不匹配，请稍后重试");
+  }
   const servedStoredAt = getServedCacheStoredAt(TOURNAMENT_LIVE_POINTS, variables);
   return {
     data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
@@ -435,8 +706,9 @@ export async function getLivePointsByTournamentSnapshot(
           eventId: data.entryLiveCompetitionsDesk.eventId,
           revision: data.entryLiveCompetitionsDesk.revision,
           state: data.entryLiveCompetitionsDesk.state,
-          publishedAt: new Date().toISOString(),
-          checkedAt: new Date().toISOString()
+          publishedAt: resolvedSnapshot.publishedAt,
+          checkedAt: resolvedSnapshot.checkedAt,
+          season: resolvedSnapshot.season
         }
       : null,
     servedStoredAt,

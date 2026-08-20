@@ -17,7 +17,7 @@ test("Live Match resumed startup owns errors and initializes recovery polling", 
 });
 
 test("Live Tournament hide-show replays context, authority, and directory startup", () => {
-  const page = read("miniprogram/pages/live/tournament/tournament.ts");
+  const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(
     page,
     /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason, forceRefresh\)[\s\S]*await app\.authReady[\s\S]*entryId: app\.globalData\.entryId[\s\S]*this\.initLiveRefresh\(\)[\s\S]*await this\.loadTournaments\(forceRefresh, trace\)/
@@ -33,7 +33,7 @@ test("Live Tournament hide-show replays context, authority, and directory startu
 });
 
 test("My FPL Team resumed startup waits for current entry authority", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     page,
     /initializeFromContext\([\s\S]*await app\.authReady[\s\S]*this\.perfTracker !== owningTracker[\s\S]*entryId: app\.globalData\.entryId/

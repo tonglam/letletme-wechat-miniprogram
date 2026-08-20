@@ -3,6 +3,7 @@
     <view wx:if="{{publicId}}" class="received">收到了，编号 {{publicId}}</view>
     <view wx:if="{{prefilledHint}}" class="prefilled-hint">{{prefilledHint}}</view>
     <view class="subtitle">用自己的话说就行。截图可以加上，没有图也能发给我们。</view>
+    <view class="legal-note">提交内容：问题正文、可选截图、登录账号/已验证球队（如有）和最小诊断信息。仅用于定位问题；关闭后保留 30 天，且最晚不超过创建后 180 天。</view>
     <textarea
       class="input report-body"
       maxlength="500"

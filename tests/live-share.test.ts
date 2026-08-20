@@ -44,7 +44,7 @@ assertIncludes(entryText, "- Haaland (C) · MCI FWD · 18分", "finished players
 assertIncludes(entryText, "- Dunk · BHA DEF · 0分 · 未赛", "pending bench keeps a short status tag");
 assertIncludes(entryText, "— 替补 —", "bench divider, not a heading");
 if (entryText.includes("## ")) throw new Error("entry share stays one continuous list");
-assertIncludes(entryText, "https://www.letletme.top/zh-CN/live/points/123456", "entry url");
+assertIncludes(entryText, "https://letletme.top/zh-CN/live/points/123456", "entry url");
 
 const tableText = formatLiveTournamentShareText({
   gameweek: 3,
@@ -94,7 +94,7 @@ assertIncludes(matchText, "进球: Saka (ARS)", "single count omitted inline");
 assertIncludes(matchText, "奖励分: Saka (ARS) +3", "bonus keeps its plus value");
 if (matchText.includes("\n\n进球")) throw new Error("highlight groups stay inline, one line each");
 if (matchText.includes("P4")) throw new Error("match share caps BPS at 3 rows");
-assertIncludes(matchText, "实时比赛：https://www.letletme.top/zh-CN/live/matches", "match url");
+assertIncludes(matchText, "实时比赛：https://letletme.top/zh-CN/live/matches", "match url");
 
 const finishedMatchText = formatLiveMatchShareText({
   matchId: 12,

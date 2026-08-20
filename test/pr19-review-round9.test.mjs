@@ -38,7 +38,7 @@ test("Match automatic background work does not mutate a completed navigation tra
 });
 
 test("My FPL GW switches clear primary identity before the replacement read", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     team,
     /onGwChange\([\s\S]*overviewStats: \[\][\s\S]*eventStats: \[\][\s\S]*squadRows: \[\][\s\S]*hasTeamData: false[\s\S]*supportAvailable: false[\s\S]*loadData\(true\)/

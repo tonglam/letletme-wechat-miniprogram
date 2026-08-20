@@ -145,6 +145,9 @@ export function durationBucket(ms: number): string {
 }
 
 let _cache: StoredPerf | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushInFlight: Promise<void> | null = null;
+let flushQueued = false;
 
 function load(): StoredPerf {
   if (_cache) return _cache;
@@ -159,11 +162,57 @@ function load(): StoredPerf {
   return _cache;
 }
 
-function flush(): void {
+function immutableSnapshot(value: StoredPerf): StoredPerf {
+  return JSON.parse(JSON.stringify(value)) as StoredPerf;
+}
+
+function writeSnapshot(snapshot: StoredPerf): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      wx.setStorage({
+        key: STORAGE_KEY,
+        data: snapshot,
+        success: () => resolve(),
+        fail: () => resolve()
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export async function flushPerfNow(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  if (flushInFlight) {
+    flushQueued = true;
+    await flushInFlight;
+    if (flushQueued) {
+      flushQueued = false;
+      await flushPerfNow();
+    }
+    return;
+  }
   if (!_cache) return;
-  try {
-    wx.setStorage({ key: STORAGE_KEY, data: _cache });
-  } catch {}
+  const snapshot = immutableSnapshot(_cache);
+  const write = writeSnapshot(snapshot);
+  flushInFlight = write;
+  await write;
+  if (flushInFlight === write) flushInFlight = null;
+  if (flushQueued) {
+    flushQueued = false;
+    await flushPerfNow();
+  }
+}
+
+function flush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushPerfNow();
+  }, 250);
 }
 
 export function recordLaunch(duration: number): void {
@@ -318,6 +367,9 @@ export function getPerf(): StoredPerf {
 }
 
 export function clearPerf(): void {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = null;
+  flushQueued = false;
   _cache = {
     apiRecords: [],
     renderCommits: [],

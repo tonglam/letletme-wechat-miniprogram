@@ -81,15 +81,15 @@ PerformancePage({
   async logout() {
     this.setData({ error: '' });
     try {
-      await logoutMiniProgramSession();
+      const result = await logoutMiniProgramSession();
       this.setData({
         accountLinked: false,
         accountEmail: '',
         email: '',
         code: '',
-        error: ''
+        error: result.remoteRevoked ? '' : '已在本地退出，远端撤销尚未确认'
       });
-      wx.showToast({ title: '已退出登录', icon: 'success' });
+      wx.showToast({ title: result.remoteRevoked ? '已退出登录' : '已退出本地登录', icon: 'success' });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '退出失败，请重试' });
     }

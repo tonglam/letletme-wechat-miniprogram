@@ -24,6 +24,7 @@ import {
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { copyShareText, formatLiveMatchShareText } from "../../../utils/live-share";
+import { miniLogger } from "../../../utils/logger";
 
 interface StatusOption {
   key: string;
@@ -384,7 +385,19 @@ export function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveM
     if (!live) return match;
     const overlayHasStatus = Boolean(live.status || live.playStatus);
     const status = overlayHasStatus ? matchStatus(live) : matchStatus(match);
-    return normalizeMatch({ ...match, ...live, status, playStatus: status }, status);
+    return normalizeMatch({
+      ...match,
+      ...live,
+      // The live overlay owns score/status only. Team identity always comes
+      // from the core fixture snapshot so an abbreviated fallback can never
+      // overwrite an official short name.
+      homeTeamName: match.homeTeamName,
+      homeTeamShortName: match.homeTeamShortName,
+      awayTeamName: match.awayTeamName,
+      awayTeamShortName: match.awayTeamShortName,
+      status,
+      playStatus: status
+    }, status);
   });
 }
 
@@ -1082,7 +1095,7 @@ Page({
         this.setData({ shareSheetOpen: true, shareText: text });
       });
     } catch (error) {
-      console.error("[copy-share] match", error);
+      miniLogger.error("copy-share.match", error instanceof Error ? error.message : "failed");
       wx.showToast({ title: "复制失败", icon: "none" });
     }
   },

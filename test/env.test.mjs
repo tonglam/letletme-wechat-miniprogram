@@ -25,8 +25,8 @@ test("release endpoints ignore local storage overrides", () => {
       letletme_graphql_endpoint_override: "https://attacker.invalid/graphql",
       letletme_web_miniprogram_api_override: "https://attacker.invalid/api"
     });
-    assert.equal(getGraphQLEndpoint(), "https://www.letletme.top/api/graphql");
-    assert.equal(getMiniProgramApiBase(), "https://www.letletme.top/api/miniprogram");
+    assert.equal(getGraphQLEndpoint(), "https://letletme.top/api/graphql");
+    assert.equal(getMiniProgramApiBase(), "https://letletme.top/api/miniprogram");
     setGraphQLEndpointOverride("https://attacker.invalid/graphql");
     assert.deepEqual(writes, []);
   } finally {
@@ -41,8 +41,8 @@ test("trial endpoints use the production Web proxy", () => {
       letletme_graphql_endpoint_override: "https://attacker.invalid/graphql",
       letletme_web_miniprogram_api_override: "https://attacker.invalid/api"
     });
-    assert.equal(getGraphQLEndpoint(), "https://www.letletme.top/api/graphql");
-    assert.equal(getMiniProgramApiBase(), "https://www.letletme.top/api/miniprogram");
+    assert.equal(getGraphQLEndpoint(), "https://letletme.top/api/graphql");
+    assert.equal(getMiniProgramApiBase(), "https://letletme.top/api/miniprogram");
     setGraphQLEndpointOverride("https://attacker.invalid/graphql");
     assert.deepEqual(writes, []);
   } finally {

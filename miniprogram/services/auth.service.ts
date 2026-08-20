@@ -328,28 +328,20 @@ export async function awaitLinkedAccountSnapshot(): Promise<LinkedAccountSnapsho
   return getLinkedAccountSnapshot();
 }
 
-async function performLogout(): Promise<void> {
-  // Settle any in-flight login first: once /wechat/login has reached the
-  // server it rotates the device token there regardless of the local epoch,
-  // so revoking the pre-rotation token would 401 and strand the session.
-  // Awaiting it lets the rotated token be stored, and the DELETE below then
-  // revokes the credential the server actually considers current.
-  const pending = getPendingSessionRefresh();
-  if (pending) {
-    await pending.catch(() => undefined);
-  }
+export type LogoutResult = { localCleared: true; remoteRevoked: boolean };
 
+async function performLogout(): Promise<LogoutResult> {
+  // Capture the credential, invalidate every local session-dependent cache,
+  // and advance the epoch before touching the network. A refresh that was
+  // already in flight will fail its epoch check and cannot restore a token.
   const token = getApiSessionToken();
+  clearApiSession();
   if (!token) {
-    clearApiSession();
-    return;
+    return { localCleared: true, remoteRevoked: true };
   }
-
-  // From here on, no refresh still in flight may store past the logout.
-  sessionEpoch += 1;
 
   const t0 = Date.now();
-  await new Promise<void>((resolve, reject) => {
+  const remoteRevoked = await new Promise<boolean>((resolve) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}/session`,
       method: "DELETE",
@@ -358,34 +350,32 @@ async function performLogout(): Promise<void> {
       success(response) {
         recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          resolve();
+          resolve(true);
           return;
         }
         if (response.statusCode === 401) {
-          // The credential is already dead server-side (a rotation raced the
-          // settle above): the session is revoked either way, so clean up
-          // locally instead of reporting a failed logout.
-          resolve();
+          // A 401 means the captured credential is already unusable.
+          resolve(true);
           return;
         }
-        reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
+        resolve(false);
       },
-      fail(error) {
+      fail(_error) {
         recordApi("auth:/session", Date.now() - t0, false);
-        reject(new Error(networkErrorMessage(error)));
+        resolve(false);
       }
     });
   });
-  clearApiSession();
+  return { localCleared: true, remoteRevoked };
 }
 
-let pendingLogout: Promise<void> | null = null;
+let pendingLogout: Promise<LogoutResult> | null = null;
 
 /**
  * Single-flight sign-out: duplicate taps share one DELETE, and the
  * refresh-creation gate stays set until that one logout has fully settled.
  */
-export function logoutMiniProgramSession(): Promise<void> {
+export function logoutMiniProgramSession(): Promise<LogoutResult> {
   if (pendingLogout) {
     return pendingLogout;
   }

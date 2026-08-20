@@ -134,7 +134,7 @@ test("canReadEventReporting is exported and used by reporting desks", () => {
   const util = readFileSync(path.join(ROOT, "utils/event-context.ts"), "utf8");
   assert.match(util, /export function canReadEventReporting/);
   for (const rel of [
-    "pages/my-fpl/team/team.ts",
+    "pages/my-fpl/team/team.controller.ts",
     "pages/summary/gameweek/gameweek.ts",
     "pages/summary/tournament/tournament.ts",
     "pages/my-fpl/leagues/leagues.ts",

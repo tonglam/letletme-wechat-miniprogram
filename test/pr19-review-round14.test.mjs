@@ -27,7 +27,7 @@ test("Live Entry delayed transfer reads retain their originating trace", () => {
 });
 
 test("Price warm and refresh samples observe the active mode primary", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   const template = source("miniprogram/pages/data/price/price.wxml");
   assert.match(template, /id="perf-primary-player"/);
   assert.match(page, /primarySelector\(\): string[\s\S]*?activeMode === "player"[\s\S]*?#perf-primary-player/);

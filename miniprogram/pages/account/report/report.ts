@@ -21,7 +21,6 @@ PerformancePage({
   },
 
   screenshotBase64: null as string | null,
-  screenshotMime: null as string | null,
   pendingDiagnostic: "" as string,
 
   onLoad() {
@@ -46,14 +45,14 @@ PerformancePage({
   },
 
   onPickScreenshot() {
-    wx.chooseMedia({
+    const choose = () => wx.chooseMedia({
       count: 1,
       mediaType: ["image"],
       sourceType: ["album"],
       success: (result) => {
         const file = result.tempFiles[0];
         if (!file) return;
-        this.readScreenshot(file.tempFilePath, "image/jpeg", file.size);
+        this.readScreenshot(file.tempFilePath, file.size);
       },
       fail: (error) => {
         if (isPrivacyScopeUndeclared(error)) {
@@ -64,9 +63,17 @@ PerformancePage({
         this.setData({ error: "这张图没加上，文字照样能发" });
       }
     });
+    if (typeof wx.requirePrivacyAuthorize === "function") {
+      wx.requirePrivacyAuthorize({
+        success: choose,
+        fail: () => this.setData({ error: "未同意图片权限，文字照样能发" })
+      });
+    } else {
+      choose();
+    }
   },
 
-  readScreenshot(filePath: string, mime: string, knownSize?: number) {
+  readScreenshot(filePath: string, knownSize?: number) {
     if (typeof knownSize === "number" && !screenshotWithinLimit(knownSize)) {
       this.setData({ error: "这张图有点大，可不加图，或换一张小一点的" });
       return;
@@ -83,7 +90,6 @@ PerformancePage({
           encoding: "base64",
           success: (file) => {
             this.screenshotBase64 = String(file.data);
-            this.screenshotMime = mime.startsWith("image/") ? mime : "image/jpeg";
             this.setData({
               screenshotName: "已选一张图",
               error: ""
@@ -102,7 +108,6 @@ PerformancePage({
 
   onClearScreenshot() {
     this.screenshotBase64 = null;
-    this.screenshotMime = null;
     this.setData({ screenshotName: "" });
   },
 
@@ -116,11 +121,9 @@ PerformancePage({
       const publicId = await submitMiniProgramBugReport({
         body: this.data.body,
         screenshotBase64: this.screenshotBase64,
-        screenshotMime: this.screenshotMime,
         diagnostic: this.pendingDiagnostic || null
       });
       this.screenshotBase64 = null;
-      this.screenshotMime = null;
       this.pendingDiagnostic = "";
       this.setData({
         publicId,

@@ -14,6 +14,7 @@ import {
   ensureAppContext,
 } from "./services/app-context.service";
 import { installPrivacyAuthorizationHandler } from "./utils/privacy";
+import { flushPerfNow } from "./utils/perf";
 
 App<IAppOption>({
   globalData: {
@@ -50,10 +51,11 @@ App<IAppOption>({
     this.authReady = new Promise<void>((resolve) => {
       this._authReadyResolve = resolve;
     });
-    // Listen before requirePrivacyAuthorize so the custom dialog can resolve
-    // the first consent prompt instead of leaving it to the official popup.
+    // Install the handler up front, but do not request a privacy scope during
+    // cold start. Scope-specific prompts are triggered by the user action
+    // that actually needs clipboard/photo/albums access.
     installPrivacyAuthorizationHandler();
-    this.requirePrivacyAndLogin();
+    this.doLogin();
     const initialization = this.initAppData();
     // AppContext initialization stays detached from the shell, but the
     // fallback launch metric must end when initialization settles rather than
@@ -97,6 +99,10 @@ App<IAppOption>({
     void ensureAppContext({ reason: "app-show" }).catch(() => undefined);
   },
 
+  onHide() {
+    void flushPerfNow();
+  },
+
   reportError(message: string) {
     (
       wx as unknown as { reportError?: (message: string) => void }
@@ -129,14 +135,7 @@ App<IAppOption>({
   },
 
   requirePrivacyAndLogin() {
-    wx.requirePrivacyAuthorize({
-      success: () => {
-        this.doLogin();
-      },
-      fail: () => {
-        this.doLogin();
-      },
-    });
+    this.doLogin();
   },
 
   async doLogin() {

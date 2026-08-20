@@ -5,7 +5,7 @@ import test from "node:test";
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("price page keeps date identity and stale state while team directory remains secondary", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /readPlayerValueByDate/);
   assert.match(page, /nextRequestRevision\(this\.dailyRequestOwner, "daily"\)/);
   assert.match(page, /isCurrentRevision\(this\.dailyRequestOwner, "daily", revision\)/);
@@ -38,7 +38,7 @@ test("price service rejects partial errors before mapping an empty board", () =>
 });
 
 test("price warm resume only refetches an interrupted stage", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
   assert.match(onShow, /warm-enter/);
   assert.match(onShow, /if \(resumeStage === "daily"\)[\s\S]*loadDailyChanges\(resumeStageForceRefresh\)/);
@@ -48,7 +48,7 @@ test("price warm resume only refetches an interrupted stage", () => {
 });
 
 test("price date changes and retries create an isolated refresh trace", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /onDateChange[\s\S]*?this\.startDailyRefreshTrace\(\)/);
   assert.match(page, /onDateChange[\s\S]*shareSheetOpen: false/);
   assert.match(page, /onModeChange[\s\S]*shareSheetOpen: false/);

@@ -26,7 +26,7 @@ test("Gameweek Summary binds cold startup and GraphQL attribution to page owners
 });
 
 test("Price resumes pending debounce and forces context recovery on retry", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /pendingSearch = this\.playerSearchTimer !== undefined[\s\S]*clearTimeout\(this\.playerSearchTimer\)[\s\S]*\? "search"/);
   assert.match(page, /resumeStage === "search"[\s\S]*startPlayerSearch\(false\)/);
   assert.match(page, /loadTeamOptions\(forceRefresh = false\)[\s\S]*ensureAppContext\(\{ reason: "page-load", forceRefresh \}\)[\s\S]*getTeamList\(season, forceRefresh, trace\)/);

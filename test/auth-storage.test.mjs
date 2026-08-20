@@ -41,7 +41,7 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
   }
 });
 
-test("remote sign-out failure retains the credential so revocation can be retried", async () => {
+test("remote sign-out failure still clears local credentials", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
@@ -61,9 +61,10 @@ test("remote sign-out failure retains the credential so revocation can be retrie
     globalThis.getApp = () => ({ globalData: { entryId: 123 } });
 
     await restoreApiSessionCredentials();
-    await assert.rejects(logoutMiniProgramSession(), /网络连接失败/);
-    assert.deepEqual(removed, []);
-    clearSessionCredentials();
+    const result = await logoutMiniProgramSession();
+    assert.deepEqual(result, { localCleared: true, remoteRevoked: false });
+    assert.equal(getApiSessionToken(), null);
+    assert.ok(removed.includes("api-session-token"));
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;

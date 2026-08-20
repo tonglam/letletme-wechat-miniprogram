@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("My FPL Team explicit refresh is forced and tracker-owned", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     page,
     /onPullDownRefresh\(\)[\s\S]*const tracker = this\.perfTracker[\s\S]*contextUnavailable \|\| this\.data\.maxGw <= 0[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*this\.perfTracker !== tracker/

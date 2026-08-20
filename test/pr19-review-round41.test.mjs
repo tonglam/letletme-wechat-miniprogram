@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("Price query changes drop interrupted pagination ownership", () => {
-  const page = read("miniprogram/pages/data/price/price.ts");
+  const page = read("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /clearPaginationOwnership\(\)/);
   assert.match(page, /onPlayerKeywordInput[\s\S]*clearPaginationOwnership\(\)/);
   assert.match(page, /onClearPlayerFilters[\s\S]*clearPaginationOwnership\(\)/);

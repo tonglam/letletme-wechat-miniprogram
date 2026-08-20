@@ -128,9 +128,9 @@ last-good:页面侧 storage key `my-competitions:list`,值 `{ entryId, items, st
 `utils/canonical-action.ts` 的 `CanonicalActionType` 与 `ACTION_URLS` 增量:
 
 ```ts
-CREATE_COMPETITION → https://www.letletme.top/zh-CN/tournament
-MANAGE_COMPETITION → https://www.letletme.top/zh-CN/tournament
-VIEW_COMPETITION   → https://www.letletme.top/zh-CN/tournament
+CREATE_COMPETITION → https://letletme.top/zh-CN/tournament
+MANAGE_COMPETITION → https://letletme.top/zh-CN/tournament
+VIEW_COMPETITION   → https://letletme.top/zh-CN/tournament
 ```
 
 URL 仍为静态常量;**不拼 competitionId**(§11.1 允许 id,但静态更保守,网页端自行定位;后续契约给出 canonicalLinks 再替换)。测试补动作表用例。

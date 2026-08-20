@@ -26,6 +26,7 @@ export interface CachedRead {
 
 const memoryCache = new Map<string, CacheEntry>();
 const servedFromCache = new Map<string, number>();
+let storageIndex: Map<string, number> | null = null;
 
 export function hashKey(str: string): string {
   let first = 0x811c9dc5;
@@ -85,6 +86,37 @@ function writeMemoryCache(cacheKey: string, entry: CacheEntry): void {
   memoryCache.set(cacheKey, entry);
 }
 
+function ensureStorageIndex(): Map<string, number> {
+  if (storageIndex) return storageIndex;
+  const index = new Map<string, number>();
+  try {
+    const { keys } = wx.getStorageInfoSync();
+    keys
+      .filter((key) =>
+        key.startsWith(storagePrefixes.graphqlPublicCache)
+        || key.startsWith(storagePrefixes.graphqlSessionCache)
+      )
+      .map((key) => {
+        try {
+          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
+          return { key, storedAt: Number(entry?.storedAt) || 0 };
+        } catch {
+          return { key, storedAt: 0 };
+        }
+      })
+      .sort((left, right) => left.storedAt - right.storedAt)
+      .forEach(({ key, storedAt }) => index.set(key, storedAt));
+  } catch {}
+  storageIndex = index;
+  return index;
+}
+
+function touchStorageIndex(cacheKey: string, storedAt: number): void {
+  const index = ensureStorageIndex();
+  index.delete(cacheKey);
+  index.set(cacheKey, storedAt);
+}
+
 export function recordServedFromCache(requestKey: string, storedAt: number): void {
   if (!servedFromCache.has(requestKey) && servedFromCache.size >= MEMORY_CACHE_LIMIT) {
     const oldest = servedFromCache.keys().next().value as string | undefined;
@@ -129,41 +161,25 @@ export function readCacheEntry(cacheKey: string, requestKey: string): CachedRead
     const fromStorage = wx.getStorageSync(cacheKey);
     if (isV2Entry(fromStorage, requestKey) && now < fromStorage.staleUntil) {
       writeMemoryCache(cacheKey, fromStorage);
+      touchStorageIndex(cacheKey, Number(fromStorage.storedAt) || now);
       return { entry: fromStorage, source: "storage" };
     }
     if (fromStorage !== undefined && fromStorage !== null && fromStorage !== "") {
       try { wx.removeStorageSync(cacheKey); } catch {}
+      ensureStorageIndex().delete(cacheKey);
     }
   } catch {}
   return undefined;
 }
 
 function enforceStorageLimit(): void {
-  try {
-    const { keys } = wx.getStorageInfoSync();
-    const cacheKeys = keys.filter((key) =>
-      key.startsWith(storagePrefixes.graphqlPublicCache)
-      || key.startsWith(storagePrefixes.graphqlSessionCache)
-    );
-    if (cacheKeys.length <= STORAGE_CACHE_LIMIT) return;
-
-    const ordered = cacheKeys
-      .map((key) => {
-        try {
-          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
-          return { key, storedAt: Number(entry?.storedAt) || 0 };
-        } catch {
-          return { key, storedAt: 0 };
-        }
-      })
-      .sort((left, right) => left.storedAt - right.storedAt);
-
-    ordered
-      .slice(0, Math.max(0, ordered.length - STORAGE_CACHE_LIMIT))
-      .forEach(({ key }) => {
-        try { wx.removeStorageSync(key); } catch {}
-      });
-  } catch {}
+  const index = ensureStorageIndex();
+  while (index.size > STORAGE_CACHE_LIMIT) {
+    const oldest = index.keys().next().value as string | undefined;
+    if (!oldest) break;
+    index.delete(oldest);
+    try { wx.removeStorageSync(oldest); } catch {}
+  }
 }
 
 export function writeCacheEntry(cacheKey: string, entry: CacheEntry, persist: boolean): void {
@@ -171,11 +187,13 @@ export function writeCacheEntry(cacheKey: string, entry: CacheEntry, persist: bo
   if (!persist || entry.freshUntil - Date.now() < MIN_PERSIST_TTL_MS) return;
   try {
     wx.setStorageSync(cacheKey, entry);
+    touchStorageIndex(cacheKey, entry.storedAt);
     enforceStorageLimit();
   } catch {}
 }
 
 export function purgeGraphQLStorageCache(now = Date.now()): void {
+  storageIndex = null;
   try {
     const { keys } = wx.getStorageInfoSync();
     const valid: Array<{ key: string; storedAt: number }> = [];
@@ -207,6 +225,17 @@ export function purgeGraphQLStorageCache(now = Date.now()): void {
       .forEach(({ key }) => {
         try { wx.removeStorageSync(key); } catch {}
       });
+    storageIndex = new Map(valid
+      .filter(({ key }) => {
+        try {
+          const entry = wx.getStorageSync(key) as Partial<CacheEntry> | undefined;
+          return entry?.version === CACHE_VERSION && now < Number(entry.staleUntil);
+        } catch {
+          return false;
+        }
+      })
+      .sort((left, right) => left.storedAt - right.storedAt)
+      .map(({ key, storedAt }) => [key, storedAt]));
   } catch {}
 }
 

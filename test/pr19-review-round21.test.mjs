@@ -37,7 +37,7 @@ test("Players clears an interrupted pagination latch on resume", () => {
 
 test("Match and Tournament resume interrupted primary loads", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(match, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = this\.resumeLoadAfterShow[\s\S]*\|\| \(!this\.resumeForcedRefreshAfterShow[\s\S]*Boolean\(this\.liveRequest\)[\s\S]*liveRequestId \+= 1/);
   assert.match(match, /if \(resumeInterruptedLoad\)[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/);
   assert.match(tournament, /onHide\(\)[\s\S]*if \(this\.directoryRequestPending\)[\s\S]*resumeDirectoryAfterShow = true[\s\S]*tournamentListRequestId \+= 1/);
@@ -45,7 +45,7 @@ test("Match and Tournament resume interrupted primary loads", () => {
 });
 
 test("My FPL primary errors and Teams retries use primary recovery", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
   assert.match(team, /onRetry\(\)[\s\S]*if \(this\.data\.error\)[\s\S]*runForcedRefresh\([\s\S]*activeTab === "squad"/);
   assert.match(teams, /loadData\(forceRefresh = false, originatingTrace\?: PageRequestTrace\)[\s\S]*ensureAppContext\(\{[\s\S]*forceRefresh[\s\S]*getTeamList\(context\.season, forceRefresh, trace\)/);

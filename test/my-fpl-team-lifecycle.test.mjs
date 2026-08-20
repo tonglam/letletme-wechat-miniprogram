@@ -5,7 +5,7 @@ import test from "node:test";
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("My FPL Team loads the selected event before lazy support tabs", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const primary = page.indexOf("await getEntryTeamStatsEventResult");
   const primaryCommit = page.indexOf("this.markPrimaryCommit(tracker)", primary);
   const lazy = page.indexOf("async loadTab");
@@ -24,25 +24,25 @@ test("My FPL Team owns independent primary and tab status surfaces", () => {
 });
 
 test("My FPL no-entry state observes primary after its terminal commit", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*this\.markPrimaryCommit\(tracker\)/);
   assert.match(page, /markPrimaryCommit\(tracker\?: PagePerformanceTracker\)[\s\S]*tracker\.mark\("primarySetDataAt"\)[\s\S]*tracker\.observePrimary\(\)/);
 });
 
 test("My FPL warm resume observes retained terminal state without refetching", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const onShow = page.slice(page.indexOf("async onShow()"), page.indexOf("_loadedAt: 0"));
   assert.match(onShow, /hasTeamData \|\| Boolean\(this\.data\.emptyState\) \|\| Boolean\(this\.data\.error\)[\s\S]*observePrimary/);
 });
 
 test("My FPL invalidates lazy support payloads on season rollover", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /invalidateSeasonSupport\(\)[\s\S]*this\.tabRequestId \+= 1[\s\S]*this\.historyPayload = null[\s\S]*this\.transferPayload = null/);
   assert.equal((page.match(/if \(seasonChanged\) this\.invalidateSeasonSupport\(\)/g) || []).length, 2);
 });
 
 test("My FPL cold context failure commits a retryable terminal state", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /async onLoad\(\)[\s\S]*catch \(error\)[\s\S]*this\.showContextError\(error\)[\s\S]*return/);
   assert.match(page, /showContextError\(error: unknown\)[\s\S]*this\.contextUnavailable = true[\s\S]*loading: false[\s\S]*observePrimary/);
   assert.match(page, /onRetry\(\)[\s\S]*if \(this\.contextUnavailable \|\| this\.data\.maxGw <= 0\)[\s\S]*recoverContext\("pull-refresh"\)/);
@@ -51,7 +51,7 @@ test("My FPL cold context failure commits a retryable terminal state", () => {
 });
 
 test("My FPL carries one originating trace through delayed support reads", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const service = source("miniprogram/services/summary.service.ts");
   assert.match(page, /const trace = originatingTrace \|\| capturePageRequestTrace/);
   assert.match(page, /getEntryTeamStatsEventResult\(entryId, selectedEvent, forceRefresh, trace\)/);

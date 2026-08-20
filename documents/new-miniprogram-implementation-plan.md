@@ -1016,7 +1016,8 @@ For each implementation phase:
 - Verify `app.json` page paths resolve.
 - Verify tab pages open with `wx.switchTab`.
 - Verify child pages open with `wx.navigateTo`.
-- Verify the request-domain allowlist contains `https://www.letletme.top`.
+- Verify the request-domain allowlist contains `https://letletme.top`; retain
+  `https://www.letletme.top` for one compatibility release only.
 - Verify loading/empty/error states by temporarily using invalid entry IDs or disconnected network.
 - Test high-risk live/data pages on a real device when possible.
 

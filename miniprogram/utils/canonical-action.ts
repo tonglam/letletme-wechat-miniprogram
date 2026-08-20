@@ -11,6 +11,7 @@ import {
   isPrivacyScopeUndeclared,
   markClipboardApiBlocked
 } from "./privacy";
+import { miniLogger } from "./logger";
 
 export type CanonicalActionType =
   | "ACCOUNT_LINK"
@@ -28,16 +29,16 @@ export interface CanonicalAction {
 }
 
 const ACTION_URLS: Record<CanonicalActionType, string> = {
-  ACCOUNT_LINK: "https://www.letletme.top/zh-CN/account",
-  TEAM_BIND: "https://www.letletme.top/zh-CN/account",
-  LEAGUE_PREPARE: "https://www.letletme.top/zh-CN/tournament",
-  LEAGUE_MANAGE: "https://www.letletme.top/zh-CN/tournament",
+  ACCOUNT_LINK: "https://letletme.top/zh-CN/account",
+  TEAM_BIND: "https://letletme.top/zh-CN/account",
+  LEAGUE_PREPARE: "https://letletme.top/zh-CN/tournament",
+  LEAGUE_MANAGE: "https://letletme.top/zh-CN/tournament",
   // Compatibility destinations until the Website /zh-CN/competitions route
   // registry ships (§11.1); URLs stay static — no competition IDs appended.
-  CREATE_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
-  MANAGE_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
-  VIEW_COMPETITION: "https://www.letletme.top/zh-CN/tournament",
-  OPEN_HOME: "https://www.letletme.top/zh-CN"
+  CREATE_COMPETITION: "https://letletme.top/zh-CN/tournament",
+  MANAGE_COMPETITION: "https://letletme.top/zh-CN/tournament",
+  VIEW_COMPETITION: "https://letletme.top/zh-CN/tournament",
+  OPEN_HOME: "https://letletme.top/zh-CN"
 };
 
 const ALLOWED_HOSTS: ReadonlySet<string> = new Set(["www.letletme.top", "letletme.top"]);
@@ -82,9 +83,7 @@ export function openWebsiteAction(action: CanonicalAction): Promise<boolean> {
     const fail = (err?: { errno?: number; errMsg?: string }) => {
       if (isPrivacyScopeUndeclared(err)) {
         markClipboardApiBlocked();
-        console.error(
-          "[canonical-action] errno 112: declare 「读取你的剪切板」 in MP 用户隐私保护指引"
-        );
+        miniLogger.error("canonical-action.privacy-scope");
       }
       wx.showToast({ title: "复制失败，请重试", icon: "none" });
       resolve(false);
