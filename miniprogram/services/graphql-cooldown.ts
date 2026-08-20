@@ -96,15 +96,23 @@ export function persistGraphQLCooldown(
 export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState {
   ensureCooldownRuntime();
   let stored = 0;
+  let storageReadSucceeded = false;
   try {
     stored = Number(wx.getStorageSync(storageKeys.graphqlCooldownUntil)) || 0;
+    storageReadSucceeded = true;
   } catch {}
 
   const safeStored = Number.isFinite(stored) ? stored : 0;
   const maximumUntil = now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000;
   let normalizedStored = safeStored;
-  const isQuarantinedValue = corruptedStoredCooldownValue === safeStored;
-  if (isQuarantinedValue || safeStored > maximumUntil) {
+  const isQuarantinedValue = storageReadSucceeded
+    && corruptedStoredCooldownValue === safeStored;
+  if (!storageReadSucceeded && corruptedStoredCooldownValue !== null) {
+    // A read error is not proof that the corrupt raw value was replaced.
+    // Retain its original quarantine anchor until a later successful read
+    // observes either the normalized value or a genuine empty key.
+    normalizedStored = corruptedStoredCooldownUntil;
+  } else if (isQuarantinedValue || safeStored > maximumUntil) {
     if (!isQuarantinedValue) {
       corruptedStoredCooldownValue = safeStored;
       corruptedStoredCooldownUntil = maximumUntil;
@@ -113,7 +121,7 @@ export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState 
     try {
       wx.setStorageSync(storageKeys.graphqlCooldownUntil, normalizedStored);
     } catch {}
-  } else {
+  } else if (storageReadSucceeded) {
     corruptedStoredCooldownValue = null;
     corruptedStoredCooldownUntil = 0;
   }

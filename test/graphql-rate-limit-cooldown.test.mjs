@@ -174,6 +174,32 @@ test("a corrupted future cooldown stays anchored when storage writes fail", () =
   assert.equal(fresh.remainingSeconds, 1);
 });
 
+test("a cooldown storage read failure does not release corrupt-value quarantine", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set("graphql-cooldown-until", now + 5 * 60 * 1000);
+  const readStoredValue = globalThis.wx.getStorageSync;
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+  globalThis.wx.removeStorageSync = () => {
+    throw new Error("storage locked");
+  };
+
+  const first = getGraphQLCooldownState(now);
+  globalThis.wx.getStorageSync = () => {
+    throw new Error("storage temporarily unavailable");
+  };
+  const duringReadFailure = getGraphQLCooldownState(now + 1_000);
+  globalThis.wx.getStorageSync = readStoredValue;
+  const afterReadRecovery = getGraphQLCooldownState(now + 2_000);
+
+  assert.equal(first.cooldownUntil, now + 120_000);
+  assert.equal(duringReadFailure.cooldownUntil, first.cooldownUntil);
+  assert.equal(afterReadRecovery.cooldownUntil, first.cooldownUntil);
+  assert.equal(afterReadRecovery.remainingSeconds, 118);
+});
+
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {
   const runtime = installRuntime((request) => request.success({
     statusCode: 429,
