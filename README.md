@@ -61,12 +61,13 @@ The app selects the GraphQL endpoint from the Mini Program runtime environment:
 For development testing, the endpoints can be overridden through the storage keys managed by `miniprogram/config/env.ts`. Trial and release builds always use the checked-in HTTPS endpoints and ignore local overrides.
 
 Production authentication is owned by `letletme-web`: the Mini Program calls
-`https://www.letletme.top/api/miniprogram` for WeChat/email-link login and sends
-the returned bearer token to `https://www.letletme.top/api/graphql`. Login never
+`https://letletme.top/api/miniprogram` for WeChat/email-link login and sends
+the returned bearer token to `https://letletme.top/api/graphql`. Login never
 accepts a client-supplied `fplEntryId`; only an entry verified by the website
-team-name challenge is inherited into the profile. Add `www.letletme.top` to
-the WeChat request-domain allowlist in the Mini Program admin console before
-releasing a build; the API origin is no longer a client endpoint.
+team-name challenge is inherited into the profile. Add `letletme.top` to the
+WeChat request-domain allowlist in the Mini Program admin console before
+releasing a build; keep `www.letletme.top` during the compatibility window for
+already-installed clients, but do not generate new links with the legacy host.
 
 Sessions last at most 30 days and each successful login rotates the active
 token for that user/device. Explicit sign-out calls the web session `DELETE`
