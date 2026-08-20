@@ -4,8 +4,9 @@ import {
   isPrivacyScopeUndeclared,
   markClipboardApiBlocked
 } from "./privacy";
+import { miniLogger } from "./logger";
 
-const SITE = "https://www.letletme.top/zh-CN";
+const SITE = "https://letletme.top/zh-CN";
 
 function textValue(value: unknown, fallback = ""): string {
   if (value === undefined || value === null || value === "") return fallback;
@@ -193,24 +194,22 @@ export function formatLiveMatchShareText(match: LiveMatch): string {
 export function copyShareText(text: string): Promise<boolean> {
   const data = String(text || "");
   if (!data.trim()) {
-    console.error("[copy-share] empty text");
+    miniLogger.warn("copy-share.empty");
     wx.showToast({ title: "暂无可复制内容", icon: "none" });
     return Promise.resolve(false);
   }
   if (isClipboardApiBlocked()) {
-    console.error("[copy-share] skip: clipboard privacy scope undeclared");
+    miniLogger.warn("copy-share.privacy-blocked");
     wx.showToast({ title: "无法自动复制，请长按文本", icon: "none", duration: 2500 });
     return Promise.resolve(false);
   }
-  console.log("[copy-share] writing", data.length, "chars");
+  miniLogger.info("copy-share.write", data.length);
   return new Promise((resolve) => {
     const fail = (err?: { errno?: number; errMsg?: string }) => {
-      console.error("[copy-share] fail", err?.errMsg || err, err?.errno);
+      miniLogger.error("copy-share.fail", err?.errMsg || err?.errno);
       if (isPrivacyScopeUndeclared(err)) {
         markClipboardApiBlocked();
-        console.error(
-          "[copy-share] errno 112: declare 「读取你的剪切板」 in MP 用户隐私保护指引, or enable 本地用户隐私保护指引 in DevTools"
-        );
+        miniLogger.error("copy-share.privacy-scope");
         wx.showToast({ title: "无法自动复制，请长按文本", icon: "none", duration: 2500 });
       } else {
         wx.showToast({ title: "复制失败，请长按文本复制", icon: "none", duration: 2500 });
@@ -221,7 +220,7 @@ export function copyShareText(text: string): Promise<boolean> {
       wx.setClipboardData({
         data,
         success: () => {
-          console.log("[copy-share] ok");
+          miniLogger.info("copy-share.ok");
           resolve(true);
         },
         fail

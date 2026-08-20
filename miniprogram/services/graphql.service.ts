@@ -153,11 +153,20 @@ class GraphQLTransportError extends Error {
   }
 }
 
-class GraphQLApplicationError extends Error {
+
+export class GraphQLApplicationError extends Error {
+  readonly errors: GraphQLErrorInfo[];
+
   constructor(errors: GraphQLErrorInfo[]) {
     super(graphQLErrorMessage(errors));
     this.name = "GraphQLApplicationError";
+    this.errors = errors;
   }
+}
+
+export function hasGraphQLErrorCode(error: unknown, code: string): boolean {
+  return error instanceof GraphQLApplicationError
+    && error.errors.some((item) => item.extensions?.code === code);
 }
 
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([

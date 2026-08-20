@@ -11,7 +11,7 @@ const entryModule = await import("../miniprogram/pages/live/entry/entry.ts");
 const entryPage = capturedPage;
 
 capturedPage = undefined;
-const tournamentModule = await import("../miniprogram/pages/live/tournament/tournament.ts");
+const tournamentModule = await import("../miniprogram/pages/live/tournament/tournament.controller.ts");
 const tournamentPage = capturedPage;
 
 capturedPage = undefined;
@@ -19,7 +19,7 @@ const matchModule = await import("../miniprogram/pages/live/match/match.ts");
 const matchPage = capturedPage;
 
 capturedPage = undefined;
-const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
+const teamModule = await import("../miniprogram/pages/my-fpl/team/team.controller.ts");
 const teamPage = capturedPage;
 
 test("live tournament defaults to GW sort", () => {
@@ -970,7 +970,7 @@ test("renders pending transfers and partial tournament rows honestly", () => {
 
 test("tournament applyRows keeps full rows off page data", () => {
   const page = readFileSync(
-    new URL("../miniprogram/pages/live/tournament/tournament.ts", import.meta.url),
+    new URL("../miniprogram/pages/live/tournament/tournament.controller.ts", import.meta.url),
     "utf8"
   );
   const start = page.indexOf("applyRows(rows: DisplayTournamentRow[]");

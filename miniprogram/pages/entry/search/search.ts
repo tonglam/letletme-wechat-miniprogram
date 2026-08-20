@@ -66,9 +66,27 @@ PerformancePage({
   } as EntrySearchData,
 
   lookupRequestId: 0,
+  redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  pageVisible: true,
 
   onShow() {
+    this.pageVisible = true;
     this.syncCurrentEntry();
+  },
+
+  onHide() {
+    this.pageVisible = false;
+    this.cancelRedirectTimer();
+  },
+
+  onUnload() {
+    this.pageVisible = false;
+    this.cancelRedirectTimer();
+  },
+
+  cancelRedirectTimer() {
+    if (this.redirectTimer) clearTimeout(this.redirectTimer);
+    this.redirectTimer = undefined;
   },
 
   syncCurrentEntry() {
@@ -256,7 +274,12 @@ PerformancePage({
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.
-    setTimeout(() => wx.reLaunch({ url: routes.home }), 800);
+    this.cancelRedirectTimer();
+    this.redirectTimer = setTimeout(() => {
+      this.redirectTimer = undefined;
+      if (!this.pageVisible) return;
+      wx.reLaunch({ url: routes.home });
+    }, 800);
   },
 
   onUnbind() {

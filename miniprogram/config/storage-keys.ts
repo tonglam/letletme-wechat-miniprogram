@@ -12,6 +12,7 @@ export const storageKeys = {
   selectedSummaryTournamentName: "summary-tournamentName",
   apiSessionToken: "api-session-token",
   apiSessionExpiresAt: "api-session-expires-at",
+  pendingSessionRevocations: "api-session-revocations",
   apiProfileCheckedAt: "api-profile-checked-at",
   apiProfileEmail: "api-profile-email",
   deviceId: "mini-program-device-id",

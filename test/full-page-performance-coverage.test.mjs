@@ -21,7 +21,14 @@ const explicitP0 = new Set([
 test("all registered pages expose a viewport-visible primary boundary and tracker", () => {
   assert.equal(routes.length, 24);
   for (const route of routes) {
-    const source = fs.readFileSync(path.join(root, "miniprogram", `${route}.ts`), "utf8");
+    const controllerRoute = new Set([
+      "pages/live/tournament/tournament",
+      "pages/my-fpl/team/team",
+      "pages/data/price/price"
+    ]).has(route)
+      ? `${route}.controller.ts`
+      : `${route}.ts`;
+    const source = fs.readFileSync(path.join(root, "miniprogram", controllerRoute), "utf8");
     const template = fs.readFileSync(path.join(root, "miniprogram", `${route}.wxml`), "utf8");
     assert.match(template, /perf-primary-(?:content|fixtures)/, `${route} lacks a primary node`);
     if (explicitP0.has(route)) {

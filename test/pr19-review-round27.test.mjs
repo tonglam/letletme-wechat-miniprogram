@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path) => readFileSync(resolve(root, path), "utf8");
 
 test("Price resumes the visible Player mode ahead of cold daily startup", () => {
-  const price = source("miniprogram/pages/data/price/price.ts");
+  const price = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(price, /resumePlayerRefreshAfterShow = this\.playerRefreshPending[\s\S]*resumeStage = this\.resumePlayerRefreshAfterShow[\s\S]*historyLoading[\s\S]*startupPending \|\| this\.data\.playerLoading[\s\S]*\? "player"[\s\S]*: this\.startupPending \|\| this\.data\.loading/);
 });
 

@@ -16,6 +16,7 @@ import {
   type SquadPitchLocale,
   type SquadPitchPlayer
 } from "./squad-pitch";
+import { presentImage } from "./album-presenter";
 
 export const SHARE_LOGICAL_WIDTH = 750;
 export const SHARE_ASPECT_PLAIN = 1304 / 1244;
@@ -487,51 +488,6 @@ export function exportSquadPitchShareImage(options: RenderShareImageOptions): Pr
   return request;
 }
 
-function authorizeAlbum(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    wx.getSetting({
-      success(res) {
-        if (res.authSetting["scope.writePhotosAlbum"]) {
-          resolve();
-          return;
-        }
-        wx.authorize({
-          scope: "scope.writePhotosAlbum",
-          success: () => resolve(),
-          fail: (err) => reject(err)
-        });
-      },
-      fail: (err) => reject(err)
-    });
-  });
-}
-
 export function presentSquadPitchShareImage(path: string): Promise<void> {
-  return new Promise((resolve) => {
-    const showMenu = (wx as WechatMiniprogram.Wx & {
-      showShareImageMenu?: (options: { path: string; success?: () => void; fail?: () => void; complete?: () => void }) => void;
-    }).showShareImageMenu;
-    if (typeof showMenu === "function") {
-      showMenu({
-        path,
-        complete: () => resolve()
-      });
-      return;
-    }
-    void authorizeAlbum()
-      .then(() => new Promise<void>((saveResolve, saveReject) => {
-        wx.saveImageToPhotosAlbum({
-          filePath: path,
-          success: () => {
-            wx.showToast({ title: "已保存到相册", icon: "success" });
-            saveResolve();
-          },
-          fail: saveReject
-        });
-      }))
-      .catch(() => {
-        wx.showToast({ title: "保存需要相册权限", icon: "none" });
-      })
-      .finally(() => resolve());
-  });
+  return presentImage(path);
 }

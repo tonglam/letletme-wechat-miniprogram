@@ -95,7 +95,7 @@ test("player directory completion preserves edits made during the request", () =
 });
 
 test("My FPL last-good views survive context and refresh failures", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(team, /await this\.ensureContext\("page-show"\)[\s\S]*wasCurrentEvent/);
   assert.match(team, /restartForPrincipalChange\(entryId\)/);
@@ -127,7 +127,7 @@ test("entry lookup results are guarded by request generation and input identity"
 });
 
 test("tournament status reports only rows actually retained", () => {
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
   assert.match(tournament, /this\.retainedRowCount = retainedRows\.length/);
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
@@ -135,7 +135,7 @@ test("tournament status reports only rows actually retained", () => {
 });
 
 test("team summary requests discard older GW responses", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(team, /const requestId = \+\+this\.loadRequestId/);
   assert.match(team, /if \(!this\.pageVisible \|\| requestId !== this\.loadRequestId\) return/);
   assert.match(team, /if \(this\.pageVisible && requestId === this\.loadRequestId\) \{\s*this\.setData\(\{ loading: false \}\)/);
@@ -152,7 +152,7 @@ test("unchanged live probes refresh the displayed check time", () => {
   for (const path of [
     "miniprogram/pages/live/entry/entry.ts",
     "miniprogram/pages/live/match/match.ts",
-    "miniprogram/pages/live/tournament/tournament.ts"
+    "miniprogram/pages/live/tournament/tournament.controller.ts"
   ]) {
     const page = source(path);
     assert.match(
@@ -248,7 +248,7 @@ test("player route keywords survive a failed first load for Retry", () => {
 });
 
 test("tournament row requests are principal- and season-generation guarded", () => {
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(tournament, /seasonChanged \|\| wasCurrentEvent[\s\S]*this\.rowsRequestId \+= 1/);
   assert.match(tournament, /const entryId = this\.data\.entryId[\s\S]*const requestKey = `\$\{entryId\}:/);
   assert.match(tournament, /await getLivePointsByTournamentSnapshot[\s\S]*restartForPrincipalChange\(entryId\)/);
@@ -292,7 +292,7 @@ test("profile and tournament pull-to-refresh bypass reporting caches", () => {
 test("historical Live selections reset when the season changes", () => {
   for (const path of [
     "miniprogram/pages/live/entry/entry.ts",
-    "miniprogram/pages/live/tournament/tournament.ts"
+    "miniprogram/pages/live/tournament/tournament.controller.ts"
   ]) {
     const page = source(path);
     assert.match(page, /loadedSeason: undefined/, path);
@@ -306,21 +306,21 @@ test("historical Live selections reset when the season changes", () => {
   assert.match(entry, /const currentGw = currentLiveEventId\(context\)/);
   assert.match(entry, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadData[\s\S]*noLiveEventState/);
   assert.match(entry, /nextEventId > 0[\s\S]*noLiveEventState\(\)/);
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(tournament, /const eventContextChanged = seasonChanged \|\| \(nextEventId > 0/);
   assert.match(tournament, /this\.tournamentListRequestId \+= 1[\s\S]*nextEventId === 0/);
   assert.match(tournament, /if \(!this\.data\.entryId \|\| currentGw > 0\) \{[\s\S]*this\.loadTournaments/);
 });
 
 test("first personal paints honor season-aware event and reporting policies", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(team, /async onLoad\(\)[\s\S]*capturePageRequestTrace[\s\S]*this\.initializeFromContext\(false, trace, tracker\)/);
   assert.match(team, /async initializeFromContext\([\s\S]*forceRefresh: boolean,[\s\S]*trace\?: PageRequestTrace,[\s\S]*tracker\?: PagePerformanceTracker[\s\S]*this\.loadData\(forceRefresh, trace\)/);
 });
 
 test("Match and Team retries bypass repeating-season caches", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(match, /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*liveRequestId \+= 1/);
   assert.match(team, /onRetry\(\)[\s\S]*data\.error[\s\S]*runForcedRefresh\([\s\S]*activeTab === "squad"[\s\S]*runForcedRefresh\(/);
@@ -331,7 +331,7 @@ test("Match and Team retries bypass repeating-season caches", () => {
 });
 
 test("season rollover clears row filters derived from player ids", () => {
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(
     tournament,
     /seasonChanged \? \{[\s\S]*selectedOwnershipPlayers: \[\][\s\S]*ownershipAvailablePlayers: \[\][\s\S]*teamExposureRules: \[\][\s\S]*pendingExposureTeam: null/
@@ -339,7 +339,7 @@ test("season rollover clears row filters derived from player ids", () => {
 });
 
 test("live competition Website handoff uses the guarded canonical action", () => {
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(
     tournament,
     /async onCopyCompetitionLink\(\)[\s\S]*openWebsiteAction\(canonicalAction\("MANAGE_COMPETITION"\)\)/
@@ -379,7 +379,7 @@ test("all Live surfaces refresh event context before resume polling", () => {
   assert.match(match, /async onShow\(\)/);
   assert.match(match, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
   assert.match(match, /nextCurrentEventId[\s\S]*nextTargetEventId[\s\S]*forceRefresh: true/);
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(tournament, /if \(resumed\)[\s\S]*await this\.ensureContext\("page-show"\)/);
   assert.match(tournament, /nextEventId[\s\S]*forceRefresh: true/);
 });

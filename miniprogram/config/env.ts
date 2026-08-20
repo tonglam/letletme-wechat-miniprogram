@@ -7,21 +7,24 @@ const MINIPROGRAM_API_BASE_OVERRIDE_KEY = "letletme_web_miniprogram_api_override
 
 const GRAPHQL_ENDPOINTS: Record<MiniProgramEnv, string> = {
   develop: "http://localhost:3001/api/graphql",
-  trial: "https://www.letletme.top/api/graphql",
-  release: "https://www.letletme.top/api/graphql"
+  trial: "https://letletme.top/api/graphql",
+  release: "https://letletme.top/api/graphql"
 };
 
 const MINIPROGRAM_API_BASES: Record<MiniProgramEnv, string> = {
   develop: "http://localhost:3001/api/miniprogram",
-  trial: "https://www.letletme.top/api/miniprogram",
-  release: "https://www.letletme.top/api/miniprogram"
+  trial: "https://letletme.top/api/miniprogram",
+  release: "https://letletme.top/api/miniprogram"
 };
 
 export function getMiniProgramEnv(): MiniProgramEnv {
   try {
     return wx.getAccountInfoSync().miniProgram.envVersion;
   } catch {
-    return "trial";
+    // Unknown platform state must take the most restrictive path. In
+    // particular, diagnostics and internal performance routes must not be
+    // exposed to a release user when account metadata is unavailable.
+    return "release";
   }
 }
 

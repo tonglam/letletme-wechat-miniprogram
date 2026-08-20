@@ -27,7 +27,7 @@ test("Live Match hidden pull refresh is owned and resumed", () => {
 });
 
 test("Live Tournament event-zero recovery uses startup generation ownership", () => {
-  const page = read("miniprogram/pages/live/tournament/tournament.ts");
+  const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(
     page,
     /retryWithContext\(\)[\s\S]*if \(this\.data\.event === 0\)[\s\S]*const recoveryGeneration = \+\+this\.startupGeneration;[\s\S]*this\.startupPending = true[\s\S]*await this\.ensureContext\("pull-refresh", true\)[\s\S]*this\.startupGeneration !== recoveryGeneration/

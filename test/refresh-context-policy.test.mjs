@@ -5,7 +5,7 @@ import test from "node:test";
 const service = await readFile(new URL("../miniprogram/services/app-context.service.ts", import.meta.url), "utf8");
 const liveEntry = await readFile(new URL("../miniprogram/pages/live/entry/entry.ts", import.meta.url), "utf8");
 const liveMatch = await readFile(new URL("../miniprogram/pages/live/match/match.ts", import.meta.url), "utf8");
-const myFpl = await readFile(new URL("../miniprogram/pages/my-fpl/team/team.ts", import.meta.url), "utf8");
+const myFpl = await readFile(new URL("../miniprogram/pages/my-fpl/team/team.controller.ts", import.meta.url), "utf8");
 
 test("app context refresh policy treats incomplete, stale, and expired snapshots as refreshable", () => {
   assert.match(service, /export function shouldRefreshAppContext\([\s\S]*snapshot\.stale[\s\S]*!snapshot\.season[\s\S]*!snapshot\.displayEvent[\s\S]*snapshot\.freshUntil <= now/);

@@ -4,9 +4,12 @@
   "description": "Native WeChat Mini Program client for LetLetMe Fantasy Premier League live data, summaries, and statistics.",
   "scripts": {
     "lint": "eslint miniprogram/",
+    "lint:strict": "eslint miniprogram/ --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/**/*.test.mjs tests/**/*.test.ts",
+    "test:coverage": "node scripts/check-coverage.mjs",
     "check:style": "node scripts/check-style-drift.mjs",
+    "check:production-origin": "node scripts/check-production-origin.mjs",
     "assets:squad-pitch": "node scripts/convert-squad-pitch-assets.mjs",
     "package:check": "npm pack --dry-run",
     "prune:vant": "node scripts/prune-vant.mjs"
@@ -24,7 +27,9 @@
     "@eslint/js": "^10.0.1",
     "@resvg/resvg-js": "^2.6.2",
     "eslint": "^10.2.1",
+    "less": "4.2.2",
     "miniprogram-api-typings": "^2.8.3-1",
+    "miniprogram-ci": "2.1.5",
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.59.1"
   },

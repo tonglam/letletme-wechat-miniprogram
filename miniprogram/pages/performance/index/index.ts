@@ -1,4 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
+import { getMiniProgramEnv } from "../../../config/env";
+import { routes } from "../../../config/routes";
 import { getPerf, clearPerf } from "../../../utils/perf";
 import type { StoredPerf, ApiRecord } from "../../../utils/perf";
 import {
@@ -76,6 +78,10 @@ PerformancePage({
   } as PageData,
 
   onLoad() {
+    if (getMiniProgramEnv() === "release") {
+      wx.reLaunch({ url: routes.home });
+      return;
+    }
     this.loadMetrics();
     this.loadEnv();
   },

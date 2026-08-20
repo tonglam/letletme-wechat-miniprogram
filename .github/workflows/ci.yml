@@ -21,17 +21,32 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Prepare runtime dependency lock for security scans
+        run: |
+          set -eu
+          mkdir -p runtime-scan
+          node <<'NODE'
+          const fs = require('node:fs')
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'))
+          const packages = Object.fromEntries(
+            Object.entries(lock.packages).filter(([path, metadata]) => path === '' || !metadata.dev)
+          )
+          delete packages[''].devDependencies
+          fs.writeFileSync('runtime-scan/package-lock.json', `${JSON.stringify({ ...lock, packages }, null, 2)}\n`)
+          NODE
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run check:style
       - run: npm run package:check
-      - run: npm audit --audit-level=moderate
+      # miniprogram-ci@2.1.5 is an exact, dev-only release-tool pin. Its
+      # no-fix transitive findings are not shipped; the runtime graph is gated here.
+      - run: npm audit --omit=dev --audit-level=moderate
       - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
           scan-args: |-
-            --recursive
-            ./
+            --lockfile
+            runtime-scan/package-lock.json
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -14,7 +14,7 @@ test("team detail preserves forced Retry semantics across hide and show", () => 
 });
 
 test("My FPL event-empty context recovery is lifecycle-owned", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /contextRecoveryPending/);
   assert.match(page, /resumeContextRecovery = this\.resumeContextRecovery \|\| this\.contextRecoveryPending/);
   assert.match(page, /if \(this\.resumeContextRecovery\)[\s\S]*recoverContext\("page-show"\)/);

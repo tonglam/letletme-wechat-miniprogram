@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const read = (file) => fs.readFileSync(new URL(file, root), "utf8");
 
 test("My FPL context recovery consumes the stale refresh owner", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /if \(this\.resumeContextRecovery\)[\s\S]*this\.resumeRefreshAfterShow = false;[\s\S]*this\.refreshPending = false[\s\S]*recoverContext\("page-show"\)/);
 });
 

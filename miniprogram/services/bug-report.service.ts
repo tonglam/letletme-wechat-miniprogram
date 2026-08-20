@@ -88,6 +88,7 @@ export function consumePendingBugReportDraft(): BugReportDraft | null {
 export async function submitMiniProgramBugReport(input: {
   body: string;
   screenshotBase64?: string | null;
+  /** Accepted by old callers only; the server sniffs magic bytes. */
   screenshotMime?: string | null;
   diagnostic?: string | null;
 }): Promise<string> {
@@ -110,18 +111,19 @@ export async function submitMiniProgramBugReport(input: {
       : {})
   };
 
+  const data: Record<string, unknown> = {
+    body,
+    clientMeta,
+    screenshotBase64: input.screenshotBase64 ?? null
+  };
+  if (!token) data.deviceId = getMiniProgramDeviceId();
+
   return new Promise((resolve, reject) => {
     wx.request<BugReportApiResponse>({
       url: `${getMiniProgramApiBase()}/bug-reports`,
       method: "POST",
       header,
-      data: {
-        body,
-        deviceId: getMiniProgramDeviceId(),
-        clientMeta,
-        screenshotBase64: input.screenshotBase64 ?? null,
-        screenshotMime: input.screenshotMime ?? null
-      },
+      data,
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         const publicId = response.data?.publicId;

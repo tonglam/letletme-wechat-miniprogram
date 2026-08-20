@@ -145,6 +145,14 @@ export function durationBucket(ms: number): string {
 }
 
 let _cache: StoredPerf | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushInFlight: Promise<void> | null = null;
+let flushQueued = false;
+// A clear can happen while a native setStorage call is still in flight. The
+// generation lets that completed write identify itself as stale and remove
+// its value after the native callback, so an old snapshot cannot resurrect
+// metrics that the user just cleared.
+let flushGeneration = 0;
 
 function load(): StoredPerf {
   if (_cache) return _cache;
@@ -159,11 +167,63 @@ function load(): StoredPerf {
   return _cache;
 }
 
-function flush(): void {
+function immutableSnapshot(value: StoredPerf): StoredPerf {
+  return JSON.parse(JSON.stringify(value)) as StoredPerf;
+}
+
+function writeSnapshot(snapshot: StoredPerf): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      wx.setStorage({
+        key: STORAGE_KEY,
+        data: snapshot,
+        success: () => resolve(),
+        fail: () => resolve()
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export async function flushPerfNow(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  if (flushInFlight) {
+    flushQueued = true;
+    await flushInFlight;
+    if (flushQueued) {
+      flushQueued = false;
+      await flushPerfNow();
+    }
+    return;
+  }
   if (!_cache) return;
-  try {
-    wx.setStorage({ key: STORAGE_KEY, data: _cache });
-  } catch {}
+  const generation = flushGeneration;
+  const snapshot = immutableSnapshot(_cache);
+  const write = writeSnapshot(snapshot);
+  flushInFlight = write;
+  await write;
+  if (flushInFlight === write) flushInFlight = null;
+  if (generation !== flushGeneration) {
+    try {
+      wx.removeStorageSync(STORAGE_KEY);
+    } catch {}
+  }
+  if (flushQueued) {
+    flushQueued = false;
+    await flushPerfNow();
+  }
+}
+
+function flush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushPerfNow();
+  }, 250);
 }
 
 export function recordLaunch(duration: number): void {
@@ -318,6 +378,10 @@ export function getPerf(): StoredPerf {
 }
 
 export function clearPerf(): void {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = null;
+  flushGeneration += 1;
+  flushQueued = false;
   _cache = {
     apiRecords: [],
     renderCommits: [],

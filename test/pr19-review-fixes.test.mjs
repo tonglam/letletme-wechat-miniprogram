@@ -18,9 +18,9 @@ const entryPage = capturedPage;
 capturedPage = undefined;
 const matchModule = await import("../miniprogram/pages/live/match/match.ts");
 capturedPage = undefined;
-await import("../miniprogram/pages/live/tournament/tournament.ts");
+await import("../miniprogram/pages/live/tournament/tournament.controller.ts");
 const tournamentPage = capturedPage;
-const teamModule = await import("../miniprogram/pages/my-fpl/team/team.ts");
+const teamModule = await import("../miniprogram/pages/my-fpl/team/team.controller.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
 
 test("soft timeout observes a rejected task without creating a rejected finally promise", async () => {
@@ -36,7 +36,7 @@ test("soft timeout observes a rejected task without creating a rejected finally 
 });
 
 test("price context is optional while season-scoped deep links await it", () => {
-  const price = source("miniprogram/pages/data/price/price.ts");
+  const price = source("miniprogram/pages/data/price/price.controller.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
   const players = source("miniprogram/pages/data/players/players.ts");
   const playerDetail = source("miniprogram/pages/data/player-detail/player-detail.ts");
@@ -49,7 +49,7 @@ test("price context is optional while season-scoped deep links await it", () => 
 });
 
 test("price soft timeout belongs to its originating visible page tracker", () => {
-  const price = source("miniprogram/pages/data/price/price.ts");
+  const price = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(price, /const tracker = this\.perfTracker;[\s\S]*observeSoftTimeout\(readTask, 2900[\s\S]*if \(!this\.pageActive \|\| !isCurrentRevision/);
   assert.match(price, /tracker\?\.mark\("softFailureAt"\)/);
 });
@@ -76,7 +76,7 @@ test("tournament chains carry their originating trace through later reads", () =
   const service = source("miniprogram/services/tournament.service.ts");
   const selections = source("miniprogram/pages/data/selections/selections.ts");
   const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
-  const live = source("miniprogram/pages/live/tournament/tournament.ts");
+  const live = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(service, /readDirectory\([\s\S]*trace\?: PageRequestTrace[\s\S]*readEntryTournamentDirectory\(entry, season, \{ forceRefresh, trace \}\)/);
   assert.match(selections, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadStats\(forceRefresh, trace\)/);
   assert.match(summary, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntrySummaryTournaments\([^;]*trace\)[\s\S]*this\.loadSummary\(forceRefresh, trace\)/);
@@ -118,10 +118,10 @@ test("wrapped asynchronous pull refresh handlers return their actual work", () =
     "miniprogram/pages/entry/profile/profile.ts",
     "miniprogram/pages/summary/gameweek/gameweek.ts",
     "miniprogram/pages/summary/tournament/tournament.ts",
-    "miniprogram/pages/live/tournament/tournament.ts",
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
     "miniprogram/pages/data/players/players.ts",
     "miniprogram/pages/data/selections/selections.ts",
-    "miniprogram/pages/data/price/price.ts"
+    "miniprogram/pages/data/price/price.controller.ts"
   ];
   for (const path of pages) {
     const page = source(path);
@@ -137,7 +137,7 @@ test("cold context failures settle Home and all Live page loading states", () =>
   const home = source("miniprogram/pages/home/index/index.ts");
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   const match = source("miniprogram/pages/live/match/match.ts");
-  const tournament = source("miniprogram/pages/live/tournament/tournament.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(home, /startHomeLifecycle\([\s\S]*catch \(error\)[\s\S]*if \(isActiveLifecycle\(\)\) this\.showContextError\(error, tracker\)/);
   for (const page of [entry, match, tournament]) {
     assert.match(page, /let context = getAppContextSnapshot\(\)[\s\S]*catch \(error\)[\s\S]*if \(!context\)[\s\S]*this\.showContextError\(error\)/);
@@ -320,7 +320,7 @@ test("Live Tournament rejects event zero before any row request", async () => {
 });
 
 test("My FPL support payload stays local until principal validation and updates chip totals", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const loadTab = page.slice(page.indexOf("async loadTab"), page.indexOf("setActiveTab", page.indexOf("async loadTab")));
   assert.match(loadTab, /let historyPayload = this\.historyPayload/);
   assert.match(loadTab, /historyPayload = await getEntryTeamStatsHistory[\s\S]*restartForPrincipalChange\(entryId\)[\s\S]*getEntryTeamStatsTransfers/);
@@ -376,7 +376,7 @@ test("My FPL transfer tab summarizes and filters like the web TeamTransfersTab",
 });
 
 test("My FPL keeps support tabs available without an event summary", () => {
-  const page = source("miniprogram/pages/my-fpl/team/team.ts");
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(page, /if \(!eventResult\)[\s\S]*supportAvailable: true[\s\S]*loadTab/);
   assert.match(template, /emptyState && !supportAvailable/);

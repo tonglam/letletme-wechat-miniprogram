@@ -20,7 +20,7 @@ test("Tournament directory has one GraphQL operation and one season-aware read",
 });
 
 test("Live Tournament skips live rows for empty metadata or no current event", () => {
-  const page = source("miniprogram/pages/live/tournament/tournament.ts");
+  const page = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   const guard = page.indexOf("selectedTournament.participantCount === 0 || this.data.event <= 0");
   const rows = page.indexOf("await this.loadRows", guard);
   assert.ok(guard >= 0 && rows > guard);

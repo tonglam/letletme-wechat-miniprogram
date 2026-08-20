@@ -95,7 +95,7 @@ test("breaking market contract is protected by a non-cancelable update gate", ()
 });
 
 test("market ownership requests clear stale tiles and resume after a hidden page", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /ownershipPending: false/);
   assert.match(page, /resumeOwnershipAfterShow/);
   assert.match(

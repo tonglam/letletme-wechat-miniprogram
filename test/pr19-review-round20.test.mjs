@@ -49,7 +49,7 @@ test("Players captures its trace before context and cancels hidden continuations
 });
 
 test("My FPL invalidates hidden primary work before deferred tabs", () => {
-  const team = source("miniprogram/pages/my-fpl/team/team.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     team,
     /onHide\(\)[\s\S]*loadRequestId \+= 1[\s\S]*tabRequestId \+= 1[\s\S]*phaseBannerRequestId \+= 1/

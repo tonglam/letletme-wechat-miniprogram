@@ -19,6 +19,7 @@ import {
   type LiveDisplayState
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
+import { miniLogger } from "../../../utils/logger";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
 import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "./player-detail";
@@ -1152,7 +1153,7 @@ Page({
         this.setData({ shareSheetOpen: true, shareText: text });
       });
     } catch (error) {
-      console.error("[copy-share] entry", error);
+      miniLogger.error("copy-share.entry", error instanceof Error ? error.message : "failed");
       wx.showToast({ title: "复制失败", icon: "none" });
     }
   },

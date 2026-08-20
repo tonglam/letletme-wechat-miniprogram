@@ -11,7 +11,7 @@ test("tournament context recovery retains the originating directory trace", () =
 });
 
 test("Price abandons a superseded cold continuation after context resolution", () => {
-  const page = source("miniprogram/pages/data/price/price.ts");
+  const page = source("miniprogram/pages/data/price/price.controller.ts");
 
   assert.match(page, /const tracker = this\.perfTracker;[\s\S]*?await ensureAppContext/);
   assert.match(page, /if \(!this\.pageActive \|\| this\.perfTracker !== tracker\) return;\s+tracker\.mark\("contextReadyAt"\)/);

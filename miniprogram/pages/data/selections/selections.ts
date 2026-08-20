@@ -12,6 +12,7 @@ import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
 import { canReadEventReporting } from "../../../utils/event-context";
 import { copyShareText } from "../../../utils/live-share";
+import { miniLogger } from "../../../utils/logger";
 import { formatSelectionsShareText } from "../../../utils/explore-share";
 import { formatCompactNumber } from "../../../utils/summary-format";
 
@@ -485,7 +486,7 @@ PerformancePage({
         this.setData({ shareSheetOpen: true, shareText: text });
       });
     } catch (error) {
-      console.error("[copy-share] selections", error);
+      miniLogger.error("copy-share.selections", error instanceof Error ? error.message : "failed");
       wx.showToast({ title: "复制失败", icon: "none" });
     }
   },

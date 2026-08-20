@@ -165,10 +165,10 @@ export function openWebsiteAction(action: CanonicalAction): void;
 动作 → URL 常量表(静态写死,与 env.ts 站点一致):
 
 ```ts
-ACCOUNT_LINK  → https://www.letletme.top/zh-CN/account
-TEAM_BIND     → https://www.letletme.top/zh-CN/account
-LEAGUE_PREPARE→ https://www.letletme.top/zh-CN/tournament
-LEAGUE_MANAGE → https://www.letletme.top/zh-CN/tournament
+ACCOUNT_LINK  → https://letletme.top/zh-CN/account
+TEAM_BIND     → https://letletme.top/zh-CN/account
+LEAGUE_PREPARE→ https://letletme.top/zh-CN/tournament
+LEAGUE_MANAGE → https://letletme.top/zh-CN/tournament
 OPEN_HOME     → https://www.letletme.top/zh-CN
 ```
 

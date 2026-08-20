@@ -18,7 +18,7 @@ test("Live Entry retry uses the resumable forced refresh owner", () => {
 });
 
 test("Price resumes the complete forced player and history refresh chain", () => {
-  const page = read("miniprogram/pages/data/price/price.ts");
+  const page = read("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /runPlayerRefresh\([\s\S]*playerRefreshPending = true[\s\S]*refreshPlayerMode\(\)/);
   assert.match(page, /onHide\(\)[\s\S]*resumePlayerRefreshAfterShow = this\.playerRefreshPending/);
   assert.match(page, /onShow\(\)[\s\S]*resumePlayerRefresh[\s\S]*runPlayerRefresh\(tracker\)/);

@@ -20,12 +20,12 @@ test("Teams preserves forced directory retries across hide/show", () => {
 });
 
 test("Price player retry uses the lifecycle-owned forced refresh", () => {
-  const page = read("miniprogram/pages/data/price/price.ts");
+  const page = read("miniprogram/pages/data/price/price.controller.ts");
   assert.match(page, /onRetryPlayers\(\)[\s\S]*runPlayerRefresh\(this\.perfTracker\)/);
 });
 
 test("My FPL primary retry preserves forced refresh ownership", () => {
-  const page = read("miniprogram/pages/my-fpl/team/team.ts");
+  const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /onRetry\(\)[\s\S]*data\.error[\s\S]*runForcedRefresh\(/);
   assert.match(page, /onRetry\(\)[\s\S]*activeTab === "squad"[\s\S]*runForcedRefresh\(/);
 });

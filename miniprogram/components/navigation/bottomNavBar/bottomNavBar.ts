@@ -1,3 +1,5 @@
+import { getMiniProgramEnv } from "../../../config/env";
+
 interface NavAction {
   name: string;
   subname: string;
@@ -14,8 +16,6 @@ interface NavTab {
   icon: string;
   label: string;
 }
-
-const PERF_ENTRY_ID = 15702;
 
 const TABS: NavTab[] = [
   { name: "live", icon: "fire-o", label: "实时" },
@@ -153,7 +153,7 @@ Component({
 
   methods: {
     syncPerfVisibility() {
-      const showPerf = getApp<IAppOption>().globalData.entryId === PERF_ENTRY_ID;
+      const showPerf = getMiniProgramEnv() !== "release";
       this.setData({
         showPerf,
         tabs: showPerf ? TABS.concat(PERF_TAB) : TABS

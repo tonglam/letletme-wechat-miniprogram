@@ -4,7 +4,7 @@
  */
 import type { PlayerValueChange } from "../models/player";
 
-const SITE = "https://www.letletme.top/zh-CN";
+const SITE = "https://letletme.top/zh-CN";
 
 function formatMoneyTenths(tenths?: number | null): string {
   if (typeof tenths !== "number" || !Number.isFinite(tenths)) return "-";

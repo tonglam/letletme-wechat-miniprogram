@@ -42,6 +42,7 @@ export interface LiveSnapshotResult<T> {
 
 export interface LivePlayerRow {
   element?: number;
+  teamId?: number;
   name?: string;
   webName?: string;
   team?: string;
@@ -63,6 +64,7 @@ export interface LivePlayerRow {
   goalsScored?: number;
   assists?: number;
   cleanSheets?: number;
+  goalsConceded?: number;
   saves?: number;
   yellowCards?: number;
   redCards?: number;
@@ -99,6 +101,8 @@ export interface LiveEntryResult {
 export interface LiveMatch {
   id?: number | string;
   matchId?: number | string;
+  homeTeamId?: number;
+  awayTeamId?: number;
   status?: string;
   playStatus?: string;
   minutes?: number;

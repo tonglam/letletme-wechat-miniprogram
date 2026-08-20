@@ -64,6 +64,13 @@ test("fixture service rejects partial errors before mapping an empty schedule", 
   assert.ok(read >= 0 && guard > read && mapping > guard);
 });
 
+test("Live revision recovery retains the original desk when the forced refresh fails", () => {
+  const service = source("miniprogram/services/live.service.ts");
+  const recovery = service.slice(service.indexOf('if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE"))'));
+  assert.match(recovery, /try \{[\s\S]*const refreshed = await graphqlRequest/);
+  assert.match(recovery, /catch \{[\s\S]*enriched = mapped/);
+});
+
 test("Live Match surfaces a stale Core fixture fallback", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const template = source("miniprogram/pages/live/match/match.wxml");
