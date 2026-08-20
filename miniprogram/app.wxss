@@ -58,6 +58,8 @@ page {
   --plum-a70: rgba(56, 0, 60, 0.7);
 
   /* Squad pitch (web SquadPitch cream / fascia) */
+  --pitch-green: #2d8a4e;
+  --pitch-green-dark: #1e6b3a;
   --pitch-cream: #f8f6ef;
   --pitch-dark: #210025;
   --pitch-marker: #111315;

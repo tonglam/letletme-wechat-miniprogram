@@ -543,7 +543,7 @@
   height: 900rpx;
   margin-top: 16rpx;
   border-radius: 16rpx;
-  background: linear-gradient(180deg, #2d8a4e 0%, #1e6b3a 50%, #2d8a4e 100%);
+  background: linear-gradient(180deg, var(--pitch-green) 0%, var(--pitch-green-dark) 50%, var(--pitch-green) 100%);
   overflow: hidden;
 }
 
@@ -600,7 +600,7 @@
   padding: 6rpx 14rpx;
   border-radius: 8rpx;
   background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  color: var(--card);
   font-size: 22rpx;
   font-weight: 700;
   white-space: nowrap;
@@ -612,7 +612,7 @@
   padding: 2rpx 10rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.85);
-  color: #1e6b3a;
+  color: var(--pitch-green-dark);
   font-size: 18rpx;
   font-weight: 800;
   white-space: nowrap;

@@ -49,20 +49,6 @@ const GET_ENTRY_LEAGUES = `
   }
 `;
 
-const GET_ENTRY_LEAGUES_BY_TYPE = `
-  query EntryLeaguesByType($entryId: Int!, $type: LeagueType!) {
-    entryLeagues(entryId: $entryId, type: $type) {
-      id
-      name
-      type
-      officialKind
-      shortName
-      startedEvent
-      entryRank
-    }
-  }
-`;
-
 const GET_ENTRY_HISTORY = `
   query EntryHistory($entryId: Int!) {
     entryHistory(entryId: $entryId) {
@@ -261,7 +247,8 @@ export async function getEntryClassicLeagues(
   forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<EntryLeague[]> {
-  return getEntryLeaguesByType(entry, "CLASSIC", forceRefresh, trace);
+  const allLeagues = await getEntryLeagueInfo(entry, forceRefresh, trace);
+  return allLeagues.filter(league => league.type === "CLASSIC");
 }
 
 export async function getEntryH2hLeagues(
@@ -269,34 +256,8 @@ export async function getEntryH2hLeagues(
   forceRefresh = false,
   trace?: PageRequestTrace
 ): Promise<EntryLeague[]> {
-  return getEntryLeaguesByType(entry, "H2H", forceRefresh, trace);
-}
-
-async function getEntryLeaguesByType(
-  entry: number,
-  type: "CLASSIC" | "H2H",
-  forceRefresh: boolean,
-  trace?: PageRequestTrace
-): Promise<EntryLeague[]> {
-  const data = await graphqlRequest<EntryLeaguesResponse>(GET_ENTRY_LEAGUES_BY_TYPE, { entryId: entry, type }, {
-    cachePolicy: "reporting",
-    forceRefresh,
-    cacheVariant: type.toLowerCase(),
-    trace
-  });
-  return (data.entryLeagues || []).map((league) => ({
-    id: league.id,
-    name: league.name,
-    rank: league.entryRank ?? undefined,
-    officialKind:
-      league.officialKind === "SYSTEM" ||
-      league.officialKind === "INVITATIONAL" ||
-      league.officialKind === "PUBLIC"
-        ? league.officialKind
-        : undefined,
-    type: league.type ?? undefined,
-    shortName: league.shortName ?? undefined
-  }));
+  const allLeagues = await getEntryLeagueInfo(entry, forceRefresh, trace);
+  return allLeagues.filter(league => league.type === "H2H");
 }
 
 export async function getEntryHistoryInfo(entry: number): Promise<EntryHistory[]> {

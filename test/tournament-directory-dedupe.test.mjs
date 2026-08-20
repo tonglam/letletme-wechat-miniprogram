@@ -33,7 +33,7 @@ test("EntryLeagues operation exists only in the entry service", () => {
   const entry = source("miniprogram/services/entry.service.ts");
   const common = source("miniprogram/services/common.service.ts");
   assert.equal((entry.match(/query EntryLeagues\b/g) || []).length, 1);
-  assert.equal((entry.match(/query EntryLeaguesByType\b/g) || []).length, 1);
+  assert.equal((entry.match(/query EntryLeaguesByType\b/g) || []).length, 0);
   assert.doesNotMatch(common, /query EntryLeagues/);
   assert.match(common, /getEntryLeagueInfo\(entryId\)/);
 });
