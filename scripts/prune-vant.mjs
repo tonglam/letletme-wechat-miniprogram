@@ -1,51 +1,61 @@
 #!/usr/bin/env node
 /**
- * Prune unused Vant Weapp components from the built miniprogram_npm tree.
+ * Validate/patch the built Vant Weapp tree used by the Mini Program.
  *
- * The app only uses van-icon / van-action-sheet, but the npm build ships all
- * ~70 component bundles (~1.9 MB). Keeping just the transitive closure cuts
- * the upload package by ~1.6 MB.
+ * WeChat's lazy component injector indexes the complete package tree even when
+ * a component is not referenced by the initial page. Removing apparently
+ * unused Vant directories therefore produces runtime ENOENT WXML failures
+ * (the missing directory varies with the page/cache state). Keep the official
+ * package output intact; the upload gate still runs this script so the
+ * compatibility patch below is applied consistently in CI and local builds.
  *
- * Closure (verified by reading each component's index.json + `../x/` imports):
- *   icon, action-sheet
- *     → info, popup, loading, overlay, transition
- *     → shared: common, mixins, wxs, definitions
- *
- * When the app starts using another Vant component, add it (and its
- * transitive deps) to KEEP below.
+ * Do not delete component directories here. The full tree is required by the
+ * official DevTools/runtime package resolver, including on pages that do not
+ * render the component during the first pass.
  */
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const KEEP = new Set([
-  // directly used
-  "icon",
-  "action-sheet",
-  // transitive component deps
-  "info",
-  "popup",
-  "loading",
-  "overlay",
-  "transition",
-  // shared runtime dirs referenced via ../common, ../mixins, ../wxs
-  "common",
-  "mixins",
-  "wxs",
-  "definitions"
-]);
-
 const vantDir = join("miniprogram", "miniprogram_npm", "@vant", "weapp");
+const sourceVantDir = join("node_modules", "@vant", "weapp", "lib");
+const representativeComponents = ["action-sheet", "picker-column", "circle", "common", "icon"];
+const rebuildCommand = "npm ci && node -e 'const path=require(\"node:path\"),ci=require(\"miniprogram-ci\");ci.packNpmManually({packageJsonPath:path.resolve(\"package.json\"),miniprogramNpmDistDir:path.resolve(\"miniprogram\")}).then(()=>{}).catch(error=>{console.error(error);process.exit(1)})'";
 
 if (!existsSync(vantDir)) {
   console.log(`[prune-vant] ${vantDir} not found — skipping (npm build not run yet)`);
   process.exit(0);
 }
 
-let removed = 0;
-for (const entry of readdirSync(vantDir, { withFileTypes: true })) {
-  if (entry.isDirectory() && !KEEP.has(entry.name)) {
-    rmSync(join(vantDir, entry.name), { recursive: true, force: true });
-    removed += 1;
+// The generated directory is ignored by git, so a developer can carry a
+// previously-pruned tree across commits.  Do not report success for that
+// state: WeChat's lazy component resolver will later fail with an opaque
+// WXML ENOENT.  The upload workflow runs packNpmManually immediately before
+// this check, while a local invocation gets an actionable rebuild error.
+const missingRepresentatives = representativeComponents.filter(
+  (component) => !existsSync(join(vantDir, component))
+);
+if (missingRepresentatives.length > 0) {
+  throw new Error(
+    `[prune-vant] incomplete generated tree; missing ${missingRepresentatives.join(", ")}. `
+      + `Rebuild Mini Program npm packages before running this script: ${rebuildCommand}`
+  );
+}
+
+// When the installed Vant package is available, compare every source
+// component directory with the generated output instead of relying only on
+// the representative sentinel list above.
+if (existsSync(sourceVantDir)) {
+  const expectedComponents = readdirSync(sourceVantDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  const missingComponents = expectedComponents.filter(
+    (component) => !existsSync(join(vantDir, component))
+  );
+  if (missingComponents.length > 0) {
+    throw new Error(
+      `[prune-vant] generated tree is missing ${missingComponents.length} installed Vant component(s): `
+        + `${missingComponents.join(", ")}. Rebuild Mini Program npm packages before upload: ${rebuildCommand}`
+    );
   }
 }
 
@@ -80,4 +90,4 @@ function getSystemInfoSync() {
   }
 }
 
-console.log(`[prune-vant] removed ${removed} unused component bundles, kept ${KEEP.size}`);
+console.log("[prune-vant] kept the complete Vant component tree for runtime lazy loading");
