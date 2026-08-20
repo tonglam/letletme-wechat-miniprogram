@@ -19,6 +19,7 @@ import { join } from "node:path";
 const vantDir = join("miniprogram", "miniprogram_npm", "@vant", "weapp");
 const sourceVantDir = join("node_modules", "@vant", "weapp", "lib");
 const representativeComponents = ["action-sheet", "picker-column", "circle", "common", "icon"];
+const rebuildCommand = "npm ci && node -e 'const path=require(\"node:path\"),ci=require(\"miniprogram-ci\");ci.packNpmManually({packageJsonPath:path.resolve(\"package.json\"),miniprogramNpmDistDir:path.resolve(\"miniprogram\")}).then(()=>{}).catch(error=>{console.error(error);process.exit(1)})'";
 
 if (!existsSync(vantDir)) {
   console.log(`[prune-vant] ${vantDir} not found — skipping (npm build not run yet)`);
@@ -36,7 +37,7 @@ const missingRepresentatives = representativeComponents.filter(
 if (missingRepresentatives.length > 0) {
   throw new Error(
     `[prune-vant] incomplete generated tree; missing ${missingRepresentatives.join(", ")}. `
-      + "Rebuild Mini Program npm packages (npm ci && packNpmManually) before running this script."
+      + `Rebuild Mini Program npm packages before running this script: ${rebuildCommand}`
   );
 }
 
@@ -53,7 +54,7 @@ if (existsSync(sourceVantDir)) {
   if (missingComponents.length > 0) {
     throw new Error(
       `[prune-vant] generated tree is missing ${missingComponents.length} installed Vant component(s): `
-        + `${missingComponents.join(", ")}. Rebuild Mini Program npm packages before upload.`
+        + `${missingComponents.join(", ")}. Rebuild Mini Program npm packages before upload: ${rebuildCommand}`
     );
   }
 }
