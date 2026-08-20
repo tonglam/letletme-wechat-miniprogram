@@ -28,7 +28,7 @@ test("Market stale state exposes a cooldown-aware retry action", () => {
   const template = source("miniprogram/pages/data/price/price.wxml");
   assert.match(
     template,
-    /wx:if="\{\{staleMessage\}\}"[\s\S]*showRetry="\{\{true\}\}"[\s\S]*bind:retry="onRetry"/,
+    /wx:if="\{\{staleMessage\}\}"[\s\S]*showRetry="\{\{true\}\}"[\s\S]*bind:retry="onRetryDaily"/,
   );
   assert.match(
     template,
@@ -38,5 +38,9 @@ test("Market stale state exposes a cooldown-aware retry action", () => {
   assert.match(
     controller,
     /onRetryPulse\(\)[\s\S]*loadMarketPulse\(true\)/,
+  );
+  assert.match(
+    controller,
+    /onRetryDaily\(\)[\s\S]*loadDailyChanges\(true, false\)/,
   );
 });

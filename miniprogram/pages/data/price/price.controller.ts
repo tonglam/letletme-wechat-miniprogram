@@ -869,6 +869,11 @@ Page({
     this.loadDailyChanges();
   },
 
+  onRetryDaily() {
+    this.startDailyRefreshTrace();
+    void this.loadDailyChanges(true, false);
+  },
+
   onRetryPulse() {
     void this.loadMarketPulse(true);
   },
@@ -972,8 +977,11 @@ Page({
       : "#perf-primary-content";
   },
 
-  async loadDailyChanges(forceRefresh = false): Promise<void> {
-    void this.loadMarketPulse(forceRefresh);
+  async loadDailyChanges(
+    forceRefresh = false,
+    includeMarketPulse = true,
+  ): Promise<void> {
+    if (includeMarketPulse) void this.loadMarketPulse(forceRefresh);
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
     this.dailyRequestForceRefresh = forceRefresh;
     const changeDate = this.data.changeDate;

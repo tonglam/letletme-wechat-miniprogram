@@ -53,5 +53,6 @@ test("price date changes and retries create an isolated refresh trace", () => {
   assert.match(page, /onDateChange[\s\S]*shareSheetOpen: false/);
   assert.match(page, /onModeChange[\s\S]*shareSheetOpen: false/);
   assert.match(page, /onRetry[\s\S]*?this\.startDailyRefreshTrace\(\)/);
+  assert.match(page, /onRetryDaily[\s\S]*?loadDailyChanges\(true, false\)/);
   assert.match(page, /startDailyRefreshTrace[\s\S]*?new PagePerformanceTracker\(this, "pages\/data\/price\/price", "refresh"\)/);
 });

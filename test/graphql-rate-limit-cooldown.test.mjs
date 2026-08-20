@@ -167,6 +167,11 @@ test("a corrupted future cooldown stays anchored when storage writes fail", () =
     false,
     "the quarantined raw value must not become valid again as the clock approaches it",
   );
+
+  const freshEvidenceAt = now + 181_000;
+  const fresh = persistGraphQLCooldown(1, freshEvidenceAt);
+  assert.equal(fresh.cooldownUntil, freshEvidenceAt + 1_000);
+  assert.equal(fresh.remainingSeconds, 1);
 });
 
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {

@@ -74,7 +74,10 @@ export function persistGraphQLCooldown(
   try {
     stored = Number(wx.getStorageSync(storageKeys.graphqlCooldownUntil)) || 0;
   } catch {}
-  const boundedStored = Number.isFinite(stored)
+  // A raw value that could not be rewritten or removed remains untrusted even
+  // after its anchored quarantine expires; fresh 429 evidence must not extend it.
+  const storedIsQuarantined = corruptedStoredCooldownValue === stored;
+  const boundedStored = Number.isFinite(stored) && !storedIsQuarantined
     ? Math.min(stored, now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000)
     : 0;
   cooldownUntilMemory = Math.max(
