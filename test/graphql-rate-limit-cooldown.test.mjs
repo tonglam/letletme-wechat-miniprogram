@@ -7,6 +7,7 @@ import {
 } from "../miniprogram/services/graphql.service.ts";
 import {
   getGraphQLCooldownState,
+  isGraphQLCooldownMessage,
   parseRetryAfterSeconds,
   persistGraphQLCooldown,
   subscribeGraphQLCooldown,
@@ -73,6 +74,14 @@ test("Retry-After accepts seconds and HTTP-date and clamps invalid values", () =
     1,
   );
   assert.equal(parseRetryAfterSeconds("not-a-date", now), 15);
+  assert.equal(parseRetryAfterSeconds("2099-01-01", now), 15);
+  assert.equal(parseRetryAfterSeconds("1.5", now), 15);
+  assert.equal(isGraphQLCooldownMessage("请求较多，请在 20 秒后刷新"), true);
+  assert.equal(
+    isGraphQLCooldownMessage("请求较多，当前显示上次成功数据；20 秒后可刷新"),
+    true,
+  );
+  assert.equal(isGraphQLCooldownMessage("网络超时，请稍后重试"), false);
 });
 
 test("the existing persistent device ID is reused only when the Web ingress will accept it", () => {

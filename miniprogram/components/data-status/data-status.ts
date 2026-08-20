@@ -2,8 +2,10 @@ import {
   userFacingErrorMessage
 } from "../../utils/request-error";
 import {
+  GRAPHQL_COOLDOWN_READY_MESSAGE,
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  isGraphQLCooldownMessage,
   subscribeGraphQLCooldown,
 } from "../../services/graphql-cooldown";
 
@@ -86,16 +88,19 @@ Component({
   methods: {
     refreshCooldownState() {
       const cooldown = getGraphQLCooldownState();
+      const storedMessage = this.properties.message;
       this.setData({
         displayMessage: cooldown.active
           ? graphQLCooldownMessage(
               cooldown,
               this.properties.status === "stale",
             )
-          : userFacingErrorMessage(
-              this.properties.message,
-              "数据暂时不可用，请稍后重试",
-            ),
+          : isGraphQLCooldownMessage(storedMessage)
+            ? GRAPHQL_COOLDOWN_READY_MESSAGE
+            : userFacingErrorMessage(
+                storedMessage,
+                "数据暂时不可用，请稍后重试",
+              ),
         retryDisabled: cooldown.active,
         retryButtonText: cooldown.active
           ? `${cooldown.remainingSeconds} 秒后可重试`

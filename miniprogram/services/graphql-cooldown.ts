@@ -3,6 +3,17 @@ import { storageKeys } from "../config/storage-keys";
 export const DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS = 15;
 export const MIN_GRAPHQL_RETRY_AFTER_SECONDS = 1;
 export const MAX_GRAPHQL_RETRY_AFTER_SECONDS = 120;
+export const GRAPHQL_COOLDOWN_READY_MESSAGE = "请求冷却已结束，可以重试";
+
+const IMF_FIXDATE_PATTERN = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+const OBSOLETE_RFC850_PATTERN = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT$/;
+const OBSOLETE_ASCTIME_PATTERN = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?: {2}\d| \d{2}) \d{2}:\d{2}:\d{2} \d{4}$/;
+
+function isHttpDate(value: string): boolean {
+  return IMF_FIXDATE_PATTERN.test(value)
+    || OBSOLETE_RFC850_PATTERN.test(value)
+    || OBSOLETE_ASCTIME_PATTERN.test(value);
+}
 
 export interface GraphQLCooldownState {
   active: boolean;
@@ -48,12 +59,12 @@ export function parseRetryAfterSeconds(
   now = Date.now(),
 ): number {
   const normalized = String(value ?? "").trim();
-  if (/^\d+(?:\.\d+)?$/.test(normalized)) {
+  if (/^\d+$/.test(normalized)) {
     const seconds = Number(normalized);
     if (Number.isFinite(seconds)) return clampRetryAfterSeconds(seconds);
   }
 
-  if (normalized) {
+  if (isHttpDate(normalized)) {
     const retryAt = Date.parse(normalized);
     if (Number.isFinite(retryAt)) {
       return clampRetryAfterSeconds((retryAt - now) / 1000);
@@ -61,6 +72,11 @@ export function parseRetryAfterSeconds(
   }
 
   return DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS;
+}
+
+export function isGraphQLCooldownMessage(value: unknown): boolean {
+  const message = String(value ?? "").trim();
+  return /^请求较多，(?:当前显示上次成功数据；\d+ 秒后可刷新|请在 \d+ 秒后刷新)$/.test(message);
 }
 
 export function persistGraphQLCooldown(

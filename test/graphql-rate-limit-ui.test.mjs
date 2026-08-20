@@ -16,6 +16,8 @@ test("429 cooldown disables generic retry actions and renders a countdown", () =
     assert.match(component, /if \(getGraphQLCooldownState\(\)\.active\)/);
     assert.match(component, /subscribeGraphQLCooldown/);
     assert.match(component, /unsubscribeCooldown/);
+    assert.match(component, /isGraphQLCooldownMessage/);
+    assert.match(component, /GRAPHQL_COOLDOWN_READY_MESSAGE/);
   }
 
   const errorTemplate = source("miniprogram/components/app-error-state/app-error-state.wxml");

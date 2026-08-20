@@ -9,8 +9,10 @@ import {
   userFacingErrorMessage
 } from "../../utils/request-error";
 import {
+  GRAPHQL_COOLDOWN_READY_MESSAGE,
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  isGraphQLCooldownMessage,
   subscribeGraphQLCooldown,
 } from "../../services/graphql-cooldown";
 
@@ -81,13 +83,16 @@ Component({
   methods: {
     refreshCooldownState(message?: string) {
       const cooldown = getGraphQLCooldownState();
+      const storedMessage = message ?? this.properties.message;
       this.setData({
         displayMessage: cooldown.active
           ? graphQLCooldownMessage(cooldown, false)
-          : userFacingErrorMessage(
-              message ?? this.properties.message,
-              "加载失败，请稍后重试",
-            ),
+          : isGraphQLCooldownMessage(storedMessage)
+            ? GRAPHQL_COOLDOWN_READY_MESSAGE
+            : userFacingErrorMessage(
+                storedMessage,
+                "加载失败，请稍后重试",
+              ),
         retryDisabled: cooldown.active,
         retryButtonText: cooldown.active
           ? `${cooldown.remainingSeconds} 秒后可重试`
