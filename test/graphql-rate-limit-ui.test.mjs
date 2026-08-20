@@ -14,6 +14,8 @@ test("429 cooldown disables generic retry actions and renders a countdown", () =
     assert.match(component, /remainingSeconds/);
     assert.match(component, /retryDisabled: cooldown\.active/);
     assert.match(component, /if \(getGraphQLCooldownState\(\)\.active\)/);
+    assert.match(component, /subscribeGraphQLCooldown/);
+    assert.match(component, /unsubscribeCooldown/);
   }
 
   const errorTemplate = source("miniprogram/components/app-error-state/app-error-state.wxml");
@@ -30,6 +32,11 @@ test("Market stale state exposes a cooldown-aware retry action", () => {
   );
   assert.match(
     template,
-    /wx:if="\{\{pulseError\}\}"[\s\S]*showRetry="\{\{true\}\}"[\s\S]*bind:retry="onRetry"/,
+    /wx:if="\{\{pulseError\}\}"[\s\S]*showRetry="\{\{true\}\}"[\s\S]*bind:retry="onRetryPulse"/,
+  );
+  const controller = source("miniprogram/pages/data/price/price.controller.ts");
+  assert.match(
+    controller,
+    /onRetryPulse\(\)[\s\S]*loadMarketPulse\(true\)/,
   );
 });

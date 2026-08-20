@@ -4,11 +4,13 @@ import {
 import {
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  subscribeGraphQLCooldown,
 } from "../../services/graphql-cooldown";
 
 interface DataStatusHost {
   transientTimer?: ReturnType<typeof setTimeout>;
   cooldownTimer?: ReturnType<typeof setInterval>;
+  unsubscribeCooldown?: () => void;
 }
 
 function host(component: WechatMiniprogram.Component.TrivialInstance): DataStatusHost {
@@ -64,10 +66,18 @@ Component({
 
   lifetimes: {
     attached() {
+      const state = host(this);
+      state.unsubscribeCooldown?.();
+      state.unsubscribeCooldown = subscribeGraphQLCooldown(() => {
+        this.refreshCooldownState();
+      });
       this.refreshCooldownState();
       this.scheduleTransientHide();
     },
     detached() {
+      const state = host(this);
+      state.unsubscribeCooldown?.();
+      state.unsubscribeCooldown = undefined;
       this.clearTransientHide();
       this.clearCooldownTimer();
     }

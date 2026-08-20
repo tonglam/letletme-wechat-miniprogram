@@ -103,7 +103,7 @@
       <view class="section-heading">市场动态</view>
       <text wx:if="{{coverageText}}" class="coverage-text">{{coverageText}}{{pulseStale ? ' · 数据可能滞后' : ''}}</text>
     </view>
-    <data-status wx:if="{{pulseError}}" status="error" message="{{pulseError}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{pulseError}}" status="error" message="{{pulseError}}" showRetry="{{true}}" bind:retry="onRetryPulse" />
 
     <view class="section mode-tabs market-period-tabs">
       <view class="mode-tab {{marketPeriod === 'DAILY' ? 'active' : ''}}" data-period="DAILY" bindtap="onMarketPeriodChange">每日</view>

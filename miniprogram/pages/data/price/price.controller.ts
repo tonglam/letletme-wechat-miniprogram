@@ -869,6 +869,10 @@ Page({
     this.loadDailyChanges();
   },
 
+  onRetryPulse() {
+    void this.loadMarketPulse(true);
+  },
+
   onModeChange(
     event: WechatMiniprogram.BaseEvent<
       WechatMiniprogram.IAnyObject,

@@ -11,10 +11,12 @@ import {
 import {
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  subscribeGraphQLCooldown,
 } from "../../services/graphql-cooldown";
 
 interface ErrorStateHost {
   cooldownTimer?: ReturnType<typeof setInterval>;
+  unsubscribeCooldown?: () => void;
 }
 
 function host(
@@ -61,9 +63,17 @@ Component({
 
   lifetimes: {
     attached() {
+      const state = host(this);
+      state.unsubscribeCooldown?.();
+      state.unsubscribeCooldown = subscribeGraphQLCooldown(() => {
+        this.refreshCooldownState(this.properties.message);
+      });
       this.refreshCooldownState(this.properties.message);
     },
     detached() {
+      const state = host(this);
+      state.unsubscribeCooldown?.();
+      state.unsubscribeCooldown = undefined;
       this.clearCooldownTimer();
     }
   },

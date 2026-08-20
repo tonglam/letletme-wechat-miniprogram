@@ -10,7 +10,26 @@ export interface GraphQLCooldownState {
   remainingSeconds: number;
 }
 
+type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
+
 let cooldownNoticeActiveUntil = 0;
+let cooldownRuntime: unknown;
+let cooldownUntilMemory = 0;
+let cooldownListeners = new Set<GraphQLCooldownListener>();
+
+function ensureCooldownRuntime(): void {
+  if (cooldownRuntime === wx) return;
+  cooldownRuntime = wx;
+  cooldownUntilMemory = 0;
+  cooldownNoticeActiveUntil = 0;
+  cooldownListeners = new Set<GraphQLCooldownListener>();
+}
+
+function notifyGraphQLCooldown(state: GraphQLCooldownState): void {
+  for (const listener of [...cooldownListeners]) {
+    try { listener(state); } catch {}
+  }
+}
 
 function clampRetryAfterSeconds(value: number): number {
   return Math.min(
@@ -32,7 +51,7 @@ export function parseRetryAfterSeconds(
 
   if (normalized) {
     const retryAt = Date.parse(normalized);
-    if (Number.isFinite(retryAt) && retryAt > now) {
+    if (Number.isFinite(retryAt)) {
       return clampRetryAfterSeconds((retryAt - now) / 1000);
     }
   }
@@ -44,25 +63,41 @@ export function persistGraphQLCooldown(
   retryAfterSeconds: number,
   now = Date.now(),
 ): GraphQLCooldownState {
+  ensureCooldownRuntime();
   const seconds = clampRetryAfterSeconds(retryAfterSeconds);
-  const cooldownUntil = now + seconds * 1000;
+  const requestedUntil = now + seconds * 1000;
+  let stored = 0;
   try {
-    const existing = Number(wx.getStorageSync(storageKeys.graphqlCooldownUntil)) || 0;
-    wx.setStorageSync(
-      storageKeys.graphqlCooldownUntil,
-      Math.max(existing, cooldownUntil),
-    );
+    stored = Number(wx.getStorageSync(storageKeys.graphqlCooldownUntil)) || 0;
   } catch {}
-  return getGraphQLCooldownState(now);
+  const boundedStored = Number.isFinite(stored)
+    ? Math.min(stored, now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000)
+    : 0;
+  cooldownUntilMemory = Math.max(
+    cooldownUntilMemory,
+    boundedStored,
+    requestedUntil,
+  );
+  try {
+    wx.setStorageSync(storageKeys.graphqlCooldownUntil, cooldownUntilMemory);
+  } catch {}
+  const state = getGraphQLCooldownState(now);
+  notifyGraphQLCooldown(state);
+  return state;
 }
 
 export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState {
+  ensureCooldownRuntime();
   let stored = 0;
   try {
     stored = Number(wx.getStorageSync(storageKeys.graphqlCooldownUntil)) || 0;
   } catch {}
 
-  if (!Number.isFinite(stored) || stored <= now) {
+  const safeStored = Number.isFinite(stored) ? stored : 0;
+  const effectiveUntil = Math.max(cooldownUntilMemory, safeStored);
+
+  if (!Number.isFinite(effectiveUntil) || effectiveUntil <= now) {
+    cooldownUntilMemory = 0;
     if (stored) {
       try { wx.removeStorageSync(storageKeys.graphqlCooldownUntil); } catch {}
     }
@@ -72,16 +107,28 @@ export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState 
   // A corrupted or manually edited value must never lock the client for more
   // than the protocol's documented 120-second ceiling.
   const cooldownUntil = Math.min(
-    stored,
+    effectiveUntil,
     now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000,
   );
-  if (cooldownUntil !== stored) {
+  cooldownUntilMemory = cooldownUntil;
+  if (cooldownUntil !== safeStored) {
     try { wx.setStorageSync(storageKeys.graphqlCooldownUntil, cooldownUntil); } catch {}
   }
   return {
     active: true,
     cooldownUntil,
     remainingSeconds: clampRetryAfterSeconds((cooldownUntil - now) / 1000),
+  };
+}
+
+export function subscribeGraphQLCooldown(
+  listener: GraphQLCooldownListener,
+): () => void {
+  ensureCooldownRuntime();
+  const listeners = cooldownListeners;
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
   };
 }
 

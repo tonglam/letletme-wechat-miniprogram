@@ -8,6 +8,8 @@ import {
 import {
   getGraphQLCooldownState,
   parseRetryAfterSeconds,
+  persistGraphQLCooldown,
+  subscribeGraphQLCooldown,
 } from "../miniprogram/services/graphql-cooldown.ts";
 import { getMiniProgramDeviceId } from "../miniprogram/services/auth.service.ts";
 
@@ -58,6 +60,10 @@ test("Retry-After accepts seconds and HTTP-date and clamps invalid values", () =
     parseRetryAfterSeconds("Thu, 20 Aug 2026 00:01:30 GMT", now),
     90,
   );
+  assert.equal(
+    parseRetryAfterSeconds("Wed, 19 Aug 2026 23:59:59 GMT", now),
+    1,
+  );
   assert.equal(parseRetryAfterSeconds("not-a-date", now), 15);
 });
 
@@ -71,6 +77,49 @@ test("the existing persistent device ID is reused only when the Web ingress will
   assert.match(regenerated, /^[A-Za-z0-9._:-]{8,128}$/);
   assert.notEqual(regenerated, "unsafe/device");
   assert.equal(runtime.storage.get("mini-program-device-id"), regenerated);
+});
+
+test("device ID remains stable in memory when synchronous storage is unavailable", () => {
+  installRuntime(() => undefined);
+  globalThis.wx.getStorageSync = () => {
+    throw new Error("storage unavailable");
+  };
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+
+  const first = getMiniProgramDeviceId();
+  const second = getMiniProgramDeviceId();
+  assert.match(first, /^[A-Za-z0-9._:-]{8,128}$/);
+  assert.equal(second, first);
+});
+
+test("cooldown remains active and notifies subscribers when storage fails", async () => {
+  const runtime = installRuntime(() => {
+    throw new Error("cooldown must prevent the network request");
+  });
+  globalThis.wx.getStorageSync = () => {
+    throw new Error("storage unavailable");
+  };
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+  const notifications = [];
+  const unsubscribe = subscribeGraphQLCooldown((state) => {
+    notifications.push(state);
+  });
+
+  const persisted = persistGraphQLCooldown(20);
+  assert.equal(persisted.active, true);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].active, true);
+  assert.equal(getGraphQLCooldownState().active, true);
+  await assert.rejects(
+    graphqlRead("query StorageFailureCooldown { value }", {}, policy),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  assert.equal(runtime.requests.length, 0);
+  unsubscribe();
 });
 
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {
