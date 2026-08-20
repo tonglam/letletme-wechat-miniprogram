@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildGraphQLRequestHeaders,
+  GraphQLApplicationError,
   graphqlRead,
   graphqlRequest,
   purgeGraphQLStorageCache
@@ -183,4 +184,28 @@ test("stale fallback is limited to transient transport failures", async () => {
     }
   }));
   await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
+});
+
+test("application error text containing 429 never serves stale data", async () => {
+  const runtime = installRuntime(success({ value: "last-good" }));
+  const query = "query BehaviorApplicationText429 { value }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 1,
+    staleTtl: 60_000
+  };
+
+  await graphqlRead(query, {}, options);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  runtime.setHandler((request) => request.success({
+    statusCode: 200,
+    data: { errors: [{ message: "Entry 429 was not found" }] }
+  }));
+
+  await assert.rejects(
+    graphqlRead(query, {}, { ...options, forceRefresh: true }),
+    (error) => error instanceof GraphQLApplicationError
+      && error.errors.some((item) => item.message === "Entry 429 was not found")
+  );
+  assert.equal(runtime.requests.length, 2);
 });

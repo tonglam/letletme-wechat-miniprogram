@@ -324,9 +324,7 @@ export function isTransientGraphQLStatus(statusCode: number): boolean {
 }
 
 function isTransientFailure(error: unknown): boolean {
-  if (error instanceof GraphQLTransportError) return error.transient;
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return /network|timeout|timed out|网络|超时|429|502|503|504/.test(message);
+  return error instanceof GraphQLTransportError && error.transient;
 }
 
 function responseHeader(
@@ -652,6 +650,55 @@ export async function graphqlRead<T>(
     ? cached.entry
     : undefined;
 
+  const joinInFlight = async (
+    inFlight: Promise<GraphQLReadResult<T>>,
+  ): Promise<GraphQLReadResult<T>> => {
+    try {
+      const result = await inFlight;
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        result.errors.length === 0,
+        "in-flight",
+        false,
+        result.meta.storedAt,
+        trace,
+        cacheVariantHash,
+        result.meta.requestId
+      );
+      return {
+        ...result,
+        meta: {
+          ...result.meta,
+          source: "in-flight",
+          durationMs: Date.now() - startedAt
+        }
+      };
+    } catch (error) {
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "in-flight",
+        false,
+        undefined,
+        trace,
+        cacheVariantHash
+      );
+      throw error;
+    }
+  };
+
+  const existingInFlight = inFlightRequests.get(identity.requestKey) as
+    | Promise<GraphQLReadResult<T>>
+    | undefined;
+
+  if (existingInFlight) {
+    // Joining an identical request starts no new network traffic, so it remains
+    // safe even if another operation established the global cooldown.
+    return joinInFlight(existingInFlight);
+  }
+
   const cooldown = getGraphQLCooldownState(now);
   if (cooldown.active) {
     if (staleCandidate) {
@@ -747,49 +794,13 @@ export async function graphqlRead<T>(
     throw new GraphQLTransportError("当前处于离线状态，请检查网络后重试", true);
   }
 
-  const inFlight = inFlightRequests.get(identity.requestKey) as
+  // initializeNetworkStatus can yield. Re-check so callers that crossed that
+  // probe still join the request that won the race instead of issuing a second
+  // POST after the cooldown/in-flight gate.
+  const racedInFlight = inFlightRequests.get(identity.requestKey) as
     | Promise<GraphQLReadResult<T>>
     | undefined;
-
-  if (inFlight) {
-    // forceRefresh joins this in-flight network request (not a cache hit).
-    // The coalesced flight is already on the wire; starting a second identical
-    // POST would not make the first response any fresher.
-    try {
-      const result = await inFlight;
-      recordRequest(
-        policy.operationName,
-        startedAt,
-        result.errors.length === 0,
-        "in-flight",
-        false,
-        result.meta.storedAt,
-        trace,
-        cacheVariantHash,
-        result.meta.requestId
-      );
-      return {
-        ...result,
-        meta: {
-          ...result.meta,
-          source: "in-flight",
-          durationMs: Date.now() - startedAt
-        }
-      };
-    } catch (error) {
-      recordRequest(
-        policy.operationName,
-        startedAt,
-        false,
-        "in-flight",
-        false,
-        undefined,
-        trace,
-        cacheVariantHash
-      );
-      throw error;
-    }
-  }
+  if (racedInFlight) return joinInFlight(racedInFlight);
 
   const networkRequest = (async (): Promise<GraphQLReadResult<T>> => {
     let networkAttempted = false;

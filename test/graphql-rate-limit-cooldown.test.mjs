@@ -144,6 +144,26 @@ test("cooldown remains active and notifies subscribers when storage fails", asyn
   unsubscribe();
 });
 
+test("a corrupted future cooldown stays anchored when storage writes fail", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set("graphql-cooldown-until", now + 24 * 60 * 60 * 1000);
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+  globalThis.wx.removeStorageSync = () => {
+    throw new Error("storage locked");
+  };
+
+  const first = getGraphQLCooldownState(now);
+  const second = getGraphQLCooldownState(now + 1_000);
+  assert.equal(first.cooldownUntil, now + 120_000);
+  assert.equal(second.cooldownUntil, first.cooldownUntil);
+  assert.equal(second.remainingSeconds, 119);
+  assert.equal(getGraphQLCooldownState(now + 120_001).active, false);
+  assert.equal(getGraphQLCooldownState(now + 130_000).active, false);
+});
+
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {
   const runtime = installRuntime((request) => request.success({
     statusCode: 429,
@@ -324,4 +344,44 @@ test("after cooldown expiry, concurrent refreshes share one in-flight request", 
   );
   assert.equal(runtime.requests.length, 1);
   assert.equal(reads.every((read) => read.data.value === "fresh"), true);
+});
+
+test("an identical in-flight read is joined after another operation starts cooldown", async () => {
+  let requestCount = 0;
+  let completeFirst;
+  const runtime = installRuntime((request) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      completeFirst = () => request.success({
+        statusCode: 200,
+        data: { data: { value: "completed" } },
+      });
+      return;
+    }
+    request.success({
+      statusCode: 429,
+      header: { "Retry-After": "30" },
+      data: { errors: [{ message: "rate limited" }] },
+    });
+  });
+  const pendingQuery = "query InFlightBeforeCooldown { value }";
+
+  const first = graphqlRead(pendingQuery, {}, { ...policy, forceRefresh: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof completeFirst, "function");
+  await assert.rejects(
+    graphqlRead("query StartsOtherCooldown { value }", {}, {
+      ...policy,
+      forceRefresh: true,
+    }),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+
+  const joined = graphqlRead(pendingQuery, {}, { ...policy, forceRefresh: true });
+  completeFirst();
+  const [firstResult, joinedResult] = await Promise.all([first, joined]);
+  assert.equal(firstResult.meta.source, "network");
+  assert.equal(joinedResult.meta.source, "in-flight");
+  assert.equal(joinedResult.data.value, "completed");
+  assert.equal(runtime.requests.length, 2);
 });

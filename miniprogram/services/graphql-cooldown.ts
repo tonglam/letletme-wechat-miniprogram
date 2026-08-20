@@ -15,12 +15,16 @@ type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
 let cooldownNoticeActiveUntil = 0;
 let cooldownRuntime: unknown;
 let cooldownUntilMemory = 0;
+let corruptedStoredCooldownValue: number | null = null;
+let corruptedStoredCooldownUntil = 0;
 let cooldownListeners = new Set<GraphQLCooldownListener>();
 
 function ensureCooldownRuntime(): void {
   if (cooldownRuntime === wx) return;
   cooldownRuntime = wx;
   cooldownUntilMemory = 0;
+  corruptedStoredCooldownValue = null;
+  corruptedStoredCooldownUntil = 0;
   cooldownNoticeActiveUntil = 0;
   cooldownListeners = new Set<GraphQLCooldownListener>();
 }
@@ -94,7 +98,22 @@ export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState 
   } catch {}
 
   const safeStored = Number.isFinite(stored) ? stored : 0;
-  const effectiveUntil = Math.max(cooldownUntilMemory, safeStored);
+  const maximumUntil = now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000;
+  let normalizedStored = safeStored;
+  if (safeStored > maximumUntil) {
+    if (corruptedStoredCooldownValue !== safeStored) {
+      corruptedStoredCooldownValue = safeStored;
+      corruptedStoredCooldownUntil = maximumUntil;
+    }
+    normalizedStored = corruptedStoredCooldownUntil;
+    try {
+      wx.setStorageSync(storageKeys.graphqlCooldownUntil, normalizedStored);
+    } catch {}
+  } else {
+    corruptedStoredCooldownValue = null;
+    corruptedStoredCooldownUntil = 0;
+  }
+  const effectiveUntil = Math.max(cooldownUntilMemory, normalizedStored);
 
   if (!Number.isFinite(effectiveUntil) || effectiveUntil <= now) {
     cooldownUntilMemory = 0;
@@ -108,7 +127,7 @@ export function getGraphQLCooldownState(now = Date.now()): GraphQLCooldownState 
   // than the protocol's documented 120-second ceiling.
   const cooldownUntil = Math.min(
     effectiveUntil,
-    now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000,
+    maximumUntil,
   );
   cooldownUntilMemory = cooldownUntil;
   if (cooldownUntil !== safeStored) {
