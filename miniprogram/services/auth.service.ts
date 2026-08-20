@@ -46,9 +46,11 @@ function loginCode(): Promise<string> {
   });
 }
 
+const SAFE_MINI_PROGRAM_DEVICE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+
 function getDeviceId(): string {
   const existing = wx.getStorageSync(storageKeys.deviceId) as string | undefined;
-  if (existing && existing.length >= 8) return existing;
+  if (existing && SAFE_MINI_PROGRAM_DEVICE_ID.test(existing)) return existing;
   const generated = `wx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   wx.setStorageSync(storageKeys.deviceId, generated);
   return generated;

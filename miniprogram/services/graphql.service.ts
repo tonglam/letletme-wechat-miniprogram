@@ -2,6 +2,7 @@ import { getGraphQLEndpoint, REQUEST_TIMEOUT_MS } from "../config/env";
 import {
   clearSessionCredentials,
   getApiSessionToken,
+  getMiniProgramDeviceId,
   getPendingSessionRefresh,
   isLogoutInFlight,
   refreshWechatApiSession
@@ -37,6 +38,13 @@ import {
 } from "./graphql-cache";
 import { registerGraphQLInFlightClear } from "./graphql-session-hooks";
 import { recordBugReportDiagnostic } from "../utils/bug-report-diagnostics";
+import {
+  getGraphQLCooldownState,
+  graphQLCooldownMessage,
+  parseRetryAfterSeconds,
+  persistGraphQLCooldown,
+  showGraphQLCooldownNotice,
+} from "./graphql-cooldown";
 
 export {
   buildGraphQLRequestCacheKey,
@@ -87,6 +95,9 @@ export interface GraphQLReadMeta {
   storedAt?: number;
   cacheAgeMs?: number;
   requestId?: string;
+  rateLimited?: boolean;
+  cooldownUntil?: number;
+  retryAfterSeconds?: number;
   durationMs: number;
 }
 
@@ -141,15 +152,30 @@ interface ResolvedRequestPolicy {
   cacheable: boolean;
 }
 
-class GraphQLTransportError extends Error {
+export class GraphQLTransportError extends Error {
   statusCode?: number;
   transient: boolean;
+  retryAfterSeconds?: number;
+  retryAt?: number;
+  requestId?: string;
 
-  constructor(message: string, transient: boolean, statusCode?: number) {
+  constructor(
+    message: string,
+    transient: boolean,
+    statusCode?: number,
+    options: {
+      retryAfterSeconds?: number;
+      retryAt?: number;
+      requestId?: string;
+    } = {},
+  ) {
     super(message);
     this.name = "GraphQLTransportError";
     this.transient = transient;
     this.statusCode = statusCode;
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.retryAt = options.retryAt;
+    this.requestId = options.requestId;
   }
 }
 
@@ -294,20 +320,52 @@ function recordRequest(
 }
 
 export function isTransientGraphQLStatus(statusCode: number): boolean {
-  return statusCode === 502 || statusCode === 503 || statusCode === 504;
+  return statusCode === 429 || statusCode === 502 || statusCode === 503 || statusCode === 504;
 }
 
 function isTransientFailure(error: unknown): boolean {
   if (error instanceof GraphQLTransportError) return error.transient;
   const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return /network|timeout|timed out|网络|超时|502|503|504/.test(message);
+  return /network|timeout|timed out|网络|超时|429|502|503|504/.test(message);
 }
 
-function toHttpError(statusCode: number): GraphQLTransportError {
+function responseHeader(
+  headers: Record<string, unknown> | undefined,
+  name: string,
+): string | undefined {
+  const key = Object.keys(headers || {}).find(
+    (candidate) => candidate.toLowerCase() === name.toLowerCase(),
+  );
+  if (!key) return undefined;
+  const value = headers?.[key];
+  return value === undefined || value === null ? undefined : String(value);
+}
+
+function toHttpError(
+  statusCode: number,
+  headers: Record<string, unknown> | undefined,
+  now = Date.now(),
+): GraphQLTransportError {
+  const requestId = responseHeader(headers, "x-request-id");
+  if (statusCode === 429) {
+    const retryAfterSeconds = parseRetryAfterSeconds(
+      responseHeader(headers, "retry-after"),
+      now,
+    );
+    const state = persistGraphQLCooldown(retryAfterSeconds, now);
+    const retryAt = state.cooldownUntil ?? now + retryAfterSeconds * 1000;
+    return new GraphQLTransportError(
+      graphQLCooldownMessage(state, false),
+      true,
+      statusCode,
+      { retryAfterSeconds, retryAt, requestId },
+    );
+  }
   return new GraphQLTransportError(
     httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
-    statusCode
+    statusCode,
+    { requestId },
   );
 }
 
@@ -317,10 +375,13 @@ function isUnauthenticated(body: GraphQLResponse<unknown> | undefined): boolean 
 
 export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
-  token: string | null
+  token: string | null,
+  deviceId: string,
 ): Record<string, string> {
   const header: Record<string, string> = {
-    "content-type": "application/json"
+    "content-type": "application/json",
+    "X-Letletme-Client": "wechat-miniprogram",
+    "X-Letletme-Device-Id": deviceId,
   };
   if (authMode === "session" && token) {
     header.Authorization = `Bearer ${token}`;
@@ -336,8 +397,25 @@ function makeRequest<T>(
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null
 ): Promise<{ body: GraphQLResponse<T>; token: string | null; requestId?: string }> {
+  const cooldown = getGraphQLCooldownState();
+  if (cooldown.active) {
+    return Promise.reject(new GraphQLTransportError(
+      graphQLCooldownMessage(cooldown, false),
+      true,
+      429,
+      {
+        retryAfterSeconds: cooldown.remainingSeconds,
+        retryAt: cooldown.cooldownUntil,
+      },
+    ));
+  }
+
   return new Promise((resolve, reject) => {
-    const header = buildGraphQLRequestHeaders(authMode, token);
+    const header = buildGraphQLRequestHeaders(
+      authMode,
+      token,
+      getMiniProgramDeviceId(),
+    );
 
     wx.request<GraphQLResponse<T>>({
       url: getGraphQLEndpoint(),
@@ -411,7 +489,10 @@ function makeRequest<T>(
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(toHttpError(response.statusCode));
+          reject(toHttpError(
+            response.statusCode,
+            response.header as Record<string, unknown> | undefined,
+          ));
           return;
         }
 
@@ -420,10 +501,10 @@ function makeRequest<T>(
           return;
         }
 
-        const requestIdKey = Object.keys(response.header || {}).find(
-          (key) => key.toLowerCase() === "x-request-id"
+        const requestId = responseHeader(
+          response.header as Record<string, unknown> | undefined,
+          "x-request-id",
         );
-        const requestId = requestIdKey ? String(response.header[requestIdKey]) : undefined;
         resolve({ body, token, requestId });
       },
       fail(error) {
@@ -557,6 +638,59 @@ export async function graphqlRead<T>(
   const staleCandidate = cached && now < cached.entry.staleUntil
     ? cached.entry
     : undefined;
+
+  const cooldown = getGraphQLCooldownState(now);
+  if (cooldown.active) {
+    if (staleCandidate) {
+      recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "stale",
+        false,
+        staleCandidate.storedAt,
+        trace,
+        cacheVariantHash,
+      );
+      return {
+        data: staleCandidate.data as T,
+        errors: [],
+        meta: {
+          operationName: policy.operationName,
+          authMode: policy.authMode,
+          source: "stale",
+          stale: true,
+          storedAt: staleCandidate.storedAt,
+          cacheAgeMs: Math.max(0, now - staleCandidate.storedAt),
+          rateLimited: true,
+          cooldownUntil: cooldown.cooldownUntil,
+          retryAfterSeconds: cooldown.remainingSeconds,
+          durationMs: Date.now() - startedAt,
+        },
+      };
+    }
+
+    recordRequest(
+      policy.operationName,
+      startedAt,
+      false,
+      "network",
+      false,
+      undefined,
+      trace,
+      cacheVariantHash,
+    );
+    throw new GraphQLTransportError(
+      graphQLCooldownMessage(cooldown, false),
+      true,
+      429,
+      {
+        retryAfterSeconds: cooldown.remainingSeconds,
+        retryAt: cooldown.cooldownUntil,
+      },
+    );
+  }
 
   await initializeNetworkStatus();
   if (isKnownOffline()) {
@@ -711,6 +845,13 @@ export async function graphqlRead<T>(
       };
     } catch (error) {
       if (staleCandidate && isTransientFailure(error)) {
+        const transportError = error instanceof GraphQLTransportError
+          ? error
+          : undefined;
+        const rateLimited = transportError?.statusCode === 429;
+        if (rateLimited) {
+          showGraphQLCooldownNotice(getGraphQLCooldownState(), true);
+        }
         recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
         recordRequest(
           policy.operationName,
@@ -720,7 +861,8 @@ export async function graphqlRead<T>(
           true,
           staleCandidate.storedAt,
           trace,
-          cacheVariantHash
+          cacheVariantHash,
+          transportError?.requestId,
         );
         return {
           data: staleCandidate.data as T,
@@ -732,9 +874,22 @@ export async function graphqlRead<T>(
             stale: true,
             storedAt: staleCandidate.storedAt,
             cacheAgeMs: Math.max(0, Date.now() - staleCandidate.storedAt),
+            requestId: transportError?.requestId,
+            rateLimited,
+            cooldownUntil: rateLimited ? transportError?.retryAt : undefined,
+            retryAfterSeconds: rateLimited
+              ? transportError?.retryAfterSeconds
+              : undefined,
             durationMs: Date.now() - startedAt
           }
         };
+      }
+
+      if (
+        error instanceof GraphQLTransportError
+        && error.statusCode === 429
+      ) {
+        showGraphQLCooldownNotice(getGraphQLCooldownState(), false);
       }
 
       recordRequest(
@@ -745,7 +900,8 @@ export async function graphqlRead<T>(
         true,
         undefined,
         trace,
-        cacheVariantHash
+        cacheVariantHash,
+        error instanceof GraphQLTransportError ? error.requestId : undefined,
       );
       throw error;
     }

@@ -54,11 +54,15 @@ const publicReporting = {
 };
 
 test("public headers omit Bearer while session headers include it", () => {
-  assert.deepEqual(buildGraphQLRequestHeaders("public", "secret-token"), {
-    "content-type": "application/json"
-  });
-  assert.deepEqual(buildGraphQLRequestHeaders("session", "secret-token"), {
+  assert.deepEqual(buildGraphQLRequestHeaders("public", "secret-token", "wx-device-123"), {
     "content-type": "application/json",
+    "X-Letletme-Client": "wechat-miniprogram",
+    "X-Letletme-Device-Id": "wx-device-123"
+  });
+  assert.deepEqual(buildGraphQLRequestHeaders("session", "secret-token", "wx-device-123"), {
+    "content-type": "application/json",
+    "X-Letletme-Client": "wechat-miniprogram",
+    "X-Letletme-Device-Id": "wx-device-123",
     Authorization: "Bearer secret-token"
   });
 });

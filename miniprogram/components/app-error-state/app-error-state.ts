@@ -8,6 +8,20 @@ import {
   looksTechnicalErrorMessage,
   userFacingErrorMessage
 } from "../../utils/request-error";
+import {
+  getGraphQLCooldownState,
+  graphQLCooldownMessage,
+} from "../../services/graphql-cooldown";
+
+interface ErrorStateHost {
+  cooldownTimer?: ReturnType<typeof setInterval>;
+}
+
+function host(
+  component: WechatMiniprogram.Component.TrivialInstance,
+): ErrorStateHost {
+  return component as unknown as ErrorStateHost;
+}
 
 Component({
   properties: {
@@ -34,30 +48,64 @@ Component({
   },
 
   data: {
-    displayMessage: "加载失败"
+    displayMessage: "加载失败",
+    retryDisabled: false,
+    retryButtonText: "重试",
   },
 
   observers: {
     message: function (message: string) {
-      this.setData({
-        displayMessage: userFacingErrorMessage(message, "加载失败，请稍后重试")
-      });
+      this.refreshCooldownState(message);
     }
   },
 
   lifetimes: {
     attached() {
-      this.setData({
-        displayMessage: userFacingErrorMessage(
-          this.properties.message,
-          "加载失败，请稍后重试"
-        )
-      });
+      this.refreshCooldownState(this.properties.message);
+    },
+    detached() {
+      this.clearCooldownTimer();
     }
   },
 
   methods: {
+    refreshCooldownState(message?: string) {
+      const cooldown = getGraphQLCooldownState();
+      this.setData({
+        displayMessage: cooldown.active
+          ? graphQLCooldownMessage(cooldown, false)
+          : userFacingErrorMessage(
+              message ?? this.properties.message,
+              "加载失败，请稍后重试",
+            ),
+        retryDisabled: cooldown.active,
+        retryButtonText: cooldown.active
+          ? `${cooldown.remainingSeconds} 秒后可重试`
+          : this.properties.retryText,
+      });
+
+      const state = host(this);
+      if (cooldown.active && !state.cooldownTimer) {
+        state.cooldownTimer = setInterval(() => {
+          this.refreshCooldownState(this.properties.message);
+        }, 1000);
+      } else if (!cooldown.active) {
+        this.clearCooldownTimer();
+      }
+    },
+
+    clearCooldownTimer() {
+      const state = host(this);
+      if (!state.cooldownTimer) return;
+      clearInterval(state.cooldownTimer);
+      state.cooldownTimer = undefined;
+    },
+
     onRetry() {
+      if (getGraphQLCooldownState().active) {
+        this.refreshCooldownState(this.properties.message);
+        return;
+      }
       this.triggerEvent("retry");
     },
 
