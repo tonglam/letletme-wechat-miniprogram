@@ -333,6 +333,7 @@ export type LogoutResult = { localCleared: true; remoteRevoked: boolean };
 interface PendingSessionRefresh {
   promise: Promise<ApiSession>;
   issuedToken: string | null;
+  issuedExpiresAt: string | null;
   displaced?: boolean;
 }
 
@@ -341,7 +342,36 @@ interface PendingSessionRefresh {
 // logout can revoke a rotated credential even when the replacement fails.
 const pendingRefreshStates = new Set<PendingSessionRefresh>();
 const retainedRefreshTokens = new Set<string>();
+const retainedRefreshTokenExpiry = new Map<string, number>();
+const REVOCATION_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
 let pendingEmailConfirmation: Promise<ApiSession> | null = null;
+
+function retainRefreshToken(token: string, expiresAt?: string | null): void {
+  const parsedExpiry = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+  const expiry = Number.isFinite(parsedExpiry)
+    ? parsedExpiry
+    : Date.now() + REVOCATION_RETRY_TTL_MS;
+  if (expiry <= Date.now()) return;
+  retainedRefreshTokens.add(token);
+  retainedRefreshTokenExpiry.set(
+    token,
+    Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry)
+  );
+}
+
+function forgetRetainedRefreshToken(token: string): void {
+  retainedRefreshTokens.delete(token);
+  retainedRefreshTokenExpiry.delete(token);
+}
+
+function discardExpiredRetainedRefreshTokens(): void {
+  const now = Date.now();
+  for (const token of retainedRefreshTokens) {
+    if ((retainedRefreshTokenExpiry.get(token) ?? 0) <= now) {
+      forgetRetainedRefreshToken(token);
+    }
+  }
+}
 
 function registerPendingRefreshState(
   state: PendingSessionRefresh,
@@ -364,7 +394,7 @@ function releasePendingRefreshState(
     pendingRefresh = null;
   }
   if (state.displaced && state.issuedToken) {
-    retainedRefreshTokens.add(state.issuedToken);
+    retainRefreshToken(state.issuedToken, state.issuedExpiresAt);
   }
 }
 
@@ -404,21 +434,35 @@ async function performLogout(): Promise<LogoutResult> {
   // while the pending refresh is awaited only so its issued credential can be
   // revoked as well.
   const token = getApiSessionToken();
+  const tokenExpiresAt = sessionMemory?.expiresAt;
   const pendingStates = [...pendingRefreshStates];
   clearApiSession();
   await Promise.all(pendingStates.map((state) => state.promise.catch(() => undefined)));
 
+  discardExpiredRetainedRefreshTokens();
+  const tokenExpiries = new Map<string, string | null>();
+  if (token) tokenExpiries.set(token, tokenExpiresAt ?? null);
+  pendingStates.forEach((state) => {
+    if (state.issuedToken) tokenExpiries.set(state.issuedToken, state.issuedExpiresAt);
+  });
   const tokens = [...new Set([
     token,
     ...pendingStates.map((state) => state.issuedToken),
     ...retainedRefreshTokens
   ].filter((value): value is string => Boolean(value)))];
-  retainedRefreshTokens.clear();
   if (tokens.length === 0) {
     return { localCleared: true, remoteRevoked: true };
   }
 
-  const revocations = await Promise.all(tokens.map(revokeSessionToken));
+  const revocations = await Promise.all(tokens.map(async (currentToken) => {
+    const revoked = await revokeSessionToken(currentToken);
+    if (revoked) {
+      forgetRetainedRefreshToken(currentToken);
+    } else {
+      retainRefreshToken(currentToken, tokenExpiries.get(currentToken));
+    }
+    return revoked;
+  }));
   const remoteRevoked = revocations.every(Boolean);
   return { localCleared: true, remoteRevoked };
 }
@@ -450,7 +494,9 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
 }
 
 /** Uses only web-owned identity. FPL entry IDs are inherited from the verified account. */
-async function performWechatSessionRefresh(onSessionIssued?: (token: string) => void): Promise<ApiSession> {
+async function performWechatSessionRefresh(
+  onSessionIssued?: (token: string, expiresAt: string) => void
+): Promise<ApiSession> {
   const epoch = sessionEpoch;
   const code = await loginCode();
   const response = await requestWebAuth("/wechat/login", {
@@ -471,7 +517,7 @@ async function performWechatSessionRefresh(onSessionIssued?: (token: string) => 
   // The server credential exists even when the local epoch has changed. Keep
   // it attached to the in-flight refresh so logout can revoke that credential
   // after local state has already been cleared.
-  onSessionIssued?.(session.token);
+  onSessionIssued?.(session.token, session.expiresAt);
   if (epoch !== sessionEpoch) {
     // A logout, session clear, or explicit email-link confirm landed while
     // the login round trip was in flight — this stale response must not
@@ -480,7 +526,6 @@ async function performWechatSessionRefresh(onSessionIssued?: (token: string) => 
     throw new Error("登录状态已变更，请重试");
   }
   const stored = storeApiSession(session);
-  retainedRefreshTokens.clear();
   return stored;
 }
 
@@ -509,10 +554,12 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
   }
   const state: PendingSessionRefresh = {
     promise: Promise.resolve(undefined as never),
-    issuedToken: null
+    issuedToken: null,
+    issuedExpiresAt: null
   };
-  const refresh = performWechatSessionRefresh((issuedToken) => {
+  const refresh = performWechatSessionRefresh((issuedToken, expiresAt) => {
     state.issuedToken = issuedToken;
+    state.issuedExpiresAt = expiresAt;
   });
   registerPendingRefreshState(state, refresh);
   const release = () => {
@@ -538,13 +585,17 @@ export function confirmMiniProgramEmailLink(
   email: string,
   emailCode: string
 ): Promise<ApiSession> {
+  if (logoutInFlight) {
+    return Promise.reject(new Error("正在退出登录，请稍后重试"));
+  }
   if (pendingEmailConfirmation) {
     return pendingEmailConfirmation;
   }
   const startEpoch = sessionEpoch;
   const state: PendingSessionRefresh = {
     promise: Promise.resolve(undefined as never),
-    issuedToken: null
+    issuedToken: null,
+    issuedExpiresAt: null
   };
   const run = (async () => {
     // Settle any in-flight /wechat/login first, same as logout: if the server
@@ -566,12 +617,12 @@ export function confirmMiniProgramEmailLink(
     // overwrite this freshly confirmed session.
     const session = asSession(response);
     state.issuedToken = session.token;
+    state.issuedExpiresAt = session.expiresAt;
     if (logoutInFlight || startEpoch !== sessionEpoch) {
       throw new Error("登录状态已变更，请重试");
     }
     sessionEpoch += 1;
     const stored = storeApiSession(session);
-    retainedRefreshTokens.clear();
     return stored;
   })();
   // Occupy the single-flight slot for the whole confirmation: a 401 landing

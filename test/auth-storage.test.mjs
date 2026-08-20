@@ -47,6 +47,7 @@ test("remote sign-out failure still clears local credentials", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
+  let requestCount = 0;
 
   try {
     globalThis.wx = {
@@ -58,7 +59,14 @@ test("remote sign-out failure still clears local credentials", async () => {
       canIUse: () => true,
       getStorage: ({ success }) => success({ data: "token", errMsg: "getStorage:ok" }),
       removeStorageSync: (key) => removed.push(key),
-      request: ({ fail }) => fail({ errMsg: "offline" })
+      request: ({ fail, success }) => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          fail({ errMsg: "offline" });
+          return;
+        }
+        success({ statusCode: 204, data: { success: true } });
+      }
     };
     globalThis.getApp = () => ({ globalData: { entryId: 123 } });
 
@@ -67,6 +75,8 @@ test("remote sign-out failure still clears local credentials", async () => {
     assert.deepEqual(result, { localCleared: true, remoteRevoked: false });
     assert.equal(getApiSessionToken(), null);
     assert.ok(removed.includes("api-session-token"));
+    assert.deepEqual(await logoutMiniProgramSession(), { localCleared: true, remoteRevoked: true });
+    assert.equal(requestCount, 2);
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
@@ -264,6 +274,49 @@ test("duplicate email confirmations share the first in-flight request", async ()
     await duplicate;
     assert.equal(getApiSessionToken(), "confirmed-token");
     clearSessionCredentials();
+  } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("email confirmation is rejected while logout is in flight", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const loginCallbacks = [];
+  let deleteRequest;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => key === "api-session-token"
+        ? "token-before-confirm"
+        : key === "api-session-expires-at"
+          ? "2099-01-01T00:00:00.000Z"
+          : undefined,
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => false,
+      login: (options) => loginCallbacks.push(options.success),
+      request: (options) => {
+        if (options.method === "DELETE") deleteRequest = options;
+      }
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+    clearSessionCredentials();
+    await restoreApiSessionCredentials();
+
+    const logout = logoutMiniProgramSession();
+    await assert.rejects(
+      confirmMiniProgramEmailLink("fpl@example.com", "123456"),
+      /正在退出登录/
+    );
+    assert.equal(loginCallbacks.length, 0);
+    assert.ok(deleteRequest);
+
+    deleteRequest.success({ statusCode: 204, data: { success: true } });
+    assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
