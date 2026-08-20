@@ -169,6 +169,7 @@ async function persistEncryptedSessionToken(token: string): Promise<boolean> {
 
 /** Restores an encrypted credential and upgrades legacy plaintext in place. */
 export async function restoreApiSessionCredentials(): Promise<void> {
+  await ensureRevocationQueueRestored();
   if (sessionMemory !== undefined) return;
   const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
   const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
@@ -345,6 +346,98 @@ const retainedRefreshTokens = new Set<string>();
 const retainedRefreshTokenExpiry = new Map<string, number>();
 const REVOCATION_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
 let pendingEmailConfirmation: Promise<ApiSession> | null = null;
+let revocationQueueReady: Promise<void> | null = null;
+let revocationPersistChain = Promise.resolve();
+
+interface StoredRevocationQueue {
+  version: 1;
+  entries: Array<{ token: string; expiresAt: number }>;
+}
+
+function revocationQueueSnapshot(): StoredRevocationQueue {
+  return {
+    version: 1,
+    entries: [...retainedRefreshTokens].flatMap((token) => {
+      const expiresAt = retainedRefreshTokenExpiry.get(token);
+      return expiresAt && expiresAt > Date.now() ? [{ token, expiresAt }] : [];
+    })
+  };
+}
+
+function persistRetainedRefreshTokens(): void {
+  if (!supportsEncryptedSessionStorage()) return;
+  const snapshot = revocationQueueSnapshot();
+  revocationPersistChain = revocationPersistChain.then(() => new Promise<void>((resolve) => {
+    try {
+      if (snapshot.entries.length === 0) {
+        wx.removeStorage({
+          key: storageKeys.pendingSessionRevocations,
+          success: () => resolve(),
+          fail: () => resolve()
+        });
+        return;
+      }
+      wx.setStorage({
+        key: storageKeys.pendingSessionRevocations,
+        data: snapshot,
+        encrypt: true,
+        success: () => resolve(),
+        fail: () => resolve()
+      } as WechatMiniprogram.SetStorageOption);
+    } catch {
+      resolve();
+    }
+  }));
+}
+
+function ensureRevocationQueueRestored(): Promise<void> {
+  if (revocationQueueReady) return revocationQueueReady;
+  revocationQueueReady = new Promise<void>((resolve) => {
+    if (!supportsEncryptedSessionStorage()) {
+      resolve();
+      return;
+    }
+    try {
+      wx.getStorage({
+        key: storageKeys.pendingSessionRevocations,
+        encrypt: true,
+        success(result) {
+          const data = result.data as Partial<StoredRevocationQueue> | undefined;
+          const entries = data?.version === 1 && Array.isArray(data.entries)
+            ? data.entries
+            : null;
+          let dirty = entries === null;
+          if (entries) {
+            const now = Date.now();
+            entries.forEach((entry) => {
+              if (
+                typeof entry?.token === "string"
+                && entry.token.length > 0
+                && Number.isFinite(entry.expiresAt)
+                && entry.expiresAt > now
+              ) {
+                retainedRefreshTokens.add(entry.token);
+                retainedRefreshTokenExpiry.set(entry.token, entry.expiresAt);
+              } else {
+                // Do not leave malformed or expired credentials in protected
+                // storage: a cold start must restore only retryable entries.
+                dirty = true;
+              }
+            });
+          }
+          if (dirty) {
+            persistRetainedRefreshTokens();
+          }
+          resolve();
+        },
+        fail: () => resolve()
+      } as WechatMiniprogram.GetStorageOption);
+    } catch {
+      resolve();
+    }
+  });
+  return revocationQueueReady;
+}
 
 function retainRefreshToken(token: string, expiresAt?: string | null): void {
   const parsedExpiry = expiresAt ? Date.parse(expiresAt) : Number.NaN;
@@ -357,11 +450,13 @@ function retainRefreshToken(token: string, expiresAt?: string | null): void {
     token,
     Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry)
   );
+  persistRetainedRefreshTokens();
 }
 
 function forgetRetainedRefreshToken(token: string): void {
   retainedRefreshTokens.delete(token);
   retainedRefreshTokenExpiry.delete(token);
+  persistRetainedRefreshTokens();
 }
 
 function discardExpiredRetainedRefreshTokens(): void {
@@ -437,6 +532,7 @@ async function performLogout(): Promise<LogoutResult> {
   const tokenExpiresAt = sessionMemory?.expiresAt;
   const pendingStates = [...pendingRefreshStates];
   clearApiSession();
+  await ensureRevocationQueueRestored();
   await Promise.all(pendingStates.map((state) => state.promise.catch(() => undefined)));
 
   discardExpiredRetainedRefreshTokens();
@@ -444,6 +540,10 @@ async function performLogout(): Promise<LogoutResult> {
   if (token) tokenExpiries.set(token, tokenExpiresAt ?? null);
   pendingStates.forEach((state) => {
     if (state.issuedToken) tokenExpiries.set(state.issuedToken, state.issuedExpiresAt);
+  });
+  retainedRefreshTokens.forEach((retainedToken) => {
+    const expiry = retainedRefreshTokenExpiry.get(retainedToken);
+    if (expiry) tokenExpiries.set(retainedToken, new Date(expiry).toISOString());
   });
   const tokens = [...new Set([
     token,
