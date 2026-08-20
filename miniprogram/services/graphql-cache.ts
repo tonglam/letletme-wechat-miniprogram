@@ -242,6 +242,9 @@ export function purgeGraphQLStorageCache(now = Date.now()): void {
 function wipeGraphQLMemoryEntries(): void {
   memoryCache.clear();
   servedFromCache.clear();
+  // Auth/session cleanup removes storage rows directly. Drop the one-scan LRU
+  // index too, otherwise deleted session keys remain phantom eviction entries.
+  storageIndex = null;
 }
 
 registerGraphQLMemoryClear(wipeGraphQLMemoryEntries);

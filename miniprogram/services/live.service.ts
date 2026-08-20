@@ -538,12 +538,22 @@ export async function getLiveMatchByStatusSnapshot(
         const refreshedCurrent = refreshedMapped.filter((match) =>
           refreshedResult.matches.some((item) => item.fixtureId === Number(match.matchId)) && match.playStatus !== "not_started"
         );
-        const details = await fetchLiveFixturePlayers(
-          refreshedRef,
-          refreshedCurrent.map((match) => Number(match.matchId)),
-          true
-        );
-        enriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
+        let refreshedEnriched = refreshedMapped;
+        if (refreshedCurrent.length > 0) {
+          try {
+            const details = await fetchLiveFixturePlayers(
+              refreshedRef,
+              refreshedCurrent.map((match) => Number(match.matchId)),
+              true
+            );
+            refreshedEnriched = mergeLiveFixturePlayers(refreshedMapped, details, refreshedRef);
+          } catch {
+            // The refreshed score/status desk is authoritative even when its
+            // optional player-detail retry is unavailable.
+            refreshedEnriched = refreshedMapped;
+          }
+        }
+        enriched = refreshedEnriched;
         return {
           data: filterLiveMatchesByStatus(enriched, status),
           snapshot: refreshedResult.revision

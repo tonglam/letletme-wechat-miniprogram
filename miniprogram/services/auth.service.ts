@@ -421,6 +421,16 @@ async function performWechatSessionRefresh(onSessionIssued?: (token: string) => 
     code,
     deviceId: getDeviceId()
   });
+  if (response.linked !== true) {
+    if (epoch !== sessionEpoch) {
+      throw new Error("登录状态已变更，请重试");
+    }
+    // The WeChat identity was understood and is not linked, so retaining a
+    // previous account's credential would be unsafe. The locally followed
+    // entry stays: it is display-only and carries no account data.
+    clearSessionCredentials();
+    throw new MiniProgramLinkRequiredError();
+  }
   const session = asSession(response);
   // The server credential exists even when the local epoch has changed. Keep
   // it attached to the in-flight refresh so logout can revoke that credential
@@ -432,15 +442,6 @@ async function performWechatSessionRefresh(onSessionIssued?: (token: string) => 
     // touch session state in either direction (neither store a credential
     // nor clear the session that superseded it).
     throw new Error("登录状态已变更，请重试");
-  }
-  if (!response.linked) {
-    // The WeChat identity was understood and is not linked, so retaining a
-    // previous account's credential would be unsafe. The locally followed
-    // entry stays: it is display-only and carries no account data.
-    // Network/login failures above retain a still-valid session for offline
-    // resilience.
-    clearSessionCredentials();
-    throw new MiniProgramLinkRequiredError();
   }
   return storeApiSession(session);
 }
