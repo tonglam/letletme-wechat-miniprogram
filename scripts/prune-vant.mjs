@@ -13,14 +13,49 @@
  * official DevTools/runtime package resolver, including on pages that do not
  * render the component during the first pass.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const vantDir = join("miniprogram", "miniprogram_npm", "@vant", "weapp");
+const sourceVantDir = join("node_modules", "@vant", "weapp", "lib");
+const representativeComponents = ["action-sheet", "picker-column", "circle", "common", "icon"];
 
 if (!existsSync(vantDir)) {
   console.log(`[prune-vant] ${vantDir} not found — skipping (npm build not run yet)`);
   process.exit(0);
+}
+
+// The generated directory is ignored by git, so a developer can carry a
+// previously-pruned tree across commits.  Do not report success for that
+// state: WeChat's lazy component resolver will later fail with an opaque
+// WXML ENOENT.  The upload workflow runs packNpmManually immediately before
+// this check, while a local invocation gets an actionable rebuild error.
+const missingRepresentatives = representativeComponents.filter(
+  (component) => !existsSync(join(vantDir, component))
+);
+if (missingRepresentatives.length > 0) {
+  throw new Error(
+    `[prune-vant] incomplete generated tree; missing ${missingRepresentatives.join(", ")}. `
+      + "Rebuild Mini Program npm packages (npm ci && packNpmManually) before running this script."
+  );
+}
+
+// When the installed Vant package is available, compare every source
+// component directory with the generated output instead of relying only on
+// the representative sentinel list above.
+if (existsSync(sourceVantDir)) {
+  const expectedComponents = readdirSync(sourceVantDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  const missingComponents = expectedComponents.filter(
+    (component) => !existsSync(join(vantDir, component))
+  );
+  if (missingComponents.length > 0) {
+    throw new Error(
+      `[prune-vant] generated tree is missing ${missingComponents.length} installed Vant component(s): `
+        + `${missingComponents.join(", ")}. Rebuild Mini Program npm packages before upload.`
+    );
+  }
 }
 
 const versionJs = join(vantDir, "common", "version.js");
