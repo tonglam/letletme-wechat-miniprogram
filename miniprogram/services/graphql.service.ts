@@ -5,7 +5,8 @@ import {
   getMiniProgramDeviceId,
   getPendingSessionRefresh,
   isLogoutInFlight,
-  refreshWechatApiSession
+  refreshWechatApiSession,
+  WechatSessionTransportError
 } from "./auth.service";
 import { recordApi, recordPageOperation } from "../utils/perf";
 import type { ApiRecordSource } from "../utils/perf";
@@ -327,6 +328,16 @@ function isTransientFailure(error: unknown): boolean {
   return error instanceof GraphQLTransportError && error.transient;
 }
 
+function rethrowSessionRefreshFailure(error: unknown): never {
+  if (error instanceof WechatSessionTransportError) {
+    // Auth-refresh throttling is not a GraphQL ingress 429 and must not start
+    // the global GraphQL cooldown. It remains a transient transport failure so
+    // an already captured stale GraphQL result can be served safely.
+    throw new GraphQLTransportError(error.message, true);
+  }
+  throw error;
+}
+
 function responseHeader(
   headers: Record<string, unknown> | undefined,
   name: string,
@@ -449,35 +460,27 @@ function makeRequest<T>(
             return;
           }
 
+          const retryWithRefreshedSession = () => {
+            const freshToken = getApiSessionToken();
+            if (!freshToken) {
+              throw new Error("登录状态刷新失败，请重新登录");
+            }
+            return makeRequest<T>(
+              query,
+              variables,
+              operationName,
+              authMode,
+              false,
+              freshToken,
+              onNetworkAttempt,
+            );
+          };
+
           const pending = getPendingSessionRefresh();
           if (pending) {
             pending
-              .catch(() => undefined)
-              .then(() => {
-                const freshToken = getApiSessionToken();
-                if (freshToken && freshToken !== token) {
-                  return makeRequest<T>(
-                    query,
-                    variables,
-                    operationName,
-                    authMode,
-                    false,
-                    freshToken,
-                    onNetworkAttempt,
-                  );
-                }
-                clearSessionCredentials();
-                return refreshWechatApiSession()
-                  .then(() => makeRequest<T>(
-                    query,
-                    variables,
-                    operationName,
-                    authMode,
-                    false,
-                    getApiSessionToken(),
-                    onNetworkAttempt,
-                  ));
-              })
+              .catch(rethrowSessionRefreshFailure)
+              .then(retryWithRefreshedSession)
               .then(resolve)
               .catch(reject);
             return;
@@ -485,15 +488,8 @@ function makeRequest<T>(
 
           clearSessionCredentials();
           refreshWechatApiSession()
-            .then(() => makeRequest<T>(
-              query,
-              variables,
-              operationName,
-              authMode,
-              false,
-              getApiSessionToken(),
-              onNetworkAttempt,
-            ))
+            .catch(rethrowSessionRefreshFailure)
+            .then(retryWithRefreshedSession)
             .then(resolve)
             .catch(reject);
           return;

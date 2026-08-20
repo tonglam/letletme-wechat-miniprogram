@@ -8,6 +8,10 @@ import {
   graphqlRequest,
   purgeGraphQLStorageCache
 } from "../miniprogram/services/graphql.service.ts";
+import {
+  clearSessionCredentials,
+  restoreApiSessionCredentials
+} from "../miniprogram/services/auth.service.ts";
 
 function installRuntime(handler) {
   const storage = new Map();
@@ -184,6 +188,52 @@ test("stale fallback is limited to transient transport failures", async () => {
     }
   }));
   await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
+});
+
+test("session refresh network failure serves stale data without a second refresh", async () => {
+  const runtime = installRuntime(success({ value: "last-good" }));
+  const query = "query BehaviorSessionRefreshStale { value }";
+  const options = {
+    authMode: "session",
+    cachePolicy: "reporting",
+    cacheTtl: 1,
+    staleTtl: 60_000
+  };
+
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "expired-upstream-token");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  globalThis.wx.canIUse = () => false;
+  await restoreApiSessionCredentials();
+
+  try {
+    await graphqlRead(query, {}, options);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    globalThis.wx.login = ({ success: loginSuccess }) => {
+      loginSuccess({ code: "refresh-code" });
+    };
+    runtime.setHandler((request) => {
+      if (request.url.endsWith("/wechat/login")) {
+        request.fail({ errMsg: "request:fail timeout" });
+        return;
+      }
+      request.success({
+        statusCode: 401,
+        data: { errors: [{ message: "unauthorized" }] }
+      });
+    });
+
+    const stale = await graphqlRead(query, {}, {
+      ...options,
+      forceRefresh: true
+    });
+    assert.equal(stale.meta.source, "stale");
+    assert.equal(stale.meta.stale, true);
+    assert.equal(stale.data.value, "last-good");
+    assert.equal(runtime.requests.length, 3);
+  } finally {
+    clearSessionCredentials();
+  }
 });
 
 test("application error text containing 429 never serves stale data", async () => {

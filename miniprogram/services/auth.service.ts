@@ -34,14 +34,31 @@ interface ApiResponse {
   profile?: MiniProgramProfile;
 }
 
+export class WechatSessionTransportError extends Error {
+  readonly statusCode?: number;
+
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = "WechatSessionTransportError";
+    this.statusCode = statusCode;
+  }
+}
+
+function isTransientAuthStatus(statusCode: number): boolean {
+  return statusCode === 429
+    || statusCode === 502
+    || statusCode === 503
+    || statusCode === 504;
+}
+
 function loginCode(): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.login({
       success: ({ code }) => {
         if (code) resolve(code);
-        else reject(new Error("微信登录失败，请重试"));
+        else reject(new WechatSessionTransportError("微信登录失败，请重试"));
       },
-      fail: () => reject(new Error("微信登录失败，请重试"))
+      fail: () => reject(new WechatSessionTransportError("微信登录失败，请重试"))
     });
   });
 }
@@ -103,7 +120,12 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       success(response) {
         if (response.statusCode < 200 || response.statusCode >= 300 || !response.data?.success) {
           recordApi(`auth:${path}`, Date.now() - t0, false);
-          reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
+          const message = authApiErrorMessage(response.statusCode, response.data?.error);
+          reject(
+            isTransientAuthStatus(response.statusCode)
+              ? new WechatSessionTransportError(message, response.statusCode)
+              : new Error(message)
+          );
           return;
         }
         recordApi(`auth:${path}`, Date.now() - t0, true);
@@ -111,7 +133,7 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       },
       fail(error) {
         recordApi(`auth:${path}`, Date.now() - t0, false);
-        reject(new Error(networkErrorMessage(error)));
+        reject(new WechatSessionTransportError(networkErrorMessage(error)));
       }
     });
   });
