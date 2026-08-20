@@ -93,6 +93,10 @@
   margin: 28rpx auto 0;
 }
 
+.error-action.is-disabled {
+  opacity: 0.58;
+}
+
 .error-report {
   margin: 18rpx auto 0;
   color: var(--muted-ink);

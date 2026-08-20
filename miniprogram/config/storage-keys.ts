@@ -16,6 +16,7 @@ export const storageKeys = {
   apiProfileCheckedAt: "api-profile-checked-at",
   apiProfileEmail: "api-profile-email",
   deviceId: "mini-program-device-id",
+  graphqlCooldownUntil: "graphql-cooldown-until",
   pendingBugReportDraft: "pending-bug-report-draft",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",

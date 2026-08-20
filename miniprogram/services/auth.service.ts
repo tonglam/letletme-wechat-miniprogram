@@ -34,23 +34,73 @@ interface ApiResponse {
   profile?: MiniProgramProfile;
 }
 
+export class WechatSessionTransportError extends Error {
+  readonly statusCode?: number;
+
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = "WechatSessionTransportError";
+    this.statusCode = statusCode;
+  }
+}
+
+function isTransientAuthStatus(statusCode: number): boolean {
+  return statusCode === 429
+    || statusCode === 502
+    || statusCode === 503
+    || statusCode === 504;
+}
+
 function loginCode(): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.login({
       success: ({ code }) => {
         if (code) resolve(code);
-        else reject(new Error("微信登录失败，请重试"));
+        else reject(new WechatSessionTransportError("微信登录失败，请重试"));
       },
-      fail: () => reject(new Error("微信登录失败，请重试"))
+      fail: () => reject(new WechatSessionTransportError("微信登录失败，请重试"))
     });
   });
 }
 
+const SAFE_MINI_PROGRAM_DEVICE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+
+let deviceIdRuntime: unknown;
+let deviceIdMemory: string | undefined;
+
 function getDeviceId(): string {
-  const existing = wx.getStorageSync(storageKeys.deviceId) as string | undefined;
-  if (existing && existing.length >= 8) return existing;
+  if (deviceIdRuntime !== wx) {
+    deviceIdRuntime = wx;
+    deviceIdMemory = undefined;
+  }
+
+  let storedValue: unknown;
+  let storageReadable = false;
+  try {
+    storedValue = wx.getStorageSync(storageKeys.deviceId);
+    storageReadable = true;
+  } catch {}
+  const existing = typeof storedValue === "string" ? storedValue : undefined;
+  if (existing && SAFE_MINI_PROGRAM_DEVICE_ID.test(existing)) {
+    deviceIdMemory = existing;
+    return existing;
+  }
+  const memoryFallback = deviceIdMemory
+    && SAFE_MINI_PROGRAM_DEVICE_ID.test(deviceIdMemory)
+    ? deviceIdMemory
+    : undefined;
+  if ((!storageReadable || !storedValue) && memoryFallback) {
+    return memoryFallback;
+  }
+
   const generated = `wx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-  wx.setStorageSync(storageKeys.deviceId, generated);
+  try {
+    wx.setStorageSync(storageKeys.deviceId, generated);
+    deviceIdMemory = generated;
+    return generated;
+  } catch {}
+  if (memoryFallback) return memoryFallback;
+  deviceIdMemory = generated;
   return generated;
 }
 
@@ -70,7 +120,12 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       success(response) {
         if (response.statusCode < 200 || response.statusCode >= 300 || !response.data?.success) {
           recordApi(`auth:${path}`, Date.now() - t0, false);
-          reject(new Error(authApiErrorMessage(response.statusCode, response.data?.error)));
+          const message = authApiErrorMessage(response.statusCode, response.data?.error);
+          reject(
+            isTransientAuthStatus(response.statusCode)
+              ? new WechatSessionTransportError(message, response.statusCode)
+              : new Error(message)
+          );
           return;
         }
         recordApi(`auth:${path}`, Date.now() - t0, true);
@@ -78,7 +133,7 @@ function requestWebAuth(path: string, data: Record<string, unknown>): Promise<Ap
       },
       fail(error) {
         recordApi(`auth:${path}`, Date.now() - t0, false);
-        reject(new Error(networkErrorMessage(error)));
+        reject(new WechatSessionTransportError(networkErrorMessage(error)));
       }
     });
   });

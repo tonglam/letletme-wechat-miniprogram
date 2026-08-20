@@ -33,7 +33,7 @@
       </picker>
     </view>
 
-    <data-status wx:if="{{staleMessage}}" status="stale" message="{{staleMessage}}" transient="{{true}}" />
+    <data-status wx:if="{{staleMessage}}" status="stale" message="{{staleMessage}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryDaily" />
     <view wx:if="{{refreshing}}" class="section-status">正在刷新 {{changeDate}}</view>
     <view id="perf-primary-content">
     <app-error-state wx:if="{{error && riseChanges.length === 0 && fallChanges.length === 0}}" message="{{error}}" bind:retry="onRetry" />
@@ -103,7 +103,7 @@
       <view class="section-heading">市场动态</view>
       <text wx:if="{{coverageText}}" class="coverage-text">{{coverageText}}{{pulseStale ? ' · 数据可能滞后' : ''}}</text>
     </view>
-    <view wx:if="{{pulseError}}" class="section inline-error">{{pulseError}}</view>
+    <data-status wx:if="{{pulseError}}" status="error" message="{{pulseError}}" showRetry="{{true}}" bind:retry="onRetryPulse" />
 
     <view class="section mode-tabs market-period-tabs">
       <view class="mode-tab {{marketPeriod === 'DAILY' ? 'active' : ''}}" data-period="DAILY" bindtap="onMarketPeriodChange">每日</view>
