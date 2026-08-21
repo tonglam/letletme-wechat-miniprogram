@@ -56,7 +56,7 @@ export async function getLiveSnapshot(eventId: number): Promise<LiveSnapshotStat
   };
 }
 
-const LIVE_SNAPSHOT_BY_EVENT_QUERY = `
+export const LIVE_SNAPSHOT_BY_EVENT_QUERY = `
   query LiveSnapshotByEvent($eventId: Int!) {
     liveSnapshot(eventId: $eventId) {
       season
@@ -95,7 +95,7 @@ export async function getLiveSnapshotByEvent(
   return snapshot;
 }
 
-const CALC_LIVE_POINTS_BY_ENTRY = `
+export const CALC_LIVE_POINTS_BY_ENTRY = `
   query CalcLivePointsByEntry($eventId: Int!, $entryId: Int!) {
     calcLivePointsByEntry(eventId: $eventId, entryId: $entryId) {
       availability
@@ -273,47 +273,44 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
-        homeTeamShortName
         awayTeamId
         awayTeamName
-        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
+        minutes
         started
         finished
       }
-		nextFixtures {
-			fixtureId
-			eventId
-			homeTeamId
-			homeTeamName
-			homeTeamShortName
-			awayTeamId
-			awayTeamName
-			awayTeamShortName
-			homeScore
-			awayScore
-			kickoffTime
-			started
-			finished
-		}
+      nextFixtures {
+        fixtureId
+        eventId
+        homeTeamId
+        homeTeamName
+        awayTeamId
+        awayTeamName
+        homeScore
+        awayScore
+        kickoffTime
+        minutes
+        started
+        finished
+      }
     }
   }
 `;
 
-interface GraphQLMatchData {
+export interface GraphQLMatchData {
   fixtureId: number;
   eventId: number;
   homeTeamId: number;
   homeTeamName: string;
-  homeTeamShortName: string;
   awayTeamId: number;
   awayTeamName: string;
-  awayTeamShortName: string;
   homeScore: number | null;
   awayScore: number | null;
   kickoffTime: string | null;
+  minutes: number;
   started: boolean;
   finished: boolean;
 }
@@ -326,22 +323,21 @@ interface LiveMatchesResponse {
     state: LiveSnapshotStatus["state"];
     publishedAt: string;
     matches: GraphQLMatchData[];
-		nextFixtures: GraphQLMatchData[];
+    nextFixtures: GraphQLMatchData[];
   };
 }
 
-function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
+export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
   return {
     matchId: match.fixtureId,
     homeTeamId: match.homeTeamId,
     homeTeamName: match.homeTeamName,
-    homeTeamShortName: match.homeTeamShortName,
     homeScore: match.homeScore ?? 0,
     awayTeamName: match.awayTeamName,
     awayTeamId: match.awayTeamId,
-    awayTeamShortName: match.awayTeamShortName,
     awayScore: match.awayScore ?? 0,
     kickoffTime: match.kickoffTime ?? "",
+    minutes: match.minutes,
     playStatus: match.finished ? "finished" : match.started ? "playing" : "not_started",
     homeTeamDataList: [],
     awayTeamDataList: []
@@ -372,13 +368,11 @@ interface GraphQLLivePerformance {
   totalPoints: number;
 }
 
-interface GraphQLLiveFixturePlayers {
+export interface GraphQLLiveFixturePlayers {
   season: string;
   eventId: number;
   revision: string;
   fixtureId: number;
-  availability: "READY" | "NOT_STARTED" | "UNAVAILABLE";
-  bonusProvisional: boolean;
   players: GraphQLLivePerformance[];
 }
 
@@ -394,7 +388,7 @@ const POSITION_TYPE: Record<NonNullable<GraphQLLivePerformance["player"]>["posit
 function liveFixturePlayersSelection(alias: string, variable: string): string {
   return `
     ${alias}: liveFixturePlayers(ref: $ref, fixtureId: $${variable}) {
-      season eventId revision fixtureId availability bonusProvisional
+      season eventId revision fixtureId
       players {
         player { id webName position team { id name shortName } }
         minutes goalsScored assists cleanSheets goalsConceded ownGoals
@@ -405,7 +399,7 @@ function liveFixturePlayersSelection(alias: string, variable: string): string {
   `;
 }
 
-function buildLiveFixturePlayersQuery(count: number): string {
+export function buildLiveFixturePlayersQuery(count: number): string {
   const definitions = Array.from({ length: count }, (_, index) => `$fixture${index}: Int!`).join(", ");
   const selections = Array.from({ length: count }, (_, index) =>
     liveFixturePlayersSelection(`fixture${index}`, `fixture${index}`)
@@ -469,7 +463,7 @@ async function fetchLiveFixturePlayers(
   return result;
 }
 
-function mergeLiveFixturePlayers(
+export function mergeLiveFixturePlayers(
   matches: LiveMatch[],
   details: Map<number, GraphQLLiveFixturePlayers>,
   ref: { season: string; eventId: number; revision: string }
@@ -480,9 +474,9 @@ function mergeLiveFixturePlayers(
     if (!detail || detail.season !== ref.season || detail.eventId !== ref.eventId || detail.revision !== ref.revision || detail.fixtureId !== fixtureId) {
       return match;
     }
-    const players = detail.availability === "READY"
-      ? detail.players.map(mapLiveFixturePlayer).filter((row): row is LivePlayerRow => row !== null)
-      : [];
+    const players = detail.players
+      .map(mapLiveFixturePlayer)
+      .filter((row): row is LivePlayerRow => row !== null);
     return {
       ...match,
       homeTeamDataList: players.filter((player) => player.teamId === match.homeTeamId),
