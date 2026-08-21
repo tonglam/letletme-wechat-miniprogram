@@ -1,0 +1,76 @@
+name: WeChat Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: wechat-release
+    steps:
+      - name: Check latest audit status and release when approved
+        env:
+          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
+          WECHAT_SECRET: ${{ secrets.WECHAT_SECRET }}
+        run: |
+          set -eu
+          test -n "$WECHAT_APPID"
+          test -n "$WECHAT_SECRET" || {
+            echo "::error::WECHAT_SECRET is not configured in the wechat-release environment"
+            exit 1
+          }
+          token_response=$(curl -sS --max-time 30 -X POST \
+            https://api.weixin.qq.com/cgi-bin/stable_token \
+            -H 'Content-Type: application/json' \
+            -d "{\"grant_type\":\"client_credential\",\"appid\":\"$WECHAT_APPID\",\"secret\":\"$WECHAT_SECRET\",\"force_refresh\":false}")
+          access_token=$(printf '%s' "$token_response" | jq -r 'if .access_token then .access_token else empty end')
+          if [ -z "$access_token" ]; then
+            echo "::error::failed to obtain access token"
+            printf '%s' "$token_response" | jq '{errcode, errmsg}'
+            exit 1
+          fi
+          status_response=$(curl -sS --max-time 30 \
+            "https://api.weixin.qq.com/wxa/get_latest_auditstatus?access_token=$access_token")
+          errcode=$(printf '%s' "$status_response" | jq -r '.errcode')
+          if [ "$errcode" != "0" ]; then
+            echo "::error::get_latest_auditstatus failed"
+            printf '%s' "$status_response" | jq '{errcode, errmsg}'
+            exit 1
+          fi
+          audit_status=$(printf '%s' "$status_response" | jq -r '.status')
+          auditid=$(printf '%s' "$status_response" | jq -r '.auditid')
+          case "$audit_status" in
+            0)
+              echo "Audit $auditid approved, releasing"
+              ;;
+            1)
+              reason=$(printf '%s' "$status_response" | jq -r '.reason')
+              echo "::error::audit $auditid rejected: $reason"
+              exit 1
+              ;;
+            2)
+              echo "Audit $auditid still in review; run this workflow again once approved"
+              exit 1
+              ;;
+            *)
+              echo "::error::unknown audit status $audit_status"
+              printf '%s' "$status_response" | jq .
+              exit 1
+              ;;
+          esac
+          release_response=$(curl -sS --max-time 30 -X POST \
+            "https://api.weixin.qq.com/wxa/release?access_token=$access_token" \
+            -H 'Content-Type: application/json' \
+            -d '{}')
+          release_errcode=$(printf '%s' "$release_response" | jq -r '.errcode')
+          if [ "$release_errcode" != "0" ]; then
+            echo "::error::release failed"
+            printf '%s' "$release_response" | jq '{errcode, errmsg}'
+            exit 1
+          fi
+          echo "Released audit $auditid to production"
+          echo "## WeChat Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Released audit $auditid to production" >> "$GITHUB_STEP_SUMMARY"

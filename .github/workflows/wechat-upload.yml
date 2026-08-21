@@ -15,6 +15,11 @@ on:
         description: Exact 40-character commit on origin/main
         required: true
         type: string
+      auto_submit_audit:
+        description: Submit the uploaded version for WeChat audit automatically
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -132,3 +137,50 @@ jobs:
             --ud "$RELEASE_DESCRIPTION" \
             --use-project-config true \
             --enable-es6 true
+      - name: Submit uploaded version for audit
+        if: ${{ inputs.auto_submit_audit }}
+        env:
+          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
+          WECHAT_SECRET: ${{ secrets.WECHAT_SECRET }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DESCRIPTION: ${{ inputs.description }}
+        run: |
+          set -eu
+          test -n "$WECHAT_APPID"
+          test -n "$WECHAT_SECRET" || {
+            echo "::error::WECHAT_SECRET is not configured in the wechat-release environment"
+            exit 1
+          }
+          # stable_token with force_refresh=false reuses the cached token, so a
+          # routine audit submit cannot invalidate a token held by the backend.
+          token_response=$(curl -sS --max-time 30 -X POST \
+            https://api.weixin.qq.com/cgi-bin/stable_token \
+            -H 'Content-Type: application/json' \
+            -d "{\"grant_type\":\"client_credential\",\"appid\":\"$WECHAT_APPID\",\"secret\":\"$WECHAT_SECRET\",\"force_refresh\":false}")
+          access_token=$(printf '%s' "$token_response" | jq -r 'if .access_token then .access_token else empty end')
+          if [ -z "$access_token" ]; then
+            echo "::error::failed to obtain access token"
+            printf '%s' "$token_response" | jq '{errcode, errmsg}'
+            exit 1
+          fi
+          audit_response=$(curl -sS --max-time 30 -X POST \
+            "https://api.weixin.qq.com/wxa/submit_audit?access_token=$access_token" \
+            -H 'Content-Type: application/json' \
+            -d "{\"item_list\":[{\"version_desc\":\"$RELEASE_VERSION: $RELEASE_DESCRIPTION\"}]}")
+          errcode=$(printf '%s' "$audit_response" | jq -r '.errcode')
+          case "$errcode" in
+            0)
+              auditid=$(printf '%s' "$audit_response" | jq -r '.auditid')
+              echo "Submitted for audit: auditid=$auditid"
+              echo "auditid=$auditid" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            85058)
+              # A version is already under audit; treat as idempotent success.
+              echo "Audit already in progress for the current version, skipping submit"
+              ;;
+            *)
+              echo "::error::submit_audit failed"
+              printf '%s' "$audit_response" | jq '{errcode, errmsg}'
+              exit 1
+              ;;
+          esac
