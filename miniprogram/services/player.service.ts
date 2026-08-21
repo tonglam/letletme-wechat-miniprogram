@@ -294,33 +294,39 @@ const PLAYER_STATS_DESK_QUERY = `
       entries {
         playerId
         overview {
-          id
-          webName
-          teamShortName
-          elementType
-          elementTypeName
-          price
-          startPrice
-          totalPoints
-          selectedByPercent
-          form
-          seasonTransfersIn
-          seasonTransfersOut
-          transfersInEvent
-          transfersOutEvent
-          minutes
-          starts
-          goalsScored
-          assists
-          cleanSheets
-          bonus
-          bps
-          expectedGoals
-          expectedAssists
-          expectedGoalInvolvements
+          status
+          value {
+            id
+            webName
+            teamShortName
+            elementType
+            elementTypeName
+            price
+            startPrice
+            totalPoints
+            selectedByPercent
+            form
+            seasonTransfersIn
+            seasonTransfersOut
+            transfersInEvent
+            transfersOutEvent
+            minutes
+            starts
+            goalsScored
+            assists
+            cleanSheets
+            bonus
+            bps
+            expectedGoals
+            expectedAssists
+            expectedGoalInvolvements
+          }
         }
         evidence {
-          ictIndex
+          status
+          value {
+            ictIndex
+          }
         }
       }
     }
@@ -367,8 +373,14 @@ interface PlayerStatsDeskResponse {
     eventId: number;
     entries?: Array<{
       playerId: number;
-      overview?: PlayerStatsDeskOverview | null;
-      evidence?: { ictIndex?: number | null } | null;
+      overview?: {
+        status: string;
+        value?: PlayerStatsDeskOverview | null;
+      } | null;
+      evidence?: {
+        status: string;
+        value?: { ictIndex?: number | null } | null;
+      } | null;
     }>;
   };
 }
@@ -396,8 +408,8 @@ export async function getPlayerStatsDesk(
   );
   return (data.playerStatsDesk?.entries || []).map((entry) => ({
     playerId: entry.playerId,
-    overview: entry.overview || null,
-    ictIndex: entry.evidence?.ictIndex ?? null
+    overview: entry.overview?.value ?? null,
+    ictIndex: entry.evidence?.value?.ictIndex ?? null
   }));
 }
 
