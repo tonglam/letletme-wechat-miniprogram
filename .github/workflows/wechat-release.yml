@@ -2,6 +2,11 @@ name: WeChat Release
 
 on:
   workflow_dispatch:
+    inputs:
+      auditid:
+        description: Audit id returned by the submit_audit step of the upload workflow
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,15 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     environment: wechat-release
     steps:
-      - name: Check latest audit status and release when approved
+      # get_auditstatus (per-audit-id) is the only status endpoint a
+      # first-party mini program may call; get_latest_auditstatus is restricted
+      # to third-party platforms and fails with errcode 86000.
+      - name: Check audit status and release when approved
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
           WECHAT_SECRET: ${{ secrets.WECHAT_SECRET }}
+          AUDIT_ID: ${{ inputs.auditid }}
         run: |
           set -eu
           test -n "$WECHAT_APPID"
           test -n "$WECHAT_SECRET" || {
             echo "::error::WECHAT_SECRET is not configured in the wechat-release environment"
+            exit 1
+          }
+          printf '%s' "$AUDIT_ID" | grep -Eq '^[0-9]+$' || {
+            echo "::error::auditid must be a number from the upload workflow's audit submit step"
             exit 1
           }
           token_payload=$(jq -n \
@@ -37,26 +50,25 @@ jobs:
             exit 1
           fi
           status_response=$(curl -sS --max-time 30 \
-            "https://api.weixin.qq.com/wxa/get_latest_auditstatus?access_token=$access_token")
+            "https://api.weixin.qq.com/wxa/get_auditstatus?access_token=$access_token&auditid=$AUDIT_ID")
           errcode=$(printf '%s' "$status_response" | jq -r '.errcode')
           if [ "$errcode" != "0" ]; then
-            echo "::error::get_latest_auditstatus failed"
+            echo "::error::get_auditstatus failed for auditid=$AUDIT_ID"
             printf '%s' "$status_response" | jq '{errcode, errmsg}'
             exit 1
           fi
           audit_status=$(printf '%s' "$status_response" | jq -r '.status')
-          auditid=$(printf '%s' "$status_response" | jq -r '.auditid')
           case "$audit_status" in
             0)
-              echo "Audit $auditid approved, releasing"
+              echo "Audit $AUDIT_ID approved, releasing"
               ;;
             1)
               reason=$(printf '%s' "$status_response" | jq -r '.reason')
-              echo "::error::audit $auditid rejected: $reason"
+              echo "::error::audit $AUDIT_ID rejected: $reason"
               exit 1
               ;;
             2)
-              echo "Audit $auditid still in review; run this workflow again once approved"
+              echo "Audit $AUDIT_ID still in review; run this workflow again once approved"
               exit 1
               ;;
             *)
@@ -75,6 +87,6 @@ jobs:
             printf '%s' "$release_response" | jq '{errcode, errmsg}'
             exit 1
           fi
-          echo "Released audit $auditid to production"
+          echo "Released audit $AUDIT_ID to production"
           echo "## WeChat Release" >> "$GITHUB_STEP_SUMMARY"
-          echo "Released audit $auditid to production" >> "$GITHUB_STEP_SUMMARY"
+          echo "Released audit $AUDIT_ID to production" >> "$GITHUB_STEP_SUMMARY"
