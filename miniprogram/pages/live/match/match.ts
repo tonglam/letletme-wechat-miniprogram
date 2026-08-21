@@ -388,13 +388,14 @@ export function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveM
     return normalizeMatch({
       ...match,
       ...live,
-      // The live overlay owns score/status only. Team identity always comes
-      // from the core fixture snapshot so an abbreviated fallback can never
-      // overwrite an official short name.
+      // The live overlay owns score/status/minutes/player details. Team
+      // identity always comes from the core fixture snapshot so an
+      // abbreviated fallback can never overwrite an official short name.
       homeTeamName: match.homeTeamName,
       homeTeamShortName: match.homeTeamShortName,
       awayTeamName: match.awayTeamName,
       awayTeamShortName: match.awayTeamShortName,
+      minutes: live.minutes ?? match.minutes,
       status,
       playStatus: status
     }, status);
