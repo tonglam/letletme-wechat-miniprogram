@@ -22,10 +22,14 @@ jobs:
             echo "::error::WECHAT_SECRET is not configured in the wechat-release environment"
             exit 1
           }
+          token_payload=$(jq -n \
+            --arg appid "$WECHAT_APPID" \
+            --arg secret "$WECHAT_SECRET" \
+            '{grant_type: "client_credential", appid: $appid, secret: $secret, force_refresh: false}')
           token_response=$(curl -sS --max-time 30 -X POST \
             https://api.weixin.qq.com/cgi-bin/stable_token \
             -H 'Content-Type: application/json' \
-            -d "{\"grant_type\":\"client_credential\",\"appid\":\"$WECHAT_APPID\",\"secret\":\"$WECHAT_SECRET\",\"force_refresh\":false}")
+            -d "$token_payload")
           access_token=$(printf '%s' "$token_response" | jq -r 'if .access_token then .access_token else empty end')
           if [ -z "$access_token" ]; then
             echo "::error::failed to obtain access token"
