@@ -45,7 +45,9 @@ test("tournament preseason is a stable business empty state", () => {
     rowCount: 0,
     displayedRows: [],
     filteredCount: 0,
-    lastUpdated: ""
+    lastUpdated: "",
+    scoreStatusText: "官方分数不可用",
+    scoreNextRefreshAt: ""
   });
 });
 
@@ -60,6 +62,10 @@ test("entry preseason is a stable business empty state", () => {
     emptyState: "preseason",
     event: 0,
     maxGw: 0,
+    scoreState: "UNAVAILABLE",
+    scoreStatusText: "官方分数不可用",
+    scoreDetailText: "",
+    scoreNextRefreshAt: "",
     lastUpdated: ""
   });
 });

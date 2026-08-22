@@ -1,4 +1,4 @@
-import type { LivePlayerRow, LiveTournamentRow } from "../models/live";
+import type { LiveManagerScore, LivePlayerRow, LiveTournamentRow } from "../models/live";
 
 export type TournamentOwnershipScope = "any" | "starter" | "bench";
 export type TournamentCaptainMode = "any" | "captain" | "vice";
@@ -17,6 +17,7 @@ export interface TournamentLiveGraphQLRow {
   played: number;
   toPlay: number;
   captainName: string;
+  score?: LiveManagerScore;
   pickList?: Array<{
     element: number;
     webName: string;
@@ -26,6 +27,9 @@ export interface TournamentLiveGraphQLRow {
     position?: number;
     isCaptain?: boolean;
     isViceCaptain?: boolean;
+    multiplier?: number;
+    pickActive?: boolean;
+    autoSub?: boolean;
   }>;
 }
 
@@ -59,10 +63,11 @@ function mapTournamentPick(item: NonNullable<TournamentLiveGraphQLRow["pickList"
     teamShortName: item.teamShortName,
     elementTypeName: item.elementTypeName,
     position: item.elementTypeName,
-    captain: Boolean(item.isCaptain),
+    captain: Boolean(item.isCaptain || (item.multiplier || 0) >= 2),
     viceCaptain: Boolean(item.isViceCaptain),
-    pickActive: item.position === undefined ? undefined : item.position <= 11,
-    multiplier: item.isCaptain ? 2 : undefined
+    pickActive: item.pickActive ?? (item.position === undefined ? undefined : item.position <= 11),
+    autoSub: item.autoSub,
+    multiplier: item.multiplier ?? (item.isCaptain ? 2 : undefined)
   };
 }
 
@@ -110,6 +115,7 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       captainName: row.captainName,
       chip: row.chip || undefined,
       overallRank: row.overallRank,
+      score: row.score,
       picks: (row.pickList || []).map(mapTournamentPick)
     };
     return {

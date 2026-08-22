@@ -20,6 +20,8 @@ export interface LiveRefreshControllerOptions {
   reload: () => Promise<void>;
   /** Adopt an observed snapshot that turned out unchanged (fresh checkedAt). */
   acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
+  /** Official manager score may need a reload after the player snapshot settles. */
+  shouldReloadOnUnchangedProbe?: () => boolean;
   /** Probe failure: current data is kept, the page only updates its status. */
   onProbeError?: (message: string) => void;
   /** Probe lifecycle for status rendering (true when a probe actually starts). */
@@ -104,7 +106,10 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
         const observed = await options.probe();
         const probeDurationMs = Date.now() - probeStart;
         if (isResponseStale(requestId)) return;
-        if (!liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed)) {
+        if (
+          !liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed) &&
+          !options.shouldReloadOnUnchangedProbe?.()
+        ) {
           options.onProbeSettled?.({
             snapshotState: observed?.state,
             revisionChanged: false,

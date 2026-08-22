@@ -74,7 +74,9 @@ export function noLiveEventState() {
     rowCount: 0,
     displayedRows: [] as DisplayTournamentRow[],
     filteredCount: 0,
-    lastUpdated: ""
+    lastUpdated: "",
+    scoreStatusText: "官方分数不可用",
+    scoreNextRefreshAt: ""
   };
 }
 
@@ -84,7 +86,8 @@ interface SortOption {
 }
 
 interface DisplayTournamentRow extends LiveTournamentRow {
-  visibleRank: number;
+	visibleRank: number;
+	netPointsKnown: boolean;
   displayLive: string;
   displayNet: string;
   displayTotal: string;
@@ -96,7 +99,16 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   isMe: boolean;
   pinned: boolean;
   compared: boolean;
-  compareDisabled: boolean;
+	compareDisabled: boolean;
+}
+
+function managerScoreStatusText(rows: readonly DisplayTournamentRow[]): string {
+  const states = rows.map((row) => row.score?.state).filter(Boolean);
+  if (states.length === 0) return "官方分数不可用";
+  if (states.includes("SETTLING")) return "结算中";
+  if (states.includes("STALE")) return "官方数据延迟";
+  if (states.includes("UNAVAILABLE")) return "官方分数不可用";
+  return "官方实时";
 }
 
 interface OwnershipPlayerOption {
@@ -172,6 +184,8 @@ interface LiveTournamentData {
   pageSize: number;
   hasMore: boolean;
   lastUpdated: string;
+  scoreStatusText: string;
+  scoreNextRefreshAt: string;
   columns: Array<{ key: string; label: string }>;
   highestText: string;
   averageText: string;
@@ -230,9 +244,17 @@ function chipCodeOf(raw: unknown): string {
 }
 
 function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
-  const livePoints = numberValue(row.livePoints);
-  const liveNetPoints = numberValue(row.liveNetPoints, livePoints);
-  const totalPoints = numberValue(row.liveTotalPoints ?? row.totalPoints);
+	const officialEventPoints = row.score?.eventPoints;
+	const livePoints = numberValue(officialEventPoints);
+	const netPointsKnown = row.score?.netEventPoints != null;
+	const liveNetPoints = netPointsKnown
+		? numberValue(row.score?.netEventPoints)
+		: 0;
+	const totalPoints = numberValue(
+		row.score?.totalScope === "OVERALL" && row.score.totalPoints != null
+			? row.score.totalPoints
+			: 0
+	);
   const transferCost = numberValue(row.transferCost);
   const played = numberValue(row.played);
   const toPlay = numberValue(row.toPlay);
@@ -241,7 +263,8 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const chipCode = chipCodeOf(row.chip);
 
   return {
-    ...row,
+		...row,
+		netPointsKnown,
     livePoints,
     liveNetPoints,
     totalPoints,
@@ -249,7 +272,7 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     overallRank: row.overallRank ?? row.rank,
     visibleRank: 0,
     displayLive: `${livePoints}`,
-    displayNet: `${liveNetPoints}`,
+		displayNet: netPointsKnown ? `${liveNetPoints}` : "—",
     displayTotal: `${totalPoints}`,
     displayHit: transferCost > 0 ? `-${transferCost}` : "0",
     metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCost} · ${played}/${played + toPlay}`,
@@ -473,6 +496,8 @@ PerformancePage({
     pageSize: 20,
     hasMore: false,
     lastUpdated: "",
+    scoreStatusText: "官方分数不可用",
+    scoreNextRefreshAt: "",
     columns: [
       { key: "rank", label: "序" },
       { key: "entryName", label: "球队" },
@@ -597,6 +622,10 @@ PerformancePage({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(this.data.event),
+      shouldReloadOnUnchangedProbe: () => Boolean(
+        this.data.scoreNextRefreshAt &&
+        Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+      ),
       reload: () => this.loadRows({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -906,6 +935,8 @@ PerformancePage({
       rowCount: 0,
       displayedRows: [],
       lastUpdated: "",
+      scoreStatusText: "官方分数不可用",
+      scoreNextRefreshAt: "",
       ...emptyCompareState()
     });
     void this.loadTournaments(true);
@@ -1142,6 +1173,11 @@ PerformancePage({
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);
+        const scoreNextRefreshAt = refreshedRows
+          .map((row) => row.score?.nextRefreshAt)
+          .filter((value): value is string => Boolean(value))
+          .sort()[0] || "";
+        this.setData({ scoreNextRefreshAt });
         const failedEntryIds = new Set(liveResult.failedEntryIds || []);
         this.failedEntryCount = Math.max(
           failedEntryIds.size,
@@ -1209,7 +1245,8 @@ PerformancePage({
       pageVisible: this.pageVisible,
       currentEventId,
       selectedEventId: this.data.event,
-      snapshot: this.liveSnapshot
+      snapshot: this.liveSnapshot,
+      managerNextRefreshAt: this.data.scoreNextRefreshAt
     });
   },
 
@@ -1313,6 +1350,7 @@ PerformancePage({
     );
     const nextSize = resetPage ? this.data.pageSize : this.data.displayedRows.length + this.data.pageSize;
     const stats = buildTournamentStats(rows);
+    const scoreStatusText = managerScoreStatusText(rows);
     const captainValues = Array.from(new Set(rows
       .map((row) => textValue(row.captainName))
       .filter((name) => name && name !== "-" && name !== "无队长")))
@@ -1329,6 +1367,7 @@ PerformancePage({
       highestText: stats.highestText,
       averageText: stats.averageText,
       entriesText: stats.entriesText,
+      scoreStatusText,
       captainValues,
       captainOptions: captainValues.map((name) => ({ name, on: captainFilters.includes(name) })),
       chipOptions: CHIP_VALUES.map((value) => ({ value, label: value, on: chipFilters.includes(value) })),

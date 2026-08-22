@@ -1,7 +1,7 @@
 import { getEntryEventTransfers, getEntryInfo } from "../../../services/entry.service";
 import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import type { LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import type { LiveManagerScore, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { chipShareLabel, copyShareText, formatLiveEntryShareText } from "../../../utils/live-share";
@@ -58,6 +58,10 @@ export function noLiveEventState() {
     emptyState: "preseason" as const,
     event: 0,
     maxGw: 0,
+    scoreState: "UNAVAILABLE",
+    scoreStatusText: "官方分数不可用",
+    scoreDetailText: "",
+    scoreNextRefreshAt: "",
     lastUpdated: ""
   };
 }
@@ -87,9 +91,14 @@ interface LiveEntryData {
   entryId?: number;
   entryName: string;
   playerName: string;
+  scoreState: string;
+  scoreStatusText: string;
+  scoreDetailText: string;
+  scoreNextRefreshAt: string;
   total: number;
   livePoints: number;
   netPoints: number;
+  netPointsKnown: boolean;
   transferCost: number;
   captainText: string;
   chipText: string;
@@ -133,11 +142,18 @@ function textValue(value: unknown, fallback = "-"): string {
   return String(value);
 }
 
+function managerScoreStatusText(score?: LiveManagerScore): string {
+	if (!score || score.state === "UNAVAILABLE") return "官方分数不可用";
+	if (score.state === "SETTLING") return "结算中";
+	if (score.state === "STALE") return "官方数据延迟";
+	return "官方实时";
+}
+
 function captainDisplayName(
-  players: Array<{ captain?: boolean; webName?: string; name?: string }>,
+  players: Array<{ captain?: boolean; multiplier?: number; webName?: string; name?: string }>,
   captainName: unknown
 ): string {
-  const fromSquad = players.find((player) => player.captain);
+  const fromSquad = players.find((player) => player.captain || (player.multiplier || 0) >= 2);
   const squadName = fromSquad?.webName || fromSquad?.name;
   if (squadName) return String(squadName);
   const raw = textValue(captainName);
@@ -168,9 +184,14 @@ Page({
     entryId: 0,
     entryName: "",
     playerName: "",
+    scoreState: "UNAVAILABLE",
+    scoreStatusText: "官方分数不可用",
+    scoreDetailText: "",
+    scoreNextRefreshAt: "",
     total: 0,
     livePoints: 0,
     netPoints: 0,
+    netPointsKnown: false,
     transferCost: 0,
     captainText: "-",
     chipText: "无",
@@ -312,6 +333,10 @@ Page({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(this.data.event),
+      shouldReloadOnUnchangedProbe: () => Boolean(
+        this.data.scoreNextRefreshAt &&
+        Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+      ),
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -792,17 +817,42 @@ Page({
     const result = liveResult.data;
         navigationTracker?.mark("primaryResponseAt");
         if (result.availability === "NO_PICKS") {
+          const officialEventPoints = result.score?.eventPoints;
+          const headlinePoints = numberValue(officialEventPoints);
+          const netPointsKnown = result.score?.netEventPoints != null;
+          const netPoints = netPointsKnown
+            ? numberValue(result.score?.netEventPoints)
+            : 0;
+          const total = numberValue(
+            result.score?.totalScope === "OVERALL" && result.score.totalPoints != null
+              ? result.score.totalPoints
+              : 0
+          );
+          const hasOfficialHeadline = typeof officialEventPoints === "number";
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData({
-            hasData: false,
+            hasData: hasOfficialHeadline,
             noPicks: true,
+            entryName: result.entryName || "",
+            playerName: result.playerName || "",
+            scoreState: result.score?.state || "UNAVAILABLE",
+            scoreStatusText: managerScoreStatusText(result.score),
+            scoreDetailText: result.score?.reconciliation === "SOURCE_SKEW" ? "明细同步中" : "",
+            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
             error: "",
-            total: 0,
-            livePoints: 0,
-            netPoints: 0,
-            transferCost: 0,
-            summaryTiles: [],
+            total,
+            livePoints: headlinePoints,
+            netPoints,
+            netPointsKnown,
+            transferCost: numberValue(result.score?.transferCost ?? result.transferCost),
+            summaryTiles: hasOfficialHeadline
+              ? [
+                  { label: "实时得分", value: `${headlinePoints}` },
+                  { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
+                  { label: "实时总分", value: `${total}` }
+                ]
+              : [],
             starters: [],
             bench: [],
             managers: [],
@@ -815,7 +865,11 @@ Page({
             navigationTracker?.mark("primarySetDataAt");
             wx.nextTick(() => navigationTracker?.observePrimary());
           });
-          this.liveRefresh?.stop();
+          if (hasOfficialHeadline) {
+            this.liveRefresh?.sync();
+          } else {
+            this.liveRefresh?.stop();
+          }
           this.loadTransfersAfterLive = false;
           this.syncDisplayState();
           return;
@@ -825,9 +879,14 @@ Page({
         const fieldPlayers = players.filter((player) => numberValue(player.elementType) !== 5);
         const starters = fieldPlayers.filter((player) => player.pickActive !== false);
         const bench = fieldPlayers.filter((player) => player.pickActive === false);
-        const livePoints = numberValue(result.livePoints ?? result.total);
-        const total = numberValue(result.liveTotalPoints ?? result.total);
-        const netPoints = numberValue(result.liveNetPoints ?? livePoints);
+        const livePoints = numberValue(result.score?.eventPoints);
+        const total = numberValue(
+          result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0
+        );
+        const netPointsKnown = result.score?.netEventPoints != null;
+        const netPoints = netPointsKnown
+          ? numberValue(result.score?.netEventPoints)
+          : 0;
         const transferCost = numberValue(result.transferCost);
         const fetchedAt = liveResult.servedStoredAt || Date.now();
         this.liveSnapshot = liveResult.snapshot;
@@ -835,17 +894,22 @@ Page({
         this.setData({
           hasData: true,
           noPicks: false,
+          scoreState: result.score?.state || "UNAVAILABLE",
+          scoreStatusText: managerScoreStatusText(result.score),
+          scoreDetailText: result.score?.reconciliation === "SOURCE_SKEW" ? "明细同步中" : "",
+          scoreNextRefreshAt: result.score?.nextRefreshAt || "",
           error: "",
           total,
           livePoints,
           netPoints,
+          netPointsKnown,
           transferCost,
           captainText: captainDisplayName(players, result.captainName),
           chipText: chipShareLabel(textValue(result.chip, "无")),
           playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
           summaryTiles: [
             { label: "实时得分", value: `${livePoints}` },
-            { label: "净得分", value: `${netPoints}` },
+            { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
             { label: "实时总分", value: `${total}` },
             { label: "转会扣分", value: transferCost > 0 ? `-${transferCost}` : "0" }
           ],
@@ -970,18 +1034,21 @@ Page({
   },
 
   shouldAutoRefresh(): boolean {
-    if (!this.data.entryId || this.data.noPicks) return false;
+    if (!this.data.entryId) return false;
+    if (this.data.noPicks && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")) return false;
     const currentEventId = currentLiveEventId();
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
       currentEventId,
       selectedEventId: this.data.event,
-      snapshot: this.liveSnapshot
+      snapshot: this.liveSnapshot,
+      managerScoreState: this.data.scoreState,
+      managerNextRefreshAt: this.data.scoreNextRefreshAt
     });
   },
 
   revalidateCachedSnapshot(): boolean {
-    if (this.data.noPicks) return false;
+    if (this.data.noPicks && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")) return false;
     const currentEventId = currentLiveEventId();
     if (!shouldRevalidateCachedLiveSnapshot({
       servedStoredAt: this.cachedLiveStoredAt,
