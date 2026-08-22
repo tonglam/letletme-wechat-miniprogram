@@ -51,6 +51,9 @@ export interface SquadPitchHeader {
   overallRank: number;
   gameweekPoints: number;
   chip: string;
+  /** Present for official live scores so unknown values are not rendered as zero. */
+  totalPointsKnown?: boolean;
+  gameweekPointsKnown?: boolean;
 }
 
 export interface SquadPitchProps {
@@ -79,6 +82,8 @@ export interface SquadPitchTeamInput {
   eventPoints?: number | null;
   overallPoints?: number | null;
   overallRank?: number | null;
+  overallPointsKnown?: boolean;
+  eventPointsKnown?: boolean;
   eventChip?: string | null;
   entry?: {
     entryName?: string | null;
@@ -266,7 +271,7 @@ export function toSquadPitchPlayer(
 }
 
 export function toSquadPitchHeader(apiTeam: SquadPitchTeamInput): SquadPitchHeader {
-  return {
+  const header: SquadPitchHeader = {
     eventId: finiteNumber(apiTeam.eventId, 0),
     teamName: String(apiTeam.entry?.entryName || "").trim(),
     managerName: String(apiTeam.entry?.playerName || "").trim(),
@@ -275,6 +280,13 @@ export function toSquadPitchHeader(apiTeam: SquadPitchTeamInput): SquadPitchHead
     gameweekPoints: finiteNumber(apiTeam.eventPoints, 0),
     chip: normalizeSquadChip(apiTeam.eventChip)
   };
+  if (apiTeam.overallPointsKnown !== undefined) {
+    header.totalPointsKnown = apiTeam.overallPointsKnown;
+  }
+  if (apiTeam.eventPointsKnown !== undefined) {
+    header.gameweekPointsKnown = apiTeam.eventPointsKnown;
+  }
+  return header;
 }
 
 export function sortSquadPitchPlayers(players: readonly SquadPitchPlayer[]): SquadPitchPlayer[] {
@@ -321,6 +333,8 @@ export interface LiveSquadPitchInput {
   totalPoints?: number;
   overallRank?: number;
   gameweekPoints?: number;
+  totalPointsKnown?: boolean;
+  gameweekPointsKnown?: boolean;
   chip?: string;
   starters?: readonly SquadPitchRowInput[];
   bench?: readonly SquadPitchRowInput[];
@@ -344,6 +358,8 @@ export function buildLiveSquadPitchState(input: LiveSquadPitchInput): {
     eventId: input.eventId,
     eventPoints: input.gameweekPoints,
     overallPoints: input.totalPoints,
+    overallPointsKnown: input.totalPointsKnown,
+    eventPointsKnown: input.gameweekPointsKnown,
     overallRank: input.overallRank,
     eventChip: input.chip,
     entry: {
@@ -478,23 +494,25 @@ export function formatSquadPitchHeaderView(
   locale: SquadPitchLocale = "zh-CN"
 ): SquadPitchHeaderView {
   const chip = header.chip || (locale === "zh-CN" ? "无" : "NONE");
+  const totalPoints = header.totalPointsKnown === false ? "—" : formatGroupedNumber(header.totalPoints);
+  const gameweekPoints = header.gameweekPointsKnown === false ? "—" : formatGroupedNumber(header.gameweekPoints);
   if (locale === "en") {
     return {
-      eyebrow: `TOTAL PTS ${formatGroupedNumber(header.totalPoints)} · OR ${formatCompactRank(header.overallRank, "en")}`,
+      eyebrow: `TOTAL PTS ${totalPoints} · OR ${formatCompactRank(header.overallRank, "en")}`,
       teamName: header.teamName,
       managerName: header.managerName,
       gwLabel: "GW PTS",
-      gwPoints: formatGroupedNumber(header.gameweekPoints),
+      gwPoints: gameweekPoints,
       chipLabel: "CHIP",
       chip
     };
   }
   return {
-    eyebrow: `总积分 ${formatGroupedNumber(header.totalPoints)} · 总排名 ${formatCompactRank(header.overallRank, "zh-CN")}`,
+    eyebrow: `总积分 ${totalPoints} · 总排名 ${formatCompactRank(header.overallRank, "zh-CN")}`,
     teamName: header.teamName,
     managerName: header.managerName,
     gwLabel: "周赛得分",
-    gwPoints: formatGroupedNumber(header.gameweekPoints),
+    gwPoints: gameweekPoints,
     chipLabel: "道具卡",
     chip
   };

@@ -914,7 +914,7 @@ Page({
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
           : 0;
-        const transferCost = numberValue(result.transferCost);
+        const transferCost = numberValue(result.score?.transferCost ?? result.transferCost);
         const fetchedAt = liveResult.servedStoredAt || Date.now();
         this.liveSnapshot = liveResult.snapshot;
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
@@ -953,6 +953,8 @@ Page({
             managerName: this.data.playerName,
             totalPoints: total,
             gameweekPoints: livePoints,
+            totalPointsKnown: totalKnown,
+            gameweekPointsKnown: livePointsKnown,
             chip: textValue(result.chip, "")
           }),
           lastUpdated: formatTime(new Date(fetchedAt))
