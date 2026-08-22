@@ -846,7 +846,10 @@ Page({
           const totalKnown = result.score?.totalScope === "OVERALL"
             && typeof result.score.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
-          this.liveSnapshot = null;
+          // A score-only NO_PICKS response still carries the authoritative
+          // player snapshot. Keep it so unchanged probes do not force a full
+          // reload forever once the official score has settled.
+          this.liveSnapshot = liveResult.snapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData({
             hasData: hasOfficialHeadline,
@@ -884,7 +887,7 @@ Page({
             navigationTracker?.mark("primarySetDataAt");
             wx.nextTick(() => navigationTracker?.observePrimary());
           });
-          if (hasOfficialHeadline) {
+          if (hasOfficialHeadline || result.score?.state === "SETTLING") {
             this.liveRefresh?.sync();
           } else {
             this.liveRefresh?.stop();
@@ -1061,7 +1064,11 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
-    if (this.data.noPicks && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")) return false;
+    if (
+      this.data.noPicks
+      && this.data.scoreState !== "SETTLING"
+      && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
+    ) return false;
     const currentEventId = currentLiveEventId();
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
