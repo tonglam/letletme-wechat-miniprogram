@@ -63,6 +63,9 @@ export interface LiveSnapshotResult<T> {
   /** Fetch time when the payload was served from the short-lived client cache. */
   servedStoredAt?: number;
   failedEntryIds?: number[];
+  unavailableEntryIds?: number[];
+  officialCoverage?: number;
+  totalEntries?: number;
   partialError?: string;
 }
 

@@ -16,6 +16,7 @@ import type {
 import {
   filterTournamentLiveRows,
   mapTournamentLiveRows,
+  mergeUnavailableTournamentEntryIds,
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
 
@@ -322,6 +323,7 @@ export const LIVE_MATCHES_QUERY = `
         minutes
         started
         finished
+        finishedProvisional
       }
       nextFixtures {
         fixtureId
@@ -336,6 +338,7 @@ export const LIVE_MATCHES_QUERY = `
         minutes
         started
         finished
+        finishedProvisional
       }
     }
   }
@@ -354,6 +357,7 @@ export interface GraphQLMatchData {
   minutes: number;
   started: boolean;
   finished: boolean;
+  finishedProvisional: boolean;
 }
 
 interface LiveMatchesResponse {
@@ -402,11 +406,12 @@ export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     awayScore: match.awayScore ?? undefined,
     kickoffTime: match.kickoffTime ?? "",
     minutes: match.minutes,
-    playStatus: match.finished
-      ? "finished"
-      : match.started
-        ? "playing"
-        : "not_started",
+    playStatus:
+      match.finished || match.finishedProvisional
+        ? "finished"
+        : match.started
+          ? "playing"
+          : "not_started",
     homeTeamDataList: [],
     awayTeamDataList: [],
   };
@@ -734,6 +739,8 @@ export const TOURNAMENT_LIVE_POINTS = `
       dataAvailability
       nextRefreshAt
       state
+      officialCoverage
+      unavailableEntryIds
       partial
       failedEntryIds
       totalEntries
@@ -800,6 +807,8 @@ interface TournamentLivePointsResponse {
     dataAvailability: LiveSnapshotStatus["dataAvailability"];
     nextRefreshAt: string | null;
     board: TournamentLiveGraphQLRow[];
+    officialCoverage: number;
+    unavailableEntryIds: number[];
     partial: boolean;
     failedEntryIds: number[];
     totalEntries: number;
@@ -854,6 +863,10 @@ export async function getLivePointsByTournamentSnapshot(
     TOURNAMENT_LIVE_POINTS,
     requestVariables,
   );
+  const unavailableEntryIds = mergeUnavailableTournamentEntryIds(
+    data.entryLiveCompetitionsDesk.failedEntryIds,
+    data.entryLiveCompetitionsDesk.unavailableEntryIds,
+  );
   return {
     data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
     snapshot: data.entryLiveCompetitionsDesk.revision
@@ -871,9 +884,12 @@ export async function getLivePointsByTournamentSnapshot(
         }
       : null,
     servedStoredAt,
-    failedEntryIds: data.entryLiveCompetitionsDesk.failedEntryIds,
+    failedEntryIds: unavailableEntryIds,
+    unavailableEntryIds,
+    officialCoverage: data.entryLiveCompetitionsDesk.officialCoverage,
+    totalEntries: data.entryLiveCompetitionsDesk.totalEntries,
     partialError: data.entryLiveCompetitionsDesk.partial
-      ? `部分结果不可用：${data.entryLiveCompetitionsDesk.failedEntryIds.length}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
+      ? `部分结果不可用：${Math.max(1, unavailableEntryIds.length)}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
       : undefined,
   };
 }
@@ -933,6 +949,9 @@ export async function searchLivePointsByTournamentSnapshot(
     snapshot: result.snapshot,
     servedStoredAt: result.servedStoredAt,
     failedEntryIds: result.failedEntryIds,
+    unavailableEntryIds: result.unavailableEntryIds,
+    officialCoverage: result.officialCoverage,
+    totalEntries: result.totalEntries,
     partialError: result.partialError,
   };
 }
