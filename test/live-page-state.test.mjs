@@ -66,7 +66,9 @@ test("entry preseason is a stable business empty state", () => {
     scoreStatusText: "官方分数不可用",
     scoreDetailText: "",
     scoreNextRefreshAt: "",
-    lastUpdated: ""
+    lastUpdated: "",
+    livePointsText: "—",
+    totalText: "—"
   });
 });
 

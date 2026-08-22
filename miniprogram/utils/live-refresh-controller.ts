@@ -22,6 +22,12 @@ export interface LiveRefreshControllerOptions {
   acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
   /** Official manager score may need a reload after the player snapshot settles. */
   shouldReloadOnUnchangedProbe?: () => boolean;
+  /**
+   * Optional manager refresh deadline.  A page can remain on an unchanged
+   * player snapshot while the official manager aggregate is scheduled to
+   * publish later, so the controller arms a one-shot probe for that deadline.
+   */
+  getNextRefreshAt?: () => string | null | undefined;
   /** Probe failure: current data is kept, the page only updates its status. */
   onProbeError?: (message: string) => void;
   /** Probe lifecycle for status rendering (true when a probe actually starts). */
@@ -63,6 +69,7 @@ export interface LiveRefreshController {
 export function createLiveRefreshController(options: LiveRefreshControllerOptions): LiveRefreshController {
   const intervalMs = options.intervalMs ?? LIVE_REFRESH_INTERVAL_MS;
   let timer: number | undefined;
+  let deadlineTimer: number | undefined;
   let online = options.isOnline ? options.isOnline() : true;
   let probeRequest: Promise<void> | null = null;
   let probeRequestId = 0;
@@ -77,6 +84,10 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     if (timer !== undefined) {
       clearInterval(timer);
       timer = undefined;
+    }
+    if (deadlineTimer !== undefined) {
+      clearTimeout(deadlineTimer);
+      deadlineTimer = undefined;
     }
   }
 
@@ -158,6 +169,15 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     timer = setInterval(() => {
       void runProbe();
     }, intervalMs) as unknown as number;
+
+    const nextRefreshAt = options.getNextRefreshAt?.();
+    if (!nextRefreshAt) return;
+    const deadline = Date.parse(nextRefreshAt);
+    if (!Number.isFinite(deadline)) return;
+    deadlineTimer = setTimeout(() => {
+      deadlineTimer = undefined;
+      void runProbe();
+    }, Math.max(0, deadline - Date.now())) as unknown as number;
   }
 
   function stop(): void {

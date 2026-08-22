@@ -60,6 +60,26 @@ async function testUnchangedRevisionOnlyAccepts(): Promise<void> {
   controller.dispose();
 }
 
+async function testScheduledManagerRefreshArmsDeadlineProbe(): Promise<void> {
+  let probes = 0;
+  const controller = createLiveRefreshController({
+    isEligible: () => true,
+    getAcceptedSnapshot: () => snapshot("aa"),
+    probe: () => {
+      probes += 1;
+      return Promise.resolve(snapshot("aa"));
+    },
+    reload: () => Promise.resolve(),
+    getNextRefreshAt: () => new Date(Date.now() + 20).toISOString(),
+    intervalMs: 1000
+  });
+
+  controller.sync();
+  await sleep(60);
+  assert(probes >= 1, "the manager refresh deadline triggers a probe before the normal interval");
+  controller.dispose();
+}
+
 async function testChangedRevisionReloadsOnceUnderConcurrency(): Promise<void> {
   const gate = deferred<LiveSnapshotStatus>();
   let reloads = 0;
@@ -261,6 +281,7 @@ async function testProbeSettledSkipsStaleResponse(): Promise<void> {
 
 async function main(): Promise<void> {
   await testUnchangedRevisionOnlyAccepts();
+  await testScheduledManagerRefreshArmsDeadlineProbe();
   await testChangedRevisionReloadsOnceUnderConcurrency();
   await testProbeErrorKeepsPolling();
   await testIneligibleNeverStartsTimer();

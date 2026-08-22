@@ -44,7 +44,7 @@
           </view>
           <view class="score-hero">
             <view class="score-label">{{scoreStatusText || '官方实时'}} · 总分</view>
-            <view class="score">{{total}}</view>
+            <view class="score">{{totalText}}</view>
           </view>
         </view>
         <view class="score-sub">{{scoreDetailText ? scoreDetailText + ' · ' : ''}}更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
@@ -76,7 +76,7 @@
           </view>
           <view class="score-hero">
             <view class="score-label">{{scoreStatusText || '官方实时'}} · 总分</view>
-            <view class="score">{{total}}</view>
+            <view class="score">{{totalText}}</view>
           </view>
         </view>
         <view class="score-sub">{{scoreDetailText ? scoreDetailText + ' · ' : ''}}更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>

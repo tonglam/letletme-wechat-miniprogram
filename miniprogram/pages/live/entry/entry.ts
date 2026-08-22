@@ -62,7 +62,9 @@ export function noLiveEventState() {
     scoreStatusText: "官方分数不可用",
     scoreDetailText: "",
     scoreNextRefreshAt: "",
-    lastUpdated: ""
+    lastUpdated: "",
+    livePointsText: "—",
+    totalText: "—"
   };
 }
 
@@ -95,6 +97,8 @@ interface LiveEntryData {
   scoreStatusText: string;
   scoreDetailText: string;
   scoreNextRefreshAt: string;
+  livePointsText: string;
+  totalText: string;
   total: number;
   livePoints: number;
   netPoints: number;
@@ -188,6 +192,8 @@ Page({
     scoreStatusText: "官方分数不可用",
     scoreDetailText: "",
     scoreNextRefreshAt: "",
+    livePointsText: "—",
+    totalText: "—",
     total: 0,
     livePoints: 0,
     netPoints: 0,
@@ -334,9 +340,12 @@ Page({
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(this.data.event),
       shouldReloadOnUnchangedProbe: () => Boolean(
-        this.data.scoreNextRefreshAt &&
-        Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+        this.data.scoreState === "SETTLING" || (
+          this.data.scoreNextRefreshAt &&
+          Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+        )
       ),
+      getNextRefreshAt: () => this.data.scoreNextRefreshAt || null,
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -440,6 +449,8 @@ Page({
           transfersError: "",
           total: 0,
           livePoints: 0,
+          livePointsText: "—",
+          totalText: "—",
           netPoints: 0,
           transferCost: 0,
           captainText: "-",
@@ -683,6 +694,8 @@ Page({
       emptyState: nextEntryId ? "" : "entry",
       total: 0,
       livePoints: 0,
+      livePointsText: "—",
+      totalText: "—",
       netPoints: 0,
       transferCost: 0,
       captainText: "-",
@@ -829,6 +842,10 @@ Page({
               : 0
           );
           const hasOfficialHeadline = typeof officialEventPoints === "number";
+          const livePointsText = hasOfficialHeadline ? `${headlinePoints}` : "—";
+          const totalKnown = result.score?.totalScope === "OVERALL"
+            && typeof result.score.totalPoints === "number";
+          const totalText = totalKnown ? `${total}` : "—";
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData({
@@ -843,6 +860,8 @@ Page({
             error: "",
             total,
             livePoints: headlinePoints,
+            livePointsText,
+            totalText,
             netPoints,
             netPointsKnown,
             transferCost: numberValue(result.score?.transferCost ?? result.transferCost),
@@ -850,7 +869,7 @@ Page({
               ? [
                   { label: "实时得分", value: `${headlinePoints}` },
                   { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
-                  { label: "实时总分", value: `${total}` }
+                  { label: "实时总分", value: totalText }
                 ]
               : [],
             starters: [],
@@ -880,9 +899,14 @@ Page({
         const starters = fieldPlayers.filter((player) => player.pickActive !== false);
         const bench = fieldPlayers.filter((player) => player.pickActive === false);
         const livePoints = numberValue(result.score?.eventPoints);
+        const livePointsKnown = typeof result.score?.eventPoints === "number";
         const total = numberValue(
           result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0
         );
+        const totalKnown = result.score?.totalScope === "OVERALL"
+          && typeof result.score.totalPoints === "number";
+        const livePointsText = livePointsKnown ? `${livePoints}` : "—";
+        const totalText = totalKnown ? `${total}` : "—";
         const netPointsKnown = result.score?.netEventPoints != null;
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
@@ -901,6 +925,8 @@ Page({
           error: "",
           total,
           livePoints,
+          livePointsText,
+          totalText,
           netPoints,
           netPointsKnown,
           transferCost,
@@ -908,9 +934,9 @@ Page({
           chipText: chipShareLabel(textValue(result.chip, "无")),
           playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
           summaryTiles: [
-            { label: "实时得分", value: `${livePoints}` },
+            { label: "实时得分", value: livePointsText },
             { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
-            { label: "实时总分", value: `${total}` },
+            { label: "实时总分", value: totalText },
             { label: "转会扣分", value: transferCost > 0 ? `-${transferCost}` : "0" }
           ],
           starters,
@@ -1177,7 +1203,7 @@ Page({
   onShareAppMessage() {
     const teamName = this.data.pitchHeader?.teamName || this.data.entryName || "实时球队";
     return {
-      title: `${teamName} · GW${this.data.event} · ${this.data.livePoints}分`,
+      title: `${teamName} · GW${this.data.event} · ${this.data.livePointsText}分`,
       path: this.data.entryId ? `/pages/live/entry/entry?entry=${this.data.entryId}` : "/pages/live/entry/entry",
       imageUrl: this.data.shareImagePath || undefined
     };
@@ -1201,9 +1227,9 @@ Page({
         entryId: this.data.entryId,
         entryName: this.data.entryName,
         playerName: this.data.playerName,
-        livePoints: this.data.livePoints,
+        livePoints: this.data.livePointsText,
         netPoints: this.data.netPoints,
-        totalPoints: this.data.total,
+        totalPoints: this.data.totalText,
         transferCost: this.data.transferCost,
         chip: this.data.chipText,
         captainName: this.data.captainText,

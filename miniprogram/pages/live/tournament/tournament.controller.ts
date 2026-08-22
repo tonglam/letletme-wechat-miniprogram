@@ -87,6 +87,8 @@ interface SortOption {
 
 interface DisplayTournamentRow extends LiveTournamentRow {
 	visibleRank: number;
+	eventPointsKnown: boolean;
+	totalPointsKnown: boolean;
 	netPointsKnown: boolean;
   displayLive: string;
   displayNet: string;
@@ -245,6 +247,7 @@ function chipCodeOf(raw: unknown): string {
 
 function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
 	const officialEventPoints = row.score?.eventPoints;
+	const eventPointsKnown = typeof officialEventPoints === "number";
 	const livePoints = numberValue(officialEventPoints);
 	const netPointsKnown = row.score?.netEventPoints != null;
 	const liveNetPoints = netPointsKnown
@@ -255,6 +258,8 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
 			? row.score.totalPoints
 			: 0
 	);
+	const totalPointsKnown = row.score?.totalScope === "OVERALL"
+		&& typeof row.score.totalPoints === "number";
   const transferCost = numberValue(row.transferCost);
   const played = numberValue(row.played);
   const toPlay = numberValue(row.toPlay);
@@ -265,15 +270,17 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   return {
 		...row,
 		netPointsKnown,
+		eventPointsKnown,
+		totalPointsKnown,
     livePoints,
     liveNetPoints,
     totalPoints,
     transferCost,
     overallRank: row.overallRank ?? row.rank,
     visibleRank: 0,
-    displayLive: `${livePoints}`,
+		displayLive: eventPointsKnown ? `${livePoints}` : "—",
 		displayNet: netPointsKnown ? `${liveNetPoints}` : "—",
-    displayTotal: `${totalPoints}`,
+		displayTotal: totalPointsKnown ? `${totalPoints}` : "—",
     displayHit: transferCost > 0 ? `-${transferCost}` : "0",
     metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCost} · ${played}/${played + toPlay}`,
     chipCode,
@@ -310,7 +317,12 @@ function buildTournamentStats(rows: DisplayTournamentRow[]) {
   if (rows.length === 0) {
     return { highestText: "—", averageText: "—", entriesText: "0" };
   }
-  const points = rows.map((row) => numberValue(row.livePoints));
+  const points = rows
+		.filter((row) => row.eventPointsKnown)
+		.map((row) => numberValue(row.livePoints));
+  if (points.length === 0) {
+		return { highestText: "—", averageText: "—", entriesText: String(rows.length) };
+	}
   const highest = Math.max(...points);
   const average = Math.round(points.reduce((sum, value) => sum + value, 0) / points.length);
   return {
@@ -623,9 +635,12 @@ PerformancePage({
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(this.data.event),
       shouldReloadOnUnchangedProbe: () => Boolean(
-        this.data.scoreNextRefreshAt &&
-        Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+        this.data.scoreStatusText === "结算中" || (
+          this.data.scoreNextRefreshAt &&
+          Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
+        )
       ),
+      getNextRefreshAt: () => this.data.scoreNextRefreshAt || null,
       reload: () => this.loadRows({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
