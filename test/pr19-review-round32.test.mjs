@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) =>
+  fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
 test("Live Match resumed startup owns errors and initializes recovery polling", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
@@ -12,7 +13,7 @@ test("Live Match resumed startup owns errors and initializes recovery polling", 
   );
   assert.match(
     page,
-    /if \(resumeInterruptedLoad\) \{[\s\S]*this\.initLiveRefresh\(\);[\s\S]*if \(resumeInterruptedLoad\) \{[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/
+    /if \(resumeInterruptedLoad\) \{[\s\S]*this\.initLiveRefresh\(\);[\s\S]*if \(resumeInterruptedLoad\) \{[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true,? \}\)/
   );
 });
 

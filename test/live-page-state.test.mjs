@@ -980,8 +980,8 @@ test("tournament applyRows keeps full rows off page data", () => {
   const page = readFileSync(
     new URL("../miniprogram/pages/live/tournament/tournament.controller.ts", import.meta.url),
     "utf8"
-  );
-  const start = page.indexOf("applyRows(rows: DisplayTournamentRow[]");
+  ).replace(/\s+/g, " ");
+  const start = page.indexOf("applyRows( rows: DisplayTournamentRow[]");
   const apply = page.slice(start, page.indexOf("persistSelectedTournament", start));
   assert.match(apply, /this\.rows = rows/);
   assert.match(apply, /this\.ownershipPlayers = ownershipPlayers/);

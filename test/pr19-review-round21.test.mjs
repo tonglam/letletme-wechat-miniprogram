@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function source(path) {
-  return readFileSync(resolve(root, path), "utf8");
+  return readFileSync(resolve(root, path), "utf8").replace(/\s+/g, " ");
 }
 
 test("Entry queued forced follow-ups are lifecycle owned and cleared on hide", () => {
@@ -39,7 +39,7 @@ test("Match and Tournament resume interrupted primary loads", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(match, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = this\.resumeLoadAfterShow[\s\S]*\|\| \(!this\.resumeForcedRefreshAfterShow[\s\S]*Boolean\(this\.liveRequest\)[\s\S]*liveRequestId \+= 1/);
-  assert.match(match, /if \(resumeInterruptedLoad\)[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/);
+  assert.match(match, /if \(resumeInterruptedLoad\)[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true,? \}\)/);
   assert.match(tournament, /onHide\(\)[\s\S]*if \(this\.directoryRequestPending\)[\s\S]*resumeDirectoryAfterShow = true[\s\S]*tournamentListRequestId \+= 1/);
   assert.match(tournament, /resumed && this\.resumeDirectoryAfterShow[\s\S]*loadTournaments\(forceRefresh\)/);
 });

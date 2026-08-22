@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function source(path) {
-  return readFileSync(resolve(root, path), "utf8");
+  return readFileSync(resolve(root, path), "utf8").replace(/\s+/g, " ");
 }
 
 test("Home cancels hidden deadline recovery and guards the delayed callback", () => {
@@ -34,7 +34,7 @@ test("Match automatic background work does not mutate a completed navigation tra
   assert.match(match, /trace: requestTrace/);
   assert.match(match, /getLiveMatchByStatusSnapshot\([\s\S]*requestTrace/);
   assert.match(match, /onPullDownRefresh\(\)[\s\S]*runForcedRefresh\(tracker, true\)/);
-  assert.match(match, /runForcedRefresh\([\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true \}\)/);
+  assert.match(match, /runForcedRefresh\([\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true,? \}\)/);
 });
 
 test("My FPL GW switches clear primary identity before the replacement read", () => {

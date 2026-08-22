@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
 test("Live Match retry and pull refresh share forced lifecycle ownership", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
   assert.match(page, /runForcedRefresh\(tracker[\s\S]*forcedRefreshPending = true[\s\S]*ensureContext\("pull-refresh", true\)/);
   assert.match(page, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending/);
-  assert.match(page, /onShow\(\)[\s\S]*resumeForcedRefresh[\s\S]*runForcedRefresh\(this\.perfTracker, resumeForcedRefreshBackground\)/);
-  assert.match(page, /onRetry\(\)[\s\S]*runForcedRefresh\(this\.perfTracker, false\)/);
+  assert.match(page, /onShow\(\)[\s\S]*resumeForcedRefresh[\s\S]*runForcedRefresh\(\s*this\.perfTracker, resumeForcedRefreshBackground/);
+  assert.match(page, /onRetry\(\)[\s\S]*runForcedRefresh\(\s*this\.perfTracker, false\)/);
 });
 
 test("Live Entry retry uses the resumable forced refresh owner", () => {

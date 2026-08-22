@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const homeSource = readFileSync("miniprogram/pages/home/index/index.ts", "utf8");
-const liveEntrySource = readFileSync("miniprogram/pages/live/entry/entry.ts", "utf8");
-const performancePageSource = readFileSync("miniprogram/utils/performance-page.ts", "utf8");
+const normalize = (value) => value.replace(/\s+/g, " ");
+const homeSource = normalize(readFileSync("miniprogram/pages/home/index/index.ts", "utf8"));
+const liveEntrySource = normalize(readFileSync("miniprogram/pages/live/entry/entry.ts", "utf8"));
+const performancePageSource = normalize(readFileSync("miniprogram/utils/performance-page.ts", "utf8"));
 
 test("warm Home work stops when its page hides during context resolution", () => {
   assert.match(

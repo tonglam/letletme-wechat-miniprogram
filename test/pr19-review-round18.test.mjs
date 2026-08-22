@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = (path) => readFileSync(path, "utf8");
+const source = (path) => readFileSync(path, "utf8").replace(/\s+/g, " ");
 
 test("Home drops fixture results after visibility ends", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
@@ -22,6 +22,6 @@ test("Live Tournament captures the cold trace before auth and stops hidden conti
 test("Live Entry controls get a fresh refresh tracker", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
 
-  assert.match(page, /onGwChange[\s\S]*?this\.perfTracker = new PagePerformanceTracker\(this, "pages\/live\/entry\/entry", "refresh"\)/);
-  assert.match(page, /onRetry\(\) \{\s+this\.perfTracker\?\.disconnect\(\);\s+this\.perfTracker = new PagePerformanceTracker\(this, "pages\/live\/entry\/entry", "refresh"\)/);
+  assert.match(page, /onGwChange[\s\S]*?this\.perfTracker = new PagePerformanceTracker\(\s*this, "pages\/live\/entry\/entry", "refresh"/);
+  assert.match(page, /onRetry\(\) \{\s+this\.perfTracker\?\.disconnect\(\);\s+this\.perfTracker = new PagePerformanceTracker\(\s*this, "pages\/live\/entry\/entry", "refresh"/);
 });

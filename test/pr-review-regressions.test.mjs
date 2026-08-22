@@ -22,7 +22,7 @@ const { waitForAuthoritativeFollow } = await import("../miniprogram/utils/follow
 const { resolveKeywordAfterPlayerLoad } = await import("../miniprogram/pages/data/players/players.ts");
 
 function source(relativePath) {
-  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 }
 
 test("personal list pages wait for cold-start auth before reading the follow", async () => {

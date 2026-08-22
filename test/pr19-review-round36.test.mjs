@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
 test("Data selections directory rejects superseded responses", () => {
   const page = read("miniprogram/pages/data/selections/selections.ts");
@@ -31,6 +31,6 @@ test("Home invalidates and resumes a refresh interrupted by page hide", () => {
 test("Live Tournament invalidates and resumes interrupted row reads", () => {
   const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(page, /onHide\(\)[\s\S]*resumeRowsAfterShow = this\.resumeRowsAfterShow[\s\S]*\|\| \(!this\.resumeDirectoryAfterShow[\s\S]*Boolean\(this\.rowsRequest[\s\S]*rowsRequestId \+= 1[\s\S]*rowsRequest = null/);
-  assert.match(page, /onShow\(\)[\s\S]*resumeRowsAfterShow[\s\S]*loadRows\(\{ background: this\.data\.hasData, forceRefresh: true \}\)/);
+  assert.match(page, /onShow\(\)[\s\S]*resumeRowsAfterShow[\s\S]*loadRows\(\{ background: this\.data\.hasData, forceRefresh: true,? \}\)/);
   assert.match(page, /if \(!this\.pageVisible \|\| requestId !== this\.rowsRequestId\) return;/);
 });
