@@ -1,29 +1,39 @@
-import { getLiveMatchByStatusSnapshot, getLiveSnapshot } from "../../../services/live.service";
-import type { LiveMatch, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import {
+  getLiveMatchByStatusSnapshot,
+  getLiveSnapshot,
+} from "../../../services/live.service";
+import type {
+  LiveMatch,
+  LivePlayerRow,
+  LiveSnapshotStatus,
+} from "../../../models/live";
 import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
 import type { Fixture } from "../../../models/common";
 import {
   ensureAppContext,
   getAppContextSnapshot,
-  shouldRefreshAppContext
+  shouldRefreshAppContext,
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
   shouldRevalidateCachedLiveSnapshot,
-  shouldPollLiveSnapshot
+  shouldPollLiveSnapshot,
 } from "../../../utils/live-refresh";
 import {
   createLiveRefreshController,
-  type LiveRefreshController
+  type LiveRefreshController,
 } from "../../../utils/live-refresh-controller";
 import { subscribeNetworkStatus } from "../../../utils/live-network";
 import {
   normalizeLiveDisplayState,
-  type LiveDisplayState
+  type LiveDisplayState,
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
-import { copyShareText, formatLiveMatchShareText } from "../../../utils/live-share";
+import {
+  copyShareText,
+  formatLiveMatchShareText,
+} from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
 
 interface StatusOption {
@@ -45,14 +55,17 @@ interface LiveMatchLoadOptions {
 const STATUS_OPTIONS: StatusOption[] = [
   { key: "playing", label: "比赛中" },
   { key: "not_start", label: "未开始" },
-  { key: "finished", label: "已完赛" }
+  { key: "finished", label: "已完赛" },
 ];
 
 const STORAGE_STATUS_KEY = "letletme_live_match_status";
 const DEFAULT_STATUS = "playing";
 
 function isValidStatus(value: unknown): value is string {
-  return typeof value === "string" && STATUS_OPTIONS.some((item) => item.key === value);
+  return (
+    typeof value === "string" &&
+    STATUS_OPTIONS.some((item) => item.key === value)
+  );
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -174,7 +187,7 @@ const HIGHLIGHT_LABELS: Record<MatchHighlightKind, string> = {
   yellow: "黄牌",
   red: "红牌",
   penmissed: "失点",
-  owngoal: "乌龙"
+  owngoal: "乌龙",
 };
 
 function playerTeam(player: LivePlayerRow): string {
@@ -197,13 +210,15 @@ export function isDefensiveContributionEarned(player: LivePlayerRow): boolean {
 export function isCleanSheetEarned(player: LivePlayerRow): boolean {
   const type = numberValue(player.elementType);
   if (type < 1 || type > 3) return false;
-  return numberValue(player.cleanSheets) > 0 && numberValue(player.minutes) >= 60;
+  return (
+    numberValue(player.cleanSheets) > 0 && numberValue(player.minutes) >= 60
+  );
 }
 
 function sortedHighlightItems(
   players: LivePlayerRow[],
   read: (player: LivePlayerRow) => number,
-  format: (value: number) => string
+  format: (value: number) => string,
 ): MatchHighlightItem[] {
   return players
     .map((player) => ({ player, value: read(player) }))
@@ -218,24 +233,39 @@ function sortedHighlightItems(
         name,
         team,
         text: display,
-        display
+        display,
       };
     });
 }
 
 /** Top N by BPS, including all players tied at the cutoff position. */
-function bpsHighlightItemsWithTies(players: LivePlayerRow[], limit: number): MatchHighlightItem[] {
+function bpsHighlightItemsWithTies(
+  players: LivePlayerRow[],
+  limit: number,
+): MatchHighlightItem[] {
   const sorted = players
-    .filter((player) => player.bps != null && Number.isFinite(Number(player.bps)))
+    .filter(
+      (player) => player.bps != null && Number.isFinite(Number(player.bps)),
+    )
     .sort((left, right) => numberValue(right.bps) - numberValue(left.bps));
-  const withTies = sorted.length <= limit
-    ? sorted
-    : sorted.filter((player) => numberValue(player.bps) >= numberValue(sorted[limit - 1].bps));
+  const withTies =
+    sorted.length <= limit
+      ? sorted
+      : sorted.filter(
+          (player) =>
+            numberValue(player.bps) >= numberValue(sorted[limit - 1].bps),
+        );
   return withTies.map((player) => {
     const name = playerShortName(player);
     const team = playerTeam(player);
     const display = String(numberValue(player.bps));
-    return { key: [name, team, player.bps].join(":"), name, team, text: display, display };
+    return {
+      key: [name, team, player.bps].join(":"),
+      name,
+      team,
+      text: display,
+      display,
+    };
   });
 }
 
@@ -243,46 +273,143 @@ function bpsHighlightItemsWithTies(players: LivePlayerRow[], limit: number): Mat
 export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
   const status = String(match.status || match.playStatus || "");
   if (status === "not_start" || status === "not_started") return [];
-  const players = [...(match.homeTeamDataList || []), ...(match.awayTeamDataList || [])];
+  const players = [
+    ...(match.homeTeamDataList || []),
+    ...(match.awayTeamDataList || []),
+  ];
   const groups: MatchHighlightGroup[] = [
-    { kind: "goals", label: HIGHLIGHT_LABELS.goals, items: sortedHighlightItems(players, (player) => numberValue(player.goalsScored), String) },
-    { kind: "assists", label: HIGHLIGHT_LABELS.assists, items: sortedHighlightItems(players, (player) => numberValue(player.assists), String) },
+    {
+      kind: "goals",
+      label: HIGHLIGHT_LABELS.goals,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.goalsScored),
+        String,
+      ),
+    },
+    {
+      kind: "assists",
+      label: HIGHLIGHT_LABELS.assists,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.assists),
+        String,
+      ),
+    },
     {
       kind: "defensive",
       label: HIGHLIGHT_LABELS.defensive,
       items: sortedHighlightItems(
         players,
-        (player) => (isDefensiveContributionEarned(player) ? numberValue(player.defensiveContribution) : 0),
-        String
-      )
+        (player) =>
+          isDefensiveContributionEarned(player)
+            ? numberValue(player.defensiveContribution)
+            : 0,
+        String,
+      ),
     },
-    { kind: "saves", label: HIGHLIGHT_LABELS.saves, items: sortedHighlightItems(players, (player) => numberValue(player.saves), String) },
+    {
+      kind: "saves",
+      label: HIGHLIGHT_LABELS.saves,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.saves),
+        String,
+      ),
+    },
     {
       kind: "cleansheet",
       label: HIGHLIGHT_LABELS.cleansheet,
-      items: sortedHighlightItems(players, (player) => (isCleanSheetEarned(player) ? numberValue(player.cleanSheets) : 0), String)
+      items: sortedHighlightItems(
+        players,
+        (player) =>
+          isCleanSheetEarned(player) ? numberValue(player.cleanSheets) : 0,
+        String,
+      ),
     },
-    { kind: "pensaved", label: HIGHLIGHT_LABELS.pensaved, items: sortedHighlightItems(players, (player) => numberValue(player.penaltiesSaved), String) },
-    { kind: "yellow", label: HIGHLIGHT_LABELS.yellow, items: sortedHighlightItems(players, (player) => numberValue(player.yellowCards), String) },
-    { kind: "red", label: HIGHLIGHT_LABELS.red, items: sortedHighlightItems(players, (player) => numberValue(player.redCards), String) },
-    { kind: "penmissed", label: HIGHLIGHT_LABELS.penmissed, items: sortedHighlightItems(players, (player) => numberValue(player.penaltiesMissed), String) },
-    { kind: "owngoal", label: HIGHLIGHT_LABELS.owngoal, items: sortedHighlightItems(players, (player) => numberValue(player.ownGoals), String) },
-    { kind: "bonus", label: HIGHLIGHT_LABELS.bonus, items: sortedHighlightItems(players, (player) => numberValue(player.bonus), (value) => `+${value}`) },
+    {
+      kind: "pensaved",
+      label: HIGHLIGHT_LABELS.pensaved,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.penaltiesSaved),
+        String,
+      ),
+    },
+    {
+      kind: "yellow",
+      label: HIGHLIGHT_LABELS.yellow,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.yellowCards),
+        String,
+      ),
+    },
+    {
+      kind: "red",
+      label: HIGHLIGHT_LABELS.red,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.redCards),
+        String,
+      ),
+    },
+    {
+      kind: "penmissed",
+      label: HIGHLIGHT_LABELS.penmissed,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.penaltiesMissed),
+        String,
+      ),
+    },
+    {
+      kind: "owngoal",
+      label: HIGHLIGHT_LABELS.owngoal,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.ownGoals),
+        String,
+      ),
+    },
+    {
+      kind: "bonus",
+      label: HIGHLIGHT_LABELS.bonus,
+      items: sortedHighlightItems(
+        players,
+        (player) => numberValue(player.bonus),
+        (value) => `+${value}`,
+      ),
+    },
     {
       kind: "bps",
       label: HIGHLIGHT_LABELS.bps,
-      items: bpsHighlightItemsWithTies(players, 5)
-    }
+      items: bpsHighlightItemsWithTies(players, 5),
+    },
   ];
-  const countKinds = new Set<MatchHighlightKind>(["goals", "assists", "saves", "yellow", "red", "cleansheet", "pensaved", "penmissed", "owngoal"]);
+  const countKinds = new Set<MatchHighlightKind>([
+    "goals",
+    "assists",
+    "saves",
+    "yellow",
+    "red",
+    "cleansheet",
+    "pensaved",
+    "penmissed",
+    "owngoal",
+  ]);
   return groups
     .filter((group) => group.items.length > 0)
     .map((group) => ({
       ...group,
       items: group.items.map((item) => ({
         ...item,
-        display: countKinds.has(group.kind) ? (item.text === "1" ? "" : `×${item.text}`) : item.text
-      }))
+        display: countKinds.has(group.kind)
+          ? item.text === "1"
+            ? ""
+            : `×${item.text}`
+          : item.text,
+      })),
     }));
 }
 
@@ -290,14 +417,16 @@ function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
   return {
     ...match,
     matchId: match.matchId || match.id,
-    homeTeamDisplay: match.homeTeamShortName || match.homeTeamName || match.homeTeam,
-    awayTeamDisplay: match.awayTeamShortName || match.awayTeamName || match.awayTeam,
+    homeTeamDisplay:
+      match.homeTeamShortName || match.homeTeamName || match.homeTeam,
+    awayTeamDisplay:
+      match.awayTeamShortName || match.awayTeamName || match.awayTeam,
     statusText: statusLabel(match, fallbackStatus),
     statusClass: statusClass(match, fallbackStatus),
     scoreText: scoreText(match, fallbackStatus),
     kickoffText: kickoffText(match),
     minuteText: minuteText(match),
-    eventSummary: buildMatchHighlights(match)
+    eventSummary: buildMatchHighlights(match),
   };
 }
 
@@ -305,12 +434,16 @@ function groupMatches(matches: LiveMatch[], status: string): MatchGroup[] {
   const groups: Record<string, LiveMatch[]> = {};
 
   matches.forEach((match) => {
-    const title = status === "playing" ? "正在进行" : match.kickoffText || "比赛";
+    const title =
+      status === "playing" ? "正在进行" : match.kickoffText || "比赛";
     groups[title] = groups[title] || [];
     groups[title].push(match);
   });
 
-  return Object.keys(groups).map((title) => ({ title, matches: groups[title] }));
+  return Object.keys(groups).map((title) => ({
+    title,
+    matches: groups[title],
+  }));
 }
 
 function emptyDescription(status: string): string {
@@ -342,70 +475,109 @@ export function noScheduleState() {
     groups: [] as MatchGroup[],
     displayState: "scheduled" as const,
     lastUpdated: "",
-    fixtureStaleMessage: ""
+    fixtureStaleMessage: "",
   };
 }
 
 function coreMatch(fixture: Fixture): LiveMatch {
   const started = fixture.started === true;
-  const status = fixture.finished ? "finished" : started ? "playing" : "not_start";
-  return normalizeMatch({
-    id: fixture.id,
-    matchId: fixture.id,
-    homeTeamName: fixture.homeTeam,
-    awayTeamName: fixture.awayTeam,
-    homeTeamShortName: fixture.teamShortName,
-    awayTeamShortName: fixture.againstTeamShortName,
-    homeScore: fixture.homeScore,
-    awayScore: fixture.awayScore,
-    kickoffTime: fixture.kickoffTime,
-    minutes: fixture.minutes,
+  const status = fixture.finished
+    ? "finished"
+    : started
+      ? "playing"
+      : "not_start";
+  return normalizeMatch(
+    {
+      id: fixture.id,
+      matchId: fixture.id,
+      homeTeamName: fixture.homeTeam,
+      awayTeamName: fixture.awayTeam,
+      homeTeamShortName: fixture.teamShortName,
+      awayTeamShortName: fixture.againstTeamShortName,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+      kickoffTime: fixture.kickoffTime,
+      minutes: fixture.minutes,
+      status,
+      playStatus: status,
+      homeTeamDataList: [],
+      awayTeamDataList: [],
+    },
     status,
-    playStatus: status,
-    homeTeamDataList: [],
-    awayTeamDataList: []
-  }, status);
+  );
 }
 
 function matchStatus(match: LiveMatch): string {
-  const status = String(match.status || match.playStatus || "not_start").toLowerCase();
+  const status = String(
+    match.status || match.playStatus || "not_start",
+  ).toLowerCase();
   if (status === "playing" || status === "live") return "playing";
   if (status === "finished") return "finished";
   return "not_start";
 }
 
-function filterMatches(matches: LiveMatch[] | undefined, status: string): LiveMatch[] {
+function filterMatches(
+  matches: LiveMatch[] | undefined,
+  status: string,
+): LiveMatch[] {
   return (matches || []).filter((match) => matchStatus(match) === status);
 }
 
-export function mergeLiveOverlay(core: LiveMatch[], overlay: LiveMatch[]): LiveMatch[] {
-  const liveById = new Map(overlay.map((match) => [String(match.matchId || match.id), match]));
+export function mergeLiveOverlay(
+  core: LiveMatch[],
+  overlay: LiveMatch[],
+): LiveMatch[] {
+  const liveById = new Map(
+    overlay.map((match) => [String(match.matchId || match.id), match]),
+  );
   return core.map((match) => {
     const live = liveById.get(String(match.matchId || match.id));
     if (!live) return match;
-    const overlayHasStatus = Boolean(live.status || live.playStatus);
-    const status = overlayHasStatus ? matchStatus(live) : matchStatus(match);
-    return normalizeMatch({
-      ...match,
-      ...live,
-      // The live overlay owns score/status/minutes/player details. Team
-      // identity always comes from the core fixture snapshot so an
-      // abbreviated fallback can never overwrite an official short name.
-      homeTeamName: match.homeTeamName,
-      homeTeamShortName: match.homeTeamShortName,
-      awayTeamName: match.awayTeamName,
-      awayTeamShortName: match.awayTeamShortName,
-      minutes: live.minutes ?? match.minutes,
+    const coreStatus = matchStatus(match);
+    const liveStatus = matchStatus(live);
+    const status =
+      coreStatus === "finished" || liveStatus === "finished"
+        ? "finished"
+        : coreStatus === "playing" || liveStatus === "playing"
+          ? "playing"
+          : "not_start";
+    return normalizeMatch(
+      {
+        ...match,
+        ...live,
+        // The live overlay owns score/status/minutes/player details. Team
+        // identity always comes from the core fixture snapshot so an
+        // abbreviated fallback can never overwrite an official short name.
+        homeTeamName: match.homeTeamName,
+        homeTeamShortName: match.homeTeamShortName,
+        awayTeamName: match.awayTeamName,
+        awayTeamShortName: match.awayTeamShortName,
+        homeScore: live.homeScore ?? match.homeScore,
+        awayScore: live.awayScore ?? match.awayScore,
+        minutes: Math.max(
+          numberValue(live.minutes),
+          numberValue(match.minutes),
+        ),
+        homeTeamDataList:
+          live.homeTeamDataList && live.homeTeamDataList.length > 0
+            ? live.homeTeamDataList
+            : match.homeTeamDataList,
+        awayTeamDataList:
+          live.awayTeamDataList && live.awayTeamDataList.length > 0
+            ? live.awayTeamDataList
+            : match.awayTeamDataList,
+        status,
+        playStatus: status,
+      },
       status,
-      playStatus: status
-    }, status);
+    );
   });
 }
 
 export function contextDeadlineTargetAt(
   nextDeadlineAt: number | null | undefined,
   now: number,
-  retry = false
+  retry = false,
 ): number | null {
   if (retry) return now + 30_000;
   const deadline = Number(nextDeadlineAt);
@@ -431,7 +603,7 @@ Page({
     lastUpdated: "",
     copiedMatchId: "" as number | string,
     shareSheetOpen: false,
-    shareText: ""
+    shareText: "",
   },
 
   copiedMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -462,25 +634,35 @@ Page({
   resumeForcedRefreshAfterShow: false,
   resumeForcedRefreshBackground: false,
 
-  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+  ensureContext(
+    reason: "page-load" | "page-show" | "pull-refresh",
+    forceRefresh = false,
+  ) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad() {
     this.pageVisible = true;
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "cold-launch");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/match/match",
+      "cold-launch",
+    );
     const tracker = this.perfTracker;
     this.startupPending = true;
     const rawStoredStatus = wx.getStorageSync(STORAGE_STATUS_KEY);
-    const storedStatus = rawStoredStatus === "next_event" ? "not_start" : rawStoredStatus;
+    const storedStatus =
+      rawStoredStatus === "next_event" ? "not_start" : rawStoredStatus;
     if (rawStoredStatus === "next_event") {
       wx.setStorageSync(STORAGE_STATUS_KEY, "not_start");
     }
     if (isValidStatus(storedStatus)) {
       this.setData({
         status: storedStatus,
-        activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === storedStatus)?.label || "比赛中",
-        emptyDescription: emptyDescription(storedStatus)
+        activeStatusLabel:
+          STATUS_OPTIONS.find((item) => item.key === storedStatus)?.label ||
+          "比赛中",
+        emptyDescription: emptyDescription(storedStatus),
       });
     }
     // onShow can run before shared launch data has resolved. Wait for the
@@ -501,16 +683,22 @@ Page({
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
     this.perfTracker.mark("contextReadyAt");
-    this.currentEventId = context.currentEvent || 0;
-    this.targetEventId = context.displayEvent || 0;
+    const liveWindow = await getLiveSnapshot().catch(() => null);
+    this.liveSnapshot = liveWindow;
+    this.currentEventId = liveWindow?.eventId ?? context.currentEvent ?? 0;
+    this.targetEventId = liveWindow?.eventId ?? context.displayEvent ?? 0;
     this.loadedSeason = context.season || undefined;
     this.armContextDeadline(context.nextDeadlineAt);
-    if (!context.currentEvent && this.targetEventId && !isValidStatus(storedStatus)) {
+    if (
+      !context.currentEvent &&
+      this.targetEventId &&
+      !isValidStatus(storedStatus)
+    ) {
       // Preseason/offseason uses the schema-backed not-started bucket.
       this.setData({
         status: "not_start",
         activeStatusLabel: "未开始",
-        emptyDescription: emptyDescription("not_start")
+        emptyDescription: emptyDescription("not_start"),
       });
     }
     this.initLiveRefresh();
@@ -523,13 +711,16 @@ Page({
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
-      probe: () => getLiveSnapshot(this.currentEventId),
+      probe: () => getLiveSnapshot(),
       reload: () => this.loadData({ background: true, forceRefresh: true }),
+      getNextRefreshAt: () => this.liveSnapshot?.nextRefreshAt || null,
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+          ...(snapshot?.checkedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+            : {}),
         });
         this.syncDisplayState();
       },
@@ -550,15 +741,19 @@ Page({
           surface: "match",
           season: this.liveSnapshot?.season,
           eventId: this.currentEventId,
-          isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+          isCurrentEvent:
+            this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
           coverageFailed: this.liveSnapshot?.coverageFailed,
           probeDurationBucket: durationBucket(info.probeDurationMs),
-          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+          fullFetchDurationBucket:
+            info.reloadDurationMs === undefined
+              ? undefined
+              : durationBucket(info.reloadDurationMs),
         });
       },
-      subscribeNetwork: subscribeNetworkStatus
+      subscribeNetwork: subscribeNetworkStatus,
     });
   },
 
@@ -605,12 +800,19 @@ Page({
     try {
       const context = await this.ensureContext("page-show", true);
       if (!this.pageVisible) return;
-      const nextCurrentEventId = context.currentEvent || 0;
-      const nextTargetEventId = context.displayEvent || 0;
+      const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
+      if (liveWindow) this.liveSnapshot = liveWindow;
+      const nextCurrentEventId =
+        liveWindow?.eventId ?? context.currentEvent ?? 0;
+      const nextTargetEventId =
+        liveWindow?.eventId ?? context.displayEvent ?? 0;
       const nextSeason = context.season || undefined;
-      const changed = nextCurrentEventId !== this.currentEventId
-        || nextTargetEventId !== this.targetEventId
-        || Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+      const changed =
+        nextCurrentEventId !== this.currentEventId ||
+        nextTargetEventId !== this.targetEventId ||
+        Boolean(
+          this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
+        );
       this.currentEventId = nextCurrentEventId;
       this.targetEventId = nextTargetEventId;
       if (nextSeason) this.loadedSeason = nextSeason;
@@ -621,9 +823,15 @@ Page({
       this.liveRequestId += 1;
       this.liveRequest = null;
       this.liveRequestKey = "";
-      this.liveSnapshot = null;
+      this.liveSnapshot = liveWindow;
       this.cachedLiveStoredAt = undefined;
-      this.setData({ matches: [], groups: [], hasData: false, fixtureStaleMessage: "", lastUpdated: "" });
+      this.setData({
+        matches: [],
+        groups: [],
+        hasData: false,
+        fixtureStaleMessage: "",
+        lastUpdated: "",
+      });
       this.liveRefresh?.sync();
       await this.loadData({ background: true, forceRefresh: true });
       this.syncDisplayState();
@@ -632,12 +840,15 @@ Page({
     }
   },
 
-  armKickoffTransition(fixtures: Array<{ finished?: boolean; kickoffTime?: string }>, retry = false) {
+  armKickoffTransition(
+    fixtures: Array<{ finished?: boolean; kickoffTime?: string }>,
+    retry = false,
+  ) {
     this.clearKickoffTransition();
     if (
-      !this.pageVisible
-      || this.currentEventId <= 0
-      || this.targetEventId !== this.currentEventId
+      !this.pageVisible ||
+      this.currentEventId <= 0 ||
+      this.targetEventId !== this.currentEventId
     ) {
       return;
     }
@@ -659,9 +870,9 @@ Page({
     this.kickoffTransitionTimer = setTimeout(() => {
       this.kickoffTransitionTimer = undefined;
       if (
-        !this.pageVisible
-        || this.currentEventId <= 0
-        || this.targetEventId !== this.currentEventId
+        !this.pageVisible ||
+        this.currentEventId <= 0 ||
+        this.targetEventId !== this.currentEventId
       ) {
         return;
       }
@@ -674,16 +885,20 @@ Page({
   },
 
   showContextError(error: unknown) {
-    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    this.setData({
-      loading: false,
-      refreshing: false,
-      error: message,
-      scheduleEmpty: false
-    }, () => {
-      this.perfTracker?.mark("primarySetDataAt");
-      wx.nextTick(() => this.perfTracker?.observePrimary());
-    });
+    const message =
+      error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData(
+      {
+        loading: false,
+        refreshing: false,
+        error: message,
+        scheduleEmpty: false,
+      },
+      () => {
+        this.perfTracker?.mark("primarySetDataAt");
+        wx.nextTick(() => this.perfTracker?.observePrimary());
+      },
+    );
     this.syncDisplayState();
   },
 
@@ -699,8 +914,10 @@ Page({
       if (!context) throw new Error("赛季和比赛轮信息加载失败");
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
-      this.currentEventId = context.currentEvent || 0;
-      this.targetEventId = context.displayEvent || 0;
+      const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
+      if (liveWindow) this.liveSnapshot = liveWindow;
+      this.currentEventId = liveWindow?.eventId ?? context.currentEvent ?? 0;
+      this.targetEventId = liveWindow?.eventId ?? context.displayEvent ?? 0;
       this.loadedSeason = context.season || this.loadedSeason;
       this.armContextDeadline(context.nextDeadlineAt);
       tracker.mark("contextReadyAt");
@@ -713,9 +930,14 @@ Page({
         return;
       }
       this.initLiveRefresh();
-      await this.loadData({ background, forceRefresh: true, trackNavigation: true });
+      await this.loadData({
+        background,
+        forceRefresh: true,
+        trackNavigation: true,
+      });
     } catch (error) {
-      if (this.pageVisible && this.perfTracker === tracker) this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker)
+        this.showContextError(error);
     } finally {
       if (this.pageVisible && this.perfTracker === tracker) {
         this.refreshContextPending = false;
@@ -740,17 +962,22 @@ Page({
       this.perfTracker = new PagePerformanceTracker(
         this,
         "pages/live/match/match",
-        resumeForcedRefresh ? "refresh" : "warm-enter"
+        resumeForcedRefresh ? "refresh" : "warm-enter",
       );
       if (resumeForcedRefresh) {
         this.resumeLoadAfterShow = false;
-        await this.runForcedRefresh(this.perfTracker, resumeForcedRefreshBackground);
+        await this.runForcedRefresh(
+          this.perfTracker,
+          resumeForcedRefreshBackground,
+        );
         return;
       }
       try {
         context = await this.ensureContext("page-show");
         this.perfTracker.mark("contextReadyAt");
-      } catch { /* keep the last known event */ }
+      } catch {
+        /* keep the last known event */
+      }
       if (!this.pageVisible) return;
     }
     if (resumeInterruptedLoad) {
@@ -761,13 +988,22 @@ Page({
       // The replacement lifecycle owns both the load and its recovery polling.
       this.initLiveRefresh();
     }
-    const nextCurrentEventId = context?.currentEvent || 0;
-    const nextTargetEventId = context?.displayEvent || 0;
+    const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
+    if (liveWindow) this.liveSnapshot = liveWindow;
+    const nextCurrentEventId =
+      liveWindow?.eventId ?? context?.currentEvent ?? 0;
+    const nextTargetEventId = liveWindow?.eventId ?? context?.displayEvent ?? 0;
     const nextSeason = context?.season || undefined;
     this.armContextDeadline(context?.nextDeadlineAt);
-    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    const seasonChanged = Boolean(
+      this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
+    );
     if (nextSeason) this.loadedSeason = nextSeason;
-    if (seasonChanged || nextCurrentEventId !== this.currentEventId || nextTargetEventId !== this.targetEventId) {
+    if (
+      seasonChanged ||
+      nextCurrentEventId !== this.currentEventId ||
+      nextTargetEventId !== this.targetEventId
+    ) {
       this.liveRefresh?.stop();
       this.clearKickoffTransition();
       // The request key is otherwise only the status, which can be unchanged
@@ -778,7 +1014,7 @@ Page({
       this.liveRequestKey = "";
       this.currentEventId = nextCurrentEventId;
       this.targetEventId = nextTargetEventId;
-      this.liveSnapshot = null;
+      this.liveSnapshot = liveWindow;
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
         this.clearCopiedMatchTimer();
@@ -790,7 +1026,7 @@ Page({
           lastUpdated: "",
           copiedMatchId: "",
           shareSheetOpen: false,
-          shareText: ""
+          shareText: "",
         });
         this.liveRefresh?.sync();
         await this.loadData({ forceRefresh: true });
@@ -799,7 +1035,10 @@ Page({
       }
     }
     if (resumeInterruptedLoad) {
-      await this.loadData({ background: this.data.hasData, forceRefresh: true });
+      await this.loadData({
+        background: this.data.hasData,
+        forceRefresh: true,
+      });
       return;
     }
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
@@ -807,7 +1046,11 @@ Page({
     }
     this.armKickoffTransition(this.coreMatches);
     this.liveRefresh?.sync();
-    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
+    if (
+      !this.revalidateCachedSnapshot() &&
+      resumed &&
+      this.shouldAutoRefresh()
+    ) {
       void this.liveRefresh?.probeNow();
     }
   },
@@ -816,10 +1059,12 @@ Page({
     this.pageVisible = false;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
     this.resumeForcedRefreshBackground = this.forcedRefreshBackground;
-    this.resumeLoadAfterShow = this.resumeLoadAfterShow
-      || (!this.resumeForcedRefreshAfterShow && (this.startupPending
-        || this.refreshContextPending
-        || Boolean(this.liveRequest)));
+    this.resumeLoadAfterShow =
+      this.resumeLoadAfterShow ||
+      (!this.resumeForcedRefreshAfterShow &&
+        (this.startupPending ||
+          this.refreshContextPending ||
+          Boolean(this.liveRequest)));
     if (this.liveRequest) {
       this.liveRequestId += 1;
       this.liveRequest = null;
@@ -854,7 +1099,11 @@ Page({
 
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/match/match",
+      "refresh",
+    );
     const tracker = this.perfTracker;
     try {
       await this.runForcedRefresh(tracker, true);
@@ -864,7 +1113,8 @@ Page({
   },
 
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
-    const tracksNavigation = options.background !== true || options.trackNavigation === true;
+    const tracksNavigation =
+      options.background !== true || options.trackNavigation === true;
     const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       return this.liveRequest;
@@ -874,15 +1124,25 @@ Page({
     this.liveRequestId = requestId;
     const preserveData = options.background === true && this.data.hasData;
     const navigationTracker = tracksNavigation ? this.perfTracker : undefined;
-    this.setData(preserveData
-      ? { refreshing: true, error: "" }
-      : { loading: true, error: "", scheduleEmpty: false });
+    this.setData(
+      preserveData
+        ? { refreshing: true, error: "" }
+        : { loading: true, error: "", scheduleEmpty: false },
+    );
 
     const request = (async () => {
       try {
-        const context = getAppContextSnapshot()
-          || await this.ensureContext("page-load");
-        const targetEvent = context.displayEvent || 0;
+        const context =
+          getAppContextSnapshot() || (await this.ensureContext("page-load"));
+        const liveWindowSnapshot = await getLiveSnapshot().catch(
+          () => this.liveSnapshot,
+        );
+        if (liveWindowSnapshot) this.liveSnapshot = liveWindowSnapshot;
+        const targetEvent =
+          liveWindowSnapshot?.eventId ??
+          this.targetEventId ??
+          context.displayEvent ??
+          0;
         if (!targetEvent) {
           this.liveRefresh?.stop();
           this.setData(noScheduleState(), () => {
@@ -892,54 +1152,72 @@ Page({
           this.syncDisplayState();
           return;
         }
-        this.currentEventId = context.currentEvent || 0;
+        this.currentEventId = targetEvent;
         this.targetEventId = targetEvent;
         this.armContextDeadline(context.nextDeadlineAt);
-        const requestTrace = options.background === true && options.trackNavigation !== true
-          ? null
-          : navigationTracker
-            ? {
-                navigationId: navigationTracker.navigationId,
-                callerSurface: "live-match-schedule",
-                trigger: options.forceRefresh ? "refresh" as const : "load" as const,
-                forceReason: options.forceRefresh ? "user-refresh" as const : undefined,
-                contextRevision: context.contextRevision
-              }
-            : undefined;
+        const requestTrace =
+          options.background === true && options.trackNavigation !== true
+            ? null
+            : navigationTracker
+              ? {
+                  navigationId: navigationTracker.navigationId,
+                  callerSurface: "live-match-schedule",
+                  trigger: options.forceRefresh
+                    ? ("refresh" as const)
+                    : ("load" as const),
+                  forceReason: options.forceRefresh
+                    ? ("user-refresh" as const)
+                    : undefined,
+                  contextRevision: context.contextRevision,
+                }
+              : undefined;
         navigationTracker?.mark("primaryRequestStartAt");
-        const coreRead = await readCoreEventFixtureSchedule(targetEvent, context.season, {
-          forceRefresh: options.forceRefresh,
-          trace: requestTrace
-        });
+        const coreRead = await readCoreEventFixtureSchedule(
+          targetEvent,
+          context.season,
+          {
+            forceRefresh: options.forceRefresh,
+            trace: requestTrace,
+          },
+        );
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
         this.coreMatches = core;
-        const now = Date.now();
-        this.liveWindow = targetEvent === context.currentEvent && coreRead.data.some((fixture) =>
-          !fixture.finished
-          && (fixture.started === true || Boolean(fixture.kickoffTime && new Date(fixture.kickoffTime).getTime() <= now))
-        );
+        this.liveWindow =
+          Boolean(
+            this.liveSnapshot && this.liveSnapshot.windowState !== "OFFSEASON",
+          ) ||
+          coreRead.data.some(
+            (fixture) => !fixture.finished && fixture.started === true,
+          );
         this.armKickoffTransition(coreRead.data);
         const activeStatus = this.data.status;
-        const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label || "比赛";
+        const activeStatusLabel =
+          STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label ||
+          "比赛";
         const matches = filterMatches(core, activeStatus);
-        this.setData({
-          activeStatusLabel,
-          emptyDescription: emptyDescription(activeStatus),
-          matches,
-          groups: groupMatches(matches, activeStatus),
-          hasData: true,
-          scheduleEmpty: false,
-          error: "",
-          fixtureStaleMessage: coreRead.meta.stale
-            ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
-            : "",
-          lastUpdated: formatTime(new Date(coreRead.meta.storedAt || Date.now()))
-        }, () => {
-          navigationTracker?.mark("primarySetDataAt");
-          wx.nextTick(() => navigationTracker?.observePrimary());
-        });
+        this.setData(
+          {
+            activeStatusLabel,
+            emptyDescription: emptyDescription(activeStatus),
+            matches,
+            groups: groupMatches(matches, activeStatus),
+            hasData: true,
+            scheduleEmpty: false,
+            error: "",
+            fixtureStaleMessage: coreRead.meta.stale
+              ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
+              : "",
+            lastUpdated: formatTime(
+              new Date(coreRead.meta.storedAt || Date.now()),
+            ),
+          },
+          () => {
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
+          },
+        );
         if (this.liveWindow) {
           // Arm revision recovery before the overlay request so a failed first
           // Live acquisition after kickoff still recovers automatically.
@@ -947,31 +1225,36 @@ Page({
           const liveResult = await getLiveMatchByStatusSnapshot(
             "all",
             options.forceRefresh === true,
-            requestTrace
+            requestTrace,
           );
           if (!this.pageVisible || requestId !== this.liveRequestId) return;
-          this.liveSnapshot = liveResult.snapshot;
+          this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.coreMatches = mergeLiveOverlay(core, liveResult.data);
           const overlayStatus = this.data.status;
           const overlaid = filterMatches(this.coreMatches, overlayStatus);
           this.setData({
-            activeStatusLabel: STATUS_OPTIONS.find((item) => item.key === overlayStatus)?.label || "比赛",
+            activeStatusLabel:
+              STATUS_OPTIONS.find((item) => item.key === overlayStatus)
+                ?.label || "比赛",
             emptyDescription: emptyDescription(overlayStatus),
             matches: overlaid,
             groups: groupMatches(overlaid, overlayStatus),
             error: "",
-            lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
+            lastUpdated: formatTime(
+              new Date(liveResult.servedStoredAt || Date.now()),
+            ),
           });
           this.liveRefresh?.sync();
         } else {
-          this.liveSnapshot = null;
-          this.liveRefresh?.stop();
+          this.liveRefresh?.sync();
         }
         this.syncDisplayState();
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时比赛加载失败" });
+        this.setData({
+          error: error instanceof Error ? error.message : "实时比赛加载失败",
+        });
         this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();
       } finally {
@@ -987,7 +1270,11 @@ Page({
     observeSoftTimeout(request, 3000, () => {
       if (requestId !== this.liveRequestId || !this.pageVisible) return;
       navigationTracker?.mark("softFailureAt");
-      this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
+      this.setData({
+        loading: false,
+        refreshing: false,
+        error: "加载时间较长，请稍后重试；当前请求仍在后台继续",
+      });
       this.syncDisplayState();
     });
     const clearRequest = () => {
@@ -1002,23 +1289,27 @@ Page({
   },
 
   shouldAutoRefresh(): boolean {
-    if (!this.liveWindow) return false;
+    if (!this.liveWindow && !this.liveSnapshot) return false;
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
       currentEventId: this.currentEventId,
       selectedEventId: this.currentEventId,
-      snapshot: this.liveSnapshot
+      snapshot: this.liveSnapshot,
+      windowState: this.liveSnapshot?.windowState,
+      nextRefreshAt: this.liveSnapshot?.nextRefreshAt,
     });
   },
 
   revalidateCachedSnapshot(): boolean {
-    if (!shouldRevalidateCachedLiveSnapshot({
-      servedStoredAt: this.cachedLiveStoredAt,
-      pageVisible: this.pageVisible,
-      currentEventId: this.currentEventId,
-      selectedEventId: this.currentEventId,
-      snapshot: this.liveSnapshot
-    })) {
+    if (
+      !shouldRevalidateCachedLiveSnapshot({
+        servedStoredAt: this.cachedLiveStoredAt,
+        pageVisible: this.pageVisible,
+        currentEventId: this.currentEventId,
+        selectedEventId: this.currentEventId,
+        snapshot: this.liveSnapshot,
+      })
+    ) {
       return false;
     }
     this.cachedLiveStoredAt = undefined;
@@ -1033,26 +1324,33 @@ Page({
       loading: this.data.loading || this.data.refreshing,
       probing: this.probing,
       lastError: this.data.error || this.data.fixtureStaleMessage,
-      online: this.networkOnline
+      online: this.networkOnline,
     });
     if (next !== this.data.displayState) {
       recordLiveTransition({
         surface: "match",
         season: this.liveSnapshot?.season,
         eventId: this.currentEventId,
-        isCurrentEvent: this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
-        displayState: next
+        isCurrentEvent:
+          this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
+        displayState: next,
       });
     }
     this.setData({ displayState: next });
   },
 
-  onStatusTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { status: string }>) {
+  onStatusTap(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { status: string }
+    >,
+  ) {
     const status = event.currentTarget.dataset.status || "playing";
     if (status === this.data.status) {
       return;
     }
-    const activeStatusLabel = STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
+    const activeStatusLabel =
+      STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
     const matches = filterMatches(this.coreMatches, status);
     this.setData({
@@ -1061,21 +1359,32 @@ Page({
       emptyDescription: emptyDescription(status),
       matches,
       groups: groupMatches(matches, status),
-      hasData: true
+      hasData: true,
     });
     this.syncDisplayState();
   },
 
   onRetry() {
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/match/match", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/match/match",
+      "refresh",
+    );
     void this.runForcedRefresh(this.perfTracker, false);
   },
 
-  onCopyMatchShare(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { matchid?: number | string }>) {
+  onCopyMatchShare(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { matchid?: number | string }
+    >,
+  ) {
     try {
       const matchId = event.currentTarget.dataset.matchid;
-      const match = this.coreMatches.find((item) => String(item.matchId) === String(matchId));
+      const match = this.coreMatches.find(
+        (item) => String(item.matchId) === String(matchId),
+      );
       if (!match) {
         wx.showToast({ title: "还没有可分享的比赛", icon: "none" });
         return;
@@ -1083,7 +1392,10 @@ Page({
       const text = formatLiveMatchShareText(match);
       void copyShareText(text).then((ok) => {
         if (ok) {
-          this.setData({ copiedMatchId: match.matchId || "", shareSheetOpen: false });
+          this.setData({
+            copiedMatchId: match.matchId || "",
+            shareSheetOpen: false,
+          });
           this.clearCopiedMatchTimer();
           this.copiedMatchTimer = setTimeout(() => {
             this.copiedMatchTimer = undefined;
@@ -1096,12 +1408,15 @@ Page({
         this.setData({ shareSheetOpen: true, shareText: text });
       });
     } catch (error) {
-      miniLogger.error("copy-share.match", error instanceof Error ? error.message : "failed");
+      miniLogger.error(
+        "copy-share.match",
+        error instanceof Error ? error.message : "failed",
+      );
       wx.showToast({ title: "复制失败", icon: "none" });
     }
   },
 
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
-  }
+  },
 });

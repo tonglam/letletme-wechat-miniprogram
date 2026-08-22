@@ -2,8 +2,8 @@ import { LIVE_REFRESH_INTERVAL_MS, liveSnapshotNeedsRefresh } from "./live-refre
 import type { LiveSnapshotStatus } from "../models/live";
 
 /**
- * Owns the refresh lifecycle every Live page used to hand-roll: a 30s
- * eligibility-gated timer, a single-flight revision probe, revision-based
+ * Owns the refresh lifecycle every Live page used to hand-roll: a
+ * server-deadline eligibility-gated timer, a single-flight revision probe, revision-based
  * full-reload triggering, and stale-response guards — plus offline-aware
  * stop/resume, which previously did not exist anywhere.
  *
@@ -69,7 +69,6 @@ export interface LiveRefreshController {
 export function createLiveRefreshController(options: LiveRefreshControllerOptions): LiveRefreshController {
   const intervalMs = options.intervalMs ?? LIVE_REFRESH_INTERVAL_MS;
   let timer: number | undefined;
-  let deadlineTimer: number | undefined;
   let online = options.isOnline ? options.isOnline() : true;
   let probeRequest: Promise<void> | null = null;
   let probeRequestId = 0;
@@ -82,12 +81,8 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
 
   function stopTimer(): void {
     if (timer !== undefined) {
-      clearInterval(timer);
+			clearTimeout(timer);
       timer = undefined;
-    }
-    if (deadlineTimer !== undefined) {
-      clearTimeout(deadlineTimer);
-      deadlineTimer = undefined;
     }
   }
 
@@ -151,6 +146,16 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
           error: message
         });
         options.onProbeError?.(message);
+			// A failed one-shot deadline must not leave the page permanently
+			// unrefreshed. Retry at the normal bounded cadence; a successful probe
+			// will re-arm from the server-provided deadline.
+			stopTimer();
+			if (eligible()) {
+				timer = setTimeout(() => {
+					timer = undefined;
+					void runProbe();
+				}, intervalMs) as unknown as number;
+			}
       }
     })();
 
@@ -166,18 +171,19 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
   function sync(): void {
     stopTimer();
     if (!eligible()) return;
-    timer = setInterval(() => {
-      void runProbe();
-    }, intervalMs) as unknown as number;
-
     const nextRefreshAt = options.getNextRefreshAt?.();
-    if (!nextRefreshAt) return;
-    const deadline = Date.parse(nextRefreshAt);
-    if (!Number.isFinite(deadline)) return;
-    deadlineTimer = setTimeout(() => {
-      deadlineTimer = undefined;
+    const deadline = nextRefreshAt ? Date.parse(nextRefreshAt) : Number.NaN;
+    const baseDelay = Number.isFinite(deadline)
+      ? Math.max(10, deadline - Date.now())
+      : intervalMs;
+    const jitter = Number.isFinite(deadline)
+      ? baseDelay * (Math.random() * 0.2 - 0.1)
+      : 0;
+    const delay = Math.max(10, Math.round(baseDelay + jitter));
+    timer = setTimeout(() => {
+      timer = undefined;
       void runProbe();
-    }, Math.max(0, deadline - Date.now())) as unknown as number;
+    }, delay) as unknown as number;
   }
 
   function stop(): void {

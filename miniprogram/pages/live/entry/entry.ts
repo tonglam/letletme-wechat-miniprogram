@@ -1,34 +1,51 @@
-import { getEntryEventTransfers, getEntryInfo } from "../../../services/entry.service";
-import { getLivePointsByEntrySnapshot, getLiveSnapshot } from "../../../services/live.service";
+import {
+  getEntryEventTransfers,
+  getEntryInfo,
+} from "../../../services/entry.service";
+import {
+  getLivePointsByEntrySnapshot,
+  getLiveSnapshot,
+} from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
-import type { LiveManagerScore, LivePlayerRow, LiveSnapshotStatus } from "../../../models/live";
+import type {
+  LiveManagerScore,
+  LivePlayerRow,
+  LiveSnapshotStatus,
+} from "../../../models/live";
 import type { EntryTransfer } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
-import { chipShareLabel, copyShareText, formatLiveEntryShareText } from "../../../utils/live-share";
+import {
+  chipShareLabel,
+  copyShareText,
+  formatLiveEntryShareText,
+} from "../../../utils/live-share";
 import {
   shouldRevalidateCachedLiveSnapshot,
-  shouldPollLiveSnapshot
+  shouldPollLiveSnapshot,
 } from "../../../utils/live-refresh";
 import {
   createLiveRefreshController,
-  type LiveRefreshController
+  type LiveRefreshController,
 } from "../../../utils/live-refresh-controller";
 import { subscribeNetworkStatus } from "../../../utils/live-network";
 import {
   normalizeLiveDisplayState,
-  type LiveDisplayState
+  type LiveDisplayState,
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { miniLogger } from "../../../utils/logger";
 import { currentFollowEntryId } from "../../../utils/follow";
 import { normalizePlayer } from "./player";
-import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "./player-detail";
+import {
+  buildPlayerLiveDetail,
+  type PlayerLiveDetailView,
+} from "./player-detail";
 import { normalizeTransfer, type TransferRow } from "./transfer";
 import {
   ensureAppContext,
   getAppContextSnapshot,
   shouldRefreshAppContext,
-  type AppContextSnapshot
+  type AppContextSnapshot,
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
@@ -36,7 +53,7 @@ import type { PageRequestTrace } from "../../../services/graphql.service";
 import {
   buildLiveSquadPitchState,
   type SquadPitchHeader,
-  type SquadPitchPlayer
+  type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 
@@ -64,12 +81,17 @@ export function noLiveEventState() {
     scoreNextRefreshAt: "",
     lastUpdated: "",
     livePointsText: "—",
-    totalText: "—"
+    totalText: "—",
   };
 }
 
-function currentLiveEventId(context?: { currentEvent?: number | null } | null): number {
-  if (context && Object.prototype.hasOwnProperty.call(context, "currentEvent")) {
+function currentLiveEventId(
+  context?: { currentEvent?: number | null } | null,
+): number {
+  if (
+    context &&
+    Object.prototype.hasOwnProperty.call(context, "currentEvent")
+  ) {
     return Math.max(0, Number(context.currentEvent) || 0);
   }
   const snapshot = getAppContextSnapshot();
@@ -147,22 +169,35 @@ function textValue(value: unknown, fallback = "-"): string {
 }
 
 function managerScoreStatusText(score?: LiveManagerScore): string {
-	if (!score || score.state === "UNAVAILABLE") return "官方分数不可用";
-	if (score.state === "SETTLING") return "结算中";
-	if (score.state === "STALE") return "官方数据延迟";
-	return "官方实时";
+  if (!score || score.state === "UNAVAILABLE") return "官方分数不可用";
+  if (score.state === "SETTLING") return "结算中";
+  if (score.state === "STALE") return "官方数据延迟";
+  return "官方实时";
 }
 
 function captainDisplayName(
-  players: Array<{ captain?: boolean; multiplier?: number; webName?: string; name?: string }>,
-  captainName: unknown
+  players: Array<{
+    captain?: boolean;
+    multiplier?: number;
+    webName?: string;
+    name?: string;
+  }>,
+  captainName: unknown,
 ): string {
-  const fromSquad = players.find((player) => player.captain || (player.multiplier || 0) >= 2);
+  const fromSquad = players.find(
+    (player) => player.captain || (player.multiplier || 0) >= 2,
+  );
   const squadName = fromSquad?.webName || fromSquad?.name;
   if (squadName) return String(squadName);
   const raw = textValue(captainName);
   if (raw === "-") return raw;
-  return raw.replace(/\s*[\(（].*$/, "").replace(/\s+[·—-].*$/, "").replace(/\s+\d.*$/, "").trim() || raw;
+  return (
+    raw
+      .replace(/\s*[\(（].*$/, "")
+      .replace(/\s+[·—-].*$/, "")
+      .replace(/\s+\d.*$/, "")
+      .trim() || raw
+  );
 }
 
 function formatTime(date: Date): string {
@@ -219,7 +254,7 @@ Page({
     pitchHeader: null,
     pitchBenchBoost: false,
     shareImagePath: "",
-    shareBusy: false
+    shareBusy: false,
   } as LiveEntryData,
 
   liveRequest: null as Promise<void> | null,
@@ -251,13 +286,20 @@ Page({
   routeEntryId: 0,
   hasRouteEntry: false,
 
-  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+  ensureContext(
+    reason: "page-load" | "page-show" | "pull-refresh",
+    forceRefresh = false,
+  ) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
   async onLoad(options?: Record<string, string | undefined>) {
     this.pageVisible = true;
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "cold-launch");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/entry/entry",
+      "cold-launch",
+    );
     const routeEntry = Number(options?.entry);
     this.hasRouteEntry = Number.isFinite(routeEntry) && routeEntry > 0;
     this.routeEntryId = this.hasRouteEntry ? routeEntry : 0;
@@ -266,7 +308,7 @@ Page({
 
   async initializeFromContext(
     reason: "page-load" | "page-show",
-    tracker: PagePerformanceTracker
+    tracker: PagePerformanceTracker,
   ) {
     const app = getApp<IAppOption>();
     this.startupPending = true;
@@ -301,20 +343,24 @@ Page({
       // fallback: the account may have been linked to a different entry
       // since, so wait for the refreshed profile to re-assert it (the login
       // may not even have started while the privacy callback is pending).
-      try { await app.authReady; } catch {}
+      try {
+        await app.authReady;
+      } catch {}
     }
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
     const currentGw = currentLiveEventId(context);
     const followedEntry = app.globalData.entryId;
-    const entryId = this.hasRouteEntry ? this.routeEntryId : (followedEntry ?? 0);
+    const entryId = this.hasRouteEntry
+      ? this.routeEntryId
+      : (followedEntry ?? 0);
     this.setData({
       event: currentGw,
       maxGw: currentGw,
       entryId,
       // An explicit route entry that is not the followed team is read-only
       // view mode; it never changes the stored follow.
-      viewOnly: this.hasRouteEntry && this.routeEntryId !== followedEntry
+      viewOnly: this.hasRouteEntry && this.routeEntryId !== followedEntry,
     });
     void this.loadEntryIdentity(entryId);
     this.initLiveRefresh();
@@ -338,20 +384,25 @@ Page({
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
-      probe: () => getLiveSnapshot(this.data.event),
-      shouldReloadOnUnchangedProbe: () => Boolean(
-        this.data.scoreState === "SETTLING" || (
-          this.data.scoreNextRefreshAt &&
-          Date.parse(this.data.scoreNextRefreshAt) <= Date.now()
-        )
-      ),
-      getNextRefreshAt: () => this.data.scoreNextRefreshAt || null,
+      probe: () => getLiveSnapshot(),
+      shouldReloadOnUnchangedProbe: () =>
+        Boolean(
+          this.data.scoreState === "SETTLING" ||
+          (this.data.scoreNextRefreshAt &&
+            Date.parse(this.data.scoreNextRefreshAt) <= Date.now()),
+        ),
+      getNextRefreshAt: () =>
+        this.data.scoreNextRefreshAt ||
+        this.liveSnapshot?.nextRefreshAt ||
+        null,
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.checkedAt ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) } : {})
+          ...(snapshot?.checkedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+            : {}),
         });
         this.syncDisplayState();
       },
@@ -377,10 +428,13 @@ Page({
           revisionChanged: info.revisionChanged,
           coverageFailed: this.liveSnapshot?.coverageFailed,
           probeDurationBucket: durationBucket(info.probeDurationMs),
-          fullFetchDurationBucket: info.reloadDurationMs === undefined ? undefined : durationBucket(info.reloadDurationMs)
+          fullFetchDurationBucket:
+            info.reloadDurationMs === undefined
+              ? undefined
+              : durationBucket(info.reloadDurationMs),
         });
       },
-      subscribeNetwork: subscribeNetworkStatus
+      subscribeNetwork: subscribeNetworkStatus,
     });
   },
 
@@ -396,7 +450,7 @@ Page({
       this.perfTracker = new PagePerformanceTracker(
         this,
         "pages/live/entry/entry",
-        resumeForcedRefresh ? "refresh" : "warm-enter"
+        resumeForcedRefresh ? "refresh" : "warm-enter",
       );
       if (resumeForcedRefresh) {
         await this.runForcedRefresh(this.perfTracker);
@@ -411,16 +465,23 @@ Page({
       try {
         showContext = await this.ensureContext("page-show");
         this.perfTracker.mark("contextReadyAt");
-      } catch { /* keep the last known event */ }
+      } catch {
+        /* keep the last known event */
+      }
       if (!this.pageVisible) return;
       if (this.restartForPrincipalChange(this.data.entryId)) return;
-      const nextSeason = showContext?.season || app.globalData.season || undefined;
-      const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+      const nextSeason =
+        showContext?.season || app.globalData.season || undefined;
+      const seasonChanged = Boolean(
+        this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
+      );
       if (nextSeason) this.loadedSeason = nextSeason;
       const nextEventId = currentLiveEventId(showContext);
       const wasCurrentEvent = this.data.event === this.data.maxGw;
-      const leavingPreseason = nextEventId > 0 && this.data.emptyState === "preseason";
-      const eventContextChanged = seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      const leavingPreseason =
+        nextEventId > 0 && this.data.emptyState === "preseason";
+      const eventContextChanged =
+        seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
@@ -443,7 +504,7 @@ Page({
                 noPicks: false,
                 lastUpdated: "",
                 error: "",
-                ...(leavingPreseason ? { emptyState: "" as const } : {})
+                ...(leavingPreseason ? { emptyState: "" as const } : {}),
               }
             : noLiveEventState()),
           transfersError: "",
@@ -462,7 +523,7 @@ Page({
           managers: [],
           transfers: [],
           ...emptyLiveOverlayState(),
-          ...emptyLivePitchState()
+          ...emptyLivePitchState(),
         });
         this.liveRefresh?.sync();
         if (nextEventId > 0) {
@@ -475,26 +536,39 @@ Page({
         this.setData({ maxGw: nextEventId });
       }
     }
-    if (resumed && (this.data.hasData || this.data.noPicks || this.data.emptyState)) {
+    if (
+      resumed &&
+      (this.data.hasData || this.data.noPicks || this.data.emptyState)
+    ) {
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
-    if (resumed && this.resumeLiveAfterShow && this.data.entryId && this.data.event > 0) {
+    if (
+      resumed &&
+      this.resumeLiveAfterShow &&
+      this.data.entryId &&
+      this.data.event > 0
+    ) {
       this.resumeLiveAfterShow = false;
       await this.loadData({ includeTransfers: true });
       return;
     }
     this.liveRefresh?.sync();
-    if (!this.revalidateCachedSnapshot() && resumed && this.shouldAutoRefresh()) {
+    if (
+      !this.revalidateCachedSnapshot() &&
+      resumed &&
+      this.shouldAutoRefresh()
+    ) {
       void this.liveRefresh?.probeNow();
     }
     const currentEventId = currentLiveEventId(showContext);
     const resumeTransfers = this.resumeTransfersAfterShow;
     this.resumeTransfersAfterShow = false;
     if (
-      resumed
-      && this.data.entryId
-      && this.data.event > 0
-      && (resumeTransfers || (currentEventId > 0 && this.data.event === currentEventId))
+      resumed &&
+      this.data.entryId &&
+      this.data.event > 0 &&
+      (resumeTransfers ||
+        (currentEventId > 0 && this.data.event === currentEventId))
     ) {
       // Current-GW transfers churn independently of the score revision.
       // Historical GW only reloads when hide interrupted an in-flight read.
@@ -505,15 +579,17 @@ Page({
   onHide() {
     const queuedLiveResume = this.resumeLiveAfterShow;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
-    this.resumeStartupAfterShow = !this.resumeForcedRefreshAfterShow && this.startupPending;
+    this.resumeStartupAfterShow =
+      !this.resumeForcedRefreshAfterShow && this.startupPending;
     this.pageVisible = false;
     this.liveRefresh?.stop();
-    this.resumeLiveAfterShow = queuedLiveResume || (
-      !this.resumeStartupAfterShow
-      && !this.resumeForcedRefreshAfterShow
-      && this.liveRequest !== null
-    );
-    this.resumeTransfersAfterShow = this.resumeTransfersAfterShow || this.data.transfersLoading;
+    this.resumeLiveAfterShow =
+      queuedLiveResume ||
+      (!this.resumeStartupAfterShow &&
+        !this.resumeForcedRefreshAfterShow &&
+        this.liveRequest !== null);
+    this.resumeTransfersAfterShow =
+      this.resumeTransfersAfterShow || this.data.transfersLoading;
     if (this.data.transfersLoading) this.setData({ transfersLoading: false });
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
@@ -553,7 +629,11 @@ Page({
 
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/entry/entry",
+      "refresh",
+    );
     const tracker = this.perfTracker;
     try {
       await this.runForcedRefresh(tracker);
@@ -574,12 +654,15 @@ Page({
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
       tracker.mark("contextReadyAt");
-      await this.retryWithContext({
-        background: true,
-        includeTransfers: true,
-        forceRefresh: true,
-        trackNavigation: true
-      }, context);
+      await this.retryWithContext(
+        {
+          background: true,
+          includeTransfers: true,
+          forceRefresh: true,
+          trackNavigation: true,
+        },
+        context,
+      );
     } catch (error) {
       if (this.pageVisible && this.perfTracker === tracker) {
         this.showContextError(error);
@@ -593,22 +676,28 @@ Page({
   },
 
   showContextError(error: unknown) {
-    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    this.setData({
-      loading: false,
-      refreshing: false,
-      error: message,
-      ...(this.data.emptyState === "preseason" ? { emptyState: "" as const } : {})
-    }, () => {
-      this.perfTracker?.mark("primarySetDataAt");
-      wx.nextTick(() => this.perfTracker?.observePrimary());
-    });
+    const message =
+      error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData(
+      {
+        loading: false,
+        refreshing: false,
+        error: message,
+        ...(this.data.emptyState === "preseason"
+          ? { emptyState: "" as const }
+          : {}),
+      },
+      () => {
+        this.perfTracker?.mark("primarySetDataAt");
+        wx.nextTick(() => this.perfTracker?.observePrimary());
+      },
+    );
     this.syncDisplayState();
   },
 
   async retryWithContext(
     options: LiveEntryLoadOptions = {},
-    refreshedContext?: AppContextSnapshot
+    refreshedContext?: AppContextSnapshot,
   ) {
     // An offseason page has event=0 by design. Refresh the shared event
     // context before retrying so a newly opened GW can be discovered without
@@ -617,20 +706,22 @@ Page({
       const app = getApp<IAppOption>();
       let context: AppContextSnapshot;
       try {
-        context = refreshedContext ?? await this.ensureContext("pull-refresh", true);
+        context =
+          refreshedContext ?? (await this.ensureContext("pull-refresh", true));
       } catch (error) {
         this.showContextError(error);
         return;
       }
       const nextEventId = currentLiveEventId(context);
       if (nextEventId > 0) {
-        this.loadedSeason = context.season || app.globalData.season || this.loadedSeason;
+        this.loadedSeason =
+          context.season || app.globalData.season || this.loadedSeason;
         this.setData({
           event: nextEventId,
           maxGw: nextEventId,
           error: "",
           hasData: false,
-          emptyState: ""
+          emptyState: "",
         });
         this.initLiveRefresh();
         this.liveRefresh?.sync();
@@ -654,10 +745,11 @@ Page({
       if (this.data.entryId !== entryId) return;
       this.setData({
         entryName: entry.entryName || entry.teamName || "",
-        playerName: entry.playerName || ""
+        playerName: entry.playerName || "",
       });
     } catch {
-      if (this.data.entryId === entryId) this.setData({ entryName: "", playerName: "" });
+      if (this.data.entryId === entryId)
+        this.setData({ entryName: "", playerName: "" });
     }
   },
 
@@ -708,7 +800,7 @@ Page({
       managers: [],
       transfers: [],
       ...emptyLiveOverlayState(),
-      ...emptyLivePitchState()
+      ...emptyLivePitchState(),
     });
     if (nextEntryId) {
       void this.loadEntryIdentity(nextEntryId);
@@ -725,13 +817,21 @@ Page({
       return Promise.resolve();
     }
     if (!entryId) {
-      this.setData({ loading: false, error: "", emptyState: "entry", noPicks: false }, () => {
-        wx.nextTick(() => this.perfTracker?.observePrimary());
-      });
+      this.setData(
+        { loading: false, error: "", emptyState: "entry", noPicks: false },
+        () => {
+          wx.nextTick(() => this.perfTracker?.observePrimary());
+        },
+      );
       this.syncDisplayState();
       return Promise.resolve();
     }
 
+    // The page startup/resume lifecycle resolves the server-owned anchor before
+    // entering this loader. Keep this method synchronous up to request
+    // creation so an ordinary read and a forced follow-up share one promise.
+    // That preserves the request coalescing contract while still making every
+    // new lifecycle consume liveContext.anchorEventId.
     const eventId = this.data.event;
     if (!eventId) {
       this.liveRefresh?.stop();
@@ -745,21 +845,26 @@ Page({
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       if (options.forceRefresh && !this.liveRequestForced) {
         if (this.liveForcedFollowup) {
-          if (options.includeTransfers) this.liveForcedFollowupIncludeTransfers = true;
-          if (options.trackNavigation) this.liveForcedFollowupTrackNavigation = true;
+          if (options.includeTransfers)
+            this.liveForcedFollowupIncludeTransfers = true;
+          if (options.trackNavigation)
+            this.liveForcedFollowupTrackNavigation = true;
           return this.liveForcedFollowup;
         }
         const activeRequest = this.liveRequest;
         const followupOwnerId = this.liveRequestId;
-        this.liveForcedFollowupIncludeTransfers = options.includeTransfers === true;
-        this.liveForcedFollowupTrackNavigation = options.trackNavigation === true;
+        this.liveForcedFollowupIncludeTransfers =
+          options.includeTransfers === true;
+        this.liveForcedFollowupTrackNavigation =
+          options.trackNavigation === true;
         const startForcedFollowup = () => {
           if (
-            !this.pageVisible
-            || followupOwnerId !== this.liveRequestId
-            || entryId !== this.data.entryId
-            || eventId !== this.data.event
-          ) return;
+            !this.pageVisible ||
+            followupOwnerId !== this.liveRequestId ||
+            entryId !== this.data.entryId ||
+            eventId !== this.data.event
+          )
+            return;
           const includeTransfers = this.liveForcedFollowupIncludeTransfers;
           const trackNavigation = this.liveForcedFollowupTrackNavigation;
           this.liveForcedFollowupIncludeTransfers = false;
@@ -768,10 +873,13 @@ Page({
             ...options,
             includeTransfers,
             trackNavigation,
-            forceRefresh: true
+            forceRefresh: true,
           });
         };
-        const followup = activeRequest.then(startForcedFollowup, startForcedFollowup);
+        const followup = activeRequest.then(
+          startForcedFollowup,
+          startForcedFollowup,
+        );
         this.liveForcedFollowup = followup;
         const clearFollowup = () => {
           if (this.liveForcedFollowup === followup) {
@@ -790,44 +898,52 @@ Page({
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const background = options.background === true && this.data.hasData;
-    const navigationTracker = options.background === true && options.trackNavigation !== true
-      ? undefined
-      : this.perfTracker;
-    this.setData(background
-      ? { refreshing: true, error: "" }
-      : {
-          loading: true,
-          error: "",
-          emptyState: "",
-          noPicks: false
-        });
+    const navigationTracker =
+      options.background === true && options.trackNavigation !== true
+        ? undefined
+        : this.perfTracker;
+    this.setData(
+      background
+        ? { refreshing: true, error: "" }
+        : {
+            loading: true,
+            error: "",
+            emptyState: "",
+            noPicks: false,
+          },
+    );
     this.loadTransfersAfterLive = options.includeTransfers === true;
 
     const request = (async () => {
       try {
         navigationTracker?.mark("primaryRequestStartAt");
         const context = getAppContextSnapshot();
-        const requestTrace = options.background === true && options.trackNavigation !== true
-          ? null
-          : navigationTracker && context
-            ? {
-                navigationId: navigationTracker.navigationId,
-                callerSurface: "live-entry",
-                trigger: options.forceRefresh ? "refresh" as const : "load" as const,
-                forceReason: options.forceRefresh ? "user-refresh" as const : undefined,
-                contextRevision: context.contextRevision
-              }
-            : undefined;
+        const requestTrace =
+          options.background === true && options.trackNavigation !== true
+            ? null
+            : navigationTracker && context
+              ? {
+                  navigationId: navigationTracker.navigationId,
+                  callerSurface: "live-entry",
+                  trigger: options.forceRefresh
+                    ? ("refresh" as const)
+                    : ("load" as const),
+                  forceReason: options.forceRefresh
+                    ? ("user-refresh" as const)
+                    : undefined,
+                  contextRevision: context.contextRevision,
+                }
+              : undefined;
         const liveResult = await getLivePointsByEntrySnapshot(
           entryId,
           eventId,
           options.forceRefresh === true,
-          requestTrace
+          requestTrace,
         );
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
 
-    const result = liveResult.data;
+        const result = liveResult.data;
         navigationTracker?.mark("primaryResponseAt");
         if (result.availability === "NO_PICKS") {
           const officialEventPoints = result.score?.eventPoints;
@@ -837,56 +953,73 @@ Page({
             ? numberValue(result.score?.netEventPoints)
             : 0;
           const total = numberValue(
-            result.score?.totalScope === "OVERALL" && result.score.totalPoints != null
+            result.score?.totalScope === "OVERALL" &&
+              result.score.totalPoints != null
               ? result.score.totalPoints
-              : 0
+              : 0,
           );
           const hasOfficialHeadline = typeof officialEventPoints === "number";
-          const livePointsText = hasOfficialHeadline ? `${headlinePoints}` : "—";
-          const totalKnown = result.score?.totalScope === "OVERALL"
-            && typeof result.score.totalPoints === "number";
+          const livePointsText = hasOfficialHeadline
+            ? `${headlinePoints}`
+            : "—";
+          const totalKnown =
+            result.score?.totalScope === "OVERALL" &&
+            typeof result.score.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
-          this.liveSnapshot = liveResult.snapshot;
+          this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
-          this.setData({
-            hasData: hasOfficialHeadline,
-            noPicks: true,
-            entryName: result.entryName || "",
-            playerName: result.playerName || "",
-            scoreState: result.score?.state || "UNAVAILABLE",
-            scoreStatusText: managerScoreStatusText(result.score),
-            scoreDetailText: result.score?.reconciliation === "SOURCE_SKEW" ? "明细同步中" : "",
-            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
-            error: "",
-            total,
-            livePoints: headlinePoints,
-            livePointsText,
-            totalText,
-            netPoints,
-            netPointsKnown,
-            transferCost: numberValue(result.score?.transferCost ?? result.transferCost),
-            summaryTiles: hasOfficialHeadline
-              ? [
-                  { label: "实时得分", value: `${headlinePoints}` },
-                  { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
-                  { label: "实时总分", value: totalText }
-                ]
-              : [],
-            starters: [],
-            bench: [],
-            managers: [],
-            transfers: [],
-            ...emptyLivePitchState(),
-            transfersLoading: false,
-            transfersError: "",
-            lastUpdated: formatTime(new Date(liveResult.servedStoredAt || Date.now()))
-          }, () => {
-            navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
-          });
+          this.setData(
+            {
+              hasData: hasOfficialHeadline,
+              noPicks: true,
+              entryName: result.entryName || "",
+              playerName: result.playerName || "",
+              scoreState: result.score?.state || "UNAVAILABLE",
+              scoreStatusText: managerScoreStatusText(result.score),
+              scoreDetailText:
+                result.score?.reconciliation === "SOURCE_SKEW"
+                  ? "明细同步中"
+                  : "",
+              scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+              error: "",
+              total,
+              livePoints: headlinePoints,
+              livePointsText,
+              totalText,
+              netPoints,
+              netPointsKnown,
+              transferCost: numberValue(
+                result.score?.transferCost ?? result.transferCost,
+              ),
+              summaryTiles: hasOfficialHeadline
+                ? [
+                    { label: "实时得分", value: `${headlinePoints}` },
+                    {
+                      label: netPointsKnown ? "净得分" : "净得分（待确认）",
+                      value: netPointsKnown ? `${netPoints}` : "—",
+                    },
+                    { label: "实时总分", value: totalText },
+                  ]
+                : [],
+              starters: [],
+              bench: [],
+              managers: [],
+              transfers: [],
+              ...emptyLivePitchState(),
+              transfersLoading: false,
+              transfersError: "",
+              lastUpdated: formatTime(
+                new Date(liveResult.servedStoredAt || Date.now()),
+              ),
+            },
+            () => {
+              navigationTracker?.mark("primarySetDataAt");
+              wx.nextTick(() => navigationTracker?.observePrimary());
+            },
+          );
           if (hasOfficialHeadline || result.score?.state === "SETTLING") {
             this.liveRefresh?.sync();
           } else {
@@ -896,87 +1029,118 @@ Page({
           this.syncDisplayState();
           return;
         }
-        const players = (result.players || result.pickList || []).map(normalizePlayer);
-        const managers = players.filter((player) => numberValue(player.elementType) === 5);
-        const fieldPlayers = players.filter((player) => numberValue(player.elementType) !== 5);
-        const starters = fieldPlayers.filter((player) => player.pickActive !== false);
-        const bench = fieldPlayers.filter((player) => player.pickActive === false);
+        const players = (result.players || result.pickList || []).map(
+          normalizePlayer,
+        );
+        const managers = players.filter(
+          (player) => numberValue(player.elementType) === 5,
+        );
+        const fieldPlayers = players.filter(
+          (player) => numberValue(player.elementType) !== 5,
+        );
+        const starters = fieldPlayers.filter(
+          (player) => player.pickActive !== false,
+        );
+        const bench = fieldPlayers.filter(
+          (player) => player.pickActive === false,
+        );
         const livePoints = numberValue(result.score?.eventPoints);
         const livePointsKnown = typeof result.score?.eventPoints === "number";
         const total = numberValue(
-          result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0
+          result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0,
         );
-        const totalKnown = result.score?.totalScope === "OVERALL"
-          && typeof result.score.totalPoints === "number";
+        const totalKnown =
+          result.score?.totalScope === "OVERALL" &&
+          typeof result.score.totalPoints === "number";
         const livePointsText = livePointsKnown ? `${livePoints}` : "—";
         const totalText = totalKnown ? `${total}` : "—";
         const netPointsKnown = result.score?.netEventPoints != null;
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
           : 0;
-        const transferCost = numberValue(result.score?.transferCost ?? result.transferCost);
+        const transferCost = numberValue(
+          result.score?.transferCost ?? result.transferCost,
+        );
         const fetchedAt = liveResult.servedStoredAt || Date.now();
-        this.liveSnapshot = liveResult.snapshot;
+        this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
-        this.setData({
-          hasData: true,
-          noPicks: false,
-          scoreState: result.score?.state || "UNAVAILABLE",
-          scoreStatusText: managerScoreStatusText(result.score),
-          scoreDetailText: result.score?.reconciliation === "SOURCE_SKEW" ? "明细同步中" : "",
-          scoreNextRefreshAt: result.score?.nextRefreshAt || "",
-          error: "",
-          total,
-          livePoints,
-          livePointsText,
-          totalText,
-          netPoints,
-          netPointsKnown,
-          transferCost,
-          captainText: captainDisplayName(players, result.captainName),
-          chipText: chipShareLabel(textValue(result.chip, "无")),
-          playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
-          summaryTiles: [
-            { label: "实时得分", value: livePointsText },
-            { label: netPointsKnown ? "净得分" : "净得分（待确认）", value: netPointsKnown ? `${netPoints}` : "—" },
-            { label: "实时总分", value: totalText },
-            { label: "转会扣分", value: transferCost > 0 ? `-${transferCost}` : "0" }
-          ],
-          starters,
-          bench,
-          managers,
-          ...livePitchState({
+        this.setData(
+          {
+            hasData: true,
+            noPicks: false,
+            scoreState: result.score?.state || "UNAVAILABLE",
+            scoreStatusText: managerScoreStatusText(result.score),
+            scoreDetailText:
+              result.score?.reconciliation === "SOURCE_SKEW"
+                ? "明细同步中"
+                : "",
+            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+            error: "",
+            total,
+            livePoints,
+            livePointsText,
+            totalText,
+            netPoints,
+            netPointsKnown,
+            transferCost,
+            captainText: captainDisplayName(players, result.captainName),
+            chipText: chipShareLabel(textValue(result.chip, "无")),
+            playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
+            summaryTiles: [
+              { label: "实时得分", value: livePointsText },
+              {
+                label: netPointsKnown ? "净得分" : "净得分（待确认）",
+                value: netPointsKnown ? `${netPoints}` : "—",
+              },
+              { label: "实时总分", value: totalText },
+              {
+                label: "转会扣分",
+                value: transferCost > 0 ? `-${transferCost}` : "0",
+              },
+            ],
             starters,
             bench,
-            eventId,
-            teamName: this.data.entryName,
-            managerName: this.data.playerName,
-            totalPoints: total,
-            gameweekPoints: livePoints,
-            totalPointsKnown: totalKnown,
-            gameweekPointsKnown: livePointsKnown,
-            chip: textValue(result.chip, "")
-          }),
-          lastUpdated: formatTime(new Date(fetchedAt))
-        }, () => {
-          navigationTracker?.mark("primarySetDataAt");
-          wx.nextTick(() => navigationTracker?.observePrimary());
-        });
+            managers,
+            ...livePitchState({
+              starters,
+              bench,
+              eventId,
+              teamName: this.data.entryName,
+              managerName: this.data.playerName,
+              totalPoints: total,
+              gameweekPoints: livePoints,
+              totalPointsKnown: totalKnown,
+              gameweekPointsKnown: livePointsKnown,
+              chip: textValue(result.chip, ""),
+            }),
+            lastUpdated: formatTime(new Date(fetchedAt)),
+          },
+          () => {
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
+          },
+        );
         this.liveRefresh?.sync();
-        if (this.pageVisible && requestId === this.liveRequestId && this.loadTransfersAfterLive) {
+        if (
+          this.pageVisible &&
+          requestId === this.liveRequestId &&
+          this.loadTransfersAfterLive
+        ) {
           this.loadTransfersAfterLive = false;
           await this.loadTransfers(
             entryId,
             eventId,
             options.forceRefresh === true,
-            requestTrace
+            requestTrace,
           );
         }
         this.syncDisplayState();
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
-        this.setData({ error: error instanceof Error ? error.message : "实时球队加载失败" });
+        this.setData({
+          error: error instanceof Error ? error.message : "实时球队加载失败",
+        });
         this.loadTransfersAfterLive = false;
         wx.nextTick(() => navigationTracker?.observePrimary());
         this.syncDisplayState();
@@ -994,7 +1158,11 @@ Page({
     observeSoftTimeout(request, 3000, () => {
       if (requestId !== this.liveRequestId || !this.pageVisible) return;
       navigationTracker?.mark("softFailureAt");
-      this.setData({ loading: false, refreshing: false, error: "加载时间较长，请稍后重试；当前请求仍在后台继续" });
+      this.setData({
+        loading: false,
+        refreshing: false,
+        error: "加载时间较长，请稍后重试；当前请求仍在后台继续",
+      });
       this.syncDisplayState();
     });
     const clearRequest = () => {
@@ -1013,7 +1181,7 @@ Page({
     entryId: number,
     eventId: number,
     forceRefresh: boolean,
-    trace?: PageRequestTrace | null
+    trace?: PageRequestTrace | null,
   ): Promise<void> {
     const requestId = this.transfersRequestId + 1;
     this.transfersRequestId = requestId;
@@ -1023,41 +1191,33 @@ Page({
         entryId,
         eventId,
         forceRefresh,
-        trace
+        trace,
       );
-      if (
-        !this.pageVisible
-        || requestId !== this.transfersRequestId
-      ) return;
+      if (!this.pageVisible || requestId !== this.transfersRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
-      if (
-        entryId !== this.data.entryId
-        || eventId !== this.data.event
-      ) {
-        return;
-      }
-      this.setData({ transfers: transfers.map(normalizeTransfer), transfersError: "" });
-    } catch (error) {
-      if (
-        !this.pageVisible
-        || requestId !== this.transfersRequestId
-      ) return;
-      if (this.restartForPrincipalChange(entryId)) return;
-      if (
-        entryId !== this.data.entryId
-        || eventId !== this.data.event
-      ) {
+      if (entryId !== this.data.entryId || eventId !== this.data.event) {
         return;
       }
       this.setData({
-        transfersError: error instanceof Error ? error.message : "本周转会加载失败"
+        transfers: transfers.map(normalizeTransfer),
+        transfersError: "",
+      });
+    } catch (error) {
+      if (!this.pageVisible || requestId !== this.transfersRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
+      if (entryId !== this.data.entryId || eventId !== this.data.event) {
+        return;
+      }
+      this.setData({
+        transfersError:
+          error instanceof Error ? error.message : "本周转会加载失败",
       });
     } finally {
       if (
-        this.pageVisible
-        && requestId === this.transfersRequestId
-        && entryId === this.data.entryId
-        && eventId === this.data.event
+        this.pageVisible &&
+        requestId === this.transfersRequestId &&
+        entryId === this.data.entryId &&
+        eventId === this.data.event
       ) {
         this.setData({ transfersLoading: false });
       }
@@ -1067,31 +1227,40 @@ Page({
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
     if (
-      this.data.noPicks
-      && this.data.scoreState !== "SETTLING"
-      && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
-    ) return false;
-    const currentEventId = currentLiveEventId();
+      this.data.noPicks &&
+      this.data.scoreState !== "SETTLING" &&
+      (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
+    )
+      return false;
+    const currentEventId = this.liveSnapshot?.eventId ?? currentLiveEventId();
     return shouldPollLiveSnapshot({
       pageVisible: this.pageVisible,
       currentEventId,
       selectedEventId: this.data.event,
       snapshot: this.liveSnapshot,
+      windowState: this.liveSnapshot?.windowState,
+      nextRefreshAt: this.liveSnapshot?.nextRefreshAt,
       managerScoreState: this.data.scoreState,
-      managerNextRefreshAt: this.data.scoreNextRefreshAt
+      managerNextRefreshAt: this.data.scoreNextRefreshAt,
     });
   },
 
   revalidateCachedSnapshot(): boolean {
-    if (this.data.noPicks && (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")) return false;
+    if (
+      this.data.noPicks &&
+      (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
+    )
+      return false;
     const currentEventId = currentLiveEventId();
-    if (!shouldRevalidateCachedLiveSnapshot({
-      servedStoredAt: this.cachedLiveStoredAt,
-      pageVisible: this.pageVisible,
-      currentEventId,
-      selectedEventId: this.data.event,
-      snapshot: this.liveSnapshot
-    })) {
+    if (
+      !shouldRevalidateCachedLiveSnapshot({
+        servedStoredAt: this.cachedLiveStoredAt,
+        pageVisible: this.pageVisible,
+        currentEventId,
+        selectedEventId: this.data.event,
+        snapshot: this.liveSnapshot,
+      })
+    ) {
       return false;
     }
     // Consume this signal before starting the metadata request so onShow and
@@ -1108,7 +1277,7 @@ Page({
       loading: this.data.loading || this.data.refreshing,
       probing: this.probing,
       lastError: this.data.error,
-      online: this.networkOnline
+      online: this.networkOnline,
     });
     if (next !== this.data.displayState) {
       recordLiveTransition({
@@ -1116,7 +1285,7 @@ Page({
         season: this.liveSnapshot?.season,
         eventId: this.data.event,
         isCurrentEvent: this.data.event === currentLiveEventId(),
-        displayState: next
+        displayState: next,
       });
     }
     this.setData({ displayState: next });
@@ -1126,7 +1295,11 @@ Page({
     const nextEventId = Number(event.detail.value);
     if (!Number.isFinite(nextEventId) || nextEventId <= 0) return;
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/entry/entry",
+      "refresh",
+    );
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
@@ -1143,7 +1316,7 @@ Page({
       transfers: [],
       transfersLoading: false,
       transfersError: "",
-      ...emptyLiveOverlayState()
+      ...emptyLiveOverlayState(),
     });
     // The new current-event context must own a timer before its first request:
     // a failed request has no snapshot metadata yet but still needs recovery.
@@ -1154,7 +1327,11 @@ Page({
 
   onRetry() {
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/live/entry/entry", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/live/entry/entry",
+      "refresh",
+    );
     void this.runForcedRefresh(this.perfTracker);
   },
 
@@ -1162,37 +1339,45 @@ Page({
     goToEntrySearch();
   },
 
-  onOpenPlayer(event: WechatMiniprogram.CustomEvent<{ player: LivePlayerRow }>) {
+  onOpenPlayer(
+    event: WechatMiniprogram.CustomEvent<{ player: LivePlayerRow }>,
+  ) {
     const player = event.detail.player;
     if (!player) return;
     this.setData({
       playerDetailOpen: true,
-      playerDetail: buildPlayerLiveDetail(player)
+      playerDetail: buildPlayerLiveDetail(player),
     });
   },
 
   onPitchPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
     const playerId = String(event.detail?.playerId || "");
     if (!playerId) return;
-    const player = findLivePlayerForPitch(this.data.starters, this.data.bench, playerId);
+    const player = findLivePlayerForPitch(
+      this.data.starters,
+      this.data.bench,
+      playerId,
+    );
     if (!player) return;
     this.setData({
       playerDetailOpen: true,
-      playerDetail: buildPlayerLiveDetail(player)
+      playerDetail: buildPlayerLiveDetail(player),
     });
   },
 
   onClosePlayer() {
     this.setData({
-      playerDetailOpen: false
+      playerDetailOpen: false,
     });
   },
 
   async onSharePitch() {
     if (this.data.shareBusy) return;
-    const pitch = this.selectComponent("#live-squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
-      exportShareImage?: () => Promise<string>;
-    } | null;
+    const pitch = this.selectComponent("#live-squad-pitch") as
+      | (WechatMiniprogram.Component.TrivialInstance & {
+          exportShareImage?: () => Promise<string>;
+        })
+      | null;
     if (!pitch?.exportShareImage) {
       wx.showToast({ title: "阵容图还没准备好", icon: "none" });
       return;
@@ -1210,11 +1395,14 @@ Page({
   },
 
   onShareAppMessage() {
-    const teamName = this.data.pitchHeader?.teamName || this.data.entryName || "实时球队";
+    const teamName =
+      this.data.pitchHeader?.teamName || this.data.entryName || "实时球队";
     return {
       title: `${teamName} · GW${this.data.event} · ${this.data.livePointsText}分`,
-      path: this.data.entryId ? `/pages/live/entry/entry?entry=${this.data.entryId}` : "/pages/live/entry/entry",
-      imageUrl: this.data.shareImagePath || undefined
+      path: this.data.entryId
+        ? `/pages/live/entry/entry?entry=${this.data.entryId}`
+        : "/pages/live/entry/entry",
+      imageUrl: this.data.shareImagePath || undefined,
     };
   },
 
@@ -1243,26 +1431,32 @@ Page({
         chip: this.data.chipText,
         captainName: this.data.captainText,
         starters: this.data.starters || [],
-        bench: this.data.bench || []
+        bench: this.data.bench || [],
       });
       void copyShareText(text).then((ok) => {
         if (ok) {
           this.setData({ shareCopied: true, shareSheetOpen: false });
           this.clearShareCopiedTimer();
-          this.shareCopiedTimer = setTimeout(() => this.setData({ shareCopied: false }), 2000);
+          this.shareCopiedTimer = setTimeout(
+            () => this.setData({ shareCopied: false }),
+            2000,
+          );
           return;
         }
         this.setData({ shareSheetOpen: true, shareText: text });
       });
     } catch (error) {
-      miniLogger.error("copy-share.entry", error instanceof Error ? error.message : "failed");
+      miniLogger.error(
+        "copy-share.entry",
+        error instanceof Error ? error.message : "failed",
+      );
       wx.showToast({ title: "复制失败", icon: "none" });
     }
   },
 
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
-  }
+  },
 });
 
 function emptyLiveOverlayState(): {
@@ -1275,7 +1469,7 @@ function emptyLiveOverlayState(): {
     playerDetailOpen: false,
     playerDetail: null,
     shareSheetOpen: false,
-    shareText: ""
+    shareText: "",
   };
 }
 
@@ -1289,7 +1483,7 @@ function emptyLivePitchState(): {
     pitchPlayers: [],
     pitchBench: [],
     pitchHeader: null,
-    pitchBenchBoost: false
+    pitchBenchBoost: false,
   };
 }
 
@@ -1300,7 +1494,7 @@ function livePitchState(input: Parameters<typeof buildLiveSquadPitchState>[0]) {
 function findLivePlayerForPitch(
   starters: LivePlayerRow[],
   bench: LivePlayerRow[],
-  playerId: string
+  playerId: string,
 ): LivePlayerRow | undefined {
   return [...starters, ...bench].find((player) => {
     const elementId = player.element != null ? String(player.element) : "";

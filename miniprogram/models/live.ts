@@ -10,16 +10,42 @@ export type LiveSnapshotState =
   | "BETWEEN_FIXTURES"
   | "DAY_SETTLING"
   | "GW_REVIEW"
-  | "FINALIZED";
+  | "FINALIZED"
+  | "PRESEASON"
+  | "EVENT_SCHEDULED"
+  | "BETWEEN_GAMEWEEKS"
+  | "OFFSEASON";
+
+export type LiveWindowState =
+  | "PRESEASON"
+  | "EVENT_SCHEDULED"
+  | "LIVE_ACTIVE"
+  | "DAY_SETTLING"
+  | "BETWEEN_FIXTURES"
+  | "GW_REVIEW"
+  | "FINALIZED"
+  | "BETWEEN_GAMEWEEKS"
+  | "OFFSEASON";
+
+export type LiveDataAvailability =
+  | "SCHEDULED"
+  | "FRESH"
+  | "LAST_GOOD"
+  | "FINAL"
+  | "PARTIAL"
+  | "UNAVAILABLE";
 
 export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
 
 export interface LiveSnapshotStatus {
   eventId: number;
-  revision: string;
+  revision: string | null;
   state: LiveSnapshotState;
-  publishedAt: string;
-  checkedAt: string;
+  publishedAt: string | null;
+  checkedAt: string | null;
+  windowState?: LiveWindowState | null;
+  dataAvailability?: LiveDataAvailability | null;
+  nextRefreshAt?: string | null;
   // Additive shared Live contract fields, present only after the GraphQL
   // contract ships them. Presentation must degrade when they are absent —
   // never invent authority or coverage client-side.

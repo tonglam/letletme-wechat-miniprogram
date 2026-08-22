@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function source(path) {
-  return readFileSync(resolve(root, path), "utf8");
+  return readFileSync(resolve(root, path), "utf8").replace(/\s+/g, " ");
 }
 
 test("Home never re-arms its countdown after becoming hidden", () => {

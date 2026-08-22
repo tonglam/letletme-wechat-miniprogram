@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function source(path) {
-  return readFileSync(resolve(root, path), "utf8");
+  return readFileSync(resolve(root, path), "utf8").replace(/\s+/g, " ");
 }
 
 test("Home fixture states remain one conditional chain and stale refresh is not reported as success", () => {
@@ -54,7 +54,7 @@ test("Match retries create a refresh tracker", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /onRetry\(\)[\s\S]*perfTracker\?\.disconnect\(\)[\s\S]*new PagePerformanceTracker\(this, "pages\/live\/match\/match", "refresh"\)[\s\S]*runForcedRefresh\(this\.perfTracker, false\)/
+    /onRetry\(\)[\s\S]*perfTracker\?\.disconnect\(\)[\s\S]*new PagePerformanceTracker\(\s*this, "pages\/live\/match\/match", "refresh"[\s\S]*runForcedRefresh\(this\.perfTracker, false\)/
   );
 });
 

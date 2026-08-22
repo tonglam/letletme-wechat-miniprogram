@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const source = (path) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
 let capturedPage;
 globalThis.Page = (definition) => {
@@ -80,7 +81,7 @@ test("tournament chains carry their originating trace through later reads", () =
   assert.match(service, /readDirectory\([\s\S]*trace\?: PageRequestTrace[\s\S]*readEntryTournamentDirectory\(entry, season, \{ forceRefresh, trace \}\)/);
   assert.match(selections, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadStats\(forceRefresh, trace\)/);
   assert.match(summary, /const trace = originatingTrace \|\| capturePageRequestTrace[\s\S]*getEntrySummaryTournaments\([^;]*trace\)[\s\S]*this\.loadSummary\(forceRefresh, trace\)/);
-  assert.match(live, /getEntryPointsRaceTournament\([^;]*trace\)[\s\S]*this\.loadRows\(\{[\s\S]*trace[\s\S]*\}\)/);
+  assert.match(live, /getEntryPointsRaceTournament\([\s\S]*trace[\s\S]*\)[\s\S]*this\.loadRows\(\{[\s\S]*trace[\s\S]*\}\)/);
 });
 
 test("entry support cache identities are isolated by the canonical season", () => {

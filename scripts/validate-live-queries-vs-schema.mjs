@@ -7,8 +7,8 @@ const {
   buildLiveFixturePlayersQuery,
   CALC_LIVE_POINTS_BY_ENTRY,
   LIVE_MATCHES_QUERY,
-  LIVE_SNAPSHOT_BY_EVENT_QUERY,
-  LIVE_SNAPSHOT_QUERY
+  LIVE_SNAPSHOT_QUERY,
+  TOURNAMENT_LIVE_POINTS
 } = await import("../miniprogram/services/live.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
@@ -19,9 +19,9 @@ if (!schemaModulePath) {
 
 const operations = [
   ["LIVE_SNAPSHOT_QUERY", LIVE_SNAPSHOT_QUERY],
-  ["LIVE_SNAPSHOT_BY_EVENT_QUERY", LIVE_SNAPSHOT_BY_EVENT_QUERY],
   ["CALC_LIVE_POINTS_BY_ENTRY", CALC_LIVE_POINTS_BY_ENTRY],
   ["LIVE_MATCHES_QUERY", LIVE_MATCHES_QUERY],
+  ["TOURNAMENT_LIVE_POINTS", TOURNAMENT_LIVE_POINTS],
   ["LIVE_FIXTURE_PLAYERS_BATCH", buildLiveFixturePlayersQuery(5)]
 ];
 

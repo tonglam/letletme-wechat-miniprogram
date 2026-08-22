@@ -4,7 +4,8 @@ import test from "node:test";
 
 import { normalizeTransfer } from "../miniprogram/pages/live/entry/transfer.ts";
 
-const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const source = (path) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
 test("Live Entry uses one CalcLive root and no independent LiveSnapshot root", () => {
   const service = source("miniprogram/services/live.service.ts");
