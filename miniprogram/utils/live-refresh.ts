@@ -15,14 +15,25 @@ export function shouldPollLiveSnapshot(options: {
   currentEventId?: number;
   selectedEventId?: number;
   snapshot?: LiveSnapshotStatus | null;
+  managerScoreState?: string | null;
+  managerNextRefreshAt?: string | null;
 }): boolean {
-  const { pageVisible, currentEventId, selectedEventId, snapshot } = options;
+  const {
+    pageVisible,
+    currentEventId,
+    selectedEventId,
+    snapshot,
+    managerScoreState,
+    managerNextRefreshAt
+  } = options;
   if (!pageVisible || !currentEventId || selectedEventId !== currentEventId) {
     return false;
   }
   // Missing or stale metadata must not wedge current-event recovery after a
   // failed gameweek switch or a rolling backend deployment.
   if (!snapshot || snapshot.eventId !== selectedEventId) return true;
+  if (managerScoreState === "SETTLING") return true;
+  if (managerNextRefreshAt && Date.parse(managerNextRefreshAt) <= Date.now()) return true;
   return snapshot.state !== "SETTLED";
 }
 

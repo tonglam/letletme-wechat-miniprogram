@@ -35,6 +35,27 @@
     />
   </view>
   <view wx:elif="{{noPicks}}" id="perf-primary-content" class="section">
+    <view wx:if="{{hasData}}" class="section live-summary">
+      <view class="score-card scoreboard">
+        <view class="score-top">
+          <view class="score-identity">
+            <view class="score-team"><text user-select="{{true}}">{{entryName || '我的球队'}}</text></view>
+            <view wx:if="{{playerName}}" class="score-manager"><text user-select="{{true}}">{{playerName}}</text></view>
+          </view>
+          <view class="score-hero">
+            <view class="score-label">{{scoreStatusText || '官方实时'}} · 总分</view>
+            <view class="score">{{totalText}}</view>
+          </view>
+        </view>
+        <view class="score-sub">{{scoreDetailText ? scoreDetailText + ' · ' : ''}}更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
+      </view>
+      <view class="summary-grid">
+        <view wx:for="{{summaryTiles}}" wx:key="label" class="summary-tile">
+          <view class="tile-label">{{item.label}}</view>
+          <view class="tile-value">{{item.value}}</view>
+        </view>
+      </view>
+    </view>
     <app-empty-state
       eyebrow="本轮未提交"
       title="GW{{event}} 未找到阵容"
@@ -54,11 +75,11 @@
             <view wx:if="{{playerName}}" class="score-manager"><text user-select="{{true}}">{{playerName}}</text></view>
           </view>
           <view class="score-hero">
-            <view class="score-label">实时总分</view>
-            <view class="score">{{total}}</view>
+            <view class="score-label">{{scoreStatusText || '官方实时'}} · 总分</view>
+            <view class="score">{{totalText}}</view>
           </view>
         </view>
-        <view class="score-sub">更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
+        <view class="score-sub">{{scoreDetailText ? scoreDetailText + ' · ' : ''}}更新 {{lastUpdated || '-'}}{{refreshing ? ' · 刷新中' : ''}}</view>
       </view>
       <view class="summary-grid">
         <view wx:for="{{summaryTiles}}" wx:key="label" class="summary-tile">

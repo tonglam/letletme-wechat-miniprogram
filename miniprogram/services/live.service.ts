@@ -108,6 +108,28 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
       }
       entry
       event
+      entryName
+      playerName
+      score {
+        eventPoints
+        netEventPoints
+        totalPoints
+        totalScope
+        eventRank
+        overallRank
+        leagueRank
+        transferCost
+        source
+        state
+        eventPointSemantics
+        revision
+        checkedAt
+        upstreamUpdatedAt
+        staleAt
+        nextRefreshAt
+        reconciliation
+        reasonCodes
+      }
       livePoints
       liveNetPoints
       liveTotalPoints
@@ -132,6 +154,7 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         pickActive
         isCaptain
         isViceCaptain
+        autoSub
         multiplier
         cleanSheets
         saves
@@ -159,6 +182,7 @@ interface GraphQLPickListItem {
   bps: number;
   playStatus: number;
   pickActive: boolean;
+  autoSub: boolean;
   isCaptain: boolean;
   isViceCaptain: boolean;
   multiplier: number;
@@ -177,6 +201,9 @@ interface CalcLivePointsByEntryResponse {
     snapshot: LiveSnapshotStatus | null;
     entry: number;
     event: number;
+    entryName?: string;
+    playerName?: string;
+    score?: LiveEntryResult["score"];
     livePoints: number;
     liveNetPoints: number;
     liveTotalPoints: number;
@@ -205,7 +232,8 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     bps: item.bps,
     playStatus: item.playStatus,
     pickActive: item.pickActive,
-    captain: item.isCaptain,
+    autoSub: item.autoSub,
+    captain: item.isCaptain || item.multiplier >= 2,
     viceCaptain: item.isViceCaptain,
     multiplier: item.multiplier,
     cleanSheets: item.cleanSheets,
@@ -240,8 +268,12 @@ export async function getLivePointsByEntrySnapshot(
       availability: result.availability,
       entry: result.entry,
       event: result.event,
+      entryName: result.entryName,
+      playerName: result.playerName,
+      score: result.score,
       livePoints: result.livePoints,
       liveNetPoints: result.liveNetPoints,
+      netPointsKnown: result.score?.netEventPoints != null,
       liveTotalPoints: result.liveTotalPoints,
       transferCost: result.transferCost,
       captainName: result.captainName,
@@ -624,6 +656,26 @@ const TOURNAMENT_LIVE_POINTS = `
         overallRank
         chip
         provisional
+        score {
+          eventPoints
+          netEventPoints
+          totalPoints
+          totalScope
+          eventRank
+          overallRank
+          leagueRank
+          transferCost
+          source
+          state
+          eventPointSemantics
+          revision
+          checkedAt
+          upstreamUpdatedAt
+          staleAt
+          nextRefreshAt
+          reconciliation
+          reasonCodes
+        }
         livePoints
         transferCost
         liveNetPoints
@@ -640,6 +692,9 @@ const TOURNAMENT_LIVE_POINTS = `
           position
           isCaptain
           isViceCaptain
+          multiplier
+          pickActive
+          autoSub
           totalPoints
         }
       }

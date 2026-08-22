@@ -63,9 +63,9 @@ export function formatLiveEntryShareText(input: {
   entryId?: number;
   entryName?: string;
   playerName?: string;
-  livePoints: number;
+  livePoints: number | string;
   netPoints: number;
-  totalPoints: number;
+  totalPoints: number | string;
   transferCost: number;
   chip?: string;
   captainName?: string;
@@ -79,7 +79,7 @@ export function formatLiveEntryShareText(input: {
   const meta = [
     textValue(input.playerName),
     `队长 ${textValue(input.captainName, "—")}`,
-    `赛季 ${input.totalPoints}`
+    `赛季 ${textValue(input.totalPoints, "—")}`
   ];
   const chip = chipShareLabel(input.chip);
   if (chip !== "无") meta.push(`Chip ${chip}`);
@@ -87,7 +87,7 @@ export function formatLiveEntryShareText(input: {
   const starters = (input.starters || []).map(playerLine);
   const bench = (input.bench || []).map(playerLine);
   const lines = [
-    `# ${teamName} · GW${input.gameweek} · 实时 ${input.livePoints}${hits}`,
+    `# ${teamName} · GW${input.gameweek} · 实时 ${textValue(input.livePoints, "—")}${hits}`,
     meta.filter(Boolean).join(" · "),
     "",
     ...starters

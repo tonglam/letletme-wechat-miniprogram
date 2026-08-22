@@ -40,6 +40,27 @@ export interface LiveSnapshotResult<T> {
   partialError?: string;
 }
 
+export interface LiveManagerScore {
+  eventPoints?: number | null;
+  netEventPoints?: number | null;
+  totalPoints?: number | null;
+  totalScope?: "OVERALL" | "CLASSIC_PHASE" | "UNKNOWN";
+  eventRank?: number | null;
+  overallRank?: number | null;
+  leagueRank?: number | null;
+  transferCost?: number;
+  source?: string;
+  state?: string;
+  eventPointSemantics?: string;
+  revision?: string | null;
+  checkedAt?: string | null;
+  upstreamUpdatedAt?: string | null;
+  staleAt?: string | null;
+  nextRefreshAt?: string | null;
+  reconciliation?: string;
+  reasonCodes?: string[];
+}
+
 export interface LivePlayerRow {
   element?: number;
   teamId?: number;
@@ -59,6 +80,7 @@ export interface LivePlayerRow {
   captain?: boolean;
   viceCaptain?: boolean;
   pickActive?: boolean;
+  autoSub?: boolean;
   playStatus?: number;
   minutes?: number;
   goalsScored?: number;
@@ -80,12 +102,15 @@ export interface LivePlayerRow {
 }
 
 export interface LiveEntryResult {
-  availability?: "READY" | "NO_PICKS";
-  entry?: number;
-  event?: number;
+	availability?: "READY" | "NO_PICKS";
+	entry?: number;
+	event?: number;
+	entryName?: string;
+	playerName?: string;
   total?: number;
   livePoints?: number;
   liveNetPoints?: number;
+  netPointsKnown?: boolean;
   liveTotalPoints?: number;
   transferCost?: number;
   captainName?: string;
@@ -96,6 +121,7 @@ export interface LiveEntryResult {
   pickList?: LivePlayerRow[];
   /** Fetch time when this result was served from cache; undefined on a fresh network response. */
   servedStoredAt?: number;
+  score?: LiveManagerScore;
 }
 
 export interface LiveMatch {
@@ -150,6 +176,7 @@ export interface LiveTournamentRow {
   overallRank?: number;
   picks?: LivePlayerRow[];
   searchText?: string;
+  score?: LiveManagerScore;
 }
 
 export interface LiveTournamentRowsResult {
