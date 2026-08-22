@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: wechat-release
     steps:
-      # get_auditstatus (per-audit-id) is the only status endpoint a
-      # first-party mini program may call; get_latest_auditstatus is restricted
-      # to third-party platforms and fails with errcode 86000.
+      # The audit id must come from the WeChat MP console or an authorized
+      # third-party submission. The upload workflow never fabricates one when
+      # the first-party credential receives errcode 86000.
       - name: Check audit status and release when approved
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
