@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       auto_submit_audit:
-        description: Submit the uploaded version for WeChat audit automatically
+        description: Attempt API audit submission; unsupported first-party credentials remain manual
         required: false
         default: true
         type: boolean
@@ -137,7 +137,7 @@ jobs:
             --ud "$RELEASE_DESCRIPTION" \
             --use-project-config true \
             --enable-es6 true
-      - name: Submit uploaded version for audit
+      - name: Submit uploaded version for audit when supported
         if: ${{ inputs.auto_submit_audit }}
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
@@ -186,6 +186,16 @@ jobs:
               # The uploaded version is already under audit; treat as
               # idempotent success (85009 per docs, 85058 seen in the wild).
               echo "Audit already in progress for the current version, skipping submit"
+              echo "audit_submission=ALREADY_IN_PROGRESS" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            86000)
+              # First-party app credentials cannot call submit_audit. The
+              # upload is still complete; an operator must submit the version
+              # from the WeChat MP console or use a third-party-authorized
+              # credential. Do not manufacture an audit id or claim release.
+              echo "::warning::Upload succeeded; WeChat audit submission requires the Mini Program console or a third-party-authorized credential (errcode 86000)"
+              echo "audit_submission=MANUAL_REQUIRED" >> "$GITHUB_STEP_SUMMARY"
+              printf '%s' "$audit_response" | jq '{errcode, errmsg}' >> "$GITHUB_STEP_SUMMARY"
               ;;
             *)
               echo "::error::submit_audit failed"
