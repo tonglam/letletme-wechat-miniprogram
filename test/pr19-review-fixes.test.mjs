@@ -282,13 +282,26 @@ test("Home selected-GW reads preserve stale metadata and discard superseded resp
   assert.match(load, /fixtureStaleStoredAt: staleStoredAt/);
 });
 
-test("Live overlay is authoritative for match play status", () => {
+test("Live overlay is authoritative for match status and minutes while Core owns identity", () => {
   const merged = matchModule.mergeLiveOverlay(
-    [{ id: 1, matchId: 1, status: "not_start", playStatus: "not_start" }],
-    [{ id: 1, matchId: 1, playStatus: "playing", minutes: 12 }]
+    [{
+      id: 1,
+      matchId: 1,
+      status: "not_start",
+      playStatus: "not_start",
+      homeTeamName: "Official Home",
+      homeTeamShortName: "HOM",
+      awayTeamName: "Official Away",
+      awayTeamShortName: "AWY",
+      minutes: 0
+    }],
+    [{ id: 1, matchId: 1, playStatus: "playing", minutes: 12, homeTeamName: "Fallback Home" }]
   );
   assert.equal(merged[0].status, "playing");
   assert.equal(merged[0].playStatus, "playing");
+  assert.equal(merged[0].minutes, 12);
+  assert.equal(merged[0].homeTeamName, "Official Home");
+  assert.equal(merged[0].homeTeamShortName, "HOM");
   assert.equal(merged[0].statusText, "比赛中");
 });
 
