@@ -3,7 +3,9 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
-  mapTournamentLiveRows
+  mapTournamentLiveRows,
+  mergeUnavailableTournamentEntryIds,
+  tournamentManagerScoreStatus
 } from "../miniprogram/services/live-tournament";
 
 function assertEqual(actual: unknown, expected: unknown, message: string): void {
@@ -137,3 +139,54 @@ assertEqual(noRules.length, 2, "empty rules keep all rows");
 const teams = getTournamentTeamOptions(rows);
 assertEqual(teams.length, 2, "team options are deduplicated");
 assertEqual(teams[0]?.name, "Arsenal", "team options are sorted by name");
+
+const classicRows = mapTournamentLiveRows([
+  {
+    entry: 303,
+    entryName: "Official",
+    playerName: "Manager",
+    rank: 4,
+    overallRank: 999,
+    livePoints: 0,
+    transferCost: 0,
+    liveNetPoints: 0,
+    liveTotalPoints: 0,
+    played: 3,
+    toPlay: 8,
+    captainName: "Saka",
+    score: {
+      eventPoints: 6,
+      totalPoints: 101,
+      totalScope: "CLASSIC_PHASE",
+      overallRank: 123,
+      source: "FPL_CLASSIC_STANDINGS",
+      state: "LIVE"
+    }
+  }
+]);
+assertEqual(classicRows[0]?.rank, 4, "official tournament rank is preserved");
+assertEqual(classicRows[0]?.totalPoints, 101, "classic phase total remains visible");
+assertEqual(classicRows[0]?.overallRank, 123, "official overall rank wins");
+assertEqual(tournamentManagerScoreStatus(classicRows), "官方实时", "official rows are available");
+assertEqual(
+  mergeUnavailableTournamentEntryIds([2, 3], [3, 4]).join(","),
+  "2,3,4",
+  "failed and unavailable manager ids are unified",
+);
+assertEqual(
+  tournamentManagerScoreStatus(classicRows, {
+    officialCoverage: 97 / 98,
+    unavailableEntryIds: [404],
+    totalEntries: 98,
+  }),
+  "官方实时：97/98 支球队已有分数",
+  "official coverage reports the whole league rather than only returned rows",
+);
+assertEqual(
+  tournamentManagerScoreStatus([
+    ...classicRows,
+    { ...classicRows[0], entry: 404, score: { source: "UNAVAILABLE", state: "UNAVAILABLE" } }
+  ]),
+  "官方实时：1/2 支球队已有分数",
+  "one missing score keeps the available board visible"
+);

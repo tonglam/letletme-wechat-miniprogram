@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildSchema, parse, validate } from "graphql";
+import { buildSchema, parse, validate, visit } from "graphql";
 
 const {
   buildLiveFixturePlayersQuery,
@@ -46,7 +46,19 @@ let failed = 0;
 for (const [name, document] of operations) {
   let errors;
   try {
-    errors = validate(schema, parse(document));
+    const ast = parse(document);
+    if (name === "LIVE_FIXTURE_PLAYERS_BATCH") {
+      let astNodes = 0;
+      visit(ast, { enter: () => void (astNodes += 1) });
+      if (astNodes > 200) {
+        failed += 1;
+        console.error(
+          `[FAIL] ${name}: ${astNodes} AST nodes exceeds the production limit of 200`,
+        );
+        continue;
+      }
+    }
+    errors = validate(schema, ast);
   } catch (error) {
     failed += 1;
     console.error(`[FAIL] ${name}: ${error instanceof Error ? error.message : String(error)}`);

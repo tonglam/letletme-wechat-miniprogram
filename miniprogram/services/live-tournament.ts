@@ -55,6 +55,62 @@ export interface TournamentTeamOption {
   name: string;
 }
 
+export interface TournamentManagerCoverage {
+  officialCoverage?: number;
+  unavailableEntryIds?: readonly number[];
+  totalEntries?: number;
+}
+
+export function mergeUnavailableTournamentEntryIds(
+  failedEntryIds: readonly number[] = [],
+  unavailableEntryIds: readonly number[] = [],
+): number[] {
+  return [...new Set([...failedEntryIds, ...unavailableEntryIds])];
+}
+
+export function officialTournamentTotalPoints(
+  score?: LiveManagerScore,
+): number | undefined {
+  return typeof score?.totalPoints === "number" && Number.isFinite(score.totalPoints)
+    ? score.totalPoints
+    : undefined;
+}
+
+export function tournamentManagerScoreStatus(
+  rows: readonly LiveTournamentRow[],
+  coverage: TournamentManagerCoverage = {},
+): string {
+  const states = rows.map((row) => row.score?.state).filter(Boolean);
+  const observedAvailable = rows.filter(
+    (row) =>
+      row.score?.source !== "UNAVAILABLE" &&
+      typeof row.score?.eventPoints === "number",
+  ).length;
+  const total =
+    typeof coverage.totalEntries === "number" &&
+    Number.isFinite(coverage.totalEntries) &&
+    coverage.totalEntries > 0
+      ? Math.floor(coverage.totalEntries)
+      : rows.length;
+  const unavailableCount = new Set(coverage.unavailableEntryIds || []).size;
+  const available = unavailableCount > 0
+    ? Math.max(0, total - unavailableCount)
+    : typeof coverage.officialCoverage === "number" &&
+        Number.isFinite(coverage.officialCoverage)
+      ? Math.min(
+          total,
+          Math.max(0, Math.round(coverage.officialCoverage * total)),
+        )
+      : observedAvailable;
+  if (states.includes("SETTLING")) return "结算中";
+  if (states.includes("STALE")) return "官方数据延迟";
+  if (states.length === 0 || available === 0) return "官方分数不可用";
+  if (available < total) {
+    return `官方实时：${available}/${total} 支球队已有分数`;
+  }
+  return "官方实时";
+}
+
 function mapTournamentPick(item: NonNullable<TournamentLiveGraphQLRow["pickList"]>[number]): LivePlayerRow {
   return {
     element: item.element,
@@ -100,6 +156,7 @@ function searchText(row: LiveTournamentRow): string {
 
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
+    const officialTotal = officialTournamentTotalPoints(row.score);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
@@ -108,13 +165,13 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       livePoints: row.livePoints,
       transferCost: row.transferCost,
       liveNetPoints: row.liveNetPoints,
-      liveTotalPoints: row.liveTotalPoints,
-      totalPoints: row.liveTotalPoints,
+      liveTotalPoints: officialTotal ?? row.liveTotalPoints,
+      totalPoints: officialTotal ?? row.liveTotalPoints,
       played: row.played,
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
-      overallRank: row.overallRank,
+      overallRank: row.score?.overallRank ?? row.overallRank,
       score: row.score,
       picks: (row.pickList || []).map(mapTournamentPick)
     };

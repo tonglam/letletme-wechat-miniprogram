@@ -41,6 +41,9 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  mergeUnavailableTournamentEntryIds,
+  officialTournamentTotalPoints,
+  tournamentManagerScoreStatus,
   type TournamentCaptainMode,
   type TournamentOwnershipScope,
   type TournamentTeamOption,
@@ -123,15 +126,6 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   pinned: boolean;
   compared: boolean;
   compareDisabled: boolean;
-}
-
-function managerScoreStatusText(rows: readonly DisplayTournamentRow[]): string {
-  const states = rows.map((row) => row.score?.state).filter(Boolean);
-  if (states.length === 0) return "官方分数不可用";
-  if (states.includes("SETTLING")) return "结算中";
-  if (states.includes("STALE")) return "官方数据延迟";
-  if (states.includes("UNAVAILABLE")) return "官方分数不可用";
-  return "官方实时";
 }
 
 interface OwnershipPlayerOption {
@@ -287,14 +281,9 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const liveNetPoints = netPointsKnown
     ? numberValue(row.score?.netEventPoints)
     : 0;
-  const totalPoints = numberValue(
-    row.score?.totalScope === "OVERALL" && row.score.totalPoints != null
-      ? row.score.totalPoints
-      : 0,
-  );
-  const totalPointsKnown =
-    row.score?.totalScope === "OVERALL" &&
-    typeof row.score.totalPoints === "number";
+  const officialTotalPoints = officialTournamentTotalPoints(row.score);
+  const totalPoints = numberValue(officialTotalPoints);
+  const totalPointsKnown = officialTotalPoints !== undefined;
   const transferCost = numberValue(row.transferCost);
   const played = numberValue(row.played);
   const toPlay = numberValue(row.toPlay);
@@ -498,10 +487,16 @@ function clearTournamentBoard(page: object): void {
     rows?: DisplayTournamentRow[];
     ownershipPlayers?: OwnershipPlayerOption[];
     shareRows?: DisplayTournamentRow[];
+    officialCoverage?: number;
+    officialTotalEntries?: number;
+    unavailableEntryIds?: number[];
   };
   board.rows = [];
   board.ownershipPlayers = [];
   board.shareRows = [];
+  board.officialCoverage = undefined;
+  board.officialTotalEntries = undefined;
+  board.unavailableEntryIds = [];
 }
 
 PerformancePage({
@@ -626,6 +621,9 @@ PerformancePage({
   loadedSeason: undefined as string | undefined,
   failedEntryCount: 0,
   retainedRowCount: 0,
+  officialCoverage: undefined as number | undefined,
+  officialTotalEntries: undefined as number | undefined,
+  unavailableEntryIds: [] as number[],
   resumeDirectoryAfterShow: false,
   resumeDirectoryForceRefresh: false,
   resumeStartupAfterShow: false,
@@ -1361,7 +1359,14 @@ PerformancePage({
             .filter((value): value is string => Boolean(value))
             .sort()[0] || "";
         this.setData({ scoreNextRefreshAt });
-        const failedEntryIds = new Set(liveResult.failedEntryIds || []);
+        const unavailableEntryIds = mergeUnavailableTournamentEntryIds(
+          liveResult.failedEntryIds,
+          liveResult.unavailableEntryIds,
+        );
+        const failedEntryIds = new Set(unavailableEntryIds);
+        this.officialCoverage = liveResult.officialCoverage;
+        this.officialTotalEntries = liveResult.totalEntries;
+        this.unavailableEntryIds = unavailableEntryIds;
         this.failedEntryCount = Math.max(
           failedEntryIds.size,
           liveResult.partialError ? 1 : 0,
@@ -1578,7 +1583,11 @@ PerformancePage({
       ? this.data.pageSize
       : this.data.displayedRows.length + this.data.pageSize;
     const stats = buildTournamentStats(rows);
-    const scoreStatusText = managerScoreStatusText(rows);
+    const scoreStatusText = tournamentManagerScoreStatus(rows, {
+      officialCoverage: this.officialCoverage,
+      unavailableEntryIds: this.unavailableEntryIds,
+      totalEntries: this.officialTotalEntries,
+    });
     const captainValues = Array.from(
       new Set(
         rows
@@ -1597,7 +1606,11 @@ PerformancePage({
       hasMore: sortedRows.length > nextSize,
       highestText: stats.highestText,
       averageText: stats.averageText,
-      entriesText: stats.entriesText,
+      entriesText:
+        typeof this.officialTotalEntries === "number" &&
+        this.officialTotalEntries > 0
+          ? String(this.officialTotalEntries)
+          : stats.entriesText,
       scoreStatusText,
       captainValues,
       captainOptions: captainValues.map((name) => ({
