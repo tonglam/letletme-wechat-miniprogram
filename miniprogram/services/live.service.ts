@@ -464,16 +464,22 @@ const POSITION_TYPE: Record<
   FORWARD: 4,
 };
 
+const LIVE_FIXTURE_PLAYERS_FRAGMENT = `
+  fragment LiveFixturePlayersBatchFields on LiveFixturePlayers {
+    season eventId revision fixtureId
+    players {
+      player { id webName position team { id name shortName } }
+      minutes goalsScored assists cleanSheets goalsConceded ownGoals
+      penaltiesSaved penaltiesMissed yellowCards redCards saves bonus bps
+      defensiveContribution totalPoints
+    }
+  }
+`;
+
 function liveFixturePlayersSelection(alias: string, variable: string): string {
   return `
     ${alias}: liveFixturePlayers(ref: $ref, fixtureId: $${variable}) {
-      season eventId revision fixtureId
-      players {
-        player { id webName position team { id name shortName } }
-        minutes goalsScored assists cleanSheets goalsConceded ownGoals
-        penaltiesSaved penaltiesMissed yellowCards redCards saves bonus bps
-        defensiveContribution totalPoints
-      }
+      ...LiveFixturePlayersBatchFields
     }
   `;
 }
@@ -486,7 +492,7 @@ export function buildLiveFixturePlayersQuery(count: number): string {
   const selections = Array.from({ length: count }, (_, index) =>
     liveFixturePlayersSelection(`fixture${index}`, `fixture${index}`),
   ).join("\n");
-  return `query LiveFixturePlayersBatch($ref: LiveRevisionRefInput!, ${definitions}) { ${selections} }`;
+  return `query LiveFixturePlayersBatch($ref: LiveRevisionRefInput!, ${definitions}) { ${selections} } ${LIVE_FIXTURE_PLAYERS_FRAGMENT}`;
 }
 
 function mapLiveFixturePlayer(

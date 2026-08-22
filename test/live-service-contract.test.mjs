@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { parse, visit } from "graphql";
 
 const {
   buildLiveFixturePlayersQuery,
@@ -32,6 +33,10 @@ test("live fixture player batches use the published player detail fields", () =>
   assert.doesNotMatch(query, /\bavailability\b/);
   assert.doesNotMatch(query, /\bbonusProvisional\b/);
   assert.match(query, /players\s*\{/);
+
+  let astNodes = 0;
+  visit(parse(query), { enter: () => void (astNodes += 1) });
+  assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
 });
 
 test("live tournament desk requests official coverage and server ranking", async () => {
