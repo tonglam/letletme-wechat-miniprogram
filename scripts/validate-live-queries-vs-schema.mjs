@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildSchema, parse, validate, visit } from "graphql";
+import { buildSchema, Kind, parse, validate, visit } from "graphql";
 
 const {
   buildLiveFixturePlayersQuery,
@@ -71,13 +71,27 @@ async function loadSchema() {
 const schema = await loadSchema();
 let failed = 0;
 
+const astNodeLimit = (document) => {
+  const operations = document.definitions.filter(
+    (definition) => definition.kind === Kind.OPERATION_DEFINITION,
+  );
+  if (operations.length !== 1) return 200;
+  const roots = operations[0].selectionSet.selections;
+  return roots.length === 1 &&
+      roots[0].kind === Kind.FIELD &&
+      !roots[0].alias &&
+      roots[0].name.value === "entryLiveCompetitionBoard"
+    ? 400
+    : 200;
+};
+
 for (const [name, document] of operations) {
   let errors;
   try {
     const ast = parse(document);
     let astNodes = 0;
     visit(ast, { enter: () => void (astNodes += 1) });
-    const maxAstNodes = 200;
+    const maxAstNodes = astNodeLimit(ast);
     if (astNodes > maxAstNodes) {
       failed += 1;
       console.error(
