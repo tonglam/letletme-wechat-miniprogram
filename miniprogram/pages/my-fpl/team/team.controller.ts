@@ -33,6 +33,7 @@ import {
   SEASON_CHART_MODES,
   buildSeasonChartView,
   historyToSeasonChartPoints,
+  isCurrentSeasonLabel,
   pastSeasonSummary,
   toPastSeasonChartPoints,
   type PastSeasonChartPoint,
@@ -192,7 +193,7 @@ interface SeasonHistoryRow {
   overallRank: string;
   pointsValue: number;
   rankValue: number;
-  /** Newest season first — the first row is the in-progress season. */
+  /** True only when the row matches the authoritative app-context season. */
   current: boolean;
 }
 
@@ -930,7 +931,8 @@ Page({
       const primary = mapApiDataToTeamStats(
         eventResult,
         { results: [], history: [] },
-        []
+        [],
+        requestSeason
       );
       setPageTitle(primary.headerTitle || "我的球队");
       this.setData({
@@ -1183,7 +1185,8 @@ Page({
       this.transferPayload = transferPayload;
       const support = mapHistorySupportRows(
         historyPayload,
-        transferPayload || []
+        transferPayload || [],
+        getApp<IAppOption>().globalData.season
       );
       this.setData({
         transferRows: support.transferRows,
@@ -1398,9 +1401,10 @@ function findSquadRowForPitch(
 function mapApiDataToTeamStats(
   eventResult: EntryEventResult,
   history: EntryHistoryPayload,
-  transferHistory: EntryGameweekTransfers[]
+  transferHistory: EntryGameweekTransfers[],
+  currentSeason?: string
 ): TeamStatsViewModel {
-  const historySupport = mapHistorySupportRows(history, transferHistory);
+  const historySupport = mapHistorySupportRows(history, transferHistory, currentSeason);
 
   const squadRows = mapSquadRows(eventResult.eventPicks || []);
   const captain = eventResult.eventPlayedCaptain;
@@ -1472,7 +1476,8 @@ interface HistorySupportViewModel {
 
 function mapHistorySupportRows(
   history: EntryHistoryPayload,
-  transferHistory: EntryGameweekTransfers[]
+  transferHistory: EntryGameweekTransfers[],
+  currentSeason?: string
 ): HistorySupportViewModel {
   const transferByEvent = new Map<number, EntryGameweekTransfers>();
   transferHistory.forEach((item) => transferByEvent.set(item.eventId, item));
@@ -1497,7 +1502,7 @@ function mapHistorySupportRows(
     historyRows: sortedHistory.map(mapHistoryRow),
     seasonHistoryRows: [...history.history]
       .sort((a, b) => b.season.localeCompare(a.season))
-      .map(mapSeasonHistoryRow)
+      .map((item) => mapSeasonHistoryRow(item, currentSeason))
   };
 }
 
@@ -1656,7 +1661,10 @@ function mapHistoryRow(item: EntryHistoryItem): HistoryRow {
   };
 }
 
-function mapSeasonHistoryRow(item: EntrySeasonHistoryItem, index: number): SeasonHistoryRow {
+export function mapSeasonHistoryRow(
+  item: EntrySeasonHistoryItem,
+  currentSeason?: string
+): SeasonHistoryRow {
   return {
     id: `season-${item.season}`,
     season: item.season,
@@ -1664,7 +1672,7 @@ function mapSeasonHistoryRow(item: EntrySeasonHistoryItem, index: number): Seaso
     overallRank: formatCompactNumber(item.overallRank),
     pointsValue: item.totalPoints || 0,
     rankValue: item.overallRank || 0,
-    current: index === 0
+    current: isCurrentSeasonLabel(item.season, currentSeason)
   };
 }
 

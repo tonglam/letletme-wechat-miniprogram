@@ -78,6 +78,12 @@ export function formatPoints(value: unknown): string {
   return number === undefined ? "-" : String(number);
 }
 
+/** Averages are estimates across entries and must not be displayed as totals. */
+export function formatAverageNumber(value: unknown): string {
+  const number = numberValue(value);
+  return number === undefined ? "-" : number.toFixed(2);
+}
+
 export function formatCompactNumber(value: unknown): string {
   const number = numberValue(value);
   if (number === undefined) {
@@ -103,6 +109,17 @@ export function formatMoney(value: unknown): string {
 
   const normalized = Math.abs(number) >= 100 ? number / 10 : number;
   return `£${normalized.toFixed(1)}m`;
+}
+
+/** Team-value average with the same unit normalization and two decimals. */
+export function formatAverageMoney(value: unknown): string {
+  const number = numberValue(value);
+  if (number === undefined) {
+    return "-";
+  }
+
+  const normalized = Math.abs(number) >= 100 ? number / 10 : number;
+  return `£${normalized.toFixed(2)}m`;
 }
 
 export function formatPercent(value: unknown): string {
