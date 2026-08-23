@@ -358,29 +358,87 @@ test("response identity includes the expected season", async () => {
   );
 });
 
+test("response identity rejects a page from another board revision", async () => {
+  installRuntime(
+    graphQLSuccess(
+      validPage({ page: 2, boardRevision: "board-r2" }),
+      "request-wrong-board-revision"
+    )
+  );
+
+  await assert.rejects(
+    getEntryLiveCompetitionBoardPage({
+      entryId: 123,
+      tournamentId: 7,
+      eventId: 1,
+      page: 2,
+      expectedBoardRevision: "board-r1"
+    }),
+    (error) =>
+      error instanceof LiveBoardInvalidResponseError &&
+      error.missingFields.includes("boardRevision:mismatch") &&
+      error.requestId === "request-wrong-board-revision"
+  );
+});
+
 test("failed server filter restores the last committed controls and rows", async () => {
   const capturedPage = await getTournamentPageDefinition();
+  const selectedPlayer = {
+    element: 11,
+    name: "Saka",
+    meta: "ARS · MID",
+    teamShortName: "ARS",
+    teamName: "Arsenal",
+    position: "MID"
+  };
+  const selectedTeam = {
+    id: 1,
+    shortName: "ARS",
+    name: "Arsenal"
+  };
   const committed = {
     submittedKeyword: "",
     keyword: "",
     sortKey: "livePoints",
     sortDesc: true,
-    chipFilters: [],
-    captainFilters: [],
+    chipFilters: ["BB"],
+    captainFilters: [11],
     ownershipScope: "any",
     ownershipCaptainMode: "any",
-    selectedOwnershipPlayers: [],
+    selectedOwnershipPlayers: [selectedPlayer],
+    selectedOwnershipTeamIndex: 1,
+    selectedOwnershipTeam: selectedTeam,
+    selectedOwnershipPositionIndex: 2,
+    selectedOwnershipPosition: "MID",
+    ownershipAvailablePlayers: [selectedPlayer],
+    ownershipAvailablePlayerNames: ["Saka"],
+    ownershipSearch: "sak",
+    ownershipSearchResults: [selectedPlayer],
     teamExposureScope: "any",
-    teamExposureRules: []
+    teamExposureRules: [
+      { teamId: 1, teamShortName: "ARS", name: "Arsenal", count: 3 }
+    ],
+    pendingExposureTeamIndex: 1,
+    pendingExposureTeam: selectedTeam
   };
   const context = {
     data: {
       ...capturedPage.data,
       hasData: true,
       sortKey: "totalPoints",
-      chipFilters: ["BB"],
+      chipFilters: [],
+      captainFilters: [],
+      selectedOwnershipPlayers: [],
+      selectedOwnershipTeam: null,
+      selectedOwnershipPosition: "",
+      teamExposureRules: [],
+      pendingExposureTeam: null,
+      activeFilterCount: 0,
+      filteredCount: 12,
+      rowCount: 98,
       displayedRows: [{ entry: 123 }]
     },
+    ownershipPlayers: [selectedPlayer],
     boardControlRequestId: 0,
     committedBoardControls: committed,
     _submittedKeyword: "",
@@ -396,7 +454,18 @@ test("failed server filter restores the last committed controls and rows", async
   await capturedPage.reloadBoardControls.call(context);
 
   assert.equal(context.data.sortKey, "livePoints");
-  assert.deepEqual(context.data.chipFilters, []);
+  assert.deepEqual(context.data.chipFilters, ["BB"]);
+  assert.deepEqual(context.data.captainFilters, [11]);
+  assert.deepEqual(context.data.selectedOwnershipPlayers, [selectedPlayer]);
+  assert.deepEqual(context.data.selectedOwnershipTeam, selectedTeam);
+  assert.equal(context.data.selectedOwnershipPosition, "MID");
+  assert.deepEqual(context.data.teamExposureRules, committed.teamExposureRules);
+  assert.deepEqual(context.data.pendingExposureTeam, selectedTeam);
+  assert.equal(context.data.activeFilterCount, 4);
+  assert.equal(context.data.ownershipMatchedText, " · 匹配 12/98");
+  assert.equal(context.data.teamExposureMatchedText, " · 匹配 12/98");
+  assert.equal(context.data.ownershipSummary, "Saka");
+  assert.equal(context.data.teamExposureSummary, "Arsenal恰好3人");
   assert.deepEqual(context.data.displayedRows, [{ entry: 123 }]);
   assert.equal(context.data.errorSuffix, "当前筛选和榜单保持不变");
 });

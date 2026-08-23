@@ -277,8 +277,18 @@ interface BoardControlState {
   ownershipScope: TournamentOwnershipScope;
   ownershipCaptainMode: TournamentCaptainMode;
   selectedOwnershipPlayers: OwnershipPlayerOption[];
+  selectedOwnershipTeamIndex: number;
+  selectedOwnershipTeam: TournamentTeamOption | null;
+  selectedOwnershipPositionIndex: number;
+  selectedOwnershipPosition: string;
+  ownershipAvailablePlayers: OwnershipPlayerOption[];
+  ownershipAvailablePlayerNames: string[];
+  ownershipSearch: string;
+  ownershipSearchResults: OwnershipPlayerOption[];
   teamExposureScope: TournamentOwnershipScope;
   teamExposureRules: LiveTournamentData["teamExposureRules"];
+  pendingExposureTeamIndex: number;
+  pendingExposureTeam: TournamentTeamOption | null;
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -1478,8 +1488,29 @@ PerformancePage({
       selectedOwnershipPlayers: this.data.selectedOwnershipPlayers.map(
         (player) => ({ ...player }),
       ),
+      selectedOwnershipTeamIndex: this.data.selectedOwnershipTeamIndex,
+      selectedOwnershipTeam: this.data.selectedOwnershipTeam
+        ? { ...this.data.selectedOwnershipTeam }
+        : null,
+      selectedOwnershipPositionIndex:
+        this.data.selectedOwnershipPositionIndex,
+      selectedOwnershipPosition: this.data.selectedOwnershipPosition,
+      ownershipAvailablePlayers: this.data.ownershipAvailablePlayers.map(
+        (player) => ({ ...player }),
+      ),
+      ownershipAvailablePlayerNames: [
+        ...this.data.ownershipAvailablePlayerNames,
+      ],
+      ownershipSearch: this.data.ownershipSearch,
+      ownershipSearchResults: this.data.ownershipSearchResults.map((player) => ({
+        ...player,
+      })),
       teamExposureScope: this.data.teamExposureScope,
       teamExposureRules: this.data.teamExposureRules.map((rule) => ({ ...rule })),
+      pendingExposureTeamIndex: this.data.pendingExposureTeamIndex,
+      pendingExposureTeam: this.data.pendingExposureTeam
+        ? { ...this.data.pendingExposureTeam }
+        : null,
     };
   },
 
@@ -1491,6 +1522,21 @@ PerformancePage({
     const committed = this.committedBoardControls as BoardControlState | null;
     if (!committed) return;
     this._submittedKeyword = committed.submittedKeyword;
+    const selectedOwnershipPlayers = committed.selectedOwnershipPlayers.map(
+      (player) => ({ ...player }),
+    );
+    const teamExposureRules = committed.teamExposureRules.map((rule) => ({
+      ...rule,
+    }));
+    const captainFilterNames = committed.captainFilters
+      .map(
+        (element) =>
+          this.ownershipPlayers.find(
+            (player: OwnershipPlayerOption) => player.element === element,
+          )?.name,
+      )
+      .filter((name): name is string => Boolean(name));
+    const matchedText = ` · 匹配 ${this.data.filteredCount}/${this.data.rowCount}`;
     this.setData({
       keyword: committed.keyword,
       sortKey: committed.sortKey,
@@ -1499,11 +1545,61 @@ PerformancePage({
       captainFilters: [...committed.captainFilters],
       ownershipScope: committed.ownershipScope,
       ownershipCaptainMode: committed.ownershipCaptainMode,
-      selectedOwnershipPlayers: committed.selectedOwnershipPlayers.map(
+      selectedOwnershipPlayers,
+      selectedOwnershipTeamIndex: committed.selectedOwnershipTeamIndex,
+      selectedOwnershipTeam: committed.selectedOwnershipTeam
+        ? { ...committed.selectedOwnershipTeam }
+        : null,
+      selectedOwnershipPositionIndex:
+        committed.selectedOwnershipPositionIndex,
+      selectedOwnershipPosition: committed.selectedOwnershipPosition,
+      ownershipAvailablePlayers: committed.ownershipAvailablePlayers.map(
         (player) => ({ ...player }),
       ),
+      ownershipAvailablePlayerNames: [
+        ...committed.ownershipAvailablePlayerNames,
+      ],
+      ownershipSearch: committed.ownershipSearch,
+      ownershipSearchResults: committed.ownershipSearchResults.map((player) => ({
+        ...player,
+      })),
+      ownershipPlayerNames: selectedOwnershipPlayers.map(
+        (player) => `${player.name}${player.meta ? ` (${player.meta})` : ""}`,
+      ),
+      ownershipSummary: selectedOwnershipPlayers.length
+        ? selectedOwnershipPlayers.map((player) => player.name).join("、")
+        : "未筛选",
+      ownershipMatchedText: selectedOwnershipPlayers.length ? matchedText : "",
       teamExposureScope: committed.teamExposureScope,
-      teamExposureRules: committed.teamExposureRules.map((rule) => ({ ...rule })),
+      teamExposureRules,
+      pendingExposureTeamIndex: committed.pendingExposureTeamIndex,
+      pendingExposureTeam: committed.pendingExposureTeam
+        ? { ...committed.pendingExposureTeam }
+        : null,
+      teamExposureSummary: teamExposureRules.length
+        ? teamExposureRules
+            .map((rule) => `${rule.name}恰好${rule.count}人`)
+            .join("、")
+        : "未筛选",
+      teamExposureMatchedText: teamExposureRules.length ? matchedText : "",
+      activeFilterCount:
+        committed.chipFilters.length +
+        committed.captainFilters.length +
+        selectedOwnershipPlayers.length +
+        teamExposureRules.length,
+      chipOptions: CHIP_VALUES.map((value) => ({
+        value,
+        label: value,
+        on: committed.chipFilters.includes(value),
+      })),
+      captainFilterNames,
+      captainOptions: this.ownershipPlayers.map(
+        (player: OwnershipPlayerOption) => ({
+          element: player.element,
+          name: player.name,
+          on: committed.captainFilters.includes(player.element),
+        }),
+      ),
     });
   },
 

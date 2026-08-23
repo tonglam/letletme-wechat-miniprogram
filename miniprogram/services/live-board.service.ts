@@ -562,6 +562,12 @@ export async function getEntryLiveCompetitionBoardPage(
     if (options.expectedSeason && page.season !== options.expectedSeason) {
       mismatches.push("season:mismatch");
     }
+    if (
+      variables.expectedBoardRevision &&
+      page.boardRevision !== variables.expectedBoardRevision
+    ) {
+      mismatches.push("boardRevision:mismatch");
+    }
     if (page.page !== (variables.page || 1)) mismatches.push("page:mismatch");
     if (mismatches.length > 0) {
       throw new LiveBoardInvalidResponseError(mismatches, {
