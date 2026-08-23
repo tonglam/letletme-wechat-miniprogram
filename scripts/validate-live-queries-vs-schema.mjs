@@ -69,7 +69,7 @@ for (const [name, document] of operations) {
     const ast = parse(document);
     let astNodes = 0;
     visit(ast, { enter: () => void (astNodes += 1) });
-    const maxAstNodes = name === "GET_MY_FPL_COMPETITIONS_DESK" ? 400 : 200;
+    const maxAstNodes = 200;
     if (astNodes > maxAstNodes) {
       failed += 1;
       console.error(

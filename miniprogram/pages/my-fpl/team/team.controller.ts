@@ -10,7 +10,12 @@ import {
   type EntrySeasonHistoryItem,
   type EntryTransferMove
 } from "../../../services/summary.service";
-import { goToEntrySearch, goToLiveEntry, setPageTitle } from "../../../utils/navigation";
+import {
+  goToAccountLink,
+  goToEntrySearch,
+  goToLiveEntry,
+  setPageTitle
+} from "../../../utils/navigation";
 import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView
@@ -39,6 +44,7 @@ import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import {
   currentMyFplEntryId,
+  requiresMyFplAccountLink,
   waitForAuthoritativeFollow
 } from "../../../utils/follow";
 import { canReadEventReporting } from "../../../utils/event-context";
@@ -836,14 +842,17 @@ Page({
       trigger: forceRefresh ? "refresh" : "load"
     });
     if (!this.data.entryId) {
+      const accountLinkRequired = requiresMyFplAccountLink();
       this.setData({
         loading: false,
         error: "",
         emptyState: "entry",
-        emptyEyebrow: "需要球队",
-        emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
-        emptyActionText: "去选择球队"
+        emptyEyebrow: accountLinkRequired ? "需要关联" : "需要球队",
+        emptyTitle: accountLinkRequired ? "先关联 LetLetMe 账户" : "先选择我的球队",
+        emptyDescription: accountLinkRequired
+          ? "关联已绑定 FPL 球队的 LetLetMe 账户后，即可生成每轮总结。"
+          : "查找球队并设为我的球队后，即可生成每轮总结。",
+        emptyActionText: accountLinkRequired ? "去关联账户" : "去选择球队"
       }, () => {
         this.markPrimaryCommit(tracker);
       });
@@ -1276,7 +1285,11 @@ Page({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      goToEntrySearch();
+      if (requiresMyFplAccountLink()) {
+        goToAccountLink();
+      } else {
+        goToEntrySearch();
+      }
       return;
     }
     if (this.contextUnavailable || this.data.maxGw <= 0) {

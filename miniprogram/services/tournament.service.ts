@@ -175,45 +175,6 @@ export const GET_MY_FPL_COMPETITIONS_DESK = `
           pointsBehindNext
           pointsAheadOfPrev
         }
-        topPerformers {
-          entryId
-          entryName
-          playerName
-          eventPoints
-          eventNetPoints
-          rank
-          previousRank
-          captainId
-          captainWebName
-          captainTeamShortName
-          captainPoints
-        }
-        risers {
-          entryId
-          entryName
-          playerName
-          eventPoints
-          eventNetPoints
-          rank
-          previousRank
-          captainId
-          captainWebName
-          captainTeamShortName
-          captainPoints
-        }
-        fallers {
-          entryId
-          entryName
-          playerName
-          eventPoints
-          eventNetPoints
-          rank
-          previousRank
-          captainId
-          captainWebName
-          captainTeamShortName
-          captainPoints
-        }
       }
     }
   }
@@ -535,20 +496,6 @@ export interface MyFplReviewContext {
   latestPublishedEventId?: number | null;
 }
 
-export interface MyFplCompetitionPerformance {
-  entryId: number;
-  entryName?: string | null;
-  playerName?: string | null;
-  eventPoints?: number | null;
-  eventNetPoints?: number | null;
-  rank?: number | null;
-  previousRank?: number | null;
-  captainId?: number | null;
-  captainWebName?: string | null;
-  captainTeamShortName?: string | null;
-  captainPoints?: number | null;
-}
-
 export interface MyFplCompetitionViewer {
   entryId: number;
   overallRank?: number | null;
@@ -579,9 +526,6 @@ export interface MyFplCompetitionAggregate {
   averageOverallPoints?: number | null;
   metrics: TournamentSeasonMetric[];
   viewer?: MyFplCompetitionViewer | null;
-  topPerformers: MyFplCompetitionPerformance[];
-  risers: MyFplCompetitionPerformance[];
-  fallers: MyFplCompetitionPerformance[];
 }
 
 export interface MyFplCompetitionsDesk {

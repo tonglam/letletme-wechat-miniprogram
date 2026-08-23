@@ -15,7 +15,7 @@ import {
   type TournamentSeasonSnapshot
 } from "../../../services/tournament.service";
 import type { EntryTournamentRow } from "../../../models/competition";
-import { goToEntrySearch } from "../../../utils/navigation";
+import { goToAccountLink, goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
 import { formatCompactNumber, formatMoney, formatPoints } from "../../../utils/summary-format";
 import {
@@ -28,7 +28,11 @@ import {
 } from "../../../utils/season-chart";
 import type { MiniChartPoint } from "../../../utils/mini-chart";
 import { recordMyFplVisit } from "../../../utils/perf";
-import { currentMyFplEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
+import {
+  currentMyFplEntryId,
+  requiresMyFplAccountLink,
+  waitForAuthoritativeFollow
+} from "../../../utils/follow";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -531,6 +535,7 @@ PerformancePage({
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
+      const accountLinkRequired = requiresMyFplAccountLink();
       this.loadedSeason = undefined;
       this.setData({
         loading: false,
@@ -540,10 +545,12 @@ PerformancePage({
         tournamentNames: [],
         selectedTournament: null,
         emptyState: "entry",
-        emptyEyebrow: "需要球队",
-        emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可查看你参与的赛事。",
-        emptyActionText: "去选择球队",
+        emptyEyebrow: accountLinkRequired ? "需要关联" : "需要球队",
+        emptyTitle: accountLinkRequired ? "先关联 LetLetMe 账户" : "先选择我的球队",
+        emptyDescription: accountLinkRequired
+          ? "关联已绑定 FPL 球队的 LetLetMe 账户后，即可查看你参与的赛事。"
+          : "查找球队并设为我的球队后，即可查看你参与的赛事。",
+        emptyActionText: accountLinkRequired ? "去关联账户" : "去选择球队",
         fromCache: false
       });
       return;
@@ -1151,7 +1158,11 @@ PerformancePage({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      goToEntrySearch();
+      if (requiresMyFplAccountLink()) {
+        goToAccountLink();
+      } else {
+        goToEntrySearch();
+      }
     }
   },
 

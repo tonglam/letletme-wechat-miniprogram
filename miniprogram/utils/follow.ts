@@ -73,3 +73,8 @@ export function currentMyFplEntryId(): number | undefined {
     ? getVerifiedSessionEntryId()
     : currentFollowEntryId();
 }
+
+/** A signed-in account without a verified FPL binding must use account link. */
+export function requiresMyFplAccountLink(): boolean {
+  return Boolean(getApiSessionToken() && !getVerifiedSessionEntryId());
+}

@@ -36,4 +36,16 @@ test("personal price data is bound and cached by the verified account entry", ()
     priceService,
     /if \(getVerifiedSessionEntryId\(\) !== verifiedEntryId\)[\s\S]*unavailablePersonalContext\("unbound"\)/,
   );
+  assert.match(
+    priceService,
+    /if \(read\.meta\.stale\) \{[\s\S]*unavailablePersonalContext\("unavailable"\)/,
+  );
+});
+
+test("price prediction falls back to its dedicated last-good board after request failure", () => {
+  assert.match(priceService, /function lastGoodPriceChangeBoardRead\(\)/);
+  assert.match(
+    priceService,
+    /catch \(error\) \{[\s\S]*lastGoodPriceChangeBoardRead\(\)[\s\S]*if \(lastGood\) return lastGood;[\s\S]*throw error/,
+  );
 });

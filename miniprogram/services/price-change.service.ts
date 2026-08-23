@@ -204,55 +204,65 @@ export function readLastGoodPriceChangeBoard(now = Date.now()): StoredPriceChang
   }
 }
 
+function lastGoodPriceChangeBoardRead(): PriceChangeBoardRead | null {
+  const lastGood = readLastGoodPriceChangeBoard();
+  if (!lastGood) return null;
+  return {
+    board: { ...lastGood.board, status: "STALE" },
+    cacheStale: true,
+    usedLastGood: true,
+    storedAt: lastGood.savedAt,
+  };
+}
+
 export async function getPriceChangeBoard(
   forceRefresh = false,
   trace?: PageRequestTrace,
 ): Promise<PriceChangeBoardRead> {
-  const read = await graphqlRead<PriceChangeBoardResponse>(
-    PRICE_CHANGE_BOARD_QUERY,
-    {},
-    {
-      authMode: "public",
-      cachePolicy: "market",
-      cacheTtl: 5 * MINUTE,
-      staleTtl: DAY,
-      cacheVariant: "price-change-board:v1",
-      forceRefresh,
-      trace,
-      getCacheExpiry: (data) => {
-        const response = data as PriceChangeBoardResponse | undefined;
-        return Date.now() + (response?.priceChangeBoard?.status === "UNAVAILABLE" ? MINUTE : 5 * MINUTE);
+  try {
+    const read = await graphqlRead<PriceChangeBoardResponse>(
+      PRICE_CHANGE_BOARD_QUERY,
+      {},
+      {
+        authMode: "public",
+        cachePolicy: "market",
+        cacheTtl: 5 * MINUTE,
+        staleTtl: DAY,
+        cacheVariant: "price-change-board:v1",
+        forceRefresh,
+        trace,
+        getCacheExpiry: (data) => {
+          const response = data as PriceChangeBoardResponse | undefined;
+          return Date.now() + (response?.priceChangeBoard?.status === "UNAVAILABLE" ? MINUTE : 5 * MINUTE);
+        },
       },
-    },
-  );
-  if (read.errors.length > 0) throw new GraphQLApplicationError(read.errors);
-  const incoming = read.data.priceChangeBoard || EMPTY_PRICE_CHANGE_BOARD;
-  if (isPersistablePriceChangeBoard(incoming)) {
-    const board = read.meta.stale ? { ...incoming, status: "STALE" as const } : incoming;
-    if (!read.meta.stale) persistLastGoodBoard(incoming);
+    );
+    if (read.errors.length > 0) throw new GraphQLApplicationError(read.errors);
+    const incoming = read.data.priceChangeBoard || EMPTY_PRICE_CHANGE_BOARD;
+    if (isPersistablePriceChangeBoard(incoming)) {
+      const board = read.meta.stale ? { ...incoming, status: "STALE" as const } : incoming;
+      if (!read.meta.stale) persistLastGoodBoard(incoming);
+      return {
+        board,
+        cacheStale: read.meta.stale,
+        usedLastGood: false,
+        storedAt: read.meta.storedAt,
+      };
+    }
+
+    const lastGood = lastGoodPriceChangeBoardRead();
+    if (lastGood) return lastGood;
     return {
-      board,
+      board: incoming,
       cacheStale: read.meta.stale,
       usedLastGood: false,
       storedAt: read.meta.storedAt,
     };
+  } catch (error) {
+    const lastGood = lastGoodPriceChangeBoardRead();
+    if (lastGood) return lastGood;
+    throw error;
   }
-
-  const lastGood = readLastGoodPriceChangeBoard();
-  if (lastGood) {
-    return {
-      board: { ...lastGood.board, status: "STALE" },
-      cacheStale: true,
-      usedLastGood: true,
-      storedAt: lastGood.savedAt,
-    };
-  }
-  return {
-    board: incoming,
-    cacheStale: read.meta.stale,
-    usedLastGood: false,
-    storedAt: read.meta.storedAt,
-  };
 }
 
 function chunks<T>(values: readonly T[], size: number): T[][] {
@@ -357,6 +367,9 @@ export async function getPriceChangePersonalContext(input: {
   }
   if (getVerifiedSessionEntryId() !== verifiedEntryId) {
     return unavailablePersonalContext("unbound");
+  }
+  if (read.meta.stale) {
+    return unavailablePersonalContext("unavailable");
   }
 
   const gameweek = read.data.myFplTeamGameweek;

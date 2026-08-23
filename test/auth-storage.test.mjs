@@ -15,6 +15,7 @@ import {
 } from "../miniprogram/services/auth.service.ts";
 import {
   currentMyFplEntryId,
+  requiresMyFplAccountLink,
   waitForAuthoritativeFollow
 } from "../miniprogram/utils/follow.ts";
 
@@ -104,6 +105,11 @@ test("verified session identity stays separate from a later local follow", async
       currentMyFplEntryId(),
       undefined,
       "an account with no verified FPL entry must not inherit the local follow",
+    );
+    assert.equal(
+      requiresMyFplAccountLink(),
+      true,
+      "a signed-in account without an FPL binding must use account linking",
     );
   } finally {
     clearSessionCredentials();
