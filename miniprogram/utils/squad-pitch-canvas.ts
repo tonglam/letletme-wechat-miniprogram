@@ -17,6 +17,12 @@ import {
   type SquadPitchPlayer
 } from "./squad-pitch";
 import { presentImage } from "./album-presenter";
+import {
+  SHARE_BRAND_NAME,
+  SHARE_BRAND_URL,
+  SHARE_BRAND_VERSION,
+  drawShareBranding
+} from "./share-image-brand";
 
 export const SHARE_LOGICAL_WIDTH = 750;
 export const SHARE_ASPECT_PLAIN = 1304 / 1244;
@@ -100,7 +106,7 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
       managerName: header.managerName,
       gwPoints: header.gwPoints
     },
-    { type: "watermark", title: "LETLETME", url: "letletme.top" }
+    { type: "watermark", title: SHARE_BRAND_NAME, url: SHARE_BRAND_URL }
   ];
 
   rows.forEach((row) => {
@@ -162,6 +168,7 @@ export function shareCacheKey(input: SharePitchInput): string {
   return JSON.stringify({
     locale: input.locale || "zh-CN",
     benchBoost: Boolean(input.benchBoost),
+    shareBrandVersion: SHARE_BRAND_VERSION,
     header: input.header,
     players: input.players.map((player) => [
       player.id,
@@ -199,6 +206,7 @@ interface ShareCanvasContext {
   fillRect(x: number, y: number, w: number, h: number): void;
   strokeRect(x: number, y: number, w: number, h: number): void;
   fillText(text: string, x: number, y: number, maxWidth?: number): void;
+  strokeText?(text: string, x: number, y: number, maxWidth?: number): void;
   measureText?(text: string): { width: number };
   drawImage(image: CanvasImage, dx: number, dy: number, dw: number, dh: number): void;
   save(): void;
@@ -383,23 +391,6 @@ export function drawSharePlan(
     ctx.fillText(header.gwPoints, right, top + height * 0.55);
   }
 
-  const watermark = plan.layers.find((layer) => layer.type === "watermark");
-  if (watermark && watermark.type === "watermark") {
-    ctx.save();
-    ctx.translate(plan.width * 0.5, plan.height * 0.49);
-    ctx.rotate((-9 * Math.PI) / 180);
-    ctx.globalAlpha = 0.2;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = PITCH_CREAM;
-    ctx.font = `bold ${Math.max(42, plan.width * 0.11)}px sans-serif`;
-    ctx.fillText(watermark.title, 0, -12);
-    ctx.fillStyle = PITCH_GREEN;
-    ctx.font = `600 ${Math.max(14, plan.width * 0.028)}px sans-serif`;
-    ctx.fillText(watermark.url, 0, 28);
-    ctx.restore();
-  }
-
   if (plan.layers.some((layer) => layer.type === "bench")) {
     const x = plan.width * 0.052;
     const y = plan.height * 0.79;
@@ -418,6 +409,18 @@ export function drawSharePlan(
     if (layer.type === "starter") drawStarter(ctx, layer, images);
     if (layer.type === "bench") drawBench(ctx, layer, images);
   });
+
+  const watermark = plan.layers.find((layer) => layer.type === "watermark");
+  if (watermark && watermark.type === "watermark") {
+    drawShareBranding(ctx, plan.width, plan.height, {
+      title: watermark.title,
+      url: watermark.url
+    });
+  }
+}
+
+export function shareExportPixelRatio(pixelRatio: number): number {
+  return Math.min(2, Math.max(1, Number(pixelRatio) || 1));
 }
 
 export interface RenderShareImageOptions {
@@ -430,7 +433,7 @@ export interface RenderShareImageOptions {
 
 export async function renderSquadPitchShareImage(options: RenderShareImageOptions): Promise<string> {
   const plan = buildShareDrawPlan(options.input);
-  const dpr = Math.max(1, Number(options.pixelRatio) || 1);
+  const dpr = shareExportPixelRatio(options.pixelRatio);
   options.canvas.width = Math.round(plan.width * dpr);
   options.canvas.height = Math.round(plan.height * dpr);
   options.ctx.scale(dpr, dpr);
