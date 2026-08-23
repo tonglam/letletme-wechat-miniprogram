@@ -198,6 +198,7 @@ PerformancePage({
   lifecycleRevision: 0,
   pageVisible: false,
   hasShown: false,
+  loadPending: false,
   refreshPending: false,
   resumeForceRefresh: false,
   refreshTimer: 0 as unknown as ReturnType<typeof setInterval>,
@@ -210,6 +211,7 @@ PerformancePage({
     this.personalContext = EMPTY_PERSONAL_CONTEXT;
     this.filteredPlayers = [];
     this.pageVisible = true;
+    this.loadPending = false;
     await this.loadData("load");
   },
 
@@ -232,7 +234,8 @@ PerformancePage({
     // page in its loading shell after the ignored request settles.
     this.resumeForceRefresh = this.resumeForceRefresh
       || this.refreshPending
-      || this.data.loading;
+      || this.loadPending;
+    this.loadPending = false;
     this.refreshPending = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
@@ -241,6 +244,7 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.stopTimers();
+    this.loadPending = false;
     this.refreshPending = false;
     this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
@@ -258,6 +262,7 @@ PerformancePage({
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId;
     const hadBoard = this.board.players.length > 0;
+    this.loadPending = true;
     this.refreshPending = forceRefresh;
     this.setData({
       loading: !hadBoard,
@@ -348,6 +353,7 @@ PerformancePage({
       }
     } finally {
       if (isActive()) {
+        this.loadPending = false;
         this.refreshPending = false;
         this.setData({ loading: false, refreshing: false });
       }

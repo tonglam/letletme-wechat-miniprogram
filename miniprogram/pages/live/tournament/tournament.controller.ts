@@ -631,7 +631,7 @@ PerformancePage({
     compareLineupRows: [],
     compareLeftPickCount: 0,
     compareRightPickCount: 0,
-    shareLabel: "复制分享",
+    shareLabel: "分享文字",
     shareCopied: false,
     shareSheetOpen: false,
     shareText: "",

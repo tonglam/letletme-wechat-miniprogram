@@ -7,6 +7,7 @@ import type { EntryLeague, HomeH2HMatchup } from "../models/entry";
 export const MINI_HOME_PERSONAL_LEAGUES_QUERY = `
   query MiniHomePersonalLeagues {
     homePersonalDesk {
+      entryId
       state
       entryName
       playerName
@@ -45,6 +46,7 @@ export const MINI_HOME_PERSONAL_LEAGUES_QUERY = `
 
 interface MiniHomePersonalLeaguesResponse {
   homePersonalDesk: {
+    entryId: number;
     state: "READY" | "EMPTY" | "STALE" | "UNAVAILABLE";
     entryName?: string | null;
     playerName?: string | null;
@@ -168,6 +170,14 @@ export async function getMiniHomePersonalLeagues(
   if (getVerifiedSessionEntryId() !== verifiedEntryId) {
     throw new Error("首页账号绑定已变化，请刷新后重试");
   }
+  const deskEntryId = Number(desk.entryId);
+  if (
+    !Number.isSafeInteger(deskEntryId)
+    || deskEntryId <= 0
+    || deskEntryId !== verifiedEntryId
+  ) {
+    throw new Error("首页联赛数据与当前绑定球队不一致");
+  }
   const mismatchedViewer = (desk.leagueRanks || []).some((league) => {
     const viewerId = Number(league.h2hMatchup?.viewer?.entryId);
     return Number.isSafeInteger(viewerId)
@@ -179,7 +189,7 @@ export async function getMiniHomePersonalLeagues(
   }
 
   return {
-    entryId: verifiedEntryId,
+    entryId: deskEntryId,
     entryName: String(desk.entryName || "").trim(),
     playerName: String(desk.playerName || "").trim(),
     leagues: (desk.leagueRanks || []).map((league) => ({

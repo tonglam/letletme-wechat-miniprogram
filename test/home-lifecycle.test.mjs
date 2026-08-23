@@ -48,7 +48,9 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   const homeService = source("miniprogram/services/home.service.ts");
   assert.match(homeService, /const verifiedEntryId = getVerifiedSessionEntryId\(\)/);
   assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{verifiedEntryId\}`/);
-  assert.match(homeService, /entryId: verifiedEntryId/);
+  assert.match(homeService, /homePersonalDesk \{\s+entryId\s+state/);
+  assert.match(homeService, /deskEntryId !== verifiedEntryId/);
+  assert.match(homeService, /entryId: deskEntryId/);
   assert.match(
     homeService,
     /desk\.state === "STALE" \|\| result\.meta\.stale/,

@@ -95,7 +95,7 @@
           <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopied ? '已复制' : '分享'}}</text>
+            <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
           <block wx:if="{{compareMode}}">
             <text wx:if="{{compareIds.length === 2}}" class="action" bindtap="onOpenCompareSheet" hover-class="hover-dim">对比</text>

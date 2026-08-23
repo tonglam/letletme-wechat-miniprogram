@@ -45,7 +45,7 @@
         </view>
         <view class="guide-actions">
           <text class="action" hover-class="hover-dim" bindtap="onExplain">怎么看</text>
-          <text class="action" hover-class="hover-dim" bindtap="onCopyShare">复制分享</text>
+          <text class="action" hover-class="hover-dim" bindtap="onCopyShare">分享文字</text>
         </view>
       </view>
 

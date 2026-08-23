@@ -60,7 +60,7 @@
             >
               <image wx:if="{{copiedMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享'}}</text>
+              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享文字'}}</text>
             </view>
             <view
               class="tool-btn tool-btn-labeled {{sharingImageMatchId === match.matchId ? 'on' : ''}} {{sharedImageMatchId === match.matchId ? 'done' : ''}}"
@@ -70,7 +70,7 @@
             >
               <image wx:if="{{sharedImageMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{sharingImageMatchId === match.matchId ? '生成中' : sharedImageMatchId === match.matchId ? '已打开' : '图片'}}</text>
+              <text class="tool-label">{{sharingImageMatchId === match.matchId ? '生成中' : sharedImageMatchId === match.matchId ? '已打开' : '分享图片'}}</text>
             </view>
           </view>
         </view>

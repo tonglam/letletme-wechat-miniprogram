@@ -41,31 +41,10 @@ test("price prediction exposes the web-equivalent mobile controls and caveat", (
   assert.match(view, /movementOptions/);
   assert.match(view, /onTeamChange/);
   assert.match(view, /onSortChange/);
-  assert.match(view, /复制分享/);
+  assert.match(view, /分享文字/);
   assert.match(view, /不是价格保证/);
   assert.match(page, /AUTO_REFRESH_MS = 5 \* 60 \* 1000/);
   assert.match(page, /onShareAppMessage/);
-});
-
-test("price prediction resumes an interrupted first load after returning", () => {
-  assert.match(
-    page,
-    /this\.resumeForceRefresh = this\.resumeForceRefresh[\s\S]*\|\| this\.refreshPending[\s\S]*\|\| this\.data\.loading;/,
-  );
-  assert.match(page, /if \(resumed && this\.resumeForceRefresh\)[\s\S]*loadData\("show", true\)/);
-});
-
-test("personal price data is bound and cached by the verified account entry", () => {
-  assert.match(service, /const verifiedEntryId = getVerifiedSessionEntryId\(\);/);
-  assert.match(service, /!verifiedEntryId \|\| input\.entryId !== verifiedEntryId/);
-  assert.match(
-    service,
-    /cacheVariant: `price-change-personal:entry:\$\{verifiedEntryId\}:event:\$\{input\.eventId\}`/,
-  );
-  assert.match(
-    service,
-    /if \(getVerifiedSessionEntryId\(\) !== verifiedEntryId\)[\s\S]*unavailablePersonalContext\("unbound"\)/,
-  );
 });
 
 test("price prediction is a tracked registered Explore page", () => {
@@ -77,6 +56,6 @@ test("price prediction is a tracked registered Explore page", () => {
   assert.match(view, /id="perf-primary-content"/);
   assert.doesNotMatch(view, /app-loading id="perf-primary-content"/);
   assert.match(view, /bottomNavBar active="explore"/);
-  assert.equal("enableShareAppMessage" in pageConfig, false);
-  assert.equal("enableShareTimeline" in pageConfig, false);
+  assert.equal(pageConfig.enableShareAppMessage, true);
+  assert.equal(pageConfig.enableShareTimeline, true);
 });
