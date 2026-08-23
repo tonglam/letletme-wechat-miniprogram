@@ -523,7 +523,7 @@
 
 .cmp-pick-name {
   color: var(--ink);
-  font-size: 21rpx;
+  font-size: 22rpx;
   font-weight: 800;
 }
 
@@ -533,7 +533,7 @@
   border-radius: 999rpx;
   background: var(--accent-tint);
   color: var(--green-ink);
-  font-size: 16rpx;
+  font-size: 18rpx;
   font-weight: 900;
   line-height: 28rpx;
   text-align: center;
@@ -544,7 +544,7 @@
   gap: 8rpx;
   margin-top: 3rpx;
   color: var(--muted-ink);
-  font-size: 17rpx;
+  font-size: 18rpx;
 }
 
 .cmp-pick-points {
@@ -559,7 +559,7 @@
   border-radius: 999rpx;
   background: var(--track);
   color: var(--muted-ink);
-  font-size: 17rpx;
+  font-size: 18rpx;
   font-weight: 800;
   line-height: 36rpx;
   text-align: center;

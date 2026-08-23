@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
 import type { PriceChangePlayer } from "../miniprogram/models/price-change";
 import {
   buildPersonalPurchasePrices,
@@ -11,6 +9,30 @@ import {
   resolveTransferPlayerIds,
   sortPriceChangePlayers,
 } from "../miniprogram/utils/price-change";
+
+const assert = {
+  equal(actual: unknown, expected: unknown): void {
+    if (actual !== expected) {
+      throw new Error(`expected ${String(expected)}, received ${String(actual)}`);
+    }
+  },
+  deepEqual(actual: unknown, expected: unknown): void {
+    const actualText = JSON.stringify(actual);
+    const expectedText = JSON.stringify(expected);
+    if (actualText !== expectedText) {
+      throw new Error(`expected ${expectedText}, received ${actualText}`);
+    }
+  },
+  match(actual: string, expected: RegExp): void {
+    if (!expected.test(actual)) {
+      throw new Error(`expected ${JSON.stringify(actual)} to match ${String(expected)}`);
+    }
+  },
+};
+
+function scenario(_name: string, run: () => void): void {
+  run();
+}
 
 function player(
   playerId: number,
@@ -38,8 +60,8 @@ function player(
   };
 }
 
-describe("price change prediction parity", () => {
-  it("prioritizes likely squad players in the default web sort", () => {
+scenario("price change prediction parity", () => {
+  scenario("prioritizes likely squad players in the default web sort", () => {
     const players = [
       player(4, { progressPercent: 98 }),
       player(3, { status: "LIKELY_RISE", progressPercent: 30 }),
@@ -54,7 +76,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(players.map((item) => item.playerId), [4, 3, 2, 1]);
   });
 
-  it("combines squad, team, movement and text filters", () => {
+  scenario("combines squad, team, movement and text filters", () => {
     const players = [
       player(1, { webName: "Saka", teamId: 5, teamName: "Arsenal", teamShortName: "ARS", progressPercent: 76 }),
       player(2, { webName: "Saliba", teamId: 5, teamName: "Arsenal", teamShortName: "ARS", progressPercent: -32 }),
@@ -70,7 +92,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(filtered.map((item) => item.playerId), [1]);
   });
 
-  it("groups locked and calibrating players under the locked filter", () => {
+  scenario("groups locked and calibrating players under the locked filter", () => {
     const filtered = filterPriceChangePlayers([
       player(1, { status: "LOCKED" }),
       player(2, { status: "CALIBRATING" }),
@@ -84,7 +106,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(filtered.map((item) => item.playerId), [1, 2]);
   });
 
-  it("uses FPL half-profit selling prices and sorts personal columns", () => {
+  scenario("uses FPL half-profit selling prices and sorts personal columns", () => {
     assert.equal(calculateSellingPrice(60, 80), 70);
     assert.equal(calculateSellingPrice(70, 80), 75);
     assert.equal(calculateSellingPrice(80, 70), 70);
@@ -98,7 +120,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(sorted.map((item) => item.playerId), [2, 1]);
   });
 
-  it("resolves transferred players after a club move and ignores free-hit prices", () => {
+  scenario("resolves transferred players after a club move and ignores free-hit prices", () => {
     const board = [
       player(9, { webName: "Example", teamShortName: "NEW", position: "DEF" }),
     ];
@@ -128,7 +150,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(freeHit, { state: "READY", purchasePrices: { "9": 50 } });
   });
 
-  it("marks incomplete personal price coverage as partial", () => {
+  scenario("marks incomplete personal price coverage as partial", () => {
     const prices = buildPersonalPurchasePrices({
       squadElementIds: [1, 2],
       startPrices: { "1": 60 },
@@ -137,7 +159,7 @@ describe("price change prediction parity", () => {
     assert.deepEqual(prices, { state: "PARTIAL", purchasePrices: { "1": 60 } });
   });
 
-  it("builds a mobile row and share text from the same active result", () => {
+  scenario("builds a mobile row and share text from the same active result", () => {
     const source = player(1, {
       webName: "Example",
       teamShortName: "EXM",

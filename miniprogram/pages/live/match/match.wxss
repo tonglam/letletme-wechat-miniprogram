@@ -469,7 +469,7 @@
 .match-player-subtitle {
   margin-top: 2rpx;
   color: var(--muted-ink);
-  font-size: 19rpx;
+  font-size: 20rpx;
   line-height: 28rpx;
 }
 

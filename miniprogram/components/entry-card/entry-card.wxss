@@ -284,7 +284,7 @@
 .entry-h2h-empty {
   margin-top: 4rpx;
   color: var(--muted-ink);
-  font-size: 19rpx;
+  font-size: 20rpx;
 }
 
 .entry-h2h-center {
