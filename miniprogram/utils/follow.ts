@@ -1,23 +1,20 @@
 import { storageKeys } from "../config/storage-keys";
 import {
   getApiSessionToken,
-  getVerifiedSessionEntryId,
-  hasStoredSessionProfileBinding,
-  refreshWechatApiSession,
-  restoreApiSessionCredentials
+  getStoredMiniProgramProfile,
+  restoreApiSessionCredentials,
+  synchronizeMiniProgramAccount
 } from "../services/auth.service";
 
 /**
- * Cold-start entry authority gate. Without a usable API session the app first
- * restores the local follow, then lets the login/profile refresh re-assert a
- * web-verified entry. Personal pages must wait for that first attempt before
- * snapshotting the follow or they can fetch and cache the previous team.
+ * Cold-start viewer gate. Personal pages wait until the standalone account has
+ * replayed any offline team selection before snapshotting the local pointer.
  */
 export async function waitForAuthoritativeFollow(): Promise<void> {
   // A DevTools hot reload can recreate this module's in-memory credential
   // mirror while leaving App.authReady already resolved. Restore encrypted
-  // storage here as well so an account-owned page cannot snapshot the local
-  // display follow during that gap. The restore is idempotent on normal cold
+  // storage here as well so a personal page cannot snapshot a stale local
+  // viewer during that gap. The restore is idempotent on normal cold
   // starts, where App.doLogin has already populated the mirror.
   if (!getApiSessionToken()) {
     try {
@@ -26,22 +23,19 @@ export async function waitForAuthoritativeFollow(): Promise<void> {
       // The normal login attempt below remains the fallback.
     }
   }
-  if (!getApiSessionToken()) {
-    try {
-      const app = getApp<IAppOption>();
-      await app.authReady;
-    } catch {
-      // Failed/blocked auth intentionally keeps the local display-only follow.
-    }
+  try {
+    const app = getApp<IAppOption>();
+    await app.authReady;
+  } catch {
+    // Failed/offline auth intentionally keeps the local viewer team.
   }
-  // Existing installs may restore a still-valid encrypted token that predates
-  // the separate verified-entry key. Refresh once so personal surfaces never
-  // infer account identity from a manually followed team.
-  if (getApiSessionToken() && !hasStoredSessionProfileBinding()) {
+  // DevTools hot reload can preserve an already-resolved App.authReady while
+  // recreating this module. Restore the standalone profile in that gap.
+  if (getApiSessionToken() && !getStoredMiniProgramProfile()) {
     try {
-      await refreshWechatApiSession();
+      await synchronizeMiniProgramAccount();
     } catch {
-      // The local follow remains usable by public, non-personal surfaces.
+      // Offline mode keeps the local viewer team and retries next launch.
     }
   }
 }
@@ -65,16 +59,7 @@ export function currentFollowEntryId(): number | undefined {
   }
 }
 
-/** My FPL is account-owned: a verified session binding wins over the follow. */
+/** My FPL reads use the same explicitly selected viewer team as other pages. */
 export function currentMyFplEntryId(): number | undefined {
-  // A verified zero binding means the signed-in account has no linked FPL
-  // team; do not silently substitute a display-only followed team.
-  return getApiSessionToken()
-    ? getVerifiedSessionEntryId()
-    : currentFollowEntryId();
-}
-
-/** A signed-in account without a verified FPL binding must use account link. */
-export function requiresMyFplAccountLink(): boolean {
-  return Boolean(getApiSessionToken() && !getVerifiedSessionEntryId());
+  return currentFollowEntryId();
 }

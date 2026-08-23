@@ -148,7 +148,7 @@ test("cold context failures settle Home and all Live page loading states", () =>
 
 test("local entry selection commits the canonical binding revision", () => {
   const search = source("miniprogram/pages/entry/search/search.ts");
-  assert.match(search, /setEntryId\(entryId\);\s*commitEntryBinding\(entryId, "rebind"\)/);
+  assert.match(search, /saveMiniProgramFollowEntry\(entryId\)/);
   assert.doesNotMatch(search, /app\.globalData\.entryId = entryId/);
 });
 

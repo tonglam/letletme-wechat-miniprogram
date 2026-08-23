@@ -1,19 +1,20 @@
 <view class="page">
   <view wx:if="{{accountLinked}}" id="perf-primary-content" class="section card">
-    <view class="subtitle">此设备已关联网页账户，无需再次验证。</view>
+    <view class="subtitle">小程序账户已独立登录，并可选关联网页版账户。</view>
     <view class="linked-email">{{accountEmail || '会话有效'}}</view>
-    <view class="legal-note">退出后需要重新用邮箱验证码关联。不关联也可以在查找球队页手动选择。</view>
+    <view class="legal-note">解除关联不会删除小程序账户或球队；退出当前设备才会撤销本机登录会话。</view>
     <view wx:if="{{error}}" class="inline-error">{{error}}</view>
+    <button class="btn-secondary btn-block link-button" loading="{{unlinking}}" disabled="{{unlinking}}" bindtap="unlinkWebAccount">解除网页关联</button>
     <button class="btn-text link-text" bindtap="logout">退出当前设备</button>
   </view>
   <view wx:else id="perf-primary-content" class="section card">
-    <view class="subtitle">可选。关联后会同步网页端已验证的球队。</view>
+    <view class="subtitle">小程序账户已可独立使用。关联网页版是可选增强，可同步网页端已验证球队。</view>
     <input class="input" type="text" placeholder="邮箱" value="{{email}}" bindinput="onEmailInput" />
     <button class="btn-secondary btn-block link-button" loading="{{sending}}" disabled="{{sending}}" bindtap="sendCode">发送验证码</button>
     <input class="input" type="number" placeholder="邮箱验证码" value="{{code}}" bindinput="onCodeInput" />
-    <button class="btn-primary btn-block link-button" loading="{{confirming}}" disabled="{{confirming}}" bindtap="confirm">确认并登录</button>
+    <button class="btn-primary btn-block link-button" loading="{{confirming}}" disabled="{{confirming}}" bindtap="confirm">确认关联网页账户</button>
     <view wx:if="{{error}}" class="inline-error">{{error}}</view>
-    <view class="legal-note">确认时使用当前微信登录凭据，成功后此设备会保持 30 天会话。不关联也可以在查找球队页手动选择。</view>
+    <view class="legal-note">不关联也可以选择球队并使用全部现有只读功能。网页与小程序账户不会合并或互相删除。</view>
     <button class="btn-text link-text" bindtap="logout">退出当前设备</button>
   </view>
   <privacy-dialog />

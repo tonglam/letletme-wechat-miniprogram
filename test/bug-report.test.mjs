@@ -68,7 +68,7 @@ test("Me tab and error state expose the report entry", () => {
   );
   assert.ok(app.pages.includes("pages/account/report/report"));
   assert.match(account, /遇到问题了？/);
-  assert.match(account, /accountLinked \? '已关联' : '关联账户'/);
+  assert.match(account, /accountLinked \? '网页账户已关联' : '关联网页账户（可选）'/);
   assert.match(errorState, /bindtap="onReport"/);
   assert.match(errorState, /\{\{reportText\}\}/);
   assert.match(errorState, /\{\{displayMessage\}\}/);

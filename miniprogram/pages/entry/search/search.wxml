@@ -8,7 +8,7 @@
       <view class="current-label">当前球队</view>
       <view class="current-id">#{{currentEntryId}}</view>
     </view>
-    <view class="action current-unbind" bindtap="onUnbind" hover-class="hover-dim">解除绑定</view>
+    <view class="action current-unbind" bindtap="onUnbind" hover-class="hover-dim">取消查看</view>
   </view>
 
   <view id="perf-primary-content" class="card lookup-card section">
@@ -86,6 +86,6 @@
     <view wx:else class="current-entry-hint">这已经是我的球队</view>
   </view>
 
-  <view class="sync-hint section action" hover-class="hover-dim" bindtap="onGoAccountLink">已在网页端绑定球队？关联 LetLetMe 账户后自动同步</view>
+  <view class="sync-hint section action" hover-class="hover-dim" bindtap="onGoAccountLink">可选：关联网页账户后同步已验证球队</view>
   <privacy-dialog />
 </view>

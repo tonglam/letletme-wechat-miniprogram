@@ -138,7 +138,7 @@ test("partial price boards remain partial and never replace the complete last-go
   }
 });
 
-test("personal prices reject a stale verified-account reporting snapshot", async () => {
+test("personal prices reject a stale viewer reporting snapshot", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const storage = new Map();
@@ -171,6 +171,7 @@ test("personal prices reject a stale verified-account reporting snapshot", async
     storage.set(storageKeys.apiSessionToken, "price-session-token");
     storage.set(storageKeys.apiSessionExpiresAt, "2099-01-01T00:00:00.000Z");
     storage.set(storageKeys.apiProfileFplEntryId, 6953);
+    storage.set(storageKeys.entryId, 6953);
     await restoreApiSessionCredentials();
     setKnownNetworkStatusForTest(true);
     clearGraphQLMemoryCache();
@@ -242,6 +243,7 @@ test("current Free Hit picks never trigger or receive permanent start prices", a
     storage.set(storageKeys.apiSessionToken, "free-hit-session-token");
     storage.set(storageKeys.apiSessionExpiresAt, "2099-01-01T00:00:00.000Z");
     storage.set(storageKeys.apiProfileFplEntryId, 6953);
+    storage.set(storageKeys.entryId, 6953);
     await restoreApiSessionCredentials();
     setKnownNetworkStatusForTest(true);
     clearGraphQLMemoryCache();
@@ -297,6 +299,7 @@ test("personal prices stay unavailable when chip history is not authoritative", 
     storage.set(storageKeys.apiSessionToken, "missing-history-session-token");
     storage.set(storageKeys.apiSessionExpiresAt, "2099-01-01T00:00:00.000Z");
     storage.set(storageKeys.apiProfileFplEntryId, 6953);
+    storage.set(storageKeys.entryId, 6953);
     await restoreApiSessionCredentials();
     setKnownNetworkStatusForTest(true);
     clearGraphQLMemoryCache();

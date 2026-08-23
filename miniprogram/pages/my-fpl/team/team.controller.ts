@@ -11,7 +11,6 @@ import {
   type EntryTransferMove
 } from "../../../services/summary.service";
 import {
-  goToAccountLink,
   goToEntrySearch,
   goToLiveEntry,
   setPageTitle
@@ -45,7 +44,6 @@ import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import {
   currentMyFplEntryId,
-  requiresMyFplAccountLink,
   waitForAuthoritativeFollow
 } from "../../../utils/follow";
 import { canReadEventReporting } from "../../../utils/event-context";
@@ -384,10 +382,8 @@ Page({
   ) {
     const app = getApp<IAppOption>();
     const owningTracker = tracker ?? this.perfTracker;
-    // My FPL is account-owned. Wait for cold-start authentication (and migrate
-    // older valid sessions that predate the separate profile binding) before
-    // snapshotting the verified entry. The helper returns immediately for a
-    // current session whose profile binding is already stored.
+    // Wait for standalone authentication and any queued team sync before
+    // snapshotting the read-only viewer entry.
     this.setData({ loading: true });
     await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== owningTracker) return;
@@ -843,17 +839,14 @@ Page({
       trigger: forceRefresh ? "refresh" : "load"
     });
     if (!this.data.entryId) {
-      const accountLinkRequired = requiresMyFplAccountLink();
       this.setData({
         loading: false,
         error: "",
         emptyState: "entry",
-        emptyEyebrow: accountLinkRequired ? "需要关联" : "需要球队",
-        emptyTitle: accountLinkRequired ? "先关联 LetLetMe 账户" : "先选择我的球队",
-        emptyDescription: accountLinkRequired
-          ? "关联已绑定 FPL 球队的 LetLetMe 账户后，即可生成每轮总结。"
-          : "查找球队并设为我的球队后，即可生成每轮总结。",
-        emptyActionText: accountLinkRequired ? "去关联账户" : "去选择球队"
+        emptyEyebrow: "需要球队",
+        emptyTitle: "先选择我的球队",
+        emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
+        emptyActionText: "去选择球队"
       }, () => {
         this.markPrimaryCommit(tracker);
       });
@@ -1288,11 +1281,7 @@ Page({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      if (requiresMyFplAccountLink()) {
-        goToAccountLink();
-      } else {
-        goToEntrySearch();
-      }
+      goToEntrySearch();
       return;
     }
     if (this.contextUnavailable || this.data.maxGw <= 0) {

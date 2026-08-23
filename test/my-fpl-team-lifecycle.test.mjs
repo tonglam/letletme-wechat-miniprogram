@@ -16,7 +16,7 @@ test("My FPL Team loads the selected event before lazy support tabs", () => {
   assert.match(page, /restartForPrincipalChange\(entryId\)[\s\S]*this\.historyPayload = historyPayload/);
 });
 
-test("My FPL Team waits for and keeps the verified session entry", () => {
+test("My FPL Team waits for and keeps the standalone viewer entry", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /await waitForAuthoritativeFollow\(\)/);
   assert.match(page, /entryId: currentMyFplEntryId\(\) \?\? 0/);
@@ -24,11 +24,11 @@ test("My FPL Team waits for and keeps the verified session entry", () => {
   assert.doesNotMatch(page, /currentFollowEntryId/);
 });
 
-test("My FPL Team sends signed-in unbound accounts to account linking", () => {
+test("My FPL Team sends every no-team viewer to team selection", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
-  assert.match(page, /requiresMyFplAccountLink\(\)/);
-  assert.match(page, /accountLinkRequired \? "去关联账户" : "去选择球队"/);
-  assert.match(page, /if \(requiresMyFplAccountLink\(\)\)[\s\S]*goToAccountLink\(\)[\s\S]*goToEntrySearch\(\)/);
+  assert.doesNotMatch(page, /requiresMyFplAccountLink|goToAccountLink|accountLinkRequired/);
+  assert.match(page, /emptyTitle: "先选择我的球队"/);
+  assert.match(page, /if \(this\.data\.emptyState === "entry"\) \{\s*goToEntrySearch\(\)/);
 });
 
 test("My FPL Team owns independent primary and tab status surfaces", () => {
