@@ -62,6 +62,7 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  isTournamentBoardControlGenerationCurrent,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
@@ -2033,8 +2034,6 @@ PerformancePage({
     const scope = this.currentBoardScope();
     let cached = null as ReturnType<typeof readLiveBoardLastGood>;
     if (scope) {
-      const key = liveBoardLastGoodKey(scope);
-      clearOtherLiveBoardLastGood(key);
       if (
         !this.data.hasData &&
         this.hasDefaultBoardQuery() &&
@@ -2075,8 +2074,9 @@ PerformancePage({
           this.data.event === this.data.maxGw
         ) {
           const writeKey = liveBoardLastGoodKey(writeScope);
-          clearOtherLiveBoardLastGood(writeKey);
-          writeLiveBoardLastGood(writeScope, result.page);
+          if (writeLiveBoardLastGood(writeScope, result.page)) {
+            clearOtherLiveBoardLastGood(writeKey);
+          }
         }
         if (this.data.filterSheetOpen) void this.loadSelectionIndex();
         this.liveRefresh?.sync();
@@ -3197,6 +3197,14 @@ PerformancePage({
 
     const variables = this.buildBoardVariables(1, board.boardRevision);
     if (!variables) throw new Error("当前赛事范围已变化");
+    const boardControlRequestId = this.boardControlRequestId;
+    if (!isTournamentBoardControlGenerationCurrent({
+      boardControlRequestId,
+      committedBoardControlRequestId: this.committedBoardControlRequestId,
+      expectedBoardControlRequestId: boardControlRequestId,
+    })) {
+      throw new Error("榜单筛选正在更新，请稍后分享");
+    }
     const scopeKey = liveBoardLastGoodKey(scope);
     const maximumPages = Math.min(10, Math.ceil(board.filteredEntries / 50));
     const allRows: DisplayTournamentRow[] = [];
@@ -3217,6 +3225,12 @@ PerformancePage({
         !this.pageVisible ||
         !activeScope ||
         liveBoardLastGoodKey(activeScope) !== scopeKey ||
+        !isTournamentBoardControlGenerationCurrent({
+          boardControlRequestId: this.boardControlRequestId,
+          committedBoardControlRequestId:
+            this.committedBoardControlRequestId,
+          expectedBoardControlRequestId: boardControlRequestId,
+        }) ||
         this.boardPage?.boardRevision !== board.boardRevision ||
         result.page.filteredEntries !== board.filteredEntries
       ) {

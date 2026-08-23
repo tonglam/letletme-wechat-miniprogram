@@ -233,7 +233,21 @@ export function canPaginateTournamentBoard(input: {
 }): boolean {
   return !input.loading
     && !input.refreshing
-    && input.boardControlRequestId === input.committedBoardControlRequestId;
+    && isTournamentBoardControlGenerationCurrent({
+      boardControlRequestId: input.boardControlRequestId,
+      committedBoardControlRequestId: input.committedBoardControlRequestId,
+      expectedBoardControlRequestId: input.boardControlRequestId,
+    });
+}
+
+export function isTournamentBoardControlGenerationCurrent(input: {
+  boardControlRequestId: number;
+  committedBoardControlRequestId: number;
+  expectedBoardControlRequestId: number;
+}): boolean {
+  return input.boardControlRequestId === input.expectedBoardControlRequestId
+    && input.committedBoardControlRequestId ===
+      input.expectedBoardControlRequestId;
 }
 
 export function filterTournamentRowsByOwnership(

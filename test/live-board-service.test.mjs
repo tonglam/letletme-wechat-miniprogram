@@ -205,7 +205,7 @@ test("last-good cache is strictly scoped and does not expire by wall-clock age",
     `${"live-board:last-good:"}${LIVE_BOARD_CONTRACT_VERSION}:session-a:2026:1:123:7`
   );
 
-  writeLiveBoardLastGood(scope, validPage());
+  assert.equal(writeLiveBoardLastGood(scope, validPage()), true);
   const stored = storage.get(key);
   storage.set(key, { ...stored, savedAt: 1 });
   assert.equal(readLiveBoardLastGood(scope)?.page.boardRevision, "board-r1");
@@ -227,6 +227,30 @@ test("last-good cache is strictly scoped and does not expire by wall-clock age",
   assert.equal(storage.has(liveBoardLastGoodKey(otherScope)), false);
   clearAllLiveBoardLastGood();
   assert.equal(storage.has(key), false);
+});
+
+test("a failed last-good write cannot authorize pruning another scope", () => {
+  const currentScope = {
+    sessionKey: "session-a",
+    season: "2026",
+    eventId: 1,
+    entryId: 123,
+    tournamentId: 7
+  };
+  assert.equal(writeLiveBoardLastGood(currentScope, validPage()), true);
+  const setStorageSync = globalThis.wx.setStorageSync;
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage unavailable");
+  };
+  const replacementScope = { ...currentScope, tournamentId: 8 };
+  const written = writeLiveBoardLastGood(
+    replacementScope,
+    validPage({ tournamentId: 8 })
+  );
+  globalThis.wx.setStorageSync = setStorageSync;
+
+  assert.equal(written, false);
+  assert.equal(readLiveBoardLastGood(currentScope)?.page.boardRevision, "board-r1");
 });
 
 test("one transient failure retries once after a 400-800ms jitter", async () => {
@@ -509,6 +533,8 @@ test("sharing lazily reads every lightweight page with one locked revision", asy
     pageVisible: true,
     usingLegacyBoard: false,
     _submittedKeyword: "",
+    boardControlRequestId: 1,
+    committedBoardControlRequestId: 1,
     boardPage: validPage(),
     shareRows: [{ entry: 123 }],
     currentBoardScope: capturedPage.currentBoardScope,
@@ -521,4 +547,46 @@ test("sharing lazily reads every lightweight page with one locked revision", asy
   assert.deepEqual(requests.map((request) => request.data.variables.page), [1, 2]);
   assert.equal(rows[0].visibleRank, 1);
   assert.equal(rows[64].visibleRank, 65);
+});
+
+test("sharing stops when board controls change between page requests", async () => {
+  const capturedPage = await getTournamentPageDefinition();
+  let context;
+  installRuntime((options) => {
+    context.boardControlRequestId += 1;
+    graphQLSuccess(
+      validPage({
+        page: options.data.variables.page,
+        pageSize: 50,
+        hasMore: true
+      }),
+      "share-stale-controls"
+    )(options);
+  });
+  context = {
+    data: {
+      ...capturedPage.data,
+      entryId: 123,
+      event: 1,
+      maxGw: 1,
+      selectedTournament: { id: 7, name: "League" },
+      filteredCount: 65
+    },
+    loadedSeason: "2026",
+    pageVisible: true,
+    usingLegacyBoard: false,
+    _submittedKeyword: "",
+    boardControlRequestId: 1,
+    committedBoardControlRequestId: 1,
+    boardPage: validPage(),
+    shareRows: [{ entry: 123 }],
+    currentBoardScope: capturedPage.currentBoardScope,
+    buildBoardVariables: capturedPage.buildBoardVariables
+  };
+
+  await assert.rejects(
+    capturedPage.collectBoardShareRows.call(context),
+    /榜单已更新，请重新分享/
+  );
+  assert.equal(requests.length, 1);
 });

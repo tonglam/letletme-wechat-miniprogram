@@ -4,6 +4,7 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  isTournamentBoardControlGenerationCurrent,
   mapTournamentLiveRows,
   mergeUnavailableTournamentEntryIds,
   tournamentManagerScoreStatus
@@ -129,6 +130,15 @@ assertEqual(
   }),
   false,
   "pagination is blocked while controls differ from the visible page",
+);
+assertEqual(
+  isTournamentBoardControlGenerationCurrent({
+    boardControlRequestId: 6,
+    committedBoardControlRequestId: 6,
+    expectedBoardControlRequestId: 5,
+  }),
+  false,
+  "a share is invalidated when board controls change mid-request",
 );
 
 assertEqual(rows[0]?.entry, 101, "entry id is preserved");

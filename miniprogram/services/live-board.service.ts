@@ -864,11 +864,11 @@ export function readLiveBoardLastGood(
 export function writeLiveBoardLastGood(
   scope: LiveBoardLastGoodScope,
   page: LiveBoardPage,
-): void {
+): boolean {
   if (!scope.sessionKey || !scope.season || page.page !== 1 ||
       page.season !== scope.season || page.eventId !== scope.eventId ||
       page.tournamentId !== scope.tournamentId) {
-    return;
+    return false;
   }
   const envelope: StoredLiveBoardLastGood = {
     contractVersion: LIVE_BOARD_CONTRACT_VERSION,
@@ -878,7 +878,10 @@ export function writeLiveBoardLastGood(
   };
   try {
     wx.setStorageSync(liveBoardLastGoodKey(scope), envelope);
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearOtherLiveBoardLastGood(keepKey: string): void {
