@@ -245,6 +245,14 @@ export function seasonPathWindow(
   };
 }
 
+export function seasonPathCacheKey(
+  tournamentId: number,
+  entryId: number,
+  throughEventId: number
+): string {
+  return `${tournamentId}:${entryId}:${throughEventId}`;
+}
+
 const SEASON_SORT_OPTIONS: SortOption[] = [
   { key: "rank", label: "排名", asc: true },
   { key: "c1", label: "总积分", asc: false },
@@ -925,7 +933,7 @@ PerformancePage({
       this.setData({ boardRows: this.seasonRows });
       this.syncBoard();
     }
-    const pathKey = `${tournamentId}:${entryId}`;
+    const pathKey = seasonPathCacheKey(tournamentId, entryId, this.data.event);
     const needsPath = forceRefresh
       || this.pathLoadedKey !== pathKey
       || this.data.pathPoints.length < 2;
@@ -940,7 +948,7 @@ PerformancePage({
   ) {
     const start = Math.max(1, Number(this.data.selectedTournament?.groupStartedEventId) || 1);
     const end = Math.max(start, this.data.event);
-    const pathKey = `${tournamentId}:${entryId}`;
+    const pathKey = seasonPathCacheKey(tournamentId, entryId, end);
     const keepExisting = !forceRefresh
       && this.pathLoadedKey === pathKey
       && this.data.pathPoints.length > 0;

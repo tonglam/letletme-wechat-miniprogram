@@ -134,4 +134,9 @@ test("season path window loads the latest 8 gameweeks first", () => {
     hasOlder: false,
     olderEnd: 0
   });
+  assert.notEqual(
+    leaguesModule.seasonPathCacheKey(9, 6953, 1),
+    leaguesModule.seasonPathCacheKey(9, 6953, 2),
+    "the cached season path must advance with the through-event",
+  );
 });
