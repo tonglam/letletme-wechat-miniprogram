@@ -143,6 +143,24 @@
   padding: 0 16rpx;
 }
 
+.match-share-slot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.match-share-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 .status-pill {
   flex-shrink: 0;
   padding: 6rpx 12rpx;

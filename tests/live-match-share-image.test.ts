@@ -2,6 +2,7 @@ import type { LiveMatch } from "../miniprogram/models/live";
 import {
   buildLiveMatchSharePlan,
   drawLiveMatchSharePlan,
+  exportLiveMatchShareImage,
   liveMatchShareCacheKey,
   liveMatchSharePixelRatio,
 } from "../miniprogram/utils/live-match-share-image";
@@ -71,6 +72,16 @@ assert(
   liveMatchShareCacheKey(match) !== liveMatchShareCacheKey(changedScore),
   "live score changes invalidate the generated image cache",
 );
+assert(
+  liveMatchShareCacheKey(match) !==
+    liveMatchShareCacheKey({ ...match, kickoffText: "08-23 20:00" }),
+  "kickoff corrections invalidate the generated image cache",
+);
+assert(
+  liveMatchShareCacheKey(match) !==
+    liveMatchShareCacheKey({ ...match, statusClass: "status-playing" }),
+  "rendered status styling invalidates the generated image cache",
+);
 
 const textOperations: string[] = [];
 const context = {
@@ -134,4 +145,29 @@ crops.forEach((crop) => {
   );
 });
 
-console.log("live-match-share-image tests passed");
+async function testCanvasFallback(): Promise<void> {
+  (globalThis as { wx?: unknown }).wx = {};
+  const fallbackMatch = { ...match, matchId: 9001 };
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => context,
+  };
+  let fallbackCalls = 0;
+  const path = await exportLiveMatchShareImage(fallbackMatch, async () => {
+    fallbackCalls += 1;
+    return {
+      canvas: canvas as never,
+      ctx: context as never,
+      pixelRatio: 3,
+      toTempFilePath: async () => "/tmp/live-match-fallback.png",
+    };
+  });
+  assertEqual(path, "/tmp/live-match-fallback.png", "hidden canvas exports the image");
+  assertEqual(fallbackCalls, 1, "missing offscreen API uses one fallback canvas");
+  assertEqual(canvas.width, plan.width * 2, "fallback export caps DPR at 2x");
+}
+
+void testCanvasFallback().then(() => {
+  console.log("live-match-share-image tests passed");
+});

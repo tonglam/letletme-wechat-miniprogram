@@ -92,7 +92,9 @@ test("every live match card exposes image share beside text share", () => {
   );
   assert.match(actions, /onCopyMatchShare[\s\S]*onShareMatchImage/);
   assert.match(actions, /data-matchid="\{\{match\.matchId\}\}"/);
-  assert.match(page, /exportLiveMatchShareImage\(match\)/);
+  assert.match(page, /exportLiveMatchShareImage\(match,/);
   assert.match(page, /presentLiveMatchShareImage\(path\)/);
+  assert.match(page, /queryLiveMatchShareCanvas\(this\)/);
+  assert.match(template, /id="live-match-share-canvas"/);
   assert.match(presenter, /needShowEntrance: true/);
 });

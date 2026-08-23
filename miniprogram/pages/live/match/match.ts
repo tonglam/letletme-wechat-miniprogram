@@ -36,7 +36,10 @@ import {
 } from "../../../utils/live-share";
 import {
   exportLiveMatchShareImage,
+  liveMatchSharePixelRatio,
   presentLiveMatchShareImage,
+  type LiveMatchShareCanvas,
+  type LiveMatchShareCanvasTarget,
 } from "../../../utils/live-match-share-image";
 import { miniLogger } from "../../../utils/logger";
 
@@ -148,6 +151,51 @@ function scoreText(match: LiveMatch, fallbackStatus: string): string {
     return "VS";
   }
   return `${numberValue(match.homeScore)}-${numberValue(match.awayScore)}`;
+}
+
+function queryLiveMatchShareCanvas(
+  page: WechatMiniprogram.Page.TrivialInstance,
+): Promise<LiveMatchShareCanvasTarget> {
+  return new Promise((resolve, reject) => {
+    wx.createSelectorQuery()
+      .in(page)
+      .select("#live-match-share-canvas")
+      .fields({ node: true, size: true })
+      .exec((result) => {
+        const canvas = result?.[0]?.node as
+          | WechatMiniprogram.Canvas
+          | undefined;
+        if (!canvas) {
+          reject(new Error("share canvas missing"));
+          return;
+        }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("share canvas context missing"));
+          return;
+        }
+        resolve({
+          canvas: canvas as unknown as LiveMatchShareCanvas,
+          ctx: ctx as unknown as LiveMatchShareCanvasTarget["ctx"],
+          pixelRatio: liveMatchSharePixelRatio(
+            Number(wx.getSystemInfoSync().pixelRatio),
+          ),
+          toTempFilePath: (node) =>
+            new Promise((pathResolve, pathReject) => {
+              wx.canvasToTempFilePath(
+                {
+                  canvas: node as unknown as WechatMiniprogram.Canvas,
+                  fileType: "png",
+                  quality: 1,
+                  success: (exported) => pathResolve(exported.tempFilePath),
+                  fail: pathReject,
+                },
+                page,
+              );
+            }),
+        });
+      });
+  });
 }
 
 export type MatchHighlightKind =
@@ -1467,7 +1515,9 @@ Page({
       sharedImageMatchId: "",
     });
     try {
-      const path = await exportLiveMatchShareImage(match);
+      const path = await exportLiveMatchShareImage(match, () =>
+        queryLiveMatchShareCanvas(this),
+      );
       if (!this.pageVisible || requestId !== this.shareImageRequestId) return;
       this.setData({
         sharingImageMatchId: "",

@@ -50,13 +50,13 @@ const KIND_COLORS: Record<string, string> = {
   bps: PLUM,
 };
 
-interface ShareCanvas {
+export interface LiveMatchShareCanvas {
   width: number;
   height: number;
   getContext(type: "2d"): ShareCanvasContext | null;
 }
 
-interface ShareCanvasContext {
+export interface ShareCanvasContext {
   scale(x: number, y: number): void;
   fillRect(x: number, y: number, width: number, height: number): void;
   strokeRect(x: number, y: number, width: number, height: number): void;
@@ -372,6 +372,8 @@ export function liveMatchShareCacheKey(match: LiveMatch): string {
     matchId: match.matchId || match.id,
     status: match.status,
     statusText: liveMatchShareStatusText(match),
+    statusClass: match.statusClass,
+    kickoffText: match.kickoffText,
     scoreText: match.scoreText,
     minuteText: match.minuteText,
     homeTeam: match.homeTeamDisplay || match.homeTeamShortName || match.homeTeamName,
@@ -381,11 +383,18 @@ export function liveMatchShareCacheKey(match: LiveMatch): string {
 }
 
 interface RenderLiveMatchShareOptions {
-  canvas: ShareCanvas;
+  canvas: LiveMatchShareCanvas;
   ctx: ShareCanvasContext;
   pixelRatio: number;
   match: LiveMatch;
-  toTempFilePath: (canvas: ShareCanvas) => Promise<string>;
+  toTempFilePath: (canvas: LiveMatchShareCanvas) => Promise<string>;
+}
+
+export interface LiveMatchShareCanvasTarget {
+  canvas: LiveMatchShareCanvas;
+  ctx: ShareCanvasContext;
+  pixelRatio: number;
+  toTempFilePath: (canvas: LiveMatchShareCanvas) => Promise<string>;
 }
 
 export function renderLiveMatchShareImage(
@@ -411,7 +420,10 @@ function rememberPath(key: string, path: string): void {
 }
 
 /** Generates a local PNG for the native WeChat image-share menu. */
-export function exportLiveMatchShareImage(match: LiveMatch): Promise<string> {
+export function exportLiveMatchShareImage(
+  match: LiveMatch,
+  fallbackCanvas?: () => Promise<LiveMatchShareCanvasTarget>,
+): Promise<string> {
   const key = liveMatchShareCacheKey(match);
   const cached = cachedPaths.get(key);
   if (cached) return Promise.resolve(cached);
@@ -425,37 +437,47 @@ export function exportLiveMatchShareImage(match: LiveMatch): Promise<string> {
       height: number;
     }) => WechatMiniprogram.OffscreenCanvas;
   }).createOffscreenCanvas;
-  if (typeof createOffscreen !== "function") {
-    return Promise.reject(new Error("offscreen canvas unavailable"));
-  }
 
   const plan = buildLiveMatchSharePlan(match);
-  const pixelRatio = liveMatchSharePixelRatio(
-    Number(wx.getSystemInfoSync().pixelRatio),
-  );
-  const request = Promise.resolve().then(() => {
-    const canvas = createOffscreen({
-      type: "2d",
-      width: Math.round(plan.width * pixelRatio),
-      height: Math.round(plan.height * pixelRatio),
-    }) as unknown as ShareCanvas;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("share canvas context missing");
+  const request = Promise.resolve().then(async () => {
+    if (typeof createOffscreen === "function") {
+      try {
+        const pixelRatio = liveMatchSharePixelRatio(
+          Number(wx.getSystemInfoSync().pixelRatio),
+        );
+        const canvas = createOffscreen({
+          type: "2d",
+          width: Math.round(plan.width * pixelRatio),
+          height: Math.round(plan.height * pixelRatio),
+        }) as unknown as LiveMatchShareCanvas;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("share canvas context missing");
+        return await renderLiveMatchShareImage({
+          canvas,
+          ctx,
+          pixelRatio,
+          match,
+          toTempFilePath: (node) =>
+            new Promise((resolve, reject) => {
+              wx.canvasToTempFilePath({
+                canvas: node as unknown as WechatMiniprogram.Canvas,
+                fileType: "png",
+                quality: 1,
+                success: (result) => resolve(result.tempFilePath),
+                fail: reject,
+              });
+            }),
+        });
+      } catch {
+        // The API can exist while offscreen export still fails on a client.
+        // Fall through to the page-owned Canvas 2D node when one was supplied.
+      }
+    }
+    if (!fallbackCanvas) throw new Error("share canvas unavailable");
+    const target = await fallbackCanvas();
     return renderLiveMatchShareImage({
-      canvas,
-      ctx,
-      pixelRatio,
+      ...target,
       match,
-      toTempFilePath: (node) =>
-        new Promise((resolve, reject) => {
-          wx.canvasToTempFilePath({
-            canvas: node as unknown as WechatMiniprogram.Canvas,
-            fileType: "png",
-            quality: 1,
-            success: (result) => resolve(result.tempFilePath),
-            fail: reject,
-          });
-        }),
     });
   }).then((path) => {
     rememberPath(key, path);

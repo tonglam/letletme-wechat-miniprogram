@@ -113,6 +113,9 @@
       </view>
     </view>
   </view>
+  <view class="match-share-slot">
+    <canvas type="2d" id="live-match-share-canvas" class="match-share-canvas"></canvas>
+  </view>
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>
