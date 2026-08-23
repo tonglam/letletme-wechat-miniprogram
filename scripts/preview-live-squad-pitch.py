@@ -27,6 +27,8 @@ CREAM = (248, 246, 239)
 PLUM = (56, 0, 60)
 GREEN = (0, 255, 133)
 DARK = (17, 19, 21)
+BRAND_NAME = "LetLetMe"
+BRAND_URL = "letletme.top"
 
 
 def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -59,6 +61,86 @@ def ellipsize(draw: ImageDraw.ImageDraw, text: str, max_w: int, typeface: ImageF
     return clipped + "…"
 
 
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return min(maximum, max(minimum, value))
+
+
+def draw_branding(canvas: Image.Image) -> Image.Image:
+    """Mirror the production repeated watermark plus the readable signature."""
+
+    width, height = canvas.size
+    short_side = min(width, height)
+    tile_size = int(clamp(round(short_side * 0.032), 14, 30))
+    step_x = max(tile_size * 7.3, width * 0.28)
+    step_y = max(tile_size * 4.8, height * 0.16)
+    tile_font = font(tile_size, True)
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+
+    row = 0
+    y = -step_y * 0.2
+    while y <= height + step_y * 0.2:
+        offset = 0 if row % 2 == 0 else step_x / 2
+        x = -step_x * 0.3 + offset
+        while x <= width + step_x * 0.3:
+            label = Image.new("RGBA", (tile_size * 8, tile_size * 3), (0, 0, 0, 0))
+            label_draw = ImageDraw.Draw(label)
+            label_draw.text(
+                (label.width / 2, label.height / 2),
+                BRAND_NAME,
+                fill=(248, 246, 239, 31),
+                stroke_width=max(1, round(tile_size * 0.1)),
+                stroke_fill=(33, 0, 37, 22),
+                font=tile_font,
+                anchor="mm",
+            )
+            label = label.rotate(-18, resample=Image.Resampling.BICUBIC, expand=True)
+            overlay.alpha_composite(
+                label,
+                (round(x - label.width / 2), round(y - label.height / 2)),
+            )
+            x += step_x
+        y += step_y
+        row += 1
+
+    margin = int(clamp(round(short_side * 0.018), 8, 18))
+    signature_size = int(clamp(round(short_side * 0.024), 12, 20))
+    signature_height = round(signature_size * 2.15)
+    signature_width = min(width - margin * 2, round(signature_size * 12.8))
+    signature_x = max(margin, width - margin - signature_width)
+    signature_y = max(margin, height - margin - signature_height)
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.rounded_rectangle(
+        (
+            signature_x,
+            signature_y,
+            signature_x + signature_width,
+            signature_y + signature_height,
+        ),
+        radius=max(3, signature_size // 3),
+        fill=(33, 0, 37, 224),
+    )
+    overlay_draw.rectangle(
+        (
+            signature_x,
+            signature_y,
+            signature_x + max(3, round(signature_size * 0.2)),
+            signature_y + signature_height,
+        ),
+        fill=GREEN + (255,),
+    )
+    overlay_draw.text(
+        (
+            signature_x + signature_width - signature_size * 0.65,
+            signature_y + signature_height / 2,
+        ),
+        f"{BRAND_NAME} · {BRAND_URL}",
+        fill=CREAM + (255,),
+        font=font(signature_size, True),
+        anchor="rm",
+    )
+    return Image.alpha_composite(canvas, overlay)
+
+
 def main() -> None:
     bg = Image.open(ASSETS / "pitch-background.jpg").convert("RGBA")
     width, height = 750, 938
@@ -71,9 +153,6 @@ def main() -> None:
     stat = font(18, True)
     name_font = font(12, True)
     score_font = font(13, True)
-    wm = font(42, True)
-    wm_url = font(14, True)
-
     draw.text((39, 28), "实时总分 72 · 总排名 —", fill=GREEN, font=eyebrow)
     draw.text((39, 48), "WHOAMI FC", fill=CREAM, font=title)
     draw.text((39, 80), "Tong W", fill=(248, 246, 239, 180), font=manager)
@@ -81,13 +160,6 @@ def main() -> None:
     draw.text((711, 40), "72", fill=GREEN, font=stat, anchor="ra")
     draw.text((560, 68), "道具卡", fill=(248, 246, 239, 150), font=eyebrow)
     draw.text((711, 66), "BB", fill=CREAM, font=stat, anchor="ra")
-
-    watermark = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    wdraw = ImageDraw.Draw(watermark)
-    wdraw.text((width // 2, int(height * 0.47)), "LETLETME", fill=(248, 246, 239, 50), font=wm, anchor="mm")
-    wdraw.text((width // 2, int(height * 0.52)), "letletme.top", fill=(0, 255, 133, 50), font=wm_url, anchor="mm")
-    canvas = Image.alpha_composite(canvas, watermark.rotate(-9, resample=Image.Resampling.BICUBIC, expand=False))
-    draw = ImageDraw.Draw(canvas)
 
     for position, players in STARTERS:
         count = len(players)
@@ -131,6 +203,7 @@ def main() -> None:
         draw.text((x + 74, y + 36), name, fill=PLUM, font=name_font)
         draw.text((x + 74, y + 56), f"{fixture or team} · {score} 分", fill=(56, 0, 60, 170), font=font(10))
 
+    canvas = draw_branding(canvas)
     OUT.parent.mkdir(exist_ok=True)
     canvas.convert("RGB").save(OUT, quality=88)
     print(f"wrote {OUT}")

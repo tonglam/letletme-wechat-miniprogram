@@ -197,7 +197,7 @@ assert(types.includes("watermark"), "share has watermark");
 assertEqual(types.filter((type) => type === "starter").length, 11, "share has 11 starters");
 assertEqual(types.filter((type) => type === "bench").length, 4, "share has 4 bench");
 const watermark = plan.layers.find((layer) => layer.type === "watermark");
-assert(watermark?.type === "watermark" && watermark.title === "LETLETME", "LETLETME watermark");
+assert(watermark?.type === "watermark" && watermark.title === "LetLetMe", "LetLetMe watermark");
 assert(watermark?.type === "watermark" && watermark.url === "letletme.top", "letletme.top watermark");
 assert(Math.abs(plan.height / plan.width - 5 / 4) < 0.003, "bench share uses 4/5");
 
