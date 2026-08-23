@@ -15,7 +15,8 @@ test("cold Home work stops when the page hides during context resolution", () =>
 test("a successful cold login commits its binding only inside auth service", () => {
   const app = source("miniprogram/app.ts");
 
-  assert.match(app, /refreshWechatApiSession\(\)\.catch/);
+  assert.match(app, /await refreshWechatApiSession\(\);[\s\S]*await this\.revalidateSessionProfile\(\)/);
+  assert.match(app, /synchronizeMiniProgramAccount\(\)/);
   assert.doesNotMatch(app, /refreshWechatApiSession\(\)\.then\([\s\S]*?commitEntryBinding/);
 });
 

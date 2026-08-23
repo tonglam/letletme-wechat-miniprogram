@@ -4,8 +4,7 @@ import { enqueueMiniProgramEntrySync } from "../../../services/entry-sync.servic
 import type { EntryInfo, EntrySearchResult } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
-import { clearEntryId, clearEntryScopedStorage, setEntryId } from "../../../utils/storage";
-import { commitEntryBinding } from "../../../services/app-context.service";
+import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
 
 /** Same contract as the web bind-entry form: a pasted FPL URL yields its ID. */
 function extractEntryId(raw: string): string {
@@ -261,17 +260,15 @@ PerformancePage({
       return;
     }
 
-    const app = getApp<IAppOption>();
-    if (app.globalData.entryId !== entryId) {
-      // Switching teams drops the previous team's entry-scoped caches; the
-      // follow itself is only a stored display preference.
-      clearEntryScopedStorage();
-    }
-    setEntryId(entryId);
-    commitEntryBinding(entryId, "rebind");
+    const sync = saveMiniProgramFollowEntry(entryId);
     enqueueMiniProgramEntrySync(entryId);
     this.setData({ hasEntry: true, currentEntryId: entryId });
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
+    void sync.then((synced) => {
+      if (!synced) {
+        wx.showToast({ title: "已选择，联网后自动同步", icon: "none" });
+      }
+    });
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.
     this.cancelRedirectTimer();
@@ -285,15 +282,13 @@ PerformancePage({
   onUnbind() {
     const entryId = this.data.currentEntryId;
     wx.showModal({
-      title: "解除绑定？",
-      content: `将解除与球队 #${entryId} 的绑定，首页会回到未绑定状态。`,
-      confirmText: "解除绑定",
+      title: "取消查看？",
+      content: `将取消小程序球队 #${entryId}。如已关联网页账户，网页球队仍可继续显示。`,
+      confirmText: "取消查看",
       confirmColor: "#c9183f",
       success: ({ confirm }) => {
         if (!confirm) return;
-        clearEntryScopedStorage();
-        clearEntryId();
-        commitEntryBinding(null, "rebind");
+        const sync = saveMiniProgramFollowEntry(null);
         this.setData({
           hasEntry: false,
           currentEntryId: 0,
@@ -301,7 +296,14 @@ PerformancePage({
           isCurrentEntry: false,
           searchHits: []
         });
-        wx.showToast({ title: "已解除绑定", icon: "success" });
+        wx.showToast({ title: "已取消查看", icon: "success" });
+        void sync.then((synced) => {
+          if (!synced) {
+            wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
+          } else {
+            this.syncCurrentEntry();
+          }
+        });
       }
     });
   },

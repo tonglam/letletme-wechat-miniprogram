@@ -2,7 +2,7 @@ import { ensureAppContext } from "./app-context.service";
 import { getEntryEventResult, getEntryInfo, getEntryLeagueInfo } from "./entry.service";
 import type { EntryEventResult } from "./entry.service";
 import { getLiveSnapshot } from "./live.service";
-import { getApiSessionToken } from "./auth.service";
+import { getLinkedAccountSnapshot } from "./auth.service";
 import { storageKeys } from "../config/storage-keys";
 import type { MyFplContext, MyFplLeagueBrief, MyFplTeamBrief } from "../models/my-fpl";
 import type { LiveSnapshotState } from "../models/live";
@@ -109,7 +109,7 @@ export async function getMyFplContext(forceRefresh = false): Promise<MyFplContex
     nextEvent,
     utcDeadline,
     entryId,
-    accountLinked: Boolean(getApiSessionToken())
+    accountLinked: getLinkedAccountSnapshot().linked
   };
 }
 

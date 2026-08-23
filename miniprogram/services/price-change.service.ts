@@ -3,7 +3,7 @@ import {
   graphqlRead,
   type PageRequestTrace,
 } from "./graphql.service";
-import { getVerifiedSessionEntryId } from "./auth.service";
+import { currentMyFplEntryId } from "../utils/follow";
 import { storageKeys } from "../config/storage-keys";
 import type {
   PersonalPriceState,
@@ -353,8 +353,8 @@ export async function getPriceChangePersonalContext(input: {
   forceRefresh?: boolean;
   trace?: PageRequestTrace;
 }): Promise<PriceChangePersonalContext> {
-  const verifiedEntryId = getVerifiedSessionEntryId();
-  if (!verifiedEntryId || input.entryId !== verifiedEntryId) {
+  const viewerEntryId = currentMyFplEntryId();
+  if (!viewerEntryId || input.entryId !== viewerEntryId) {
     return unavailablePersonalContext("unbound");
   }
   let read;
@@ -366,7 +366,7 @@ export async function getPriceChangePersonalContext(input: {
         authMode: "session",
         cachePolicy: "reporting",
         season: input.season,
-        cacheVariant: `price-change-personal:entry:${verifiedEntryId}:event:${input.eventId}`,
+        cacheVariant: `price-change-personal:entry:${viewerEntryId}:event:${input.eventId}`,
         forceRefresh: input.forceRefresh === true,
         trace: input.trace,
       },
@@ -374,7 +374,7 @@ export async function getPriceChangePersonalContext(input: {
   } catch {
     return unavailablePersonalContext("unavailable");
   }
-  if (getVerifiedSessionEntryId() !== verifiedEntryId) {
+  if (currentMyFplEntryId() !== viewerEntryId) {
     return unavailablePersonalContext("unbound");
   }
   if (read.meta.stale) {

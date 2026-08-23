@@ -4,6 +4,7 @@ import {
   confirmMiniProgramEmailLink,
   logoutMiniProgramSession,
   startMiniProgramEmailLink,
+  unlinkMiniProgramWebAccount,
 } from '../../../services/auth.service';
 import { switchToHome } from '../../../utils/navigation';
 
@@ -13,6 +14,7 @@ PerformancePage({
     code: '',
     sending: false,
     confirming: false,
+    unlinking: false,
     error: '',
     accountLinked: false,
     accountEmail: ''
@@ -67,15 +69,41 @@ PerformancePage({
     this.setData({ confirming: true, error: '' });
     try {
       const session = await confirmMiniProgramEmailLink(this.data.email, this.data.code);
-      const synced = Boolean(session.profile.fplEntryId && session.profile.fplEntryVerifiedAt);
-      // With no web-verified team the user simply picks one manually on Home.
-      wx.showToast({ title: synced ? '已同步网页球队' : '登录成功', icon: 'success' });
+      const synced = session.profile.effectiveEntrySource === 'WEB';
+      wx.showToast({ title: synced ? '已关联并同步球队' : '网页账户已关联', icon: 'success' });
       switchToHome();
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '验证失败' });
     } finally {
       this.setData({ confirming: false });
     }
+  },
+
+  unlinkWebAccount() {
+    wx.showModal({
+      title: '解除网页关联？',
+      content: '只会解除网页版账户关系。小程序账户、当前设备会话和小程序球队都会保留。',
+      confirmText: '解除关联',
+      confirmColor: '#c9183f',
+      success: async ({ confirm }) => {
+        if (!confirm) return;
+        this.setData({ unlinking: true, error: '' });
+        try {
+          await unlinkMiniProgramWebAccount();
+          this.setData({
+            accountLinked: false,
+            accountEmail: '',
+            email: '',
+            code: ''
+          });
+          wx.showToast({ title: '已解除网页关联', icon: 'success' });
+        } catch (error) {
+          this.setData({ error: error instanceof Error ? error.message : '解除关联失败' });
+        } finally {
+          this.setData({ unlinking: false });
+        }
+      }
+    });
   },
 
   async logout() {
@@ -89,7 +117,7 @@ PerformancePage({
         code: '',
         error: result.remoteRevoked ? '' : '已在本地退出，远端撤销尚未确认'
       });
-      wx.showToast({ title: result.remoteRevoked ? '已退出登录' : '已退出本地登录', icon: 'success' });
+      wx.showToast({ title: result.remoteRevoked ? '已退出当前设备' : '已退出本地会话', icon: 'success' });
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '退出失败，请重试' });
     }

@@ -113,12 +113,12 @@ test("large My FPL boards use a bounded 20-row UI window", () => {
   );
 });
 
-test("My FPL leagues sends signed-in unbound accounts to account linking", async () => {
+test("My FPL leagues sends every no-team viewer to team selection", async () => {
   const { readFileSync } = await import("node:fs");
   const page = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url), "utf8");
-  assert.match(page, /requiresMyFplAccountLink\(\)/);
-  assert.match(page, /accountLinkRequired \? "去关联账户" : "去选择球队"/);
-  assert.match(page, /if \(requiresMyFplAccountLink\(\)\)[\s\S]*goToAccountLink\(\)[\s\S]*goToEntrySearch\(\)/);
+  assert.doesNotMatch(page, /requiresMyFplAccountLink|goToAccountLink|accountLinkRequired/);
+  assert.match(page, /emptyTitle: "先选择我的球队"/);
+  assert.match(page, /if \(this\.data\.emptyState === "entry"\) \{\s*goToEntrySearch\(\)/);
 });
 
 test("season path window loads the latest 8 gameweeks first", () => {

@@ -37,16 +37,16 @@ test("price prediction resumes an interrupted first load after returning", () =>
   );
 });
 
-test("personal price data is bound and cached by the verified account entry", () => {
-  assert.match(priceService, /const verifiedEntryId = getVerifiedSessionEntryId\(\);/);
-  assert.match(priceService, /!verifiedEntryId \|\| input\.entryId !== verifiedEntryId/);
+test("personal price data is bound and cached by the standalone viewer entry", () => {
+  assert.match(priceService, /const viewerEntryId = currentMyFplEntryId\(\);/);
+  assert.match(priceService, /!viewerEntryId \|\| input\.entryId !== viewerEntryId/);
   assert.match(
     priceService,
-    /cacheVariant: `price-change-personal:entry:\$\{verifiedEntryId\}:event:\$\{input\.eventId\}`/,
+    /cacheVariant: `price-change-personal:entry:\$\{viewerEntryId\}:event:\$\{input\.eventId\}`/,
   );
   assert.match(
     priceService,
-    /if \(getVerifiedSessionEntryId\(\) !== verifiedEntryId\)[\s\S]*unavailablePersonalContext\("unbound"\)/,
+    /if \(currentMyFplEntryId\(\) !== viewerEntryId\)[\s\S]*unavailablePersonalContext\("unbound"\)/,
   );
   assert.match(
     priceService,
