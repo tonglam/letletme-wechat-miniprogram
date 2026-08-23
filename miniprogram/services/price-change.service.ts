@@ -410,6 +410,7 @@ export async function getPriceChangePersonalContext(input: {
     }
   });
   const prices = buildPersonalPurchasePrices({
+    selectedEventId: input.eventId,
     squadElementIds,
     startPrices,
     transfers: resolvedTransfers,

@@ -32,6 +32,10 @@ import { formatDeadline, formatCountdown, getDeadlineDiffMs } from "../../../uti
 import { copyShareText } from "../../../utils/live-share";
 import { goToPlayerDetail } from "../../../utils/navigation";
 import { routes } from "../../../config/routes";
+import {
+  currentMyFplEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
@@ -201,6 +205,7 @@ PerformancePage({
   loadPending: false,
   refreshPending: false,
   resumeForceRefresh: false,
+  lastSuccessfulLoadAt: 0,
   refreshTimer: 0 as unknown as ReturnType<typeof setInterval>,
   countdownTimer: 0 as unknown as ReturnType<typeof setInterval>,
 
@@ -212,6 +217,7 @@ PerformancePage({
     this.filteredPlayers = [];
     this.pageVisible = true;
     this.loadPending = false;
+    this.lastSuccessfulLoadAt = 0;
     await this.loadData("load");
   },
 
@@ -220,7 +226,9 @@ PerformancePage({
     this.startTimers();
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (resumed && this.resumeForceRefresh) {
+    const refreshExpired = this.lastSuccessfulLoadAt > 0
+      && Date.now() - this.lastSuccessfulLoadAt >= AUTO_REFRESH_MS;
+    if (resumed && (this.resumeForceRefresh || refreshExpired)) {
       await this.loadData("show", true);
       if (this.pageVisible && !this.refreshPending) this.resumeForceRefresh = false;
     }
@@ -281,8 +289,13 @@ PerformancePage({
         reason: forceRefresh ? "pull-refresh" : "page-load",
       }).then((value) => ({ value, error: null as unknown }))
         .catch((error: unknown) => ({ value: null, error }));
+      const authorityPromise = waitForAuthoritativeFollow();
       const boardPromise = getPriceChangeBoard(forceRefresh, trace);
-      const [contextResult, boardRead] = await Promise.all([contextPromise, boardPromise]);
+      const [contextResult, boardRead] = await Promise.all([
+        contextPromise,
+        boardPromise,
+        authorityPromise,
+      ]);
       if (!isActive()) return;
 
       const board = boardRead.board;
@@ -292,7 +305,7 @@ PerformancePage({
         personal = await getPriceChangePersonalContext({
           eventId: context.displayEvent,
           season: context.season,
-          entryId: context.entryId,
+          entryId: currentMyFplEntryId() ?? null,
           players: board.players,
           forceRefresh,
           trace,
@@ -302,6 +315,7 @@ PerformancePage({
 
       this.board = board;
       this.personalContext = personal;
+      this.lastSuccessfulLoadAt = Date.now();
       if (!this.data.hasBoard) {
         this.defaultScope = personal.squadElementIds.length > 0 ? "mine" : "all";
       }

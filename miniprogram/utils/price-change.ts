@@ -326,6 +326,7 @@ export function resolveTransferPlayerIds(
 }
 
 export function buildPersonalPurchasePrices(input: {
+  selectedEventId: number;
   squadElementIds: readonly number[];
   startPrices: Readonly<Record<string, number>>;
   transfers: ReadonlyArray<{
@@ -338,6 +339,14 @@ export function buildPersonalPurchasePrices(input: {
 }): { state: PersonalPriceState; purchasePrices: Record<string, number> } {
   const squad = input.squadElementIds.filter((id) => Number.isSafeInteger(id) && id > 0);
   if (squad.length === 0) return { state: "UNAVAILABLE", purchasePrices: {} };
+  const selectedChip = String(
+    input.historyChips?.[String(input.selectedEventId)] || "",
+  ).toUpperCase();
+  if (selectedChip === "FREE_HIT" || selectedChip === "FREEHIT" || selectedChip === "FH") {
+    // The event squad is temporary and does not expose reliable acquisition
+    // prices. Showing season-start prices here would misstate selling values.
+    return { state: "UNAVAILABLE", purchasePrices: {} };
+  }
   const permanent = new Map<number, number>();
   for (const playerId of squad) {
     const startPrice = input.startPrices[String(playerId)];
@@ -351,7 +360,7 @@ export function buildPersonalPurchasePrices(input: {
   });
   for (const transfer of transfers) {
     const chip = String(input.historyChips?.[String(transfer.eventId)] || "").toUpperCase();
-    if (chip === "FREE_HIT" || chip === "FREEHIT") continue;
+    if (chip === "FREE_HIT" || chip === "FREEHIT" || chip === "FH") continue;
     if (!squad.includes(transfer.elementInId)) continue;
     if (!Number.isFinite(transfer.elementInCost) || transfer.elementInCost < 0) continue;
     permanent.set(transfer.elementInId, transfer.elementInCost);

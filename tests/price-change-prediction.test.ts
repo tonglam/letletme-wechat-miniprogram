@@ -142,16 +142,18 @@ scenario("price change prediction parity", () => {
       time: "2026-08-20T10:00:00Z",
     }]);
     const freeHit = buildPersonalPurchasePrices({
+      selectedEventId: 2,
       squadElementIds: [9],
       startPrices: { "9": 50 },
       transfers: resolved,
       historyChips: { "2": "FREE_HIT" },
     });
-    assert.deepEqual(freeHit, { state: "READY", purchasePrices: { "9": 50 } });
+    assert.deepEqual(freeHit, { state: "UNAVAILABLE", purchasePrices: {} });
   });
 
   scenario("marks incomplete personal price coverage as partial", () => {
     const prices = buildPersonalPurchasePrices({
+      selectedEventId: 2,
       squadElementIds: [1, 2],
       startPrices: { "1": 60 },
       transfers: [],
