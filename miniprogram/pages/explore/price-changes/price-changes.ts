@@ -295,6 +295,8 @@ PerformancePage({
       const authorityPromise = waitForAuthoritativeFollow();
       const contextPromise = authorityPromise.then(() => ensureAppContext({
         reason: forceRefresh ? "pull-refresh" : "page-load",
+        forceRefresh,
+        trace,
       })).then((value) => ({ value, error: null as unknown }))
         .catch((error: unknown) => ({ value: null, error }));
       const boardPromise = getPriceChangeBoard(forceRefresh, trace);

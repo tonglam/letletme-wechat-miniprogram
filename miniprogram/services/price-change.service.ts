@@ -169,7 +169,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function isPersistablePriceChangeBoard(value: unknown): value is PriceChangeBoard {
+function isUsablePriceChangeBoard(value: unknown): value is PriceChangeBoard {
   if (!isRecord(value)) return false;
   return Array.isArray(value.players)
     && value.players.length > 0
@@ -177,6 +177,10 @@ export function isPersistablePriceChangeBoard(value: unknown): value is PriceCha
     && value.revision.length > 0
     && typeof value.observedPlayerCount === "number"
     && value.observedPlayerCount > 0;
+}
+
+export function isPersistablePriceChangeBoard(value: unknown): value is PriceChangeBoard {
+  return isUsablePriceChangeBoard(value) && value.status === "READY";
 }
 
 function persistLastGoodBoard(board: PriceChangeBoard): void {
@@ -240,9 +244,13 @@ export async function getPriceChangeBoard(
     );
     if (read.errors.length > 0) throw new GraphQLApplicationError(read.errors);
     const incoming = read.data.priceChangeBoard || EMPTY_PRICE_CHANGE_BOARD;
-    if (isPersistablePriceChangeBoard(incoming)) {
-      const board = read.meta.stale ? { ...incoming, status: "STALE" as const } : incoming;
-      if (!read.meta.stale) persistLastGoodBoard(incoming);
+    if (isUsablePriceChangeBoard(incoming)) {
+      const board = read.meta.stale && incoming.status === "READY"
+        ? { ...incoming, status: "STALE" as const }
+        : incoming;
+      if (!read.meta.stale && isPersistablePriceChangeBoard(incoming)) {
+        persistLastGoodBoard(incoming);
+      }
       return {
         board,
         cacheStale: read.meta.stale,
@@ -393,6 +401,7 @@ export async function getPriceChangePersonalContext(input: {
 
   const history = read.data.myFplTeamDesk?.history;
   const historyAvailable = Array.isArray(history);
+  if (!historyAvailable) return unavailablePersonalContext("ready", squadElementIds);
   const historyChips: Record<string, string> = {};
   (history || []).forEach((row) => {
     if (Number.isSafeInteger(row.eventId) && row.eventId > 0) {

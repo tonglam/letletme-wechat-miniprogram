@@ -68,6 +68,7 @@ test("price prediction restores account authority and revalidates after a long h
     /const authorityPromise = waitForAuthoritativeFollow\(\);[\s\S]*authorityPromise\.then\(\(\) => ensureAppContext/,
   );
   assert.match(pricePage, /Promise\.all\(\[contextPromise, boardPromise\]\)/);
+  assert.match(pricePage, /ensureAppContext\(\{[\s\S]*?forceRefresh,[\s\S]*?trace,[\s\S]*?\}\)/);
   assert.match(pricePage, /entryId: currentMyFplEntryId\(\) \?\? null/);
   assert.match(pricePage, /defaultScopeInitialized: false/);
   assert.match(pricePage, /!this\.defaultScopeInitialized && personal\.squadElementIds\.length > 0/);
