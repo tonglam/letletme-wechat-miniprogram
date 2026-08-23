@@ -165,6 +165,7 @@ const classicRows = mapTournamentLiveRows([
   }
 ]);
 assertEqual(classicRows[0]?.rank, 4, "official tournament rank is preserved");
+assertEqual(classicRows[0]?.livePoints, 6, "official event points replace legacy headline zero");
 assertEqual(classicRows[0]?.totalPoints, 101, "classic phase total remains visible");
 assertEqual(classicRows[0]?.overallRank, 123, "official overall rank wins");
 assertEqual(tournamentManagerScoreStatus(classicRows), "官方实时", "official rows are available");
@@ -189,4 +190,37 @@ assertEqual(
   ]),
   "官方实时：1/2 支球队已有分数",
   "one missing score keeps the available board visible"
+);
+
+const h2hRows = mapTournamentLiveRows([
+  {
+    entry: 31056,
+    entryName: "H2H Team",
+    playerName: "Manager",
+    rank: 0,
+    livePoints: 0,
+    transferCost: 0,
+    liveNetPoints: 0,
+    liveTotalPoints: 0,
+    played: 0,
+    toPlay: 0,
+    captainName: "",
+    score: {
+      eventPoints: 43,
+      netEventPoints: null,
+      totalPoints: 146,
+      source: "FPL_ENTRY_SUMMARY",
+      state: "FRESH",
+      eventPointSemantics: "UNKNOWN"
+    }
+  }
+]);
+assertEqual(h2hRows[0]?.livePoints, 43, "H2H official gross event points are preserved");
+assertEqual(
+  tournamentManagerScoreStatus(h2hRows, {
+    officialCoverage: 0,
+    totalEntries: 1
+  }),
+  "官方实时",
+  "H2H gross score rows are not hidden by zero net coverage"
 );

@@ -19,7 +19,7 @@ const explicitP0 = new Set([
 ]);
 
 test("all registered pages expose a viewport-visible primary boundary and tracker", () => {
-  assert.equal(routes.length, 24);
+  assert.equal(routes.length, 25);
   for (const route of routes) {
     const controllerRoute = new Set([
       "pages/live/tournament/tournament",

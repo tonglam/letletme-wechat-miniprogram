@@ -59,6 +59,85 @@ function addPositive(parts: string[], value: number, label: string): void {
   }
 }
 
+function booleanValue(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "active"].includes(normalized)) return true;
+    if (["false", "0", "no", "inactive"].includes(normalized)) return false;
+  }
+  return undefined;
+}
+
+function squadSlot(player: LivePlayerRow): number | undefined {
+  const legacyPosition = (player as unknown as { position?: unknown }).position;
+  for (const value of [player.squadPosition, legacyPosition]) {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 15) return parsed;
+  }
+  return undefined;
+}
+
+/** Keep the live pitch to an XI; scoring activity is only a fallback for a missing slot. */
+export function isLiveSquadPitchStarter(player: LivePlayerRow): boolean {
+  const slot = squadSlot(player);
+  if (slot !== undefined) return slot <= 11;
+
+  const active = booleanValue((player as unknown as { pickActive?: unknown }).pickActive);
+  if (active !== undefined) return active;
+
+  const multiplier = Number(player.multiplier);
+  return Number.isFinite(multiplier) && multiplier !== 0;
+}
+
+/**
+ * Split a live pick list before it reaches either the list UI or the pitch.
+ *
+ * The normal source is the official pick slot. Older live payloads can omit
+ * that field and have also exposed every pick as pickActive=true; in that
+ * case an uncapped filter would put all 15 players on the pitch. The API
+ * returns picks in slot order, so cap that degraded fallback at the XI and
+ * keep the overflow in the bench list until the next authoritative refresh.
+ */
+export function splitLiveSquadPlayers(players: readonly LivePlayerRow[]): {
+  starters: LivePlayerRow[];
+  bench: LivePlayerRow[];
+} {
+  const indexed = players.map((player, index) => ({
+    player,
+    index,
+    slot: squadSlot(player)
+  }));
+  const ordered = [...indexed].sort((left, right) => {
+    if (left.slot !== undefined && right.slot !== undefined) {
+      return left.slot - right.slot || left.index - right.index;
+    }
+    if (left.slot !== undefined) return left.slot <= 11 ? -1 : 1;
+    if (right.slot !== undefined) return right.slot <= 11 ? 1 : -1;
+    return left.index - right.index;
+  });
+
+  const starters = ordered
+    .filter(({ player }) => isLiveSquadPitchStarter(player))
+    .map(({ player }) => player);
+  const bench = ordered
+    .filter(({ player }) => !isLiveSquadPitchStarter(player))
+    .map(({ player }) => player);
+
+  if (starters.length <= 11) {
+    return { starters, bench };
+  }
+
+  return {
+    starters: starters.slice(0, 11),
+    bench: [...bench, ...starters.slice(11)]
+  };
+}
+
 export function normalizePlayer(player: LivePlayerRow): LivePlayerRow {
   const points = numberValue(player.points ?? player.livePoints ?? player.totalPoints);
   const minutes = numberValue(player.minutes);
@@ -88,16 +167,24 @@ export function normalizePlayer(player: LivePlayerRow): LivePlayerRow {
   addPositive(metaParts, penaltiesMissed, "失点");
   addPositive(metaParts, bonus, "Bonus");
 
+  const normalizedPickActive = booleanValue(
+    (player as unknown as { pickActive?: unknown }).pickActive,
+  );
+  const normalizedPlayer =
+    normalizedPickActive === undefined
+      ? player
+      : { ...player, pickActive: normalizedPickActive };
+
   return {
-    ...player,
-    name: player.name || player.webName,
-    position: player.position || player.elementTypeName,
+    ...normalizedPlayer,
+    name: normalizedPlayer.name || normalizedPlayer.webName,
+    position: normalizedPlayer.position || normalizedPlayer.elementTypeName,
     points,
     multiplier,
-    roleText: roleText(player),
+    roleText: roleText(normalizedPlayer),
     pointsText: `${points}`,
     metaText: metaParts.join(" · "),
-    statusText: statusText(player),
-    statusClass: statusClass(player)
+    statusText: statusText(normalizedPlayer),
+    statusClass: statusClass(normalizedPlayer)
   };
 }

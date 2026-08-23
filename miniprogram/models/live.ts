@@ -98,6 +98,8 @@ export interface LivePlayerRow {
   team?: string;
   teamShortName?: string;
   position?: string;
+  /** Official FPL pick slot: 1–11 starters, 12–15 bench. */
+  squadPosition?: number;
   elementType?: number;
   elementTypeName?: string;
   points?: number;
@@ -160,16 +162,22 @@ export interface LiveMatch {
   awayTeamId?: number;
   status?: string;
   playStatus?: string;
+  /** The fixture has provisional completion data, but FPL has not finalized it. */
+  provisional?: boolean;
   minutes?: number;
   homeTeam?: string;
   homeTeamName?: string;
   homeTeamShortName?: string;
   homeTeamDataList?: LivePlayerRow[];
+  /** Non-zero live rows prepared for the match detail panel. */
+  homeMatchPlayers?: LivePlayerRow[];
   homeTeamManagerData?: LivePlayerRow;
   awayTeam?: string;
   awayTeamName?: string;
   awayTeamShortName?: string;
   awayTeamDataList?: LivePlayerRow[];
+  /** Non-zero live rows prepared for the match detail panel. */
+  awayMatchPlayers?: LivePlayerRow[];
   awayTeamManagerData?: LivePlayerRow;
   homeScore?: number;
   awayScore?: number;

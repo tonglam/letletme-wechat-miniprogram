@@ -63,7 +63,7 @@ const notStarted: LiveMatch = match("not_start", []);
 
 async function main(): Promise<void> {
   (globalThis as { Page?: (definition: unknown) => void }).Page = () => undefined;
-  const { buildMatchHighlights, isCleanSheetEarned, isDefensiveContributionEarned } = await import("../miniprogram/pages/live/match/match");
+  const { buildMatchHighlights, buildMatchPlayerRows, findMatchPlayer, isCleanSheetEarned, isDefensiveContributionEarned, statusLabel } = await import("../miniprogram/pages/live/match/match");
 
   assert(isDefensiveContributionEarned({ elementType: 2, defensiveContribution: 10 }), "DEF DC at 10");
   assert(!isDefensiveContributionEarned({ elementType: 2, defensiveContribution: 9 }), "DEF DC below 10");
@@ -106,6 +106,30 @@ async function main(): Promise<void> {
   assert(
     buildMatchHighlights(finishedRedCard).some((group) => group.kind === "red" && group.items.some((item) => item.name === "Munoz")),
     "red cards are not dropped"
+  );
+
+  const playerRows = buildMatchPlayerRows([
+    { element: 1, webName: "Zero", totalPoints: 0, minutes: 0 },
+    { element: 2, webName: "Runner", totalPoints: 2, minutes: 90 },
+    { element: 3, webName: "Scorer", totalPoints: 6, minutes: 75, goalsScored: 1 },
+  ]);
+  assertEqual(playerRows.length, 2, "zero live rows are omitted");
+  assertEqual(playerRows[0].webName, "Scorer", "match players sort by points");
+  assertEqual(playerRows[1].webName, "Runner", "lower points follow higher points");
+  const dgwMatches: LiveMatch[] = [
+    { matchId: 10, homeTeamDataList: [{ element: 99, webName: "First fixture", totalPoints: 2 }] },
+    { matchId: 20, homeTeamDataList: [{ element: 99, webName: "Second fixture", totalPoints: 9 }] }
+  ];
+  assertEqual(findMatchPlayer(dgwMatches, 20, 99)?.webName, "Second fixture", "DGW detail stays within the clicked fixture");
+  assertEqual(
+    statusLabel({ status: "finished", provisional: true }, "finished"),
+    "已完赛",
+    "provisional completion uses the concise finished label",
+  );
+  assertEqual(
+    statusLabel({ status: "finished", provisional: false }, "finished"),
+    "已完赛",
+    "authoritative completion stays finished",
   );
 
   console.log("live-match-highlights tests passed");

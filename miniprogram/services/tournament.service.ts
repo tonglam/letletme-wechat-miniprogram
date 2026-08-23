@@ -95,6 +95,186 @@ const GET_TOURNAMENT_SEASON_SNAPSHOT = `
   }
 `;
 
+/**
+ * My FPL competitions now has a server-owned desk contract. The web surface
+ * uses this projection so setup state, finalized-event gating, aggregate
+ * statistics, and the viewer binding are decided in one place. Keep this
+ * Mini query on the published core fields; snapshot metadata is deliberately
+ * omitted until the Mini's local GraphQL baseline has caught up.
+ */
+export const GET_MY_FPL_COMPETITIONS_DESK = `
+  query MyFplCompetitionsDesk($tournamentId: Int, $eventId: Int) {
+    myFplCompetitionsDesk(tournamentId: $tournamentId, eventId: $eventId) {
+      state
+      context {
+        season
+        coreRevision
+        currentEventId
+        nextEventId
+        latestFinalizedEventId
+      }
+      tournaments {
+        id
+        name
+        groupMode
+        totalTeamNum
+        groupStartedEventId
+        groupEndedEventId
+        knockoutMode
+        knockoutStartedEventId
+        knockoutEndedEventId
+        state
+      }
+      selectedTournamentId
+      selectedTournament {
+        id
+        name
+        groupMode
+        totalTeamNum
+        groupStartedEventId
+        groupEndedEventId
+        knockoutMode
+        knockoutStartedEventId
+        knockoutEndedEventId
+        state
+      }
+      eventId
+      aggregate {
+        eventId
+        entryCount
+        leaderOverallPoints
+        secondOverallPoints
+        gapFirstSecond
+        averageOverallPoints
+        metrics {
+          key
+          leaderValue
+          leaderEntryId
+          leaderEntryName
+          leaderPlayerName
+          averageValue
+          higherIsBetter
+        }
+        viewer {
+          entryId
+          overallRank
+          tournamentOverallRank
+          teamValue
+          tournamentTeamValueRank
+          transfersNum
+          tournamentTransfersRank
+          totalCosts
+          tournamentCostsRank
+          totalBenchPoints
+          tournamentBenchPointsRank
+          autoSubPoints
+          tournamentAutoSubRank
+          overallPoints
+          leaderOverallPoints
+          gapToLeader
+          pointsBehindNext
+          pointsAheadOfPrev
+        }
+      }
+    }
+  }
+`;
+
+export const GET_MY_FPL_COMPETITION_BOARD = `
+  query MyFplCompetitionBoard(
+    $tournamentId: Int!
+    $eventId: Int!
+    $page: Int
+    $pageSize: Int
+    $search: String
+  ) {
+    myFplCompetitionBoard(
+      tournamentId: $tournamentId
+      eventId: $eventId
+      page: $page
+      pageSize: $pageSize
+      search: $search
+    ) {
+      state
+      eventId
+      page
+      pageSize
+      totalRows
+      totalPages
+      fieldSize
+      rows {
+        eventId
+        groupId
+        entryId
+        entryName
+        playerName
+        rank
+        previousRank
+        fieldRank
+        eventPoints
+        eventCost
+        eventNetPoints
+        eventRank
+        overallPoints
+        overallRank
+        eventChip
+        captainId
+        captainWebName
+        captainTeamShortName
+        captainPoints
+        teamValue
+        bank
+      }
+      viewerRow {
+        eventId
+        groupId
+        entryId
+        entryName
+        playerName
+        rank
+        previousRank
+        fieldRank
+        eventPoints
+        eventCost
+        eventNetPoints
+        eventRank
+        overallPoints
+        overallRank
+        eventChip
+        captainId
+        captainWebName
+        captainTeamShortName
+        captainPoints
+        teamValue
+        bank
+      }
+    }
+  }
+`;
+
+export const GET_MY_FPL_COMPETITION_SEASON_PATH = `
+  query MyFplCompetitionSeasonPath($tournamentId: Int!, $throughEventId: Int!) {
+    myFplCompetitionSeasonPath(
+      tournamentId: $tournamentId
+      throughEventId: $throughEventId
+    ) {
+      state
+      tournamentId
+      throughEventId
+      points {
+        gameweek
+        tournamentRank
+        gapToLeader
+        pointsVsAverage
+        fieldSize
+        overallPoints
+        leaderOverallPoints
+        averageOverallPoints
+      }
+    }
+  }
+`;
+
 const GET_TOURNAMENT_SELECTION_STATS = `
   query TournamentSelectionStats($tournamentId: Int!, $eventId: Int!, $limit: Int) {
     tournamentSelectionStats(tournamentId: $tournamentId, eventId: $eventId, limit: $limit) {
@@ -303,6 +483,232 @@ type TournamentSummaryResponse = TournamentSummaryPayload;
 
 interface TournamentSelectionStatsResponse {
   tournamentSelectionStats: TournamentSelectionStats | null;
+}
+
+export type MyFplReviewState = "PRESEASON" | "PENDING" | "READY" | "EMPTY" | "UNAVAILABLE";
+
+export interface MyFplReviewContext {
+  season: string;
+  coreRevision: string;
+  currentEventId?: number | null;
+  nextEventId?: number | null;
+  latestFinalizedEventId?: number | null;
+  latestPublishedEventId?: number | null;
+}
+
+export interface MyFplCompetitionViewer {
+  entryId: number;
+  overallRank?: number | null;
+  tournamentOverallRank?: number | null;
+  teamValue?: number | null;
+  tournamentTeamValueRank?: number | null;
+  transfersNum?: number | null;
+  tournamentTransfersRank?: number | null;
+  totalCosts?: number | null;
+  tournamentCostsRank?: number | null;
+  totalBenchPoints?: number | null;
+  tournamentBenchPointsRank?: number | null;
+  autoSubPoints?: number | null;
+  tournamentAutoSubRank?: number | null;
+  overallPoints?: number | null;
+  leaderOverallPoints?: number | null;
+  gapToLeader?: number | null;
+  pointsBehindNext?: number | null;
+  pointsAheadOfPrev?: number | null;
+}
+
+export interface MyFplCompetitionAggregate {
+  eventId: number;
+  entryCount: number;
+  leaderOverallPoints?: number | null;
+  secondOverallPoints?: number | null;
+  gapFirstSecond?: number | null;
+  averageOverallPoints?: number | null;
+  metrics: TournamentSeasonMetric[];
+  viewer?: MyFplCompetitionViewer | null;
+}
+
+export interface MyFplCompetitionsDesk {
+  state: MyFplReviewState;
+  context: MyFplReviewContext;
+  tournaments: EntryTournamentRow[];
+  selectedTournamentId?: number | null;
+  selectedTournament?: EntryTournamentRow | null;
+  eventId?: number | null;
+  aggregate?: MyFplCompetitionAggregate | null;
+}
+
+export interface MyFplCompetitionBoardRow {
+  eventId: number;
+  groupId?: number | null;
+  entryId: number;
+  entryName?: string | null;
+  playerName?: string | null;
+  rank?: number | null;
+  previousRank?: number | null;
+  fieldRank?: number | null;
+  eventPoints?: number | null;
+  eventCost?: number | null;
+  eventNetPoints?: number | null;
+  eventRank?: number | null;
+  overallPoints?: number | null;
+  overallRank?: number | null;
+  eventChip?: string | null;
+  captainId?: number | null;
+  captainWebName?: string | null;
+  captainTeamShortName?: string | null;
+  captainPoints?: number | null;
+  teamValue?: number | null;
+  bank?: number | null;
+}
+
+export interface MyFplCompetitionBoard {
+  state: MyFplReviewState;
+  eventId: number;
+  page: number;
+  pageSize: number;
+  totalRows: number;
+  totalPages: number;
+  fieldSize: number;
+  rows: MyFplCompetitionBoardRow[];
+  viewerRow?: MyFplCompetitionBoardRow | null;
+}
+
+export interface MyFplCompetitionSeasonPathPoint {
+  gameweek: number;
+  tournamentRank?: number | null;
+  gapToLeader?: number | null;
+  pointsVsAverage?: number | null;
+  fieldSize: number;
+  overallPoints?: number | null;
+  leaderOverallPoints?: number | null;
+  averageOverallPoints?: number | null;
+}
+
+export interface MyFplCompetitionSeasonPath {
+  state: MyFplReviewState;
+  tournamentId: number;
+  throughEventId: number;
+  points: MyFplCompetitionSeasonPathPoint[];
+}
+
+export async function getMyFplCompetitionsDesk(
+  tournamentId: number | null = null,
+  eventId: number | null = null,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<MyFplCompetitionsDesk> {
+  return graphqlRequest<{ myFplCompetitionsDesk: MyFplCompetitionsDesk }>(
+    GET_MY_FPL_COMPETITIONS_DESK,
+    { tournamentId, eventId },
+    { cachePolicy: "reporting", forceRefresh, trace }
+  ).then((data) => data.myFplCompetitionsDesk);
+}
+
+export async function getMyFplCompetitionBoard(
+  tournamentId: number,
+  eventId: number,
+  page = 1,
+  pageSize = 100,
+  search = "",
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<MyFplCompetitionBoard> {
+  return graphqlRequest<{ myFplCompetitionBoard: MyFplCompetitionBoard }>(
+    GET_MY_FPL_COMPETITION_BOARD,
+    { tournamentId, eventId, page, pageSize, search: search || null },
+    { cachePolicy: "reporting", forceRefresh, trace }
+  ).then((data) => data.myFplCompetitionBoard);
+}
+
+const MY_FPL_BOARD_PAGE_SIZE = 100;
+const MY_FPL_BOARD_PAGE_CONCURRENCY = 4;
+
+export function mergeMyFplCompetitionBoardPages(
+  pages: readonly MyFplCompetitionBoard[]
+): MyFplCompetitionBoard {
+  const first = pages[0];
+  if (!first) throw new Error("赛事榜单没有返回分页数据");
+  const rows: MyFplCompetitionBoardRow[] = [];
+  const seen = new Set<number>();
+  for (const page of [...pages].sort((left, right) => left.page - right.page)) {
+    for (const row of page.rows || []) {
+      if (seen.has(row.entryId)) continue;
+      seen.add(row.entryId);
+      rows.push(row);
+    }
+  }
+  if (rows.length < first.totalRows) {
+    throw new Error(`赛事榜单加载不完整（${rows.length}/${first.totalRows}）`);
+  }
+  return { ...first, page: 1, rows };
+}
+
+/** Load every server page so local search and sort operate on the full field. */
+export async function getCompleteMyFplCompetitionBoard(
+  tournamentId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<MyFplCompetitionBoard> {
+  const first = await getMyFplCompetitionBoard(
+    tournamentId,
+    eventId,
+    1,
+    MY_FPL_BOARD_PAGE_SIZE,
+    "",
+    forceRefresh,
+    trace
+  );
+  const totalPages = Math.max(1, Number(first.totalPages) || 1);
+  if (totalPages === 1) return mergeMyFplCompetitionBoardPages([first]);
+
+  const pages: MyFplCompetitionBoard[] = [first];
+  for (let start = 2; start <= totalPages; start += MY_FPL_BOARD_PAGE_CONCURRENCY) {
+    const pageNumbers = Array.from(
+      { length: Math.min(MY_FPL_BOARD_PAGE_CONCURRENCY, totalPages - start + 1) },
+      (_, index) => start + index
+    );
+    const batch = await Promise.all(pageNumbers.map((page) =>
+      getMyFplCompetitionBoard(
+        tournamentId,
+        eventId,
+        page,
+        MY_FPL_BOARD_PAGE_SIZE,
+        "",
+        forceRefresh,
+        trace
+      )
+    ));
+    for (let index = 0; index < batch.length; index += 1) {
+      const page = batch[index];
+      const expectedPage = pageNumbers[index];
+      if (
+        page.page !== expectedPage
+        || page.eventId !== first.eventId
+        || page.totalPages !== first.totalPages
+        || page.totalRows !== first.totalRows
+        || page.fieldSize !== first.fieldSize
+      ) {
+        throw new Error("赛事榜单在分页加载期间已更新，请重试");
+      }
+    }
+    pages.push(...batch);
+  }
+  return mergeMyFplCompetitionBoardPages(pages);
+}
+
+export async function getMyFplCompetitionSeasonPath(
+  tournamentId: number,
+  throughEventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<MyFplCompetitionSeasonPath> {
+  return graphqlRequest<{ myFplCompetitionSeasonPath: MyFplCompetitionSeasonPath }>(
+    GET_MY_FPL_COMPETITION_SEASON_PATH,
+    { tournamentId, throughEventId },
+    { cachePolicy: "reporting", forceRefresh, trace }
+  ).then((data) => data.myFplCompetitionSeasonPath);
 }
 
 export async function getEntryPointsRaceTournament(

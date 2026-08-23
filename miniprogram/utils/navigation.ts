@@ -22,6 +22,10 @@ export function goToEntrySearch(): void {
   navigateTo(routes.entrySearch);
 }
 
+export function goToAccountLink(): void {
+  navigateTo(routes.accountLink);
+}
+
 export function goToEntryProfile(entryId?: number): void {
   navigateTo(routes.entryProfile, { entry: entryId });
 }

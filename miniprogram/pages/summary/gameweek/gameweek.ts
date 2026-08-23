@@ -25,6 +25,11 @@ import {
   type SquadPitchPlayer
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import { copyShareText } from "../../../utils/live-share";
+import {
+  formatGameweekShareText,
+  type GameweekShareKind
+} from "../../../utils/gameweek-share";
 import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "../../live/entry/player-detail";
 import type { LivePlayerRow } from "../../../models/live";
 import { indexDreamTeamById, indexEventPlayersByRowId } from "./dream-detail";
@@ -77,6 +82,9 @@ interface GameweekSummaryData {
   pitchHeader: SquadPitchHeader | null;
   pitchBenchBoost: boolean;
   shareBusy: boolean;
+  shareCopiedKind: GameweekShareKind | "";
+  shareSheetOpen: boolean;
+  shareText: string;
   playerDetailOpen: boolean;
   playerDetail: PlayerLiveDetailView | null;
 }
@@ -113,6 +121,9 @@ PerformancePage({
     pitchHeader: null,
     pitchBenchBoost: false,
     shareBusy: false,
+    shareCopiedKind: "",
+    shareSheetOpen: false,
+    shareText: "",
     playerDetailOpen: false,
     playerDetail: null
   } as GameweekSummaryData,
@@ -125,6 +136,7 @@ PerformancePage({
   resumeStage: null as GameweekResumeStage | null,
   activeLoadForceRefresh: false,
   resumeForceRefresh: false,
+  shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   dreamTeamById: {} as Record<string, LivePlayerRow>,
   eliteById: {} as Record<string, LivePlayerRow>,
 
@@ -176,6 +188,7 @@ PerformancePage({
 
   onUnload() {
     this.pageVisible = false;
+    this.clearShareCopiedTimer();
     this.resumeStage = null;
     this.activeLoadForceRefresh = false;
     this.resumeForceRefresh = false;
@@ -328,10 +341,14 @@ PerformancePage({
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     const next = Number(event.detail.value);
     if (!Number.isFinite(next) || next <= 0) return;
+    this.clearShareCopiedTimer();
     this.setData({
       event: next,
       playerDetailOpen: false,
-      playerDetail: null
+      playerDetail: null,
+      shareCopiedKind: "",
+      shareSheetOpen: false,
+      shareText: ""
     });
     setPageTitle(`GW${next} 总结`);
     this.loadData();
@@ -343,12 +360,16 @@ PerformancePage({
   },
 
   setActiveTab(tab: GameweekTab) {
+    this.clearShareCopiedTimer();
     this.setData({
       activeTab: tab,
       showSummary: tab === "summary",
       showDreamTeam: tab === "dreamTeam",
       showElite: tab === "elite",
-      showTransfers: tab === "transfers"
+      showTransfers: tab === "transfers",
+      shareCopiedKind: "",
+      shareSheetOpen: false,
+      shareText: ""
     });
   },
 
@@ -385,20 +406,73 @@ PerformancePage({
   async onShareDreamPitch() {
     if (this.data.shareBusy) return;
     const pitch = this.selectComponent("#dream-squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
-      exportShareImage?: () => Promise<string>;
+      exportPortraitShareImage?: () => Promise<string>;
     } | null;
-    if (!pitch?.exportShareImage) {
+    if (!pitch?.exportPortraitShareImage) {
       wx.showToast({ title: "阵容图还没准备好", icon: "none" });
       return;
     }
     this.setData({ shareBusy: true });
     try {
-      await presentSquadPitchShareImage(await pitch.exportShareImage());
+      await presentSquadPitchShareImage(await pitch.exportPortraitShareImage());
     } catch {
       wx.showToast({ title: "阵容图生成失败", icon: "none" });
     } finally {
       this.setData({ shareBusy: false });
     }
+  },
+
+  clearShareCopiedTimer() {
+    if (this.shareCopiedTimer) {
+      clearTimeout(this.shareCopiedTimer);
+      this.shareCopiedTimer = undefined;
+    }
+  },
+
+  onCopyShare(event: WechatMiniprogram.TouchEvent) {
+    const kind = String(event.currentTarget.dataset.shareKind || "") as GameweekShareKind;
+    const supported: GameweekShareKind[] = [
+      "headline",
+      "most",
+      "chips",
+      "dreamTeam",
+      "elite",
+      "transfersIn",
+      "transfersOut"
+    ];
+    if (supported.indexOf(kind) < 0) return;
+    const text = formatGameweekShareText({
+      event: this.data.event,
+      headlineStats: this.data.headlineStats,
+      mostRows: this.data.mostRows,
+      chipRows: this.data.chipRows,
+      dreamPlayers: this.data.pitchPlayers,
+      dreamBench: this.data.pitchBench,
+      dreamPoints: this.data.pitchHeader?.gameweekPoints,
+      eliteRows: this.data.eliteRows,
+      transfersInRows: this.data.transfersInRows,
+      transfersOutRows: this.data.transfersOutRows
+    }, kind);
+    if (!text.trim() || text.endsWith("\n\n无")) {
+      wx.showToast({ title: "当前列表还没有可分享的数据", icon: "none" });
+      return;
+    }
+    void copyShareText(text).then((ok) => {
+      if (ok) {
+        this.setData({ shareCopiedKind: kind, shareSheetOpen: false, shareText: "" });
+        this.clearShareCopiedTimer();
+        this.shareCopiedTimer = setTimeout(() => {
+          this.setData({ shareCopiedKind: "" });
+          this.shareCopiedTimer = undefined;
+        }, 2000);
+        return;
+      }
+      this.setData({ shareSheetOpen: true, shareText: text });
+    });
+  },
+
+  onCloseShareSheet() {
+    this.setData({ shareSheetOpen: false });
   }
 });
 

@@ -88,6 +88,7 @@ test("live match mapping presents provisional completion without mutating the co
   };
 
   assert.equal(mapGraphQLMatch(source).playStatus, "finished");
+  assert.equal(mapGraphQLMatch(source).provisional, true);
   assert.equal(source.finished, false);
 });
 

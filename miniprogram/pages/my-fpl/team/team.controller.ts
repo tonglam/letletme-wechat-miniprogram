@@ -10,8 +10,12 @@ import {
   type EntrySeasonHistoryItem,
   type EntryTransferMove
 } from "../../../services/summary.service";
-import { getApiSessionToken } from "../../../services/auth.service";
-import { goToEntrySearch, goToLiveEntry, setPageTitle } from "../../../utils/navigation";
+import {
+  goToAccountLink,
+  goToEntrySearch,
+  goToLiveEntry,
+  setPageTitle
+} from "../../../utils/navigation";
 import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView
@@ -38,7 +42,11 @@ import {
 import type { MiniChartPoint, MiniChartType } from "../../../utils/mini-chart";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentMyFplEntryId,
+  requiresMyFplAccountLink,
+  waitForAuthoritativeFollow
+} from "../../../utils/follow";
 import { canReadEventReporting } from "../../../utils/event-context";
 import {
   ensureAppContext,
@@ -375,21 +383,19 @@ Page({
   ) {
     const app = getApp<IAppOption>();
     const owningTracker = tracker ?? this.perfTracker;
-    if (!getApiSessionToken()) {
-      // With no valid session the stored binding is only offline/display
-      // fallback: the account may have been relinked, so wait for the
-      // refreshed profile before snapshotting the entry. Enter the loading
-      // state first so the wait never renders placeholder content.
-      this.setData({ loading: true });
-      try { await app.authReady; } catch {}
-    }
+    // My FPL is account-owned. Wait for cold-start authentication (and migrate
+    // older valid sessions that predate the separate profile binding) before
+    // snapshotting the verified entry. The helper returns immediately for a
+    // current session whose profile binding is already stored.
+    this.setData({ loading: true });
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== owningTracker) return;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
     this.startupPending = false;
     this.resumeStartupAfterShow = false;
     this.setData({
-      entryId: app.globalData.entryId ?? 0,
+      entryId: currentMyFplEntryId() ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
@@ -770,7 +776,7 @@ Page({
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {
-    const nextEntryId = currentFollowEntryId() ?? 0;
+    const nextEntryId = currentMyFplEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
     this.loadRequestId += 1;
@@ -836,14 +842,17 @@ Page({
       trigger: forceRefresh ? "refresh" : "load"
     });
     if (!this.data.entryId) {
+      const accountLinkRequired = requiresMyFplAccountLink();
       this.setData({
         loading: false,
         error: "",
         emptyState: "entry",
-        emptyEyebrow: "需要球队",
-        emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
-        emptyActionText: "去选择球队"
+        emptyEyebrow: accountLinkRequired ? "需要关联" : "需要球队",
+        emptyTitle: accountLinkRequired ? "先关联 LetLetMe 账户" : "先选择我的球队",
+        emptyDescription: accountLinkRequired
+          ? "关联已绑定 FPL 球队的 LetLetMe 账户后，即可生成每轮总结。"
+          : "查找球队并设为我的球队后，即可生成每轮总结。",
+        emptyActionText: accountLinkRequired ? "去关联账户" : "去选择球队"
       }, () => {
         this.markPrimaryCommit(tracker);
       });
@@ -1276,7 +1285,11 @@ Page({
 
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
-      goToEntrySearch();
+      if (requiresMyFplAccountLink()) {
+        goToAccountLink();
+      } else {
+        goToEntrySearch();
+      }
       return;
     }
     if (this.contextUnavailable || this.data.maxGw <= 0) {

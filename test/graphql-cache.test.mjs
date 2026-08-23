@@ -101,6 +101,10 @@ test("sends operationName and classifies public/session operations explicitly", 
   );
   assert.equal(getGraphQLOperationPolicy("Teams").authMode, "public");
   assert.equal(getGraphQLOperationPolicy("MiniPlayerStatsDesk").authMode, "public");
+  assert.deepEqual(getGraphQLOperationPolicy("MiniHomePersonalLeagues"), {
+    authMode: "session",
+    cachePolicy: "reporting"
+  });
   assert.equal(getGraphQLOperationPolicy("TournamentSeasonSnapshot").authMode, "session");
   assert.equal(getGraphQLOperationPolicy("EntryHistory").authMode, "session");
   assert.equal(getGraphQLOperationPolicy("UnknownPrivateQuery").cachePolicy, "network-only");
@@ -144,4 +148,3 @@ test("GetEntry misses are not cached", () => {
   assert.equal(shouldCacheGraphQLData("GetEntry", { entry: { id: 1 } }), true);
   assert.equal(shouldCacheGraphQLData("EntryLeagues", { entryLeagues: [] }), true);
 });
-

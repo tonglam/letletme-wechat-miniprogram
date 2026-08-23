@@ -20,7 +20,7 @@
   </view>
 
   <view wx:if="{{phaseBanner === 'live'}}" class="section phase-banner" bindtap="onOpenLiveEntry" hover-class="hover-dim">
-    <text class="phase-banner-text">本轮比赛进行中，详细实时得分请前往实时球队</text>
+    <text class="phase-banner-text">本轮比赛进行中，详细实时积分请前往实时积分</text>
     <text class="action phase-banner-cue">去看实时</text>
   </view>
   <view wx:elif="{{phaseBanner === 'settling'}}" class="section phase-banner phase-banner-muted">
@@ -88,7 +88,7 @@
           bindtap="onSharePitch"
           hover-class="hover-dim"
         >
-          <text class="tool-label">{{shareBusy ? '生成中' : '分享阵容'}}</text>
+          <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
         </view>
       </view>
       <app-empty-state

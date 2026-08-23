@@ -46,7 +46,7 @@
 
     <!-- 赛季 · 你在赛事中 -->
     <block wx:if="{{showSeason && !viewLoading && (!viewError || hasSeasonData)}}">
-      <view wx:if="{{!hasSeasonData && !viewError}}" class="section">
+      <view wx:if="{{!hasSeasonData && !viewError}}" id="perf-primary-content" class="section">
         <app-empty-state title="该赛事暂无可用的积分榜数据" description="赛事完成第一轮结算后会显示赛季数据" />
       </view>
       <block wx:else>
@@ -130,7 +130,7 @@
     <!-- 单轮 · 我的表现 + 本轮看点 -->
     <block wx:if="{{showGameweek && !viewLoading && (!viewError || hasGwData)}}">
       <view wx:if="{{gwNotice}}" class="live-refresh-error">{{gwNotice}}</view>
-      <view wx:if="{{!hasGwData && !viewError}}" class="section">
+      <view wx:if="{{!hasGwData && !viewError}}" id="perf-primary-content" class="section">
         <app-empty-state title="暂无赛事数据" description="本轮赛事结果结算后会显示在这里" />
       </view>
       <block wx:else>
@@ -202,7 +202,7 @@
 
       <view class="section">
         <view class="result-row">
-          <view class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{boardRows.length}}</view>
+          <view class="result-count">{{boardFrom}}-{{boardTo}} / {{filteredCount}} 支 · 共 {{boardTotalRows || boardRows.length}}</view>
         </view>
         <app-empty-state
           wx:if="{{displayedRows.length === 0}}"
@@ -242,7 +242,19 @@
             <text class="col-num col-c2 {{item.c2Tone === 'bad' ? 'num-bad' : ''}}">{{item.c2}}</text>
             <text class="col-num col-c3">{{item.c3}}</text>
           </view>
-          <view wx:if="{{hasMore}}" class="load-more" bindtap="onLoadMore" hover-class="hover-dim">再显示 20 队</view>
+          <view wx:if="{{boardPageCount > 1}}" class="board-pager">
+            <view
+              class="board-page-action {{hasPreviousBoardPage ? '' : 'board-page-disabled'}}"
+              bindtap="onPreviousBoardPage"
+              hover-class="hover-dim"
+            >上一页</view>
+            <text class="board-page-count">{{boardPage}} / {{boardPageCount}}</text>
+            <view
+              class="board-page-action {{hasNextBoardPage ? '' : 'board-page-disabled'}}"
+              bindtap="onNextBoardPage"
+              hover-class="hover-dim"
+            >下一页</view>
+          </view>
         </view>
       </view>
     </block>

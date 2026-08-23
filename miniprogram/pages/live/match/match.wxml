@@ -60,7 +60,7 @@
             >
               <image wx:if="{{copiedMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享'}}</text>
+              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享文字'}}</text>
             </view>
             <view
               class="tool-btn tool-btn-labeled {{sharingImageMatchId === match.matchId ? 'on' : ''}} {{sharedImageMatchId === match.matchId ? 'done' : ''}}"
@@ -70,7 +70,7 @@
             >
               <image wx:if="{{sharedImageMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{sharingImageMatchId === match.matchId ? '生成中' : sharedImageMatchId === match.matchId ? '已打开' : '图片'}}</text>
+              <text class="tool-label">{{sharingImageMatchId === match.matchId ? '生成中' : sharedImageMatchId === match.matchId ? '已打开' : '分享图片'}}</text>
             </view>
           </view>
         </view>
@@ -110,12 +110,103 @@
             </view>
           </view>
         </view>
+
+        <view wx:if="{{match.statusText !== '未开始'}}" class="match-player-section">
+          <view
+            class="match-player-toggle"
+            data-matchid="{{match.matchId}}"
+            bindtap="onToggleMatchPlayers"
+            hover-class="hover-dim"
+          >
+            <view>
+              <view class="match-player-title">球员详细数据</view>
+              <view class="match-player-subtitle">点击球员可查看得分明细</view>
+            </view>
+            <text class="match-player-toggle-label">{{expandedMatchId === match.matchId ? '收起' : '展开'}}</text>
+          </view>
+
+          <view wx:if="{{expandedMatchId === match.matchId}}" class="match-player-panel">
+            <view class="match-player-tabs">
+              <view
+                class="match-player-tab {{expandedTeam === 'home' ? 'active' : ''}}"
+                data-team="home"
+                bindtap="onMatchPlayerTeam"
+                hover-class="hover-dim"
+              >{{match.homeTeamDisplay || match.homeTeamName || '主队'}} <text class="match-player-count">{{match.homeMatchPlayers.length}}</text></view>
+              <view
+                class="match-player-tab {{expandedTeam === 'away' ? 'active' : ''}}"
+                data-team="away"
+                bindtap="onMatchPlayerTeam"
+                hover-class="hover-dim"
+              >{{match.awayTeamDisplay || match.awayTeamName || '客队'}} <text class="match-player-count">{{match.awayMatchPlayers.length}}</text></view>
+            </view>
+
+            <view wx:if="{{expandedTeam === 'home'}}" class="match-player-list">
+              <view wx:if="{{match.homeMatchPlayers.length === 0}}" class="match-player-empty">暂无主队实时球员数据</view>
+              <view
+                wx:for="{{match.homeMatchPlayers}}"
+                wx:for-item="player"
+                wx:key="element"
+                class="match-player-row"
+                data-matchid="{{match.matchId}}"
+                data-element="{{player.element}}"
+                bindtap="onOpenMatchPlayer"
+                hover-class="hover-dim"
+              >
+                <view class="match-player-row-head">
+                  <text class="match-player-name">{{player.webName || player.name || '-'}}</text>
+                  <text class="match-player-points">{{player.totalPoints || player.points || player.livePoints || 0}}</text>
+                </view>
+                <view class="match-player-stats">
+                  <text>分钟 {{player.minutes || 0}}</text>
+                  <text>进球 {{player.goalsScored || 0}}</text>
+                  <text>助攻 {{player.assists || 0}}</text>
+                  <text>防守贡献 {{player.defensiveContribution || 0}}</text>
+                  <text>BPS {{player.bps || 0}}</text>
+                  <text>奖励 {{player.bonus || 0}}</text>
+                  <text>扑救 {{player.saves || 0}}</text>
+                  <text>牌 {{(player.yellowCards || 0) + (player.redCards || 0)}}</text>
+                </view>
+              </view>
+            </view>
+
+            <view wx:if="{{expandedTeam === 'away'}}" class="match-player-list">
+              <view wx:if="{{match.awayMatchPlayers.length === 0}}" class="match-player-empty">暂无客队实时球员数据</view>
+              <view
+                wx:for="{{match.awayMatchPlayers}}"
+                wx:for-item="player"
+                wx:key="element"
+                class="match-player-row"
+                data-matchid="{{match.matchId}}"
+                data-element="{{player.element}}"
+                bindtap="onOpenMatchPlayer"
+                hover-class="hover-dim"
+              >
+                <view class="match-player-row-head">
+                  <text class="match-player-name">{{player.webName || player.name || '-'}}</text>
+                  <text class="match-player-points">{{player.totalPoints || player.points || player.livePoints || 0}}</text>
+                </view>
+                <view class="match-player-stats">
+                  <text>分钟 {{player.minutes || 0}}</text>
+                  <text>进球 {{player.goalsScored || 0}}</text>
+                  <text>助攻 {{player.assists || 0}}</text>
+                  <text>防守贡献 {{player.defensiveContribution || 0}}</text>
+                  <text>BPS {{player.bps || 0}}</text>
+                  <text>奖励 {{player.bonus || 0}}</text>
+                  <text>扑救 {{player.saves || 0}}</text>
+                  <text>牌 {{(player.yellowCards || 0) + (player.redCards || 0)}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
   </view>
   <view class="match-share-slot">
     <canvas type="2d" id="live-match-share-canvas" class="match-share-canvas"></canvas>
   </view>
+  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

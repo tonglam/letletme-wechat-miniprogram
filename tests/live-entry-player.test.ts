@@ -1,5 +1,9 @@
 import type { LivePlayerRow } from "../miniprogram/models/live";
-import { normalizePlayer } from "../miniprogram/pages/live/entry/player";
+import {
+  isLiveSquadPitchStarter,
+  normalizePlayer,
+  splitLiveSquadPlayers
+} from "../miniprogram/pages/live/entry/player";
 
 function assertIncludes(actual: string, expected: string, message: string): void {
   if (!actual.includes(expected)) {
@@ -12,6 +16,64 @@ function assertEqual(actual: string | number | undefined, expected: string | num
     throw new Error(`${message}: expected ${expected}, received ${actual}`);
   }
 }
+
+function assertBoolean(actual: boolean, expected: boolean, message: string): void {
+  if (actual !== expected) {
+    throw new Error(`${message}: expected ${expected}, received ${actual}`);
+  }
+}
+
+assertBoolean(
+  isLiveSquadPitchStarter({ pickActive: false, squadPosition: 8, multiplier: 0 }),
+  true,
+  "official slot keeps a starter in the XI even when scoring is inactive",
+);
+assertBoolean(
+  isLiveSquadPitchStarter({ pickActive: true, squadPosition: 12, multiplier: 1 }),
+  false,
+  "official slot keeps a scoring-active bench player in the bench panel",
+);
+assertBoolean(
+  isLiveSquadPitchStarter({ squadPosition: 12, multiplier: 1 }),
+  false,
+  "slot fallback keeps positions 12-15 on the bench",
+);
+assertBoolean(
+  isLiveSquadPitchStarter({ pickActive: "false" as unknown as boolean, multiplier: 0 }),
+  false,
+  "legacy string false is treated as inactive",
+);
+assertBoolean(
+  isLiveSquadPitchStarter({ multiplier: undefined }),
+  false,
+  "missing lineup metadata never expands the pitch",
+);
+
+const degradedSquad = splitLiveSquadPlayers(
+  Array.from({ length: 15 }, (_, index) => ({
+    element: index + 1,
+    webName: `Player${index + 1}`,
+    elementTypeName: index === 0 || index === 11 ? "GKP" : "MID",
+    pickActive: true,
+    multiplier: 1
+  })),
+);
+assertEqual(degradedSquad.starters.length, 11, "degraded live payload stays at XI");
+assertEqual(degradedSquad.bench.length, 4, "degraded live payload keeps four bench players");
+assertEqual(degradedSquad.bench[0]?.webName, "Player12", "degraded payload preserves slot order");
+
+const officialSquad = splitLiveSquadPlayers(
+  Array.from({ length: 15 }, (_, index) => ({
+    element: index + 1,
+    webName: `Player${index + 1}`,
+    squadPosition: index + 1,
+    pickActive: true,
+    multiplier: 1
+  })),
+);
+assertEqual(officialSquad.starters.length, 11, "official slots keep XI");
+assertEqual(officialSquad.bench.length, 4, "official slots keep bench");
+assertEqual(officialSquad.bench[0]?.webName, "Player12", "official bench starts at slot 12");
 
 const row = normalizePlayer({
   webName: "Sels",

@@ -30,6 +30,7 @@ export interface TournamentLiveGraphQLRow {
     multiplier?: number;
     pickActive?: boolean;
     autoSub?: boolean;
+    totalPoints?: number;
   }>;
 }
 
@@ -76,6 +77,22 @@ export function officialTournamentTotalPoints(
     : undefined;
 }
 
+function officialTournamentEventPoints(
+  score?: LiveManagerScore,
+): number | undefined {
+  return typeof score?.eventPoints === "number" && Number.isFinite(score.eventPoints)
+    ? score.eventPoints
+    : undefined;
+}
+
+function officialTournamentNetPoints(
+  score?: LiveManagerScore,
+): number | undefined {
+  return typeof score?.netEventPoints === "number" && Number.isFinite(score.netEventPoints)
+    ? score.netEventPoints
+    : undefined;
+}
+
 export function tournamentManagerScoreStatus(
   rows: readonly LiveTournamentRow[],
   coverage: TournamentManagerCoverage = {},
@@ -93,15 +110,21 @@ export function tournamentManagerScoreStatus(
       ? Math.floor(coverage.totalEntries)
       : rows.length;
   const unavailableCount = new Set(coverage.unavailableEntryIds || []).size;
-  const available = unavailableCount > 0
-    ? Math.max(0, total - unavailableCount)
-    : typeof coverage.officialCoverage === "number" &&
-        Number.isFinite(coverage.officialCoverage)
+  const reportedAvailable =
+    typeof coverage.officialCoverage === "number" &&
+    Number.isFinite(coverage.officialCoverage)
       ? Math.min(
           total,
           Math.max(0, Math.round(coverage.officialCoverage * total)),
         )
-      : observedAvailable;
+      : 0;
+  // H2H desks report zero official *net* coverage until the source can prove
+  // the transfer-cost semantics, while each row may already contain an
+  // authoritative gross event score. Never let that metadata zero out rows
+  // that were actually returned with official event points.
+  const available = unavailableCount > 0
+    ? Math.max(0, total - unavailableCount)
+    : Math.max(observedAvailable, reportedAvailable);
   if (states.includes("SETTLING")) return "结算中";
   if (states.includes("STALE")) return "官方数据延迟";
   if (states.length === 0 || available === 0) return "官方分数不可用";
@@ -119,6 +142,10 @@ function mapTournamentPick(item: NonNullable<TournamentLiveGraphQLRow["pickList"
     teamShortName: item.teamShortName,
     elementTypeName: item.elementTypeName,
     position: item.elementTypeName,
+    squadPosition: item.position,
+    points: item.totalPoints,
+    livePoints: item.totalPoints,
+    totalPoints: item.totalPoints,
     captain: Boolean(item.isCaptain || (item.multiplier || 0) >= 2),
     viceCaptain: Boolean(item.isViceCaptain),
     pickActive: item.pickActive ?? (item.position === undefined ? undefined : item.position <= 11),
@@ -156,15 +183,22 @@ function searchText(row: LiveTournamentRow): string {
 
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
+    // H2H live responses intentionally keep the legacy flat headline aliases
+    // at zero when FPL has not published a provable net-point semantic. The
+    // nested official score is still authoritative for gross event points.
+    // Promote it here so sorting, sharing, and any consumer before page-level
+    // normalization cannot silently render the compatibility zero.
+    const officialEventPoints = officialTournamentEventPoints(row.score);
+    const officialNetPoints = officialTournamentNetPoints(row.score);
     const officialTotal = officialTournamentTotalPoints(row.score);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
       rank: row.rank ?? row.overallRank,
-      livePoints: row.livePoints,
+      livePoints: officialEventPoints ?? row.livePoints,
       transferCost: row.transferCost,
-      liveNetPoints: row.liveNetPoints,
+      liveNetPoints: officialNetPoints ?? row.liveNetPoints,
       liveTotalPoints: officialTotal ?? row.liveTotalPoints,
       totalPoints: officialTotal ?? row.liveTotalPoints,
       played: row.played,

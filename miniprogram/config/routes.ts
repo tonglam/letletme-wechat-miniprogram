@@ -22,5 +22,6 @@ export const routes = {
   myFplTeam: "/pages/my-fpl/team/team",
   myFplLeagues: "/pages/my-fpl/leagues/leagues",
   exploreFixtures: "/pages/explore/fixtures/fixtures",
+  explorePriceChanges: "/pages/explore/price-changes/price-changes",
   performance: "/pages/performance/index/index"
 } as const;

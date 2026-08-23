@@ -377,9 +377,14 @@
   right: 0;
   bottom: 0;
   left: 0;
+  display: flex;
+  flex-direction: column;
+  height: 92vh;
+  max-height: 92vh;
   padding: 24rpx 28rpx calc(24rpx + env(safe-area-inset-bottom));
   border-radius: 28rpx 28rpx 0 0;
   background: var(--card);
+  box-sizing: border-box;
 }
 
 .cmp-head {
@@ -393,6 +398,13 @@
   color: var(--ink);
   font-size: 30rpx;
   font-weight: 800;
+}
+
+.cmp-body {
+  flex: 1;
+  width: 100%;
+  height: 0;
+  min-height: 0;
 }
 
 .cmp-grid {
@@ -415,6 +427,153 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 800;
+}
+
+.cmp-lineup {
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.cmp-lineup-head,
+.cmp-lineup-section,
+.cmp-lineup-row,
+.cmp-pick-primary,
+.cmp-pick-meta {
+  display: flex;
+  align-items: center;
+}
+
+.cmp-lineup-head {
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.cmp-lineup-title {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.cmp-lineup-count {
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-lineup-section {
+  gap: 12rpx;
+  margin: 14rpx 0 8rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.cmp-lineup-rule {
+  flex: 1;
+  height: 1rpx;
+  background: var(--line);
+}
+
+.cmp-lineup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46rpx minmax(0, 1fr);
+  gap: 10rpx;
+  min-height: 64rpx;
+  padding: 8rpx 0;
+  border-bottom: 1rpx solid var(--plum-a8);
+}
+
+.cmp-lineup-row:last-child {
+  border-bottom: 0;
+}
+
+.cmp-lineup-row.bench {
+  background: var(--plum-a8);
+}
+
+.cmp-pick,
+.cmp-pick-empty {
+  min-width: 0;
+}
+
+.cmp-pick-left {
+  text-align: right;
+}
+
+.cmp-pick-primary {
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.cmp-pick-left .cmp-pick-primary,
+.cmp-pick-left .cmp-pick-meta {
+  flex-direction: row-reverse;
+}
+
+.cmp-pick-name,
+.cmp-pick-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-pick-name {
+  color: var(--ink);
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.cmp-pick-role {
+  flex-shrink: 0;
+  min-width: 28rpx;
+  border-radius: 999rpx;
+  background: var(--accent-tint);
+  color: var(--green-ink);
+  font-size: 18rpx;
+  font-weight: 900;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+.cmp-pick-meta {
+  justify-content: space-between;
+  gap: 8rpx;
+  margin-top: 3rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+}
+
+.cmp-pick-points {
+  flex-shrink: 0;
+  color: var(--green-ink);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-slot {
+  align-self: center;
+  border-radius: 999rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 36rpx;
+  text-align: center;
+}
+
+.cmp-pick-empty,
+.cmp-lineup-empty {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: center;
+}
+
+.cmp-lineup-empty {
+  padding: 30rpx 0 20rpx;
 }
 
 /* Sort tabs — segmented control, same language as .tab-strip / .segmented */

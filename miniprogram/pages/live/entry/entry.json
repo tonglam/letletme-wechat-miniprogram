@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "实时球队",
+  "navigationBarTitleText": "实时积分",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",

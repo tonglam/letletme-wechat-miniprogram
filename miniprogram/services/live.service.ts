@@ -138,6 +138,7 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         teamShortName
         elementType
         elementTypeName
+        position
         totalPoints
         minutes
         goalsScored
@@ -168,6 +169,7 @@ interface GraphQLPickListItem {
   teamShortName: string;
   elementType: number;
   elementTypeName: string;
+  position?: number;
   totalPoints: number;
   minutes: number;
   goalsScored: number;
@@ -175,7 +177,7 @@ interface GraphQLPickListItem {
   bonus: number;
   bps: number;
   playStatus: number;
-  pickActive: boolean;
+  pickActive?: boolean;
   autoSub: boolean;
   isCaptain: boolean;
   isViceCaptain: boolean;
@@ -217,6 +219,7 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     teamShortName: item.teamShortName,
     elementType: item.elementType,
     elementTypeName: item.elementTypeName,
+    squadPosition: item.position,
     points: item.totalPoints,
     totalPoints: item.totalPoints,
     minutes: item.minutes,
@@ -405,6 +408,7 @@ export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     awayTeamId: match.awayTeamId,
     awayScore: match.awayScore ?? undefined,
     kickoffTime: match.kickoffTime ?? "",
+    provisional: match.finishedProvisional === true,
     minutes: match.minutes,
     playStatus:
       match.finished || match.finishedProvisional

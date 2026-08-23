@@ -42,6 +42,10 @@ import {
   type LiveMatchShareCanvasTarget,
 } from "../../../utils/live-match-share-image";
 import { miniLogger } from "../../../utils/logger";
+import {
+  buildPlayerLiveDetail,
+  type PlayerLiveDetailView,
+} from "../entry/player-detail";
 
 interface StatusOption {
   key: string;
@@ -93,7 +97,7 @@ function textValue(value: unknown, fallback = "-"): string {
   return String(value);
 }
 
-function statusLabel(match: LiveMatch, fallbackStatus: string): string {
+export function statusLabel(match: LiveMatch, fallbackStatus: string): string {
   const status = match.status || match.playStatus || fallbackStatus;
   if (status === "finished") {
     return "已完赛";
@@ -321,6 +325,60 @@ function bpsHighlightItemsWithTies(
   });
 }
 
+function matchPlayerPoints(player: LivePlayerRow): number {
+  return numberValue(player.totalPoints ?? player.points ?? player.livePoints);
+}
+
+function hasMatchPlayerData(player: LivePlayerRow): boolean {
+  return [
+    matchPlayerPoints(player),
+    player.minutes,
+    player.goalsScored,
+    player.assists,
+    player.cleanSheets,
+    player.goalsConceded,
+    player.ownGoals,
+    player.penaltiesSaved,
+    player.penaltiesMissed,
+    player.yellowCards,
+    player.redCards,
+    player.saves,
+    player.bonus,
+    player.bps,
+    player.defensiveContribution,
+  ].some((value) => numberValue(value) !== 0);
+}
+
+/** Rows shown by the match detail panel, aligned with the web player list. */
+export function buildMatchPlayerRows(
+  players: LivePlayerRow[] | undefined,
+): LivePlayerRow[] {
+  return (players || [])
+    .filter(hasMatchPlayerData)
+    .sort((left, right) => {
+      const pointsDifference =
+        matchPlayerPoints(right) - matchPlayerPoints(left);
+      if (pointsDifference !== 0) return pointsDifference;
+      const minutesDifference =
+        numberValue(right.minutes) - numberValue(left.minutes);
+      if (minutesDifference !== 0) return minutesDifference;
+      return playerShortName(left).localeCompare(playerShortName(right));
+    });
+}
+
+export function findMatchPlayer(
+  matches: readonly LiveMatch[],
+  matchId: number | string,
+  element: number
+): LivePlayerRow | undefined {
+  const match = matches.find((item) =>
+    String(item.matchId || item.id || "") === String(matchId)
+  );
+  if (!match) return undefined;
+  return [...(match.homeTeamDataList || []), ...(match.awayTeamDataList || [])]
+    .find((row) => Number(row.element) === element);
+}
+
 /** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
 export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
   const status = String(match.status || match.playStatus || "");
@@ -478,6 +536,8 @@ function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
     scoreText: scoreText(match, fallbackStatus),
     kickoffText: kickoffText(match),
     minuteText: minuteText(match),
+    homeMatchPlayers: buildMatchPlayerRows(match.homeTeamDataList),
+    awayMatchPlayers: buildMatchPlayerRows(match.awayTeamDataList),
     eventSummary: buildMatchHighlights(match),
   };
 }
@@ -610,6 +670,7 @@ export function mergeLiveOverlay(
           numberValue(live.minutes),
           numberValue(match.minutes),
         ),
+        provisional: live.provisional ?? match.provisional,
         homeTeamDataList:
           live.homeTeamDataList && live.homeTeamDataList.length > 0
             ? live.homeTeamDataList
@@ -658,6 +719,10 @@ Page({
     sharedImageMatchId: "" as number | string,
     shareSheetOpen: false,
     shareText: "",
+    expandedMatchId: "" as number | string,
+    expandedTeam: "home" as "home" | "away",
+    playerDetailOpen: false,
+    playerDetail: null as PlayerLiveDetailView | null,
   },
 
   copiedMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -1438,6 +1503,52 @@ Page({
       hasData: true,
     });
     this.syncDisplayState();
+  },
+
+  onToggleMatchPlayers(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { matchid?: number | string }
+    >,
+  ) {
+    const matchId = event.currentTarget.dataset.matchid ?? "";
+    const isExpanded = String(this.data.expandedMatchId) === String(matchId);
+    this.setData({
+      expandedMatchId: isExpanded ? "" : matchId,
+      expandedTeam: "home",
+    });
+  },
+
+  onMatchPlayerTeam(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { team?: string }
+    >,
+  ) {
+    this.setData({
+      expandedTeam: event.currentTarget.dataset.team === "away" ? "away" : "home",
+    });
+  },
+
+  onOpenMatchPlayer(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { element?: number | string; matchid?: number | string }
+    >,
+  ) {
+    const element = Number(event.currentTarget.dataset.element);
+    const matchId = event.currentTarget.dataset.matchid ?? "";
+    if (!Number.isFinite(element) || matchId === "") return;
+    const player = findMatchPlayer(this.coreMatches, matchId, element);
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player),
+    });
+  },
+
+  onClosePlayer() {
+    this.setData({ playerDetailOpen: false, playerDetail: null });
   },
 
   onRetry() {

@@ -43,6 +43,19 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     page,
     /getEntryLeagueInfo/,
   );
+  assert.match(page, /getMiniHomePersonalLeagues/);
+  assert.match(page, /homePersonalLeaguesMatchEntry/);
+  const homeService = source("miniprogram/services/home.service.ts");
+  assert.match(homeService, /const verifiedEntryId = getVerifiedSessionEntryId\(\)/);
+  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{verifiedEntryId\}`/);
+  assert.match(homeService, /homePersonalDesk \{\s+entryId\s+state/);
+  assert.match(homeService, /deskEntryId !== verifiedEntryId/);
+  assert.match(homeService, /entryId: deskEntryId/);
+  assert.match(
+    homeService,
+    /desk\.state === "STALE" \|\| result\.meta\.stale/,
+    "stale personal desks must fall back instead of rendering old H2H scores as live",
+  );
   assert.equal(
     (page.match(/getEntryLeagueInfo\(entryId,/g) || []).length,
     1,
@@ -53,6 +66,12 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     /getEntryClassicLeagues|getEntryH2hLeagues|classicTask|h2hTask/,
     "home must not retain the former split league request path",
   );
+  const entryCard = source("miniprogram/components/entry-card/entry-card.wxml");
+  assert.match(entryCard, /item\.h2h\.eventLabel/);
+  assert.match(entryCard, /item\.h2h\.statusLabel/);
+  assert.match(entryCard, /item\.h2h\.viewer\.primary/);
+  assert.match(entryCard, /item\.h2h\.opponent\.primary/);
+  assert.match(entryCard, /item\.h2h\.centerLabel/);
   assert.match(page, /getMiniHomeMarket/);
   assert.match(page, /getMiniHomeSupplement/);
 });
@@ -106,6 +125,30 @@ test("market ownership requests clear stale tiles and resume after a hidden page
   assert.match(
     page,
     /ownershipDateOptions\(\s*pulse\.snapshot\?\.snapshotDate/,
+  );
+});
+
+test("home accepts a personal league desk only for the same entry id", () => {
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+      { entryId: 6953, entryName: "Different", playerName: "Different" },
+    ),
+    true,
+  );
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+      { entryId: 8743559, entryName: "Same name", playerName: "Same manager" },
+    ),
+    false,
+  );
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryName: "Same name", playerName: "Same manager" },
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+    ),
+    false,
   );
 });
 

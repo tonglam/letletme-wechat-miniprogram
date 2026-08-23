@@ -38,6 +38,8 @@ export interface SquadPitchPlayer {
   score: number;
   teamCode: SquadTeamCode | "";
   position: SquadPosition;
+  /** Official FPL pick slot: 1–11 starters, 12–15 bench. */
+  squadPosition?: number;
   fixture?: string;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
@@ -192,6 +194,11 @@ export function resolveSquadPosition(value: unknown): SquadPosition | null {
   return null;
 }
 
+function resolveSquadSlot(value: unknown): number | undefined {
+  const slot = Number(value);
+  return Number.isInteger(slot) && slot >= 1 && slot <= 15 ? slot : undefined;
+}
+
 export function kitAsset(teamCode: string): string {
   return isSquadTeamCode(teamCode)
     ? `${squadPitchAssetBase()}/kits/${teamCode}.png`
@@ -221,7 +228,8 @@ export function isSquadPitchStarter(pick: Pick<SquadPitchPickInput, "position" |
   if (Number.isFinite(slot) && slot >= 1 && slot <= 15) {
     return slot <= 11;
   }
-  return Number(pick.multiplier) !== 0;
+  const multiplier = Number(pick.multiplier);
+  return Number.isFinite(multiplier) && multiplier !== 0;
 }
 
 export function formatSquadFixture(pick: Pick<SquadPitchPickInput, "againstShortName" | "wasHome">): string {
@@ -258,7 +266,7 @@ export function toSquadPitchPlayer(
   if (!webName || !position) return null;
 
   const teamCode = resolveSquadTeamCode(apiPick.teamShortName || apiPick.teamName);
-  return {
+  const player: SquadPitchPlayer = {
     id: pickId(apiPick, id),
     webName,
     score: finiteNumber(apiPick.totalPoints, 0),
@@ -268,6 +276,9 @@ export function toSquadPitchPlayer(
     isCaptain: Boolean(apiPick.isCaptain),
     isViceCaptain: Boolean(apiPick.isViceCaptain)
   };
+  const squadPosition = resolveSquadSlot(apiPick.position);
+  if (squadPosition !== undefined) player.squadPosition = squadPosition;
+  return player;
 }
 
 export function toSquadPitchHeader(apiTeam: SquadPitchTeamInput): SquadPitchHeader {
@@ -295,6 +306,22 @@ export function sortSquadPitchPlayers(players: readonly SquadPitchPlayer[]): Squ
   });
 }
 
+export function sortSquadPitchBench(players: readonly SquadPitchPlayer[]): SquadPitchPlayer[] {
+  return players
+    .map((player, index) => ({ player, index }))
+    .sort((left, right) => {
+      const leftSlot = Number(left.player.squadPosition);
+      const rightSlot = Number(right.player.squadPosition);
+      const leftHasSlot = Number.isSafeInteger(leftSlot) && leftSlot > 11;
+      const rightHasSlot = Number.isSafeInteger(rightSlot) && rightSlot > 11;
+      if (leftHasSlot && rightHasSlot) return leftSlot - rightSlot;
+      if (leftHasSlot) return -1;
+      if (rightHasSlot) return 1;
+      return left.index - right.index;
+    })
+    .map(({ player }) => player);
+}
+
 export interface SquadPitchRowInput {
   id?: string;
   element?: number | string;
@@ -303,6 +330,7 @@ export interface SquadPitchRowInput {
   team?: string;
   teamShortName?: string;
   position?: string;
+  squadPosition?: number | string;
   elementTypeName?: string;
   points?: string | number;
   livePoints?: number;
@@ -346,14 +374,15 @@ export function buildLiveSquadPitchState(input: LiveSquadPitchInput): {
   pitchHeader: SquadPitchHeader;
   pitchBenchBoost: boolean;
 } {
-  const starters = (input.starters || []).flatMap((row) => {
+  const starterPlayers = (input.starters || []).flatMap((row) => {
     const player = toSquadPitchPlayerFromRow({ ...row, bench: false });
     return player ? [player] : [];
   });
-  const bench = (input.bench || []).flatMap((row) => {
+  const benchPlayers = (input.bench || []).flatMap((row) => {
     const player = toSquadPitchPlayerFromRow({ ...row, bench: true });
     return player ? [player] : [];
   });
+  const lists = normalizeSquadPitchLists(starterPlayers, benchPlayers);
   const header = toSquadPitchHeader({
     eventId: input.eventId,
     eventPoints: input.gameweekPoints,
@@ -368,8 +397,8 @@ export function buildLiveSquadPitchState(input: LiveSquadPitchInput): {
     }
   });
   return {
-    pitchPlayers: sortSquadPitchPlayers(starters),
-    pitchBench: sortSquadPitchPlayers(bench).slice(0, 4),
+    pitchPlayers: lists.players,
+    pitchBench: lists.benchPlayers,
     pitchHeader: header,
     pitchBenchBoost: isBenchBoostChip(input.chip)
   };
@@ -438,12 +467,41 @@ export function toSquadPitchPlayerFromRow(row: SquadPitchRowInput): SquadPitchPl
     webName: row.webName || row.name,
     teamShortName: row.teamShortName || row.team,
     elementTypeName: row.position || row.elementTypeName,
+    position: row.squadPosition,
     multiplier: row.bench ? 0 : row.multiplier ?? 1,
     totalPoints: typeof score === "number" ? score : Number(score),
     isCaptain: row.isCaptain ?? row.captain,
     isViceCaptain: row.isViceCaptain ?? row.viceCaptain,
     ...fixtureFromStatusText(row.statusText)
   }, id);
+}
+
+/**
+ * Keep the reusable pitch contract safe even when a caller sends a mixed
+ * 15-player list. Official slots win; without slots the API order is the
+ * only non-invented fallback, so cap the pitch at the first XI and retain the
+ * overflow as substitutes.
+ */
+export function normalizeSquadPitchLists(
+  players: readonly SquadPitchPlayer[],
+  benchPlayers: readonly SquadPitchPlayer[] = []
+): {
+  players: SquadPitchPlayer[];
+  benchPlayers: SquadPitchPlayer[];
+} {
+  const slotBench = players.filter((player) => (player.squadPosition ?? 0) > 11);
+  let starters = players.filter((player) => (player.squadPosition ?? 0) <= 11);
+  let bench = [...benchPlayers, ...slotBench];
+
+  if (starters.length > 11) {
+    bench = [...bench, ...starters.slice(11)];
+    starters = starters.slice(0, 11);
+  }
+
+  return {
+    players: sortSquadPitchPlayers(starters),
+    benchPlayers: sortSquadPitchBench(bench).slice(0, 4)
+  };
 }
 
 export function toSquadPitchLists(picks: readonly SquadPitchPickInput[]): {
@@ -458,10 +516,7 @@ export function toSquadPitchLists(picks: readonly SquadPitchPickInput[]): {
     if (isSquadPitchStarter(pick)) players.push(mapped);
     else benchPlayers.push(mapped);
   });
-  return {
-    players: sortSquadPitchPlayers(players),
-    benchPlayers: sortSquadPitchPlayers(benchPlayers).slice(0, 4)
-  };
+  return normalizeSquadPitchLists(players, benchPlayers);
 }
 
 export function formatCompactRank(value: number, locale: SquadPitchLocale): string {

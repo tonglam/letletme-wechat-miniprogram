@@ -7,6 +7,7 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
     "live-status-bar": "../../../components/live-status-bar/live-status-bar",
-    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback",
+    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet"
   }
 }

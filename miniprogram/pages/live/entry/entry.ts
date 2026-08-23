@@ -35,7 +35,7 @@ import {
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { miniLogger } from "../../../utils/logger";
 import { currentFollowEntryId } from "../../../utils/follow";
-import { normalizePlayer } from "./player";
+import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView,
@@ -245,7 +245,7 @@ Page({
     transfers: [],
     playerDetailOpen: false,
     playerDetail: null,
-    shareLabel: "复制分享",
+    shareLabel: "分享文字",
     shareCopied: false,
     shareSheetOpen: false,
     shareText: "",
@@ -996,7 +996,7 @@ Page({
               ),
               summaryTiles: hasOfficialHeadline
                 ? [
-                    { label: "实时得分", value: `${headlinePoints}` },
+                    { label: "实时积分", value: `${headlinePoints}` },
                     {
                       label: netPointsKnown ? "净得分" : "净得分（待确认）",
                       value: netPointsKnown ? `${netPoints}` : "—",
@@ -1038,12 +1038,7 @@ Page({
         const fieldPlayers = players.filter(
           (player) => numberValue(player.elementType) !== 5,
         );
-        const starters = fieldPlayers.filter(
-          (player) => player.pickActive !== false,
-        );
-        const bench = fieldPlayers.filter(
-          (player) => player.pickActive === false,
-        );
+        const { starters, bench } = splitLiveSquadPlayers(fieldPlayers);
         const livePoints = numberValue(result.score?.eventPoints);
         const livePointsKnown = typeof result.score?.eventPoints === "number";
         const total = numberValue(
@@ -1087,7 +1082,7 @@ Page({
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
             summaryTiles: [
-              { label: "实时得分", value: livePointsText },
+              { label: "实时积分", value: livePointsText },
               {
                 label: netPointsKnown ? "净得分" : "净得分（待确认）",
                 value: netPointsKnown ? `${netPoints}` : "—",
@@ -1139,7 +1134,7 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.setData({
-          error: error instanceof Error ? error.message : "实时球队加载失败",
+          error: error instanceof Error ? error.message : "实时积分加载失败",
         });
         this.loadTransfersAfterLive = false;
         wx.nextTick(() => navigationTracker?.observePrimary());
@@ -1396,7 +1391,7 @@ Page({
 
   onShareAppMessage() {
     const teamName =
-      this.data.pitchHeader?.teamName || this.data.entryName || "实时球队";
+      this.data.pitchHeader?.teamName || this.data.entryName || "实时积分";
     return {
       title: `${teamName} · GW${this.data.event} · ${this.data.livePointsText}分`,
       path: this.data.entryId

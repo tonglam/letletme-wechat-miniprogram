@@ -11,6 +11,7 @@ import {
   defaultKitAsset,
   formatSquadPitchHeaderView,
   kitAsset,
+  normalizeSquadPitchLists,
   squadPitchBackgroundSrc,
   type SquadPitchHeader,
   type SquadPitchLocale,
@@ -35,6 +36,16 @@ const PITCH_GREEN = "#00ff85";
 const MARKER_BG = "#111315";
 const MARKER_INK = "#f5f1e8";
 const BENCH_PANEL = "rgba(184, 217, 185, 0.92)";
+
+// The 4:5 share canvas reserves its bottom fifth for substitutes. Keep the
+// four starter rows above that panel and slightly narrow the cards so their
+// name/score plates do not collide vertically.
+const BENCH_SHARE_STARTER_TOPS: Record<string, number> = {
+  GKP: 0.12,
+  DEF: 0.285,
+  MID: 0.45,
+  FWD: 0.615
+};
 
 export type ShareDrawLayer =
   | { type: "background"; src: string }
@@ -78,6 +89,8 @@ export interface SharePitchInput {
   header: SquadPitchHeader;
   benchBoost?: boolean;
   locale?: SquadPitchLocale;
+  /** Some XI-only surfaces, such as Dream Team, still need the readable portrait canvas. */
+  forcePortrait?: boolean;
 }
 
 export function shareCanvasSize(hasBench: boolean): { width: number; height: number } {
@@ -86,13 +99,36 @@ export function shareCanvasSize(hasBench: boolean): { width: number; height: num
   return { width, height: Math.round(width / aspect) };
 }
 
+/**
+ * A full FPL squad needs the portrait canvas even when the bench list has not
+ * arrived as a separate field. The normalizer normally moves picks 12-15 to
+ * benchPlayers, but using the total count here prevents a transient mapping
+ * gap from falling back to the squeezed 15-player field layout. XI-only
+ * surfaces can opt into the same treatment when the plain canvas would make
+ * the shared image too compressed.
+ */
+export function shareUsesPortraitLayout(
+  players: readonly SquadPitchPlayer[],
+  benchPlayers: readonly SquadPitchPlayer[] = [],
+  forcePortrait = false
+): boolean {
+  return forcePortrait || benchPlayers.length > 0 || players.length + benchPlayers.length > 11;
+}
+
 export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
-  const benchPlayers = input.benchPlayers || [];
+  const lists = normalizeSquadPitchLists(input.players, input.benchPlayers || []);
+  const players = lists.players;
+  const benchPlayers = lists.benchPlayers;
   const hasBench = benchPlayers.length > 0;
-  const { width, height } = shareCanvasSize(hasBench);
+  const portraitLayout = shareUsesPortraitLayout(
+    input.players,
+    input.benchPlayers || [],
+    Boolean(input.forcePortrait)
+  );
+  const { width, height } = shareCanvasSize(portraitLayout);
   const locale = input.locale || "zh-CN";
   const header = formatSquadPitchHeaderView(input.header, locale);
-  const rows = buildPitchRows(input.players, hasBench);
+  const rows = buildPitchRows(players, hasBench);
   const bench = buildBenchViews(benchPlayers, locale);
   const backgroundSrc = squadPitchBackgroundSrc();
   const placeholderKit = defaultKitAsset();
@@ -111,12 +147,17 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
 
   rows.forEach((row) => {
     const count = row.players.length;
-    const cardWidth = (parseFloat(row.cardWidth) / 100) * width;
+    const cardWidthPercent = portraitLayout
+      ? Math.min(parseFloat(row.cardWidth), 17)
+      : parseFloat(row.cardWidth);
+    const cardWidth = (cardWidthPercent / 100) * width;
     const usable = width * 0.916;
     row.players.forEach((player, index) => {
       const slotWidth = usable / count;
       const x = width * 0.042 + slotWidth * index + (slotWidth - cardWidth) / 2;
-      const y = (parseFloat(row.top) / 100) * height;
+      const y = portraitLayout
+        ? (BENCH_SHARE_STARTER_TOPS[row.position] ?? parseFloat(row.top) / 100) * height
+        : (parseFloat(row.top) / 100) * height;
       kitSrcs.add(player.kitSrc);
       layers.push({
         type: "starter",
@@ -164,18 +205,22 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
 }
 
 export function shareCacheKey(input: SharePitchInput): string {
-  const bench = input.benchPlayers || [];
+  const lists = normalizeSquadPitchLists(input.players, input.benchPlayers || []);
+  const players = lists.players;
+  const bench = lists.benchPlayers;
   return JSON.stringify({
     locale: input.locale || "zh-CN",
     benchBoost: Boolean(input.benchBoost),
+    forcePortrait: Boolean(input.forcePortrait),
     shareBrandVersion: SHARE_BRAND_VERSION,
     header: input.header,
-    players: input.players.map((player) => [
+    players: players.map((player) => [
       player.id,
       player.webName,
       player.score,
       player.teamCode,
       player.position,
+      player.squadPosition,
       player.isCaptain,
       player.isViceCaptain
     ]),
@@ -185,6 +230,7 @@ export function shareCacheKey(input: SharePitchInput): string {
       player.score,
       player.teamCode,
       player.position,
+      player.squadPosition,
       player.fixture
     ])
   });

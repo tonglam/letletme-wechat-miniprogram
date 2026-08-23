@@ -30,10 +30,10 @@ PerformancePage({
     currentGw: 0,
     cards: [
       {
-        title: "实时球队",
-        description: "阵容、队长、替补、开卡和实时分数",
-        meta: "实时阵容",
-        status: "球队必看",
+        title: "实时积分",
+        description: "阵容、队长、替补、开卡和实时积分",
+        meta: "实时积分",
+        status: "积分必看",
         url: routes.liveEntry
       },
       {

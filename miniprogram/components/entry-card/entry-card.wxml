@@ -41,9 +41,27 @@
           </view>
           <text class="action" catchtap="onOpenAllLeagues">全部</text>
         </view>
-        <view wx:for="{{h2hPanel.items}}" wx:key="id" class="entry-league-row">
-          <text class="entry-league-name">{{item.name}}</text>
-          <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
+        <view wx:for="{{h2hPanel.items}}" wx:key="id" class="entry-h2h-row">
+          <view class="entry-h2h-head">
+            <text class="entry-league-name">{{item.name}}</text>
+            <view class="entry-h2h-tags">
+              <text wx:if="{{item.h2h}}" class="entry-h2h-tag">{{item.h2h.eventLabel}}</text>
+              <text wx:if="{{item.h2h}}" class="entry-h2h-tag entry-h2h-status entry-h2h-status-{{item.h2h.statusKey}}">{{item.h2h.statusLabel}}</text>
+              <text wx:if="{{item.rankText}}" class="entry-h2h-rank">{{item.rankText}}</text>
+            </view>
+          </view>
+          <view wx:if="{{item.h2h}}" class="entry-h2h-matchup">
+            <view class="entry-h2h-side entry-h2h-viewer">
+              <text class="entry-h2h-primary">{{item.h2h.viewer.primary}}</text>
+              <text wx:if="{{item.h2h.viewer.secondary}}" class="entry-h2h-secondary">{{item.h2h.viewer.secondary}}</text>
+            </view>
+            <view class="entry-h2h-center {{item.h2h.showScore ? 'entry-h2h-score' : ''}}">{{item.h2h.centerLabel}}</view>
+            <view class="entry-h2h-side">
+              <text class="entry-h2h-primary">{{item.h2h.opponent.primary}}</text>
+              <text wx:if="{{item.h2h.opponent.secondary}}" class="entry-h2h-secondary">{{item.h2h.opponent.secondary}}</text>
+            </view>
+          </view>
+          <text wx:else class="entry-h2h-empty">暂无当前对阵</text>
         </view>
         <view wx:if="{{h2hPanel.hasMore}}" class="entry-league-more" hover-class="hover-dim" catchtap="onLoadMoreH2h">
           <text class="action">加载更多</text>

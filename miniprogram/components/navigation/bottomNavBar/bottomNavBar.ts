@@ -52,6 +52,7 @@ const MENU_MAP: Record<string, NavMenu> = {
       { name: "本轮", subname: "本轮得分、阵容与梦之队" },
       { name: "赛程", subname: "20 队未来赛程 · 主客场" },
       { name: "市场", subname: "转会台：身价、持有和出场状态" },
+      { name: "身价预测", subname: "下一次上涨、下跌与锁定信号" },
       { name: "趋势", subname: "已筹备赛事的选择率与转会趋势" },
       { name: "球员", subname: "搜索球员和查看详情" }
     ],
@@ -59,6 +60,7 @@ const MENU_MAP: Record<string, NavMenu> = {
       本轮: "/pages/summary/gameweek/gameweek",
       赛程: "/pages/explore/fixtures/fixtures",
       市场: "/pages/data/price/price",
+      身价预测: "/pages/explore/price-changes/price-changes",
       趋势: "/pages/data/selections/selections",
       球员: "/pages/data/players/players"
     },
@@ -66,12 +68,12 @@ const MENU_MAP: Record<string, NavMenu> = {
   },
   live: {
     pages: [
-      { name: "球队", subname: "查看球队实时得分" },
+      { name: "积分", subname: "查看球队实时积分" },
       { name: "赛事", subname: "查看赛事实时得分和排名" },
       { name: "比赛", subname: "查看实时更新的比赛结果" }
     ],
     url: {
-      球队: "/pages/live/entry/entry",
+      积分: "/pages/live/entry/entry",
       赛事: "/pages/live/tournament/tournament",
       比赛: "/pages/live/match/match"
     },
