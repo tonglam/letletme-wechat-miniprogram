@@ -399,8 +399,9 @@ export async function getPriceChangePersonalContext(input: {
     || transfersRoot?.state === "PRESEASON";
   if (!transfersAvailable) return unavailablePersonalContext("ready", squadElementIds);
 
-  const history = read.data.myFplTeamDesk?.history;
-  const historyAvailable = Array.isArray(history);
+  const desk = read.data.myFplTeamDesk;
+  const history = desk?.history;
+  const historyAvailable = desk?.state === "READY" && Array.isArray(history);
   if (!historyAvailable) return unavailablePersonalContext("ready", squadElementIds);
   const historyChips: Record<string, string> = {};
   (history || []).forEach((row) => {
