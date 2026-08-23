@@ -3127,7 +3127,6 @@ PerformancePage({
   onCopyShare(): Promise<void> {
     if (this.shareRequest) return this.shareRequest;
     const request = (async () => {
-      this.setData({ shareLabel: "整理中" });
       let complete = true;
       let rows: DisplayTournamentRow[] = [];
       try {
@@ -3192,7 +3191,6 @@ PerformancePage({
     const clearRequest = () => {
       if (this.shareRequest === request) {
         this.shareRequest = null;
-        this.setData({ shareLabel: "分享文字" });
       }
     };
     void request.then(clearRequest, clearRequest);
