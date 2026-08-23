@@ -267,6 +267,8 @@ function clearStoredGraphQLSessionCache(): void {
 // GraphQL request) never touch storage. `undefined` = encrypted storage has
 // not been restored yet; `null` = restoration found no usable session.
 let sessionMemory: { token: string; expiresAt: string } | null | undefined;
+let accountMutationRevision = 0;
+let accountMutationInFlight = 0;
 
 // Bumped on every session clear so a login round trip that was in flight
 // before a logout (or an expiry purge) can never re-store a credential
@@ -548,6 +550,7 @@ function applyEffectiveEntry(
   const previousEntryId = readLocalEntryId();
   if (previousEntryId !== entryId) {
     clearEntryScopedStorage();
+    clearStoredGraphQLSessionCache();
   }
   if (entryId) {
     wx.setStorageSync(storageKeys.entryId, entryId);
@@ -576,21 +579,29 @@ function storeReceivedProfile(
     // replace the local pointer with a Web-linked entry.
     writePendingFollowEntry(previousEntryId);
   }
+  const pendingFollow = readPendingFollowEntry();
+  const storedProfile = pendingFollow === undefined
+    ? profile
+    : {
+      ...profile,
+      followEntryId: pendingFollow,
+      effectiveEntryId: pendingFollow,
+      effectiveEntrySource: pendingFollow === null ? null : "MINI" as const
+    };
   if (
-    previousProfile?.id !== profile.id
-    || previousProfile?.webAccountLinked !== profile.webAccountLinked
-    || previousProfile?.webVerifiedEntryId !== profile.webVerifiedEntryId
-    || previousProfile?.effectiveEntryId !== profile.effectiveEntryId
+    previousProfile?.id !== storedProfile.id
+    || previousProfile?.webAccountLinked !== storedProfile.webAccountLinked
+    || previousProfile?.webVerifiedEntryId !== storedProfile.webVerifiedEntryId
+    || previousProfile?.effectiveEntryId !== storedProfile.effectiveEntryId
   ) {
     clearStoredGraphQLSessionCache();
   }
-  persistMiniProgramProfile(profile);
-  const pendingFollow = readPendingFollowEntry();
+  persistMiniProgramProfile(storedProfile);
   applyEffectiveEntry(
-    pendingFollow === undefined ? profile.effectiveEntryId : pendingFollow,
+    pendingFollow === undefined ? storedProfile.effectiveEntryId : pendingFollow,
     reason
   );
-  return profile;
+  return storedProfile;
 }
 
 function persistProfileEmail(email: string | null | undefined): void {
@@ -1218,12 +1229,15 @@ async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
   }
 }
 
-async function replayPendingFollowEntry(): Promise<MiniProgramProfile | null> {
+async function replayPendingFollowEntry(
+  expectedMutationRevision = accountMutationRevision
+): Promise<MiniProgramProfile | null> {
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
   const profile = pending === null
     ? await requestProfileWithSessionRetry("/follow-entry", "DELETE")
     : await requestProfileWithSessionRetry("/follow-entry", "PUT", { entryId: pending });
+  if (expectedMutationRevision !== accountMutationRevision) return null;
   clearPendingFollowEntry(pending);
   return storeReceivedProfile(profile, "rebind");
 }
@@ -1234,9 +1248,18 @@ let pendingAccountSynchronization: Promise<MiniProgramProfile> | null = null;
 export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
   if (pendingAccountSynchronization) return pendingAccountSynchronization;
   const run = (async () => {
-    let profile = await requestProfileWithSessionRetry("/profile", "GET");
-    profile = storeReceivedProfile(profile, "restore");
-    profile = await replayPendingFollowEntry() ?? profile;
+    const synchronizationRevision = accountMutationRevision;
+    const mutationInFlight = accountMutationInFlight > 0;
+    const pendingFollowAtStart = readPendingFollowEntry() !== undefined;
+    const serverProfile = await requestProfileWithSessionRetry("/profile", "GET");
+    let profile = (
+      synchronizationRevision === accountMutationRevision
+      && !mutationInFlight
+      && !pendingFollowAtStart
+    )
+      ? storeReceivedProfile(serverProfile, "restore")
+      : getStoredMiniProgramProfile() ?? serverProfile;
+    profile = await replayPendingFollowEntry(synchronizationRevision) ?? profile;
     profile = await replayPendingEntryChoice().catch(() => null) ?? profile;
     scheduleEntryConflictPrompt(profile);
     return profile;
@@ -1260,14 +1283,18 @@ export async function saveMiniProgramFollowEntry(entryId: number | null): Promis
   if (entryId !== null && !normalized) {
     throw new Error("请输入有效的参赛 ID");
   }
+  const mutationRevision = ++accountMutationRevision;
+  accountMutationInFlight += 1;
   writePendingFollowEntry(normalized);
   applyEffectiveEntry(normalized, "rebind");
   try {
-    const profile = await replayPendingFollowEntry();
+    const profile = await replayPendingFollowEntry(mutationRevision);
     if (profile) scheduleEntryConflictPrompt(profile);
     return true;
   } catch {
     return false;
+  } finally {
+    accountMutationInFlight -= 1;
   }
 }
 

@@ -139,6 +139,8 @@ test("standalone account migrates, replays, and preserves its team across Web un
   let serverFollowEntryId = null;
   let webAccountLinked = false;
   let failNextFollowWrite = false;
+  let deferProfile = false;
+  let deferredProfileRequest;
 
   const profile = () => ({
     id: "mini-account",
@@ -173,6 +175,10 @@ test("standalone account migrates, replays, and preserves its team across Web un
         }
         assert.equal(options.header.Authorization, "Bearer standalone-token");
         if (options.url.endsWith("/profile")) {
+          if (deferProfile) {
+            deferredProfileRequest = options;
+            return;
+          }
           options.success({ statusCode: 200, data: { success: true, profile: profile() } });
           return;
         }
@@ -221,12 +227,29 @@ test("standalone account migrates, replays, and preserves its team across Web un
     assert.equal(storage.has("pending-follow-entry-v1"), false);
     assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });
 
+    storage.set("gql:v2:session:old-follow", { entryId: 8743559 });
+    deferProfile = true;
+    const staleProfile = profile();
+    const staleSync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(deferredProfileRequest);
+    assert.equal(await saveMiniProgramFollowEntry(7001), true);
+    assert.equal(storage.has("gql:v2:session:old-follow"), false);
+    deferredProfileRequest.success({
+      statusCode: 200,
+      data: { success: true, profile: staleProfile }
+    });
+    await staleSync;
+    deferProfile = false;
+    assert.equal(getStoredMiniProgramProfile()?.followEntryId, 7001);
+    assert.equal(currentMyFplEntryId(), 7001);
+
     failNextFollowWrite = true;
-    assert.equal(await saveMiniProgramFollowEntry(7001), false);
-    assert.equal(currentMyFplEntryId(), 7001, "offline selection applies locally");
+    assert.equal(await saveMiniProgramFollowEntry(7002), false);
+    assert.equal(currentMyFplEntryId(), 7002, "offline selection applies locally");
     assert.equal(storage.has("pending-follow-entry-v1"), true);
     await synchronizeMiniProgramAccount();
-    assert.equal(serverFollowEntryId, 7001, "pending selection replays on profile sync");
+    assert.equal(serverFollowEntryId, 7002, "pending selection replays on profile sync");
     assert.equal(storage.has("pending-follow-entry-v1"), false);
 
     webAccountLinked = true;
@@ -238,7 +261,7 @@ test("standalone account migrates, replays, and preserves its team across Web un
     const tokenBeforeUnlink = getApiSessionToken();
     await unlinkMiniProgramWebAccount();
     assert.equal(getApiSessionToken(), tokenBeforeUnlink, "unlink keeps the Mini session");
-    assert.equal(currentMyFplEntryId(), 7001, "unlink keeps the Mini viewer team");
+    assert.equal(currentMyFplEntryId(), 7002, "unlink keeps the Mini viewer team");
     assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });
   } finally {
     clearSessionCredentials();
