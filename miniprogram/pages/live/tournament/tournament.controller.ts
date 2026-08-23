@@ -74,6 +74,7 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import { formatAverageNumber } from "../../../utils/summary-format";
 type SortKey =
   | "livePoints"
   | "liveNetPoints"
@@ -500,7 +501,7 @@ function compareSelectionState(
   };
 }
 
-function buildTournamentStats(rows: DisplayTournamentRow[]) {
+export function buildTournamentStats(rows: DisplayTournamentRow[]) {
   if (rows.length === 0) {
     return { highestText: "—", averageText: "—", entriesText: "0" };
   }
@@ -515,12 +516,10 @@ function buildTournamentStats(rows: DisplayTournamentRow[]) {
     };
   }
   const highest = Math.max(...points);
-  const average = Math.round(
-    points.reduce((sum, value) => sum + value, 0) / points.length,
-  );
+  const average = points.reduce((sum, value) => sum + value, 0) / points.length;
   return {
     highestText: String(highest),
-    averageText: String(average),
+    averageText: formatAverageNumber(average),
     entriesText: String(rows.length),
   };
 }

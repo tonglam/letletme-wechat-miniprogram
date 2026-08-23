@@ -7,6 +7,7 @@ import {
   type MiniChartPoint,
   type MiniChartType
 } from "./mini-chart";
+import { formatAverageNumber } from "./summary-format";
 
 export type SeasonChartMode = "rank" | "totalPoints" | "netPoints" | "captain" | "transfers" | "bench";
 
@@ -157,6 +158,26 @@ export interface PastSeasonChartPoint {
   current: boolean;
 }
 
+/**
+ * Compare a human FPL history label (for example `2025/26`) with the
+ * authoritative app-context season (`2526` or `2025/26`). Row order is not
+ * authoritative because FPL history can contain completed seasons only.
+ */
+export function isCurrentSeasonLabel(
+  historySeason: string | null | undefined,
+  currentSeason: string | null | undefined
+): boolean {
+  const seasonKey = (value: string | null | undefined): string => {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (/^\d{4}$/.test(digits)) return digits;
+    if (/^20\d{4}$/.test(digits)) return digits.slice(2);
+    return "";
+  };
+  const historyKey = seasonKey(historySeason);
+  const currentKey = seasonKey(currentSeason);
+  return Boolean(historyKey && currentKey && historyKey === currentKey);
+}
+
 export function toPastSeasonChartPoints(rows: PastSeasonChartPoint[]): MiniChartPoint[] {
   return [...rows]
     .slice()
@@ -272,8 +293,12 @@ export function tournamentPathSummary(point: TournamentPathPoint | null, mode: T
   return [
     `GW${point.gameweek}`,
     point.overallPoints != null ? `你 ${Math.round(point.overallPoints)}` : "",
-    point.averageOverallPoints != null ? `平均 ${Math.round(point.averageOverallPoints)}` : "",
-    delta != null ? `${delta >= 0 ? "高" : "低"} ${Math.abs(Math.round(delta))}` : ""
+    point.averageOverallPoints != null
+      ? `平均 ${formatAverageNumber(point.averageOverallPoints)}`
+      : "",
+    delta != null
+      ? `${delta >= 0 ? "高" : "低"} ${formatAverageNumber(Math.abs(delta))}`
+      : ""
   ].filter(Boolean).join(" · ");
 }
 

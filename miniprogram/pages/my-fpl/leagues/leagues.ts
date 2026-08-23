@@ -17,7 +17,13 @@ import {
 import type { EntryTournamentRow } from "../../../models/competition";
 import { goToAccountLink, goToEntrySearch } from "../../../utils/navigation";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
-import { formatCompactNumber, formatMoney, formatPoints } from "../../../utils/summary-format";
+import {
+  formatAverageMoney,
+  formatAverageNumber,
+  formatCompactNumber,
+  formatMoney,
+  formatPoints
+} from "../../../utils/summary-format";
 import {
   TOURNAMENT_PATH_MODES,
   toTournamentChartPoints,
@@ -320,6 +326,16 @@ function writeLastPick(entryId: number, tournamentId: number): void {
 function metricValueText(key: TournamentSeasonMetricKey, value?: number | null): string {
   if (value === undefined || value === null) return "-";
   return key === "TEAM_VALUE" ? formatMoney(value) : formatPoints(value);
+}
+
+export function metricAverageValueText(
+  key: TournamentSeasonMetricKey,
+  value?: number | null
+): string {
+  if (value === undefined || value === null) return "-";
+  return key === "TEAM_VALUE"
+    ? formatAverageMoney(value)
+    : formatAverageNumber(value);
 }
 
 function num(value: unknown, fallback = 0): number {
@@ -923,7 +939,7 @@ PerformancePage({
         meta: [
           metric.leaderPlayerName || "",
           metric.averageValue !== null && metric.averageValue !== undefined
-            ? `场均 ${metricValueText(metric.key, metric.averageValue)}`
+            ? `场均 ${metricAverageValueText(metric.key, metric.averageValue)}`
             : ""
         ].filter(Boolean).join(" · "),
         value: metricValueText(metric.key, metric.leaderValue)
@@ -1317,7 +1333,9 @@ function meSeasonTiles(
     const parts: string[] = [];
     if (rank) parts.push(`赛事内第 ${formatCompactNumber(rank)} 名`);
     const avg = avgByKey.get(key);
-    if (avg !== null && avg !== undefined) parts.push(`场均 ${metricValueText(key, avg)}`);
+    if (avg !== null && avg !== undefined) {
+      parts.push(`场均 ${metricAverageValueText(key, avg)}`);
+    }
     return parts.join(" · ");
   };
   const tiles = [
@@ -1337,22 +1355,22 @@ function meSeasonTiles(
       metaParts.push(`赛事内第 ${formatCompactNumber(me.tournamentOverallRank)} 名`);
     }
     if (fieldAverage !== null && fieldAverage !== undefined) {
-      metaParts.push(`场均 ${(fieldAverage / gwCount).toFixed(1)}`);
+      metaParts.push(`场均 ${formatAverageNumber(fieldAverage / gwCount)}`);
     }
     tiles.push({
       label: "每轮均分",
-      value: (overallPoints / gwCount).toFixed(1),
+      value: formatAverageNumber(overallPoints / gwCount),
       meta: metaParts.join(" · ")
     });
   }
   return tiles;
 }
 
-function overviewStatTiles(snapshot: TournamentSeasonSnapshot): TileStat[] {
+export function overviewStatTiles(snapshot: TournamentSeasonSnapshot): TileStat[] {
   return [
     { label: "参赛", value: formatPoints(snapshot.entryCount) },
     { label: "榜首总分", value: formatPoints(snapshot.leaderOverallPoints) },
-    { label: "平均总分", value: formatPoints(snapshot.averageOverallPoints) },
+    { label: "平均总分", value: formatAverageNumber(snapshot.averageOverallPoints) },
     { label: "冠亚分差", value: formatPoints(snapshot.gapFirstSecond) }
   ];
 }
