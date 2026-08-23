@@ -149,8 +149,12 @@ interface LeaguesData {
   sortOptions: SortOption[];
   sortKey: BoardSortKey;
   sortAsc: boolean;
-  pageSize: number;
-  hasMore: boolean;
+  boardPage: number;
+  boardPageCount: number;
+  boardFrom: number;
+  boardTo: number;
+  hasPreviousBoardPage: boolean;
+  hasNextBoardPage: boolean;
   hasSeasonData: boolean;
   hasGwData: boolean;
   fromCache: boolean;
@@ -169,10 +173,38 @@ interface LeaguesData {
 
 const DIRECTORY_CACHE_KEY = "my-fpl:tournaments:v2";
 const LAST_PICK_KEY = "my-fpl:tournament:last";
-const PAGE_STEP = 20;
+export const BOARD_PAGE_SIZE = 20;
 /** Leagues warm-show skip window (aligned with home/live index at 60s; team is 5 min). */
 export const LEAGUES_REVALIDATE_MS = 60 * 1000;
 export const SEASON_PATH_RECENT_WINDOW = 8;
+
+export function paginateBoardRows<T>(
+  rows: T[],
+  requestedPage: number,
+  pageSize = BOARD_PAGE_SIZE
+): {
+  rows: T[];
+  page: number;
+  pageCount: number;
+  from: number;
+  to: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+} {
+  const size = Math.max(1, Math.floor(pageSize) || BOARD_PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(rows.length / size));
+  const page = Math.min(pageCount, Math.max(1, Math.floor(requestedPage) || 1));
+  const start = (page - 1) * size;
+  return {
+    rows: rows.slice(start, start + size),
+    page,
+    pageCount,
+    from: rows.length > 0 ? start + 1 : 0,
+    to: Math.min(start + size, rows.length),
+    hasPrevious: page > 1,
+    hasNext: page < pageCount
+  };
+}
 
 export function shouldReloadLeagues(
   lastLoadAt: number,
@@ -351,8 +383,12 @@ PerformancePage({
     sortOptions: SEASON_SORT_OPTIONS,
     sortKey: "rank" as BoardSortKey,
     sortAsc: true,
-    pageSize: PAGE_STEP,
-    hasMore: false,
+    boardPage: 1,
+    boardPageCount: 1,
+    boardFrom: 0,
+    boardTo: 0,
+    hasPreviousBoardPage: false,
+    hasNextBoardPage: false,
     hasSeasonData: false,
     hasGwData: false,
     fromCache: false,
@@ -655,6 +691,12 @@ PerformancePage({
         boardRows: [],
         displayedRows: [],
         boardTotalRows: 0,
+        boardPage: 1,
+        boardPageCount: 1,
+        boardFrom: 0,
+        boardTo: 0,
+        hasPreviousBoardPage: false,
+        hasNextBoardPage: false,
         viewError: "",
         ...emptyPathState(),
         pathLoading: true
@@ -694,7 +736,13 @@ PerformancePage({
       pathLoading: false,
       boardRows: [],
       displayedRows: [],
-      boardTotalRows: 0
+      boardTotalRows: 0,
+      boardPage: 1,
+      boardPageCount: 1,
+      boardFrom: 0,
+      boardTo: 0,
+      hasPreviousBoardPage: false,
+      hasNextBoardPage: false
     });
   },
 
@@ -708,7 +756,7 @@ PerformancePage({
       sortOptions: view === "season" ? SEASON_SORT_OPTIONS : GW_SORT_OPTIONS,
       sortKey: "rank",
       sortAsc: true,
-      pageSize: PAGE_STEP,
+      boardPage: 1,
       keyword: ""
     });
     const cachedRows = view === "season" ? this.seasonRows : this.gwRows;
@@ -1028,12 +1076,12 @@ PerformancePage({
   },
 
   onKeyword(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
-    this.setData({ keyword: event.detail.keyword, pageSize: PAGE_STEP });
+    this.setData({ keyword: event.detail.keyword, boardPage: 1 });
     this.syncBoard();
   },
 
   onResetSearch() {
-    this.setData({ keyword: "", pageSize: PAGE_STEP });
+    this.setData({ keyword: "", boardPage: 1 });
     this.syncBoard();
   },
 
@@ -1041,15 +1089,22 @@ PerformancePage({
     const key = String(event.currentTarget.dataset.key || "rank") as BoardSortKey;
     const option = this.data.sortOptions.find((item) => item.key === key);
     if (key === this.data.sortKey) {
-      this.setData({ sortAsc: !this.data.sortAsc });
+      this.setData({ sortAsc: !this.data.sortAsc, boardPage: 1 });
     } else {
-      this.setData({ sortKey: key, sortAsc: option ? option.asc : true });
+      this.setData({ sortKey: key, sortAsc: option ? option.asc : true, boardPage: 1 });
     }
     this.syncBoard();
   },
 
-  onLoadMore() {
-    this.setData({ pageSize: this.data.pageSize + PAGE_STEP });
+  onPreviousBoardPage() {
+    if (!this.data.hasPreviousBoardPage) return;
+    this.setData({ boardPage: this.data.boardPage - 1 });
+    this.syncBoard();
+  },
+
+  onNextBoardPage() {
+    if (!this.data.hasNextBoardPage) return;
+    this.setData({ boardPage: this.data.boardPage + 1 });
     this.syncBoard();
   },
 
@@ -1068,10 +1123,16 @@ PerformancePage({
       const diff = pick(a) - pick(b);
       return (asc ? diff : -diff) || a.sortRank - b.sortRank;
     });
+    const page = paginateBoardRows(filtered, this.data.boardPage);
     this.setData({
-      displayedRows: filtered.slice(0, this.data.pageSize),
+      displayedRows: page.rows,
       filteredCount: filtered.length,
-      hasMore: filtered.length > this.data.pageSize
+      boardPage: page.page,
+      boardPageCount: page.pageCount,
+      boardFrom: page.from,
+      boardTo: page.to,
+      hasPreviousBoardPage: page.hasPrevious,
+      hasNextBoardPage: page.hasNext
     });
   },
 

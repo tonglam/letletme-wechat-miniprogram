@@ -548,12 +548,33 @@
   font-weight: 700;
 }
 
-.load-more {
-  padding: 16rpx;
+.board-pager {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   border-top: 1rpx solid var(--line);
+}
+
+.board-page-action {
+  min-height: 72rpx;
+  padding: 0 16rpx;
   color: var(--green-ink);
   font-size: 22rpx;
   font-weight: 800;
+  line-height: 72rpx;
+  text-align: center;
+}
+
+.board-page-disabled {
+  color: var(--muted-ink);
+  opacity: 0.45;
+}
+
+.board-page-count {
+  min-width: 112rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 700;
   text-align: center;
 }
 

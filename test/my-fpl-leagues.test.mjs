@@ -84,6 +84,33 @@ test("My FPL board loads every server page before local search and sort", async 
   assert.doesNotMatch(page, /getMyFplCompetitionBoard\([\s\S]{0,160}?\b1,\s*\b100,/);
   assert.match(page, /currentMyFplEntryId/);
   assert.match(template, /boardTotalRows \|\| boardRows\.length/);
+  assert.doesNotMatch(template, /再显示 20 队/);
+  assert.match(template, /bindtap="onPreviousBoardPage"/);
+  assert.match(template, /bindtap="onNextBoardPage"/);
+});
+
+test("large My FPL boards use a bounded 20-row UI window", () => {
+  const rows = Array.from({ length: 1567 }, (_, index) => index + 1);
+  const first = leaguesModule.paginateBoardRows(rows, 1);
+  assert.deepEqual(
+    {
+      rows: first.rows.length,
+      page: first.page,
+      pageCount: first.pageCount,
+      from: first.from,
+      to: first.to,
+      previous: first.hasPrevious,
+      next: first.hasNext
+    },
+    { rows: 20, page: 1, pageCount: 79, from: 1, to: 20, previous: false, next: true }
+  );
+
+  const last = leaguesModule.paginateBoardRows(rows, 999);
+  assert.deepEqual(last.rows, [1561, 1562, 1563, 1564, 1565, 1566, 1567]);
+  assert.deepEqual(
+    { page: last.page, from: last.from, to: last.to, previous: last.hasPrevious, next: last.hasNext },
+    { page: 79, from: 1561, to: 1567, previous: true, next: false }
+  );
 });
 
 test("season path window loads the latest 8 gameweeks first", () => {
