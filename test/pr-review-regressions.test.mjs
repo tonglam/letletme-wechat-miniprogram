@@ -255,10 +255,11 @@ test("tournament row requests are principal- and season-generation guarded", () 
   assert.match(tournament, /catch \(error\)[\s\S]*restartForPrincipalChange\(entryId\)/);
 });
 
-test("no-follow actions survive context failure and profile checks compare the retained follow", () => {
+test("no-follow actions survive context failure and profile checks compare the verified binding", () => {
   const app = source("miniprogram/app.ts");
-  assert.match(app, /const nextEntry = this\.globalData\.entryId/);
-  assert.doesNotMatch(app, /const nextEntry = session\.profile\.fplEntryId/);
+  assert.match(app, /const verifiedEntryAtStart = getVerifiedSessionEntryId\(\)/);
+  assert.match(app, /const nextVerifiedEntry = getVerifiedSessionEntryId\(\)/);
+  assert.doesNotMatch(app, /const nextEntry = this\.globalData\.entryId/);
 });
 
 test("forced My FPL refresh reaches the cached team identity read", () => {
