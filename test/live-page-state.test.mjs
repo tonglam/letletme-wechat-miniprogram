@@ -46,7 +46,7 @@ test("tournament preseason is a stable business empty state", () => {
     displayedRows: [],
     filteredCount: 0,
     lastUpdated: "",
-    scoreStatusText: "官方分数不可用",
+    scoreStatusText: "正在确认官方分数",
     scoreNextRefreshAt: ""
   });
 });

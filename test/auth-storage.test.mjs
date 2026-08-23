@@ -163,7 +163,12 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
   try {
     globalThis.wx = {
       getStorageInfoSync: () => ({
-        keys: ["gql:v2:public:shared", "gql:v2:session:private", "gql:legacy"]
+        keys: [
+          "gql:v2:public:shared",
+          "gql:v2:session:private",
+          "gql:legacy",
+          "live-board:last-good:entry-live-board-v1:session:2026:1:123:7"
+        ]
       }),
       removeStorageSync: (key) => removed.push(key)
     };
@@ -174,6 +179,10 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
     assert.equal(removed.includes("gql:v2:public:shared"), false);
     assert.equal(removed.includes("gql:v2:session:private"), true);
     assert.equal(removed.includes("gql:legacy"), true);
+    assert.equal(
+      removed.includes("live-board:last-good:entry-live-board-v1:session:2026:1:123:7"),
+      true
+    );
     assert.equal(removed.includes("api-session-token"), true);
     assert.equal(removed.includes("api-session-expires-at"), true);
     assert.equal(removed.includes("entry"), true);

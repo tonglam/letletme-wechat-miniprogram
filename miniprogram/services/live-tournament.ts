@@ -52,6 +52,7 @@ export interface TournamentTeamExposureFilter {
 }
 
 export interface TournamentTeamOption {
+  id?: number;
   shortName: string;
   name: string;
 }

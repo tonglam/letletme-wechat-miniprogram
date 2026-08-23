@@ -611,6 +611,18 @@
   border-top: 1rpx solid var(--line);
 }
 
+.filter-options-status {
+  padding: 14rpx 16rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.filter-options-status.error {
+  color: var(--danger);
+}
+
 .filter-section-head {
   display: flex;
   align-items: baseline;

@@ -95,9 +95,10 @@
           <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
+            <text class="tool-label">{{shareCopied ? '已复制' : shareLabel}}</text>
           </view>
           <block wx:if="{{compareMode}}">
+            <text wx:if="{{compareLoading}}" class="action-muted">对比加载中</text>
             <text wx:if="{{compareIds.length === 2}}" class="action" bindtap="onOpenCompareSheet" hover-class="hover-dim">对比</text>
             <text class="action-muted" bindtap="onToggleCompare" hover-class="hover-dim">取消</text>
           </block>
@@ -252,6 +253,8 @@
         <text class="flt-clear" bindtap="onClearAllFilters" hover-class="hover-dim">清除全部</text>
       </view>
       <scroll-view scroll-y class="flt-body">
+        <view wx:if="{{filterOptionsLoading}}" class="filter-options-status">正在加载球员筛选选项…</view>
+        <view wx:elif="{{filterOptionsError}}" class="filter-options-status error">{{filterOptionsError}}</view>
         <view class="filter-section flt-first">
           <view class="filter-section-head">
             <text class="filter-section-title">Chip</text>
@@ -272,14 +275,14 @@
         <view class="filter-section">
           <view class="filter-section-head">
             <text class="filter-section-title">队长</text>
-            <text class="filter-section-summary">{{captainFilters.length ? captainFilters.join('、') : '未筛选'}}</text>
+            <text class="filter-section-summary">{{captainFilterNames.length ? captainFilterNames.join('、') : '未筛选'}}</text>
           </view>
           <view class="filter-tags">
             <view
               wx:for="{{captainOptions}}"
-              wx:key="name"
+              wx:key="element"
               class="filter-tag {{item.on ? 'on' : ''}}"
-              data-name="{{item.name}}"
+              data-element="{{item.element}}"
               bindtap="onToggleCaptain"
               hover-class="hover-dim"
             >{{item.name}}</view>
