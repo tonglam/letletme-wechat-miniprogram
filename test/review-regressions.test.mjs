@@ -26,6 +26,15 @@ test("price prediction resumes an interrupted first load after returning", () =>
     pricePage,
     /finally \{\s+if \(isActive\(\)\) \{\s+this\.loadPending = false;/,
   );
+  assert.match(
+    pricePage,
+    /refreshExpired = this\.lastSuccessfulLoadAt > 0[\s\S]*Date\.now\(\) - this\.lastSuccessfulLoadAt >= AUTO_REFRESH_MS/,
+  );
+  assert.match(pricePage, /resumed && \(this\.resumeForceRefresh \|\| refreshExpired\)/);
+  assert.match(
+    pricePage,
+    /const authorityPromise = waitForAuthoritativeFollow\(\);[\s\S]*authorityPromise\.then\(\(\) => ensureAppContext/,
+  );
 });
 
 test("personal price data is bound and cached by the verified account entry", () => {
@@ -54,11 +63,11 @@ test("price prediction falls back to its dedicated last-good board after request
 });
 
 test("price prediction restores account authority and revalidates after a long hide", () => {
-  assert.match(pricePage, /const authorityPromise = waitForAuthoritativeFollow\(\)/);
   assert.match(
     pricePage,
-    /Promise\.all\(\[[\s\S]*contextPromise,[\s\S]*boardPromise,[\s\S]*authorityPromise/,
+    /const authorityPromise = waitForAuthoritativeFollow\(\);[\s\S]*authorityPromise\.then\(\(\) => ensureAppContext/,
   );
+  assert.match(pricePage, /Promise\.all\(\[contextPromise, boardPromise\]\)/);
   assert.match(pricePage, /entryId: currentMyFplEntryId\(\) \?\? null/);
   assert.match(pricePage, /lastSuccessfulLoadAt: 0/);
   assert.match(pricePage, /Date\.now\(\) - this\.lastSuccessfulLoadAt >= AUTO_REFRESH_MS/);

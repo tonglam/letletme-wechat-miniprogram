@@ -25,7 +25,7 @@ test("release verifies the successful upload run and its audit id", () => {
   assert.match(release, /ref: \$\{\{ inputs\.commit_sha \}\}/);
   assert.match(release, /test "\$\(git rev-parse HEAD\)" = "\$RELEASE_COMMIT_SHA"/);
   assert.doesNotMatch(release, /git\/ref\/heads\/main/);
-  assert.doesNotMatch(release, /test "\$remote_sha" = "\$RELEASE_COMMIT_SHA"/);
+  assert.doesNotMatch(release, /remote_sha/);
   assert.match(release, /\.head_sha'\)" = "\$RELEASE_COMMIT_SHA"/);
   assert.match(release, /WeChat upload \$RELEASE_VERSION @ \$RELEASE_COMMIT_SHA/);
   assert.match(release, /actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093/);

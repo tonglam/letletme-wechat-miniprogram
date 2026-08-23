@@ -285,17 +285,15 @@ PerformancePage({
     });
 
     try {
-      const contextPromise = ensureAppContext({
-        reason: forceRefresh ? "pull-refresh" : "page-load",
-      }).then((value) => ({ value, error: null as unknown }))
-        .catch((error: unknown) => ({ value: null, error }));
+      // The public board can load in parallel, but the personal context must
+      // not snapshot the local follow before encrypted account restoration.
       const authorityPromise = waitForAuthoritativeFollow();
+      const contextPromise = authorityPromise.then(() => ensureAppContext({
+        reason: forceRefresh ? "pull-refresh" : "page-load",
+      })).then((value) => ({ value, error: null as unknown }))
+        .catch((error: unknown) => ({ value: null, error }));
       const boardPromise = getPriceChangeBoard(forceRefresh, trace);
-      const [contextResult, boardRead] = await Promise.all([
-        contextPromise,
-        boardPromise,
-        authorityPromise,
-      ]);
+      const [contextResult, boardRead] = await Promise.all([contextPromise, boardPromise]);
       if (!isActive()) return;
 
       const board = boardRead.board;
