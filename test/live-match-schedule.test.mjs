@@ -50,6 +50,8 @@ test("current-event schedule arms a kickoff transition without preseason Live wo
   assert.match(page, /onHide\(\)[\s\S]*this\.clearKickoffTransition\(\)/);
   assert.match(page, /onHide\(\)[\s\S]*this\.clearCopiedMatchTimer\(\)/);
   assert.match(page, /onUnload\(\)[\s\S]*this\.clearCopiedMatchTimer\(\)/);
+  assert.match(page, /onHide\(\)[\s\S]*this\.clearSharedImageMatchTimer\(\)/);
+  assert.match(page, /onUnload\(\)[\s\S]*this\.clearSharedImageMatchTimer\(\)/);
   assert.match(
     page,
     /seasonChanged \|\| nextCurrentEventId !== this\.currentEventId[\s\S]*clearCopiedMatchTimer\(\)[\s\S]*shareSheetOpen: false/
@@ -78,4 +80,21 @@ test("Live Match surfaces a stale Core fixture fallback", () => {
   assert.match(page, /fixtureStaleMessage: coreRead\.meta\.stale[\s\S]*fixtureScheduleStaleMessage\(coreRead\.meta\.storedAt\)/);
   assert.match(page, /lastError: this\.data\.error \|\| this\.data\.fixtureStaleMessage/);
   assert.match(template, /fixtureStaleMessage[\s\S]*status="stale"/);
+});
+
+test("every live match card exposes image share beside text share", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  const presenter = source("miniprogram/utils/album-presenter.ts");
+  const actions = template.slice(
+    template.indexOf('class="match-card-actions"'),
+    template.indexOf('class="scoregrid"'),
+  );
+  assert.match(actions, /onCopyMatchShare[\s\S]*onShareMatchImage/);
+  assert.match(actions, /data-matchid="\{\{match\.matchId\}\}"/);
+  assert.match(page, /exportLiveMatchShareImage\(match,/);
+  assert.match(page, /presentLiveMatchShareImage\(path\)/);
+  assert.match(page, /queryLiveMatchShareCanvas\(this\)/);
+  assert.match(template, /id="live-match-share-canvas"/);
+  assert.match(presenter, /needShowEntrance: true/);
 });

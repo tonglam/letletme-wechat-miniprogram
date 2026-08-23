@@ -176,7 +176,9 @@ export function formatLiveMatchShareText(match: LiveMatch): string {
   const score = textValue(match.scoreText, "VS");
   const playing = match.statusClass === "status-playing"
     || String(match.status || match.playStatus) === "playing";
-  const status = (playing ? textValue(match.minuteText, "") : "") || textValue(match.statusText, "");
+  const rawStatus = textValue(match.statusText, "");
+  const status = (playing ? textValue(match.minuteText, "") : "")
+    || (rawStatus === "等待官方结算" ? "已完赛" : rawStatus);
   const lines = [`${home} ${score} ${away}${status ? ` · ${status}` : ""}`];
 
   const groups = match.eventSummary || [];

@@ -34,6 +34,13 @@ import {
   copyShareText,
   formatLiveMatchShareText,
 } from "../../../utils/live-share";
+import {
+  exportLiveMatchShareImage,
+  liveMatchSharePixelRatio,
+  presentLiveMatchShareImage,
+  type LiveMatchShareCanvas,
+  type LiveMatchShareCanvasTarget,
+} from "../../../utils/live-match-share-image";
 import { miniLogger } from "../../../utils/logger";
 
 interface StatusOption {
@@ -144,6 +151,51 @@ function scoreText(match: LiveMatch, fallbackStatus: string): string {
     return "VS";
   }
   return `${numberValue(match.homeScore)}-${numberValue(match.awayScore)}`;
+}
+
+function queryLiveMatchShareCanvas(
+  page: WechatMiniprogram.Page.TrivialInstance,
+): Promise<LiveMatchShareCanvasTarget> {
+  return new Promise((resolve, reject) => {
+    wx.createSelectorQuery()
+      .in(page)
+      .select("#live-match-share-canvas")
+      .fields({ node: true, size: true })
+      .exec((result) => {
+        const canvas = result?.[0]?.node as
+          | WechatMiniprogram.Canvas
+          | undefined;
+        if (!canvas) {
+          reject(new Error("share canvas missing"));
+          return;
+        }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("share canvas context missing"));
+          return;
+        }
+        resolve({
+          canvas: canvas as unknown as LiveMatchShareCanvas,
+          ctx: ctx as unknown as LiveMatchShareCanvasTarget["ctx"],
+          pixelRatio: liveMatchSharePixelRatio(
+            Number(wx.getSystemInfoSync().pixelRatio),
+          ),
+          toTempFilePath: (node) =>
+            new Promise((pathResolve, pathReject) => {
+              wx.canvasToTempFilePath(
+                {
+                  canvas: node as unknown as WechatMiniprogram.Canvas,
+                  fileType: "png",
+                  quality: 1,
+                  success: (exported) => pathResolve(exported.tempFilePath),
+                  fail: pathReject,
+                },
+                page,
+              );
+            }),
+        });
+      });
+  });
 }
 
 export type MatchHighlightKind =
@@ -602,11 +654,15 @@ Page({
     groups: [] as MatchGroup[],
     lastUpdated: "",
     copiedMatchId: "" as number | string,
+    sharingImageMatchId: "" as number | string,
+    sharedImageMatchId: "" as number | string,
     shareSheetOpen: false,
     shareText: "",
   },
 
   copiedMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  sharedImageMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  shareImageRequestId: 0,
 
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
@@ -775,6 +831,13 @@ Page({
     if (this.copiedMatchTimer) {
       clearTimeout(this.copiedMatchTimer);
       this.copiedMatchTimer = undefined;
+    }
+  },
+
+  clearSharedImageMatchTimer() {
+    if (this.sharedImageMatchTimer) {
+      clearTimeout(this.sharedImageMatchTimer);
+      this.sharedImageMatchTimer = undefined;
     }
   },
 
@@ -1018,6 +1081,7 @@ Page({
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
         this.clearCopiedMatchTimer();
+        this.clearSharedImageMatchTimer();
         this.setData({
           matches: [],
           groups: [],
@@ -1025,6 +1089,8 @@ Page({
           fixtureStaleMessage: "",
           lastUpdated: "",
           copiedMatchId: "",
+          sharingImageMatchId: "",
+          sharedImageMatchId: "",
           shareSheetOpen: false,
           shareText: "",
         });
@@ -1072,9 +1138,14 @@ Page({
       if (this.data.refreshing) this.setData({ refreshing: false });
     }
     this.liveRefresh?.stop();
+    this.shareImageRequestId += 1;
     this.clearKickoffTransition();
     this.clearContextDeadline();
     this.clearCopiedMatchTimer();
+    this.clearSharedImageMatchTimer();
+    if (this.data.sharingImageMatchId || this.data.sharedImageMatchId) {
+      this.setData({ sharingImageMatchId: "", sharedImageMatchId: "" });
+    }
     this.perfTracker?.disconnect();
   },
 
@@ -1091,9 +1162,14 @@ Page({
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRefresh?.dispose();
+    this.shareImageRequestId += 1;
     this.clearKickoffTransition();
     this.clearContextDeadline();
     this.clearCopiedMatchTimer();
+    this.clearSharedImageMatchTimer();
+    if (this.data.sharingImageMatchId || this.data.sharedImageMatchId) {
+      this.setData({ sharingImageMatchId: "", sharedImageMatchId: "" });
+    }
     this.perfTracker?.disconnect();
   },
 
@@ -1413,6 +1489,62 @@ Page({
         error instanceof Error ? error.message : "failed",
       );
       wx.showToast({ title: "复制失败", icon: "none" });
+    }
+  },
+
+  async onShareMatchImage(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { matchid?: number | string }
+    >,
+  ) {
+    const matchId = event.currentTarget.dataset.matchid;
+    if (this.data.sharingImageMatchId) return;
+    const match = this.coreMatches.find(
+      (item) => String(item.matchId) === String(matchId),
+    );
+    if (!match) {
+      wx.showToast({ title: "还没有可分享的比赛", icon: "none" });
+      return;
+    }
+
+    const requestId = this.shareImageRequestId + 1;
+    this.shareImageRequestId = requestId;
+    this.setData({
+      sharingImageMatchId: match.matchId || "",
+      sharedImageMatchId: "",
+    });
+    try {
+      const path = await exportLiveMatchShareImage(match, () =>
+        queryLiveMatchShareCanvas(this),
+      );
+      if (!this.pageVisible || requestId !== this.shareImageRequestId) return;
+      this.setData({
+        sharingImageMatchId: "",
+        sharedImageMatchId: match.matchId || "",
+      });
+      this.clearSharedImageMatchTimer();
+      this.sharedImageMatchTimer = setTimeout(() => {
+        this.sharedImageMatchTimer = undefined;
+        if (this.data.sharedImageMatchId === match.matchId) {
+          this.setData({ sharedImageMatchId: "" });
+        }
+      }, 2000);
+      await presentLiveMatchShareImage(path);
+    } catch (error) {
+      if (!this.pageVisible || requestId !== this.shareImageRequestId) return;
+      miniLogger.error(
+        "share-image.match",
+        error instanceof Error ? error.message : "failed",
+      );
+      wx.showToast({ title: "分享图片生成失败", icon: "none" });
+    } finally {
+      if (
+        requestId === this.shareImageRequestId &&
+        this.data.sharingImageMatchId === match.matchId
+      ) {
+        this.setData({ sharingImageMatchId: "" });
+      }
     }
   },
 

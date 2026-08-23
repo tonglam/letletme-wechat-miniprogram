@@ -108,6 +108,22 @@ const finishedMatchText = formatLiveMatchShareText({
 });
 assertIncludes(finishedMatchText, "LIV 3-0 MUN · 已完赛", "finished matches show the status, not the minute");
 
+const provisionalFinishedText = formatLiveMatchShareText({
+  matchId: 13,
+  homeTeamDisplay: "LIV",
+  awayTeamDisplay: "MUN",
+  scoreText: "3-0",
+  minuteText: "90'",
+  status: "finished",
+  statusClass: "status-finished",
+  statusText: "等待官方结算",
+  eventSummary: []
+});
+assertIncludes(provisionalFinishedText, "· 已完赛", "finished share text stays concise");
+if (provisionalFinishedText.includes("等待官方结算")) {
+  throw new Error("official-settlement wording is removed from match shares");
+}
+
 async function testCopyShareTextPrivacyFallback(): Promise<void> {
   resetPrivacyAuthorizationForTests();
   const toasts: string[] = [];
