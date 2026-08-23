@@ -149,6 +149,15 @@ scenario("price change prediction parity", () => {
       historyChips: { "2": "FREE_HIT" },
     });
     assert.deepEqual(freeHit, { state: "UNAVAILABLE", purchasePrices: {} });
+
+    const restoredSquad = buildPersonalPurchasePrices({
+      selectedEventId: 3,
+      squadElementIds: [9],
+      startPrices: { "9": 50 },
+      transfers: resolved,
+      historyChips: { "2": "FH" },
+    });
+    assert.deepEqual(restoredSquad, { state: "READY", purchasePrices: { "9": 50 } });
   });
 
   scenario("marks incomplete personal price coverage as partial", () => {

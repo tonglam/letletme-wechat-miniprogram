@@ -198,6 +198,8 @@ PerformancePage({
   personalContext: null as unknown as PriceChangePersonalContext,
   filteredPlayers: null as unknown as PriceChangePlayer[],
   defaultScope: "all" as PriceChangeScopeFilter,
+  defaultScopeInitialized: false,
+  scopeUserSelected: false,
   requestId: 0,
   lifecycleRevision: 0,
   pageVisible: false,
@@ -215,6 +217,9 @@ PerformancePage({
     this.board = EMPTY_PRICE_CHANGE_BOARD;
     this.personalContext = EMPTY_PERSONAL_CONTEXT;
     this.filteredPlayers = [];
+    this.defaultScope = "all";
+    this.defaultScopeInitialized = false;
+    this.scopeUserSelected = false;
     this.pageVisible = true;
     this.loadPending = false;
     this.lastSuccessfulLoadAt = 0;
@@ -313,11 +318,14 @@ PerformancePage({
 
       this.board = board;
       this.personalContext = personal;
-      this.lastSuccessfulLoadAt = Date.now();
-      if (!this.data.hasBoard) {
-        this.defaultScope = personal.squadElementIds.length > 0 ? "mine" : "all";
+      if (board.players.length > 0) this.lastSuccessfulLoadAt = Date.now();
+      let scope = this.data.hasBoard ? this.data.scope : this.defaultScope;
+      if (!this.defaultScopeInitialized && personal.squadElementIds.length > 0) {
+        const followsPreviousDefault = !this.data.hasBoard || scope === this.defaultScope;
+        this.defaultScope = "mine";
+        this.defaultScopeInitialized = true;
+        if (!this.scopeUserSelected && followsPreviousDefault) scope = "mine";
       }
-      const scope = this.data.hasBoard ? this.data.scope : this.defaultScope;
       const options = teamOptions(board.players);
       const selectedTeamIndex = Math.max(
         0,
@@ -458,6 +466,7 @@ PerformancePage({
 
   onScopeTap(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { scope: string }>) {
     const scope: PriceChangeScopeFilter = event.currentTarget.dataset.scope === "mine" ? "mine" : "all";
+    this.scopeUserSelected = true;
     if (scope === this.data.scope) return;
     this.setData({ scope });
     this.syncSortOptions();
@@ -497,6 +506,7 @@ PerformancePage({
   },
 
   onResetFilters() {
+    this.scopeUserSelected = false;
     this.setData({
       search: "",
       scope: this.defaultScope,

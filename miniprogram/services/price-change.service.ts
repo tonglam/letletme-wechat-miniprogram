@@ -16,6 +16,7 @@ import type {
 } from "../models/price-change";
 import {
   buildPersonalPurchasePrices,
+  isFreeHitChip,
   resolveTransferPlayerIds,
 } from "../utils/price-change";
 
@@ -390,6 +391,18 @@ export async function getPriceChangePersonalContext(input: {
     || transfersRoot?.state === "PRESEASON";
   if (!transfersAvailable) return unavailablePersonalContext("ready", squadElementIds);
 
+  const history = read.data.myFplTeamDesk?.history;
+  const historyAvailable = Array.isArray(history);
+  const historyChips: Record<string, string> = {};
+  (history || []).forEach((row) => {
+    if (Number.isSafeInteger(row.eventId) && row.eventId > 0) {
+      historyChips[String(row.eventId)] = row.eventChip;
+    }
+  });
+  if (isFreeHitChip(historyChips[String(input.eventId)])) {
+    return unavailablePersonalContext("ready", squadElementIds);
+  }
+
   const startPrices = await getSquadStartPrices({
     playerIds: squadElementIds,
     eventId: input.eventId,
@@ -401,14 +414,6 @@ export async function getPriceChangePersonalContext(input: {
     transfersRoot?.gameweeks || [],
     input.players,
   );
-  const history = read.data.myFplTeamDesk?.history;
-  const historyAvailable = Array.isArray(history);
-  const historyChips: Record<string, string> = {};
-  (history || []).forEach((row) => {
-    if (Number.isSafeInteger(row.eventId) && row.eventId > 0) {
-      historyChips[String(row.eventId)] = row.eventChip;
-    }
-  });
   const prices = buildPersonalPurchasePrices({
     selectedEventId: input.eventId,
     squadElementIds,

@@ -69,6 +69,9 @@ test("price prediction restores account authority and revalidates after a long h
   );
   assert.match(pricePage, /Promise\.all\(\[contextPromise, boardPromise\]\)/);
   assert.match(pricePage, /entryId: currentMyFplEntryId\(\) \?\? null/);
+  assert.match(pricePage, /defaultScopeInitialized: false/);
+  assert.match(pricePage, /!this\.defaultScopeInitialized && personal\.squadElementIds\.length > 0/);
+  assert.match(pricePage, /!this\.scopeUserSelected && followsPreviousDefault/);
   assert.match(pricePage, /lastSuccessfulLoadAt: 0/);
   assert.match(pricePage, /Date\.now\(\) - this\.lastSuccessfulLoadAt >= AUTO_REFRESH_MS/);
   assert.match(pricePage, /this\.lastSuccessfulLoadAt = Date\.now\(\)/);
