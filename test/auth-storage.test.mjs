@@ -13,7 +13,10 @@ import {
   refreshWechatApiSession,
   restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
-import { currentMyFplEntryId } from "../miniprogram/utils/follow.ts";
+import {
+  currentMyFplEntryId,
+  waitForAuthoritativeFollow
+} from "../miniprogram/utils/follow.ts";
 
 test("verified session identity stays separate from a later local follow", async () => {
   const previousWx = globalThis.wx;
@@ -102,6 +105,42 @@ test("verified session identity stays separate from a later local follow", async
       undefined,
       "an account with no verified FPL entry must not inherit the local follow",
     );
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("an already-resolved app auth gate still restores the verified identity", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  const globalData = { entryId: 8743559 };
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false
+    };
+    globalThis.getApp = () => ({
+      authReady: Promise.resolve(),
+      globalData
+    });
+    clearSessionCredentials();
+    storage.set("api-session-token", "restored-account-token");
+    storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+    storage.set("api-profile-fpl-entry-id", 6953);
+    storage.set("entry", 8743559);
+
+    await waitForAuthoritativeFollow();
+
+    assert.equal(getApiSessionToken(), "restored-account-token");
+    assert.equal(currentMyFplEntryId(), 6953);
+    assert.equal(globalData.entryId, 8743559, "the display-only follow is unchanged");
   } finally {
     clearSessionCredentials();
     globalThis.wx = previousWx;

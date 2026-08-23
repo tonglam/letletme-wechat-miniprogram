@@ -3,7 +3,8 @@ import {
   getApiSessionToken,
   getVerifiedSessionEntryId,
   hasStoredSessionProfileBinding,
-  refreshWechatApiSession
+  refreshWechatApiSession,
+  restoreApiSessionCredentials
 } from "../services/auth.service";
 
 /**
@@ -13,6 +14,18 @@ import {
  * snapshotting the follow or they can fetch and cache the previous team.
  */
 export async function waitForAuthoritativeFollow(): Promise<void> {
+  // A DevTools hot reload can recreate this module's in-memory credential
+  // mirror while leaving App.authReady already resolved. Restore encrypted
+  // storage here as well so an account-owned page cannot snapshot the local
+  // display follow during that gap. The restore is idempotent on normal cold
+  // starts, where App.doLogin has already populated the mirror.
+  if (!getApiSessionToken()) {
+    try {
+      await restoreApiSessionCredentials();
+    } catch {
+      // The normal login attempt below remains the fallback.
+    }
+  }
   if (!getApiSessionToken()) {
     try {
       const app = getApp<IAppOption>();
