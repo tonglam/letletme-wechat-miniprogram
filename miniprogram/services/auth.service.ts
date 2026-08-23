@@ -248,6 +248,7 @@ export async function restoreApiSessionCredentials(): Promise<void> {
 
 async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   const previousToken = sessionMemory?.token;
+  const previousVerifiedEntryId = getVerifiedSessionEntryId();
   const previousEntryId = Number(wx.getStorageSync(storageKeys.entryId));
   const nextEntryId = session.profile.fplEntryId && session.profile.fplEntryVerifiedAt
     ? session.profile.fplEntryId
@@ -256,11 +257,14 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
     ? "login"
     : previousToken !== session.token
       ? "token-rotation"
-      : previousEntryId !== nextEntryId
+      : previousVerifiedEntryId !== nextEntryId
         ? "rebind"
         : "restore";
 
-  if (previousToken !== session.token) {
+  if (
+    previousToken !== session.token
+    || previousVerifiedEntryId !== nextEntryId
+  ) {
     clearStoredGraphQLSessionCache();
   }
 

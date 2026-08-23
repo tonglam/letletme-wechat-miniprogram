@@ -3,7 +3,7 @@ import {
   graphqlRead,
   type PageRequestTrace,
 } from "./graphql.service";
-import { getApiSessionToken } from "./auth.service";
+import { getVerifiedSessionEntryId } from "./auth.service";
 import { storageKeys } from "../config/storage-keys";
 import type {
   PersonalPriceState,
@@ -334,7 +334,10 @@ export async function getPriceChangePersonalContext(input: {
   forceRefresh?: boolean;
   trace?: PageRequestTrace;
 }): Promise<PriceChangePersonalContext> {
-  if (!input.entryId || !getApiSessionToken()) return unavailablePersonalContext("unbound");
+  const verifiedEntryId = getVerifiedSessionEntryId();
+  if (!verifiedEntryId || input.entryId !== verifiedEntryId) {
+    return unavailablePersonalContext("unbound");
+  }
   let read;
   try {
     read = await graphqlRead<PriceChangePersonalResponse>(
@@ -344,13 +347,16 @@ export async function getPriceChangePersonalContext(input: {
         authMode: "session",
         cachePolicy: "reporting",
         season: input.season,
-        cacheVariant: `price-change-personal:event:${input.eventId}`,
+        cacheVariant: `price-change-personal:entry:${verifiedEntryId}:event:${input.eventId}`,
         forceRefresh: input.forceRefresh === true,
         trace: input.trace,
       },
     );
   } catch {
     return unavailablePersonalContext("unavailable");
+  }
+  if (getVerifiedSessionEntryId() !== verifiedEntryId) {
+    return unavailablePersonalContext("unbound");
   }
 
   const gameweek = read.data.myFplTeamGameweek;

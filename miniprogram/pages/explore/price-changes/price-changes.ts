@@ -227,7 +227,12 @@ PerformancePage({
   onHide() {
     this.pageVisible = false;
     this.stopTimers();
-    this.resumeForceRefresh = this.resumeForceRefresh || this.refreshPending;
+    // onHide invalidates every in-flight request below. Preserve both an
+    // explicit refresh and the first board load so onShow cannot strand the
+    // page in its loading shell after the ignored request settles.
+    this.resumeForceRefresh = this.resumeForceRefresh
+      || this.refreshPending
+      || this.data.loading;
     this.refreshPending = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;

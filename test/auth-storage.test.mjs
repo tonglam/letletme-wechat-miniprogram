@@ -69,6 +69,33 @@ test("verified session identity stays separate from a later local follow", async
     assert.equal(getVerifiedSessionEntryId(), 6953);
     assert.equal(currentMyFplEntryId(), 6953);
 
+    storage.set("gql:v2:session:private", { entryId: 6953 });
+    storage.set("gql:v2:public:shared", { public: true });
+    const rebind = refreshWechatApiSession();
+    loginSuccess({ code: "same-token-rebind-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        linked: true,
+        token: "verified-entry-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: {
+          id: "profile",
+          name: null,
+          email: null,
+          fplEntryId: 7001,
+          fplEntryVerifiedAt: "2026-08-23T01:00:00.000Z",
+          wechatLinked: true
+        }
+      }
+    });
+    await rebind;
+    assert.equal(getVerifiedSessionEntryId(), 7001);
+    assert.equal(storage.has("gql:v2:session:private"), false);
+    assert.equal(storage.has("gql:v2:public:shared"), true);
+
     storage.set("api-profile-fpl-entry-id", 0);
     assert.equal(
       currentMyFplEntryId(),

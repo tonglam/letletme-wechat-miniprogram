@@ -1,8 +1,6 @@
 {
   "navigationBarTitleText": "身价预测",
   "enablePullDownRefresh": true,
-  "enableShareAppMessage": true,
-  "enableShareTimeline": true,
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",

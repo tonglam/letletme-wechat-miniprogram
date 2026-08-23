@@ -1,5 +1,6 @@
 import { graphqlRead } from "./graphql.service";
 import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
+import { getVerifiedSessionEntryId } from "./auth.service";
 import type { GameweekOverallSummary } from "../models/summary";
 import type { EntryLeague, HomeH2HMatchup } from "../models/entry";
 
@@ -59,6 +60,7 @@ interface MiniHomePersonalLeaguesResponse {
 }
 
 export interface MiniHomePersonalLeaguesResult {
+  entryId: number;
   entryName: string;
   playerName: string;
   leagues: EntryLeague[];
@@ -135,12 +137,17 @@ export async function getMiniHomePersonalLeagues(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
 ): Promise<MiniHomePersonalLeaguesResult> {
+  const verifiedEntryId = getVerifiedSessionEntryId();
+  if (!verifiedEntryId) {
+    throw new Error("首页账号尚未绑定已验证的 FPL 球队");
+  }
   const result = await graphqlRead<MiniHomePersonalLeaguesResponse>(
     MINI_HOME_PERSONAL_LEAGUES_QUERY,
     {},
     {
       authMode: "session",
       cachePolicy: "reporting",
+      cacheVariant: `home-personal:entry:${verifiedEntryId}`,
       forceRefresh,
       trace,
     },
@@ -158,8 +165,21 @@ export async function getMiniHomePersonalLeagues(
   if (desk.state === "STALE" || result.meta.stale) {
     throw new Error("首页联赛数据已过期");
   }
+  if (getVerifiedSessionEntryId() !== verifiedEntryId) {
+    throw new Error("首页账号绑定已变化，请刷新后重试");
+  }
+  const mismatchedViewer = (desk.leagueRanks || []).some((league) => {
+    const viewerId = Number(league.h2hMatchup?.viewer?.entryId);
+    return Number.isSafeInteger(viewerId)
+      && viewerId > 0
+      && viewerId !== verifiedEntryId;
+  });
+  if (mismatchedViewer) {
+    throw new Error("首页联赛数据与当前绑定球队不一致");
+  }
 
   return {
+    entryId: verifiedEntryId,
     entryName: String(desk.entryName || "").trim(),
     playerName: String(desk.playerName || "").trim(),
     leagues: (desk.leagueRanks || []).map((league) => ({

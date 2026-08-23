@@ -125,15 +125,15 @@ export function retainedDeskMessage(base: string, retained: boolean): string {
 
 export function homePersonalLeaguesMatchEntry(
   entry: EntryInfo,
-  desk: { entryName: string; playerName: string }
+  desk: { entryId: number }
 ): boolean {
-  const normalize = (value?: string | null) => String(value || "").trim().toLocaleLowerCase();
-  const entryName = normalize(entry.entryName || entry.teamName);
-  const deskEntryName = normalize(desk.entryName);
-  if (!entryName || !deskEntryName || entryName !== deskEntryName) return false;
-  const playerName = normalize(entry.playerName);
-  const deskPlayerName = normalize(desk.playerName);
-  return !playerName || !deskPlayerName || playerName === deskPlayerName;
+  const entryId = Number(entry.entryId ?? entry.entry);
+  const personalEntryId = Number(desk.entryId);
+  return Number.isSafeInteger(entryId)
+    && entryId > 0
+    && Number.isSafeInteger(personalEntryId)
+    && personalEntryId > 0
+    && entryId === personalEntryId;
 }
 
 Page({

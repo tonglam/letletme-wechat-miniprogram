@@ -46,6 +46,9 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   assert.match(page, /getMiniHomePersonalLeagues/);
   assert.match(page, /homePersonalLeaguesMatchEntry/);
   const homeService = source("miniprogram/services/home.service.ts");
+  assert.match(homeService, /const verifiedEntryId = getVerifiedSessionEntryId\(\)/);
+  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{verifiedEntryId\}`/);
+  assert.match(homeService, /entryId: verifiedEntryId/);
   assert.match(
     homeService,
     /desk\.state === "STALE" \|\| result\.meta\.stale/,
@@ -120,6 +123,30 @@ test("market ownership requests clear stale tiles and resume after a hidden page
   assert.match(
     page,
     /ownershipDateOptions\(\s*pulse\.snapshot\?\.snapshotDate/,
+  );
+});
+
+test("home accepts a personal league desk only for the same entry id", () => {
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+      { entryId: 6953, entryName: "Different", playerName: "Different" },
+    ),
+    true,
+  );
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+      { entryId: 8743559, entryName: "Same name", playerName: "Same manager" },
+    ),
+    false,
+  );
+  assert.equal(
+    homeModule.homePersonalLeaguesMatchEntry(
+      { entryName: "Same name", playerName: "Same manager" },
+      { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
+    ),
+    false,
   );
 });
 
