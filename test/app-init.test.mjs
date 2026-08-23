@@ -68,12 +68,12 @@ test("concurrent forced app-data refreshes remain single-flight", async () => {
   assert.deepEqual(calls, [true]);
 });
 
-test("profile revalidation reloads pages when the verified binding changes", () => {
-  assert.match(appSource, /const verifiedEntryAtStart = getVerifiedSessionEntryId\(\);/);
-  assert.match(appSource, /const nextVerifiedEntry = getVerifiedSessionEntryId\(\);/);
+test("profile synchronization reloads pages when the effective viewer changes", () => {
+  assert.match(appSource, /const entryAtStart = getEntryId\(\);/);
+  assert.match(appSource, /const nextEntry = getEntryId\(\);/);
   assert.match(
     appSource,
-    /if \(nextVerifiedEntry !== verifiedEntryAtStart\)[\s\S]*reloadCurrentPageForEntryChange\(nextVerifiedEntry\)/,
+    /if \(nextEntry !== entryAtStart\)[\s\S]*reloadCurrentPageForEntryChange\(nextEntry\)/,
   );
-  assert.doesNotMatch(appSource, /const boundEntryAtStart = this\.globalData\.entryId/);
+  assert.match(appSource, /synchronizeMiniProgramAccount\(\)/);
 });

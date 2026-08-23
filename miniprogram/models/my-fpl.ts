@@ -14,7 +14,7 @@ export interface MyFplContext {
   currentEvent?: number;
   nextEvent?: number;
   utcDeadline?: string;
-  /** Local follow pointer (display-only; see models/principal). */
+  /** Effective read-only viewer team (see models/principal). */
   entryId?: number;
   accountLinked: boolean;
 }

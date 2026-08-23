@@ -1,6 +1,6 @@
 import { graphqlRead } from "./graphql.service";
 import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
-import { getVerifiedSessionEntryId } from "./auth.service";
+import { currentMyFplEntryId } from "../utils/follow";
 import type { GameweekOverallSummary } from "../models/summary";
 import type { EntryLeague, HomeH2HMatchup } from "../models/entry";
 
@@ -139,9 +139,9 @@ export async function getMiniHomePersonalLeagues(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
 ): Promise<MiniHomePersonalLeaguesResult> {
-  const verifiedEntryId = getVerifiedSessionEntryId();
-  if (!verifiedEntryId) {
-    throw new Error("首页账号尚未绑定已验证的 FPL 球队");
+  const viewerEntryId = currentMyFplEntryId();
+  if (!viewerEntryId) {
+    throw new Error("请先选择要查看的 FPL 球队");
   }
   const result = await graphqlRead<MiniHomePersonalLeaguesResponse>(
     MINI_HOME_PERSONAL_LEAGUES_QUERY,
@@ -149,7 +149,7 @@ export async function getMiniHomePersonalLeagues(
     {
       authMode: "session",
       cachePolicy: "reporting",
-      cacheVariant: `home-personal:entry:${verifiedEntryId}`,
+      cacheVariant: `home-personal:entry:${viewerEntryId}`,
       forceRefresh,
       trace,
     },
@@ -167,25 +167,25 @@ export async function getMiniHomePersonalLeagues(
   if (desk.state === "STALE" || result.meta.stale) {
     throw new Error("首页联赛数据已过期");
   }
-  if (getVerifiedSessionEntryId() !== verifiedEntryId) {
-    throw new Error("首页账号绑定已变化，请刷新后重试");
+  if (currentMyFplEntryId() !== viewerEntryId) {
+    throw new Error("首页查看球队已变化，请刷新后重试");
   }
   const deskEntryId = Number(desk.entryId);
   if (
     !Number.isSafeInteger(deskEntryId)
     || deskEntryId <= 0
-    || deskEntryId !== verifiedEntryId
+    || deskEntryId !== viewerEntryId
   ) {
-    throw new Error("首页联赛数据与当前绑定球队不一致");
+    throw new Error("首页联赛数据与当前查看球队不一致");
   }
   const mismatchedViewer = (desk.leagueRanks || []).some((league) => {
     const viewerId = Number(league.h2hMatchup?.viewer?.entryId);
     return Number.isSafeInteger(viewerId)
       && viewerId > 0
-      && viewerId !== verifiedEntryId;
+      && viewerId !== viewerEntryId;
   });
   if (mismatchedViewer) {
-    throw new Error("首页联赛数据与当前绑定球队不一致");
+    throw new Error("首页联赛数据与当前查看球队不一致");
   }
 
   return {

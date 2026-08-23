@@ -1,15 +1,13 @@
 import { getEntryId } from "./utils/storage";
 import {
   getApiSessionToken,
-  getVerifiedSessionEntryId,
-  hasStoredSessionProfileBinding,
   isLogoutInFlight,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
+  synchronizeMiniProgramAccount,
 } from "./services/auth.service";
 import { purgeGraphQLStorageCache } from "./services/graphql.service";
 import { routes } from "./config/routes";
-import { storageKeys } from "./config/storage-keys";
 import { recordLaunch } from "./utils/perf";
 import {
   commitEntryBinding,
@@ -149,65 +147,45 @@ App<IAppOption>({
       // Restore only through WeChat's encrypted asynchronous storage. Legacy
       // plaintext is migrated before any GraphQL request can read the token.
       await restoreApiSessionCredentials();
-      // A still-valid 30-day session needs no login round trip: the local entry
-      // binding is restored, and a later 401 triggers the central refresh path.
       this.globalData.entryId = getEntryId();
       commitEntryBinding(this.globalData.entryId || null, "restore");
-      if (getApiSessionToken()) {
-        markAuthReady();
-        this.revalidateSessionProfile();
-        return;
-      }
-      refreshWechatApiSession().catch(() => {
-          // Account linking is optional and sync is best-effort: link-required
-          // and network failures alike leave the locally followed team alone.
-          // Pages render their own no-entry state instead of being redirected.
+      const authenticate = async () => {
+        if (!getApiSessionToken()) {
+          await refreshWechatApiSession();
+        }
+        await this.revalidateSessionProfile();
+      };
+      authenticate().catch(() => {
+          // The Mini identity/profile sync is best-effort while offline. The
+          // locally selected viewer team remains available and its pending
+          // mutation is replayed on the next launch.
         })
         .finally(markAuthReady);
     } catch {
-      refreshWechatApiSession().catch(() => {
-          // Restore failed; still attempt a WeChat session so authReady is not
-          // "ready with no login attempt".
+      refreshWechatApiSession()
+        .then(() => this.revalidateSessionProfile())
+        .catch(() => {
+          // Restore failed; still attempt an independent WeChat session so
+          // authReady is not "ready with no login attempt".
         })
         .finally(markAuthReady);
     }
   },
 
   /**
-   * A valid session can outlive the web-side binding: the user may change or
-   * unlink their verified FPL entry while the 30-day token keeps working.
-   * Re-fetch the authoritative profile in the background at most once per
-   * 24h (storeApiSession stamps every persisted session, so fresh logins and
-   * 401 recoveries count too) without blocking cold starts.
+   * Pull the standalone profile on every launch. This also replays an offline
+   * team selection and notices optional Web-link/team changes made elsewhere.
    */
-  revalidateSessionProfile() {
-    const lastChecked =
-      Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
-    if (
-      hasStoredSessionProfileBinding()
-      && lastChecked
-      && Date.now() - lastChecked < 24 * 60 * 60 * 1000
-    ) {
-      return;
-    }
-    const verifiedEntryAtStart = getVerifiedSessionEntryId();
-    refreshWechatApiSession()
+  revalidateSessionProfile(): Promise<void> {
+    const entryAtStart = getEntryId();
+    return synchronizeMiniProgramAccount()
       .then(() => {
-        // storeApiSession has applied the fresh binding to globalData and
-        // cleared stale caches. If the binding actually changed, the open page
-        // is still showing the previously bound team — rebuild it.
-        // storeApiSession retains a local display-only follow when the profile
-        // has no verified entry, so compare the verified identity instead of
-        // that display preference. This also detects verified -> unlinked.
-        const nextVerifiedEntry = getVerifiedSessionEntryId();
-        if (nextVerifiedEntry !== verifiedEntryAtStart) {
-          this.reloadCurrentPageForEntryChange(nextVerifiedEntry);
+        const nextEntry = getEntryId();
+        if (nextEntry !== entryAtStart) {
+          this.reloadCurrentPageForEntryChange(nextEntry);
         }
       })
-      .catch(() => {
-        // Link-required and network failures keep the stored follow and retry
-        // on a later launch — pages own how they render the no-entry state.
-      });
+      .then(() => undefined);
   },
 
   /** Rebuild the visible page after the authoritative entry binding changed. */

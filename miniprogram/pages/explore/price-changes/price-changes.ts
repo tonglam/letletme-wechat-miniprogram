@@ -143,7 +143,7 @@ function teamOptions(players: readonly PriceChangePlayer[]): FilterOption[] {
 }
 
 function mineStateMessage(context: PriceChangePersonalContext): string {
-  if (context.squadState === "unbound") return "关联 LetLetMe 账号并绑定 FPL 后可查看我的阵容";
+  if (context.squadState === "unbound") return "选择我的球队后可查看阵容";
   if (context.squadState === "not-published") return "当前比赛周阵容尚未发布";
   if (context.squadState === "unavailable") return "我的阵容暂时无法加载";
   if (context.personalPriceState === "PARTIAL") return "部分购买价暂不可用，已显示可确认的价格";
