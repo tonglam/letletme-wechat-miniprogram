@@ -56,6 +56,6 @@ test("price prediction is a tracked registered Explore page", () => {
   assert.match(view, /id="perf-primary-content"/);
   assert.doesNotMatch(view, /app-loading id="perf-primary-content"/);
   assert.match(view, /bottomNavBar active="explore"/);
-  assert.equal(pageConfig.enableShareAppMessage, true);
-  assert.equal(pageConfig.enableShareTimeline, true);
+  assert.equal("enableShareAppMessage" in pageConfig, false);
+  assert.equal("enableShareTimeline" in pageConfig, false);
 });
