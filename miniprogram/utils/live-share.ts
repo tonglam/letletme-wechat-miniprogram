@@ -18,6 +18,110 @@ function numberValue(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+export interface TournamentComparePickView {
+  key: string;
+  name: string;
+  meta: string;
+  role: "" | "C" | "V";
+  pointsText: string;
+}
+
+export interface TournamentCompareLineupRow {
+  slot: number;
+  slotLabel: string;
+  sectionLabel: "" | "首发" | "替补";
+  bench: boolean;
+  left: TournamentComparePickView | null;
+  right: TournamentComparePickView | null;
+}
+
+export interface TournamentCompareLineup {
+  rows: TournamentCompareLineupRow[];
+  leftCount: number;
+  rightCount: number;
+}
+
+function tournamentPickSlot(pick: LivePlayerRow): number | undefined {
+  for (const value of [pick.squadPosition, pick.position]) {
+    const slot = Number(value);
+    if (Number.isInteger(slot) && slot >= 1 && slot <= 15) return slot;
+  }
+  return undefined;
+}
+
+function tournamentComparePickView(
+  pick: LivePlayerRow,
+  slot: number,
+): TournamentComparePickView {
+  const name = String(pick.webName || pick.name || "").trim()
+    || (pick.element ? `#${pick.element}` : "未知球员");
+  const team = String(pick.teamShortName || pick.team || "").trim();
+  const position = String(pick.elementTypeName || pick.position || "").trim();
+  const points = pick.points ?? pick.livePoints ?? pick.totalPoints;
+  return {
+    key: `${slot}:${pick.element || name}`,
+    name,
+    meta: [team, position].filter(Boolean).join(" · "),
+    role: pick.captain ? "C" : pick.viceCaptain ? "V" : "",
+    pointsText:
+      typeof points === "number" && Number.isFinite(points)
+        ? `${points}分`
+        : "—",
+  };
+}
+
+function tournamentLineupBySlot(
+  picks: readonly LivePlayerRow[] = [],
+): Map<number, TournamentComparePickView> {
+  const bySlot = new Map<number, TournamentComparePickView>();
+  picks.slice(0, 15).forEach((pick, index) => {
+    let slot = tournamentPickSlot(pick) ?? index + 1;
+    while (bySlot.has(slot) && slot <= 15) slot += 1;
+    if (slot <= 15) {
+      bySlot.set(slot, tournamentComparePickView(pick, slot));
+    }
+  });
+  return bySlot;
+}
+
+/** Pair two official 15-player tournament squads by FPL lineup slot. */
+export function buildTournamentLineupComparison(
+  leftPicks: readonly LivePlayerRow[] = [],
+  rightPicks: readonly LivePlayerRow[] = [],
+): TournamentCompareLineup {
+  const left = tournamentLineupBySlot(leftPicks);
+  const right = tournamentLineupBySlot(rightPicks);
+  const slots = [...new Set([...left.keys(), ...right.keys()])].sort(
+    (a, b) => a - b,
+  );
+  let starterLabelShown = false;
+  let benchLabelShown = false;
+  const rows = slots.map((slot): TournamentCompareLineupRow => {
+    const bench = slot > 11;
+    let sectionLabel: TournamentCompareLineupRow["sectionLabel"] = "";
+    if (bench && !benchLabelShown) {
+      benchLabelShown = true;
+      sectionLabel = "替补";
+    } else if (!bench && !starterLabelShown) {
+      starterLabelShown = true;
+      sectionLabel = "首发";
+    }
+    return {
+      slot,
+      slotLabel: bench ? `替${slot - 11}` : String(slot),
+      sectionLabel,
+      bench,
+      left: left.get(slot) || null,
+      right: right.get(slot) || null,
+    };
+  });
+  return {
+    rows,
+    leftCount: left.size,
+    rightCount: right.size,
+  };
+}
+
 /** Chip names stay English — that is the vocabulary FPL players actually use. */
 export function chipShareLabel(raw: unknown): string {
   const value = String(raw || "").toUpperCase().replace(/[\s_-]/g, "");

@@ -6,6 +6,7 @@ import type { EntryLeague } from "../../../models/entry";
 import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../services/auth.service";
 import {
   getMiniHomeMarket,
+  getMiniHomePersonalLeagues,
   getMiniHomeSupplement
 } from "../../../services/home.service";
 import type {
@@ -120,6 +121,19 @@ export function retainedDeskMessage(base: string, retained: boolean): string {
   const message = base.trim();
   if (!message) return "";
   return retained ? `${message}，已保留上次成功数据` : message;
+}
+
+export function homePersonalLeaguesMatchEntry(
+  entry: EntryInfo,
+  desk: { entryName: string; playerName: string }
+): boolean {
+  const normalize = (value?: string | null) => String(value || "").trim().toLocaleLowerCase();
+  const entryName = normalize(entry.entryName || entry.teamName);
+  const deskEntryName = normalize(desk.entryName);
+  if (!entryName || !deskEntryName || entryName !== deskEntryName) return false;
+  const playerName = normalize(entry.playerName);
+  const deskPlayerName = normalize(desk.playerName);
+  return !playerName || !deskPlayerName || playerName === deskPlayerName;
 }
 
 Page({
@@ -594,12 +608,14 @@ Page({
       if (!isActiveSecondary()) return;
       const entryId = app.globalData.entryId;
       if (!entryId) return;
+      let loadedEntry: EntryInfo | null = null;
       try {
         const entryTrace: PageRequestTrace | null = primaryTrace
           ? { ...primaryTrace, callerSurface: "home-entry" }
           : null;
         const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
         if (!isActiveSecondary()) return;
+        loadedEntry = entry;
         this.setData({ entry, entryError: "" });
       } catch (error) {
         if (isActiveSecondary()) {
@@ -611,7 +627,21 @@ Page({
         ? { ...primaryTrace, callerSurface: "home-leagues" }
         : null;
       try {
-        const allLeagues = await getEntryLeagueInfo(entryId, forceRefresh, leagueTrace || undefined);
+        let allLeagues: EntryLeague[] | null = null;
+        if (getApiSessionToken() && loadedEntry) {
+          try {
+            const personal = await getMiniHomePersonalLeagues(
+              forceRefresh,
+              leagueTrace,
+            );
+            if (homePersonalLeaguesMatchEntry(loadedEntry, personal)) {
+              allLeagues = personal.leagues;
+            }
+          } catch {}
+        }
+        if (!allLeagues) {
+          allLeagues = await getEntryLeagueInfo(entryId, forceRefresh, leagueTrace || undefined);
+        }
         if (isActiveSecondary()) {
           this.setData({ leagues: allLeagues });
         }

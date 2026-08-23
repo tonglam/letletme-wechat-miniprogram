@@ -46,7 +46,7 @@
 
     <!-- 赛季 · 你在赛事中 -->
     <block wx:if="{{showSeason && !viewLoading && (!viewError || hasSeasonData)}}">
-      <view wx:if="{{!hasSeasonData && !viewError}}" class="section">
+      <view wx:if="{{!hasSeasonData && !viewError}}" id="perf-primary-content" class="section">
         <app-empty-state title="该赛事暂无可用的积分榜数据" description="赛事完成第一轮结算后会显示赛季数据" />
       </view>
       <block wx:else>
@@ -130,7 +130,7 @@
     <!-- 单轮 · 我的表现 + 本轮看点 -->
     <block wx:if="{{showGameweek && !viewLoading && (!viewError || hasGwData)}}">
       <view wx:if="{{gwNotice}}" class="live-refresh-error">{{gwNotice}}</view>
-      <view wx:if="{{!hasGwData && !viewError}}" class="section">
+      <view wx:if="{{!hasGwData && !viewError}}" id="perf-primary-content" class="section">
         <app-empty-state title="暂无赛事数据" description="本轮赛事结果结算后会显示在这里" />
       </view>
       <block wx:else>

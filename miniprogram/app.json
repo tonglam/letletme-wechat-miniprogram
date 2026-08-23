@@ -23,6 +23,7 @@
     "pages/my-fpl/team/team",
     "pages/my-fpl/leagues/leagues",
     "pages/explore/fixtures/fixtures",
+    "pages/explore/price-changes/price-changes",
     "pages/performance/index/index"
   ],
   "window": {

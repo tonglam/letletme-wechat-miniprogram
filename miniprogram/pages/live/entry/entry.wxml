@@ -13,7 +13,7 @@
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">
     <app-error-state message="{{error}}" bind:retry="onRetry" />
   </view>
-  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时分数" />
+  <app-loading wx:elif="{{loading && !hasData}}" text="加载实时积分" />
   <view wx:elif="{{emptyState === 'entry'}}" id="perf-primary-content" class="section">
     <app-empty-state
       eyebrow="需要球队"

@@ -43,6 +43,8 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     page,
     /getEntryLeagueInfo/,
   );
+  assert.match(page, /getMiniHomePersonalLeagues/);
+  assert.match(page, /homePersonalLeaguesMatchEntry/);
   assert.equal(
     (page.match(/getEntryLeagueInfo\(entryId,/g) || []).length,
     1,
@@ -53,6 +55,12 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     /getEntryClassicLeagues|getEntryH2hLeagues|classicTask|h2hTask/,
     "home must not retain the former split league request path",
   );
+  const entryCard = source("miniprogram/components/entry-card/entry-card.wxml");
+  assert.match(entryCard, /item\.h2h\.eventLabel/);
+  assert.match(entryCard, /item\.h2h\.statusLabel/);
+  assert.match(entryCard, /item\.h2h\.viewer\.primary/);
+  assert.match(entryCard, /item\.h2h\.opponent\.primary/);
+  assert.match(entryCard, /item\.h2h\.centerLabel/);
   assert.match(page, /getMiniHomeMarket/);
   assert.match(page, /getMiniHomeSupplement/);
 });

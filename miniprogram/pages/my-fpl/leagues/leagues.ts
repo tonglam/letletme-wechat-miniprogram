@@ -1,9 +1,13 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import {
-  getEntryAllTournaments,
-  getTournamentSeasonSnapshot,
-  getTournamentSummary,
-  loadTournamentSeasonPath,
+  getMyFplCompetitionBoard,
+  getMyFplCompetitionSeasonPath,
+  getMyFplCompetitionsDesk,
+  type MyFplCompetitionBoard,
+  type MyFplCompetitionBoardRow,
+  type MyFplCompetitionSeasonPath,
+  type MyFplCompetitionsDesk,
+  type MyFplCompetitionAggregate,
   type TournamentEntryRankingSummary,
   type TournamentEventResult,
   type TournamentSeasonMetricKey,
@@ -16,7 +20,6 @@ import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-act
 import { formatCompactNumber, formatMoney, formatPoints } from "../../../utils/summary-format";
 import {
   TOURNAMENT_PATH_MODES,
-  buildTournamentPathPoint,
   toTournamentChartPoints,
   tournamentPathHint,
   tournamentPathSummary,
@@ -536,7 +539,17 @@ PerformancePage({
     this.loadForceRefresh = forceRefresh;
 
     try {
-      const tournaments = await getEntryAllTournaments(entryId, forceRefresh, trace);
+      // The web and GraphQL backends now expose one authenticated desk for
+      // My FPL competitions. It owns membership, setup state, finalized-event
+      // gating, and the tournament directory; the legacy entryTournaments
+      // projection can be stale or disagree with the selected viewer.
+      const desk = await getMyFplCompetitionsDesk(
+        null,
+        this.data.event > 0 ? this.data.event : null,
+        forceRefresh,
+        trace ?? undefined
+      );
+      const tournaments = desk.tournaments || [];
       if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       if ((season && currentSeason && season !== currentSeason) || currentFollowEntryId() !== entryId) {
@@ -564,6 +577,10 @@ PerformancePage({
           } satisfies LeaguesCache);
         }
       } catch { /* cache is best effort */ }
+      if (desk.state === "UNAVAILABLE" && tournaments.length === 0) {
+        this.setData({ error: "赛事数据暂时不可用，请稍后重试" });
+        return;
+      }
       this.afterDirectoryReady();
     } catch (error) {
       if (!isActiveRequest()) return;
@@ -659,6 +676,20 @@ PerformancePage({
     );
   },
 
+  clearViewData(viewError = "") {
+    this.seasonRows = [];
+    this.gwRows = [];
+    this.setData({
+      viewLoading: false,
+      viewError,
+      hasSeasonData: false,
+      hasGwData: false,
+      pathLoading: false,
+      boardRows: [],
+      displayedRows: []
+    });
+  },
+
   onViewTap(event: WechatMiniprogram.TouchEvent) {
     const view = String(event.currentTarget.dataset.view || "season") as LeagueView;
     if (view === this.data.activeView) return;
@@ -695,29 +726,48 @@ PerformancePage({
     const tournament = this.data.selectedTournament;
     const entryId = this.data.entryId;
     if (!tournament || !entryId || this.data.event <= 0) return;
-    if (!canReadEventReporting(this.data.event, getAppContextSnapshot()?.currentEvent)) {
-      this.seasonRows = [];
-      this.gwRows = [];
-      this.setData({
-        viewLoading: false,
-        viewError: "",
-        hasSeasonData: false,
-        hasGwData: false,
-        pathLoading: false,
-        boardRows: [],
-        displayedRows: []
-      });
-      return;
-    }
     const requestId = ++this.viewRequestId;
     const trace = originatingTrace
       ? { ...originatingTrace, callerSurface: "my-fpl-leagues-view", trigger: forceRefresh ? "refresh" as const : "tab" as const }
       : capturePageRequestTrace({
           callerSurface: "my-fpl-leagues-view",
           trigger: forceRefresh ? "refresh" : "tab"
-        });
+    });
     this.setData({ viewLoading: true, viewError: "" });
     try {
+      // The desk owns finalized-event gating. Keep the shared event helper in
+      // the reporting surface so legacy context remains classified consistently
+      // while PRESEASON/PENDING states are still rendered by the desk.
+      const requestedEvent = canReadEventReporting(
+        this.data.event,
+        getAppContextSnapshot()?.currentEvent
+      )
+        ? this.data.event
+        : this.data.event > 0 ? this.data.event : null;
+      const desk = await getMyFplCompetitionsDesk(
+        Number(tournament.id),
+        requestedEvent,
+        forceRefresh,
+        trace
+      );
+      if (!this.isActiveViewRequest(requestId)) return;
+      const eventId = Number(desk.eventId) || 0;
+      const board = desk.state === "READY" && eventId > 0 && desk.aggregate
+        ? await getMyFplCompetitionBoard(
+            Number(tournament.id),
+            eventId,
+            1,
+            100,
+            "",
+            forceRefresh,
+            trace
+          )
+        : null;
+      if (!this.isActiveViewRequest(requestId)) return;
+      if (desk.state === "UNAVAILABLE") {
+        this.clearViewData("赛事数据暂时不可用，请稍后重试");
+        return;
+      }
       if (view === "season") {
         await this.loadSeasonView(
           Number(tournament.id),
@@ -725,10 +775,20 @@ PerformancePage({
           forceRefresh,
           requestId,
           trace,
-          options?.reloadPath !== false
+          options?.reloadPath !== false,
+          desk,
+          board
         );
       } else {
-        await this.loadGameweekView(Number(tournament.id), entryId, forceRefresh, requestId, trace);
+        await this.loadGameweekView(
+          Number(tournament.id),
+          entryId,
+          forceRefresh,
+          requestId,
+          trace,
+          desk,
+          board
+        );
       }
       if (!this.isActiveViewRequest(requestId)) return;
     } catch (error) {
@@ -753,13 +813,17 @@ PerformancePage({
     forceRefresh: boolean,
     requestId: number,
     trace?: PageRequestTrace,
-    reloadPath = true
+    reloadPath = true,
+    desk?: MyFplCompetitionsDesk,
+    board?: MyFplCompetitionBoard | null
   ) {
-    const event = this.data.event;
-    const [snapshot, summary] = await Promise.all([
-      getTournamentSeasonSnapshot(tournamentId, event, forceRefresh, trace),
-      getTournamentSummary(tournamentId, event, entryId, forceRefresh, trace)
-    ]);
+    const aggregate = desk?.aggregate;
+    const snapshot = aggregate && board
+      ? seasonSnapshotFromDesk(aggregate, board)
+      : null;
+    const summary = aggregate
+      ? rankingSummaryFromDesk(aggregate)
+      : undefined;
     if (!this.isActiveViewRequest(requestId)) return;
     if (!snapshot || !snapshot.standings.length) {
       this.seasonRows = [];
@@ -771,14 +835,14 @@ PerformancePage({
       if (this.data.activeView === "season") this.syncBoard();
       return;
     }
-    const me = summary.tournamentEntryRankingSummary;
+    const me = summary;
     this.seasonRows = snapshot.standings.map((row) => seasonBoardRow(row, entryId));
     this.setData({
       hasSeasonData: true,
       heroRank: formatCompactNumber(me?.tournamentOverallRank),
       heroRankSub: heroSubText(me),
-      heroKicker: `截至第 ${snapshot.asOfEventId || event} 轮的积分榜`,
-      meTiles: meSeasonTiles(me, snapshot.metrics || [], Math.max(1, Number(snapshot.asOfEventId || event) || 1)),
+      heroKicker: `截至第 ${snapshot.asOfEventId || this.data.event} 轮的积分榜`,
+      meTiles: meSeasonTiles(me, snapshot.metrics || [], Math.max(1, Number(snapshot.asOfEventId || this.data.event) || 1)),
       overviewStats: overviewStatTiles(snapshot),
       leaderRows: (snapshot.metrics || []).map((metric) => ({
         id: metric.key,
@@ -826,47 +890,18 @@ PerformancePage({
           pathPoints: [],
           pathSeries: []
         });
-    let accumulated: Array<{ gameweek: number; rows: TournamentEventResult[] }> = [];
-    const publish = (pages: Array<{ gameweek: number; rows: TournamentEventResult[] }>) => {
-      if (requestId !== this.pathRequestId || !this.pageVisible) return false;
-      const byGw = new Map(accumulated.map((page) => [page.gameweek, page]));
-      for (const page of pages) byGw.set(page.gameweek, page);
-      accumulated = [...byGw.values()].sort((left, right) => left.gameweek - right.gameweek);
-      const points = accumulated
-        .map((page) => buildTournamentPathPoint(page.gameweek, entryId, page.rows))
-        .filter((point): point is TournamentPathPoint => Boolean(point));
-      this.setData({
-        ...pathPageState(points, this.data.pathMode, this.data.pathSelectedGw),
-        pathLoading: true
-      });
-      return true;
-    };
-    const window = seasonPathWindow(start, end);
     try {
-      const recent = await loadTournamentSeasonPath(
+      const payload = await getMyFplCompetitionSeasonPath(
         tournamentId,
-        entryId,
-        window.recentStart,
-        window.recentEnd,
+        end,
         forceRefresh,
-        trace,
-        publish
+        trace
       );
       if (requestId !== this.pathRequestId || !this.pageVisible) return;
-      publish(recent);
-      if (window.hasOlder) {
-        const older = await loadTournamentSeasonPath(
-          tournamentId,
-          entryId,
-          start,
-          window.olderEnd,
-          forceRefresh,
-          trace,
-          publish
-        );
-        if (requestId !== this.pathRequestId || !this.pageVisible) return;
-        publish(older);
-      }
+      const points = pathPointsFromDesk(payload);
+      this.setData({
+        ...pathPageState(points, this.data.pathMode, this.data.pathSelectedGw)
+      });
       this.pathLoadedKey = pathKey;
       this.setData({ pathLoading: false });
     } catch {
@@ -897,43 +932,74 @@ PerformancePage({
     entryId: number,
     forceRefresh: boolean,
     requestId: number,
-    trace?: PageRequestTrace
+    trace?: PageRequestTrace,
+    desk?: MyFplCompetitionsDesk,
+    board?: MyFplCompetitionBoard | null
   ) {
-    let event = this.data.event;
-    let payload = await getTournamentSummary(tournamentId, event, entryId, forceRefresh, trace);
-    if (!this.isActiveViewRequest(requestId)) return;
+    let activeDesk = desk;
+    let activeBoard = board;
+    let event = Number(activeDesk?.eventId) || this.data.event;
     let notice = "";
-    if (!payload.tournamentEventResults.length && event > 1) {
-      // Web parity: fall back one GW when this round's results are not ready.
+    const ready = (candidateDesk?: MyFplCompetitionsDesk, candidateBoard?: MyFplCompetitionBoard | null) =>
+      candidateDesk?.state === "READY"
+      && Boolean(candidateDesk.aggregate)
+      && candidateBoard?.state === "READY";
+    if (!ready(activeDesk, activeBoard) && event > 1) {
+      // Web parity: fall back one finalized GW when the requested round is
+      // still pending. The desk remains the source of truth for this state.
       const fallback = event - 1;
-      const retried = await getTournamentSummary(tournamentId, fallback, entryId, forceRefresh, trace);
+      const retriedDesk = await getMyFplCompetitionsDesk(
+        tournamentId,
+        fallback,
+        forceRefresh,
+        trace
+      );
       if (!this.isActiveViewRequest(requestId)) return;
-      if (retried.tournamentEventResults.length) {
+      const retriedEvent = Number(retriedDesk.eventId) || fallback;
+      const retriedBoard = retriedDesk.state === "READY" && retriedDesk.aggregate
+        ? await getMyFplCompetitionBoard(
+            tournamentId,
+            retriedEvent,
+            1,
+            100,
+            "",
+            forceRefresh,
+            trace
+          )
+        : null;
+      if (!this.isActiveViewRequest(requestId)) return;
+      if (ready(retriedDesk, retriedBoard)) {
         notice = `第 ${event} 轮赛事结果尚未就绪 · 当前显示第 ${fallback} 轮数据`;
-        event = fallback;
-        payload = retried;
+        event = retriedEvent;
+        activeDesk = retriedDesk;
+        activeBoard = retriedBoard;
       }
     }
-    const results = payload.tournamentEventResults;
-    if (!results.length) {
+    if (!ready(activeDesk, activeBoard)) {
       this.gwRows = [];
       this.setData({
         hasGwData: false,
-        gwNotice: "",
+        gwNotice: notice,
         boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
         displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
       });
       if (this.data.activeView === "gameweek") this.syncBoard();
       return;
     }
-    const previous = event > 1
-      ? await getTournamentSummary(tournamentId, event - 1, entryId, forceRefresh, trace).catch(() => null)
-      : null;
-    if (!this.isActiveViewRequest(requestId)) return;
-    const prevRankByEntry = new Map<number, number>();
-    (previous?.tournamentEventResults || []).forEach((row) => {
-      if (row.eventGroupRank) prevRankByEntry.set(row.entryId, row.eventGroupRank);
-    });
+    if (!activeBoard) return;
+    const results = boardResultsFromDesk(activeBoard);
+    if (!results.length) {
+      this.gwRows = [];
+      this.setData({
+        hasGwData: false,
+        gwNotice: notice,
+        boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
+        displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
+      });
+      if (this.data.activeView === "gameweek") this.syncBoard();
+      return;
+    }
+    const prevRankByEntry = previousRanksFromDesk(activeBoard);
     this.gwRows = results.map((row) => gameweekBoardRow(row, entryId, prevRankByEntry));
     this.setData({
       hasGwData: true,
@@ -1024,6 +1090,107 @@ PerformancePage({
     void this.loadLeagues(true);
   }
 });
+
+function rankingSummaryFromDesk(
+  aggregate: MyFplCompetitionAggregate
+): TournamentEntryRankingSummary | undefined {
+  const viewer = aggregate.viewer;
+  if (!viewer) return undefined;
+  return {
+    entryId: viewer.entryId,
+    overallRank: viewer.overallRank,
+    tournamentOverallRank: viewer.tournamentOverallRank,
+    teamValue: viewer.teamValue,
+    tournamentTeamValueRank: viewer.tournamentTeamValueRank,
+    transfersNum: viewer.transfersNum,
+    tournamentTransfersRank: viewer.tournamentTransfersRank,
+    totalCosts: viewer.totalCosts,
+    tournamentCostsRank: viewer.tournamentCostsRank,
+    totalBenchPoints: viewer.totalBenchPoints,
+    tournamentBenchPointsRank: viewer.tournamentBenchPointsRank,
+    autoSubPoints: viewer.autoSubPoints,
+    tournamentAutoSubRank: viewer.tournamentAutoSubRank,
+    overallPoints: viewer.overallPoints,
+    leaderOverallPoints: viewer.leaderOverallPoints,
+    gapToLeader: viewer.gapToLeader,
+    pointsBehindNext: viewer.pointsBehindNext,
+    pointsAheadOfPrev: viewer.pointsAheadOfPrev
+  };
+}
+
+function boardRowsFromDesk(board: MyFplCompetitionBoard): MyFplCompetitionBoardRow[] {
+  const rows = [...(board.rows || [])];
+  if (board.viewerRow && !rows.some((row) => row.entryId === board.viewerRow?.entryId)) {
+    rows.push(board.viewerRow);
+  }
+  return rows;
+}
+
+function seasonSnapshotFromDesk(
+  aggregate: MyFplCompetitionAggregate,
+  board: MyFplCompetitionBoard
+): TournamentSeasonSnapshot {
+  return {
+    asOfEventId: aggregate.eventId,
+    entryCount: aggregate.entryCount,
+    leaderOverallPoints: aggregate.leaderOverallPoints,
+    secondOverallPoints: aggregate.secondOverallPoints,
+    gapFirstSecond: aggregate.gapFirstSecond,
+    averageOverallPoints: aggregate.averageOverallPoints,
+    metrics: aggregate.metrics || [],
+    standings: boardRowsFromDesk(board).map((row) => ({
+      entryId: row.entryId,
+      rank: row.fieldRank ?? row.rank,
+      entryName: row.entryName,
+      playerName: row.playerName,
+      overallPoints: row.overallPoints,
+      overallRank: row.overallRank,
+      teamValue: row.teamValue
+    }))
+  };
+}
+
+function boardResultsFromDesk(board: MyFplCompetitionBoard): TournamentEventResult[] {
+  return boardRowsFromDesk(board).map((row) => ({
+    entryId: row.entryId,
+    entryName: row.entryName,
+    playerName: row.playerName,
+    groupId: row.groupId ?? 0,
+    eventGroupRank: row.rank,
+    eventPoints: row.eventPoints,
+    eventCost: row.eventCost,
+    eventNetPoints: row.eventNetPoints,
+    eventRank: row.eventRank,
+    overallPoints: row.overallPoints,
+    overallRank: row.overallRank,
+    eventChip: row.eventChip,
+    captainPoints: row.captainPoints,
+    teamValue: row.teamValue,
+    bank: row.bank
+  }));
+}
+
+function previousRanksFromDesk(board: MyFplCompetitionBoard): Map<number, number> {
+  const previous = new Map<number, number>();
+  for (const row of boardRowsFromDesk(board)) {
+    if (row.previousRank !== null && row.previousRank !== undefined && row.previousRank > 0) {
+      previous.set(row.entryId, row.previousRank);
+    }
+  }
+  return previous;
+}
+
+function pathPointsFromDesk(payload: MyFplCompetitionSeasonPath): TournamentPathPoint[] {
+  return (payload.points || [])
+    .filter((point) => point.gameweek > 0)
+    .map((point) => ({
+      gameweek: point.gameweek,
+      tournamentRank: point.tournamentRank ?? null,
+      overallPoints: point.overallPoints ?? null,
+      leaderOverallPoints: point.leaderOverallPoints ?? null,
+      averageOverallPoints: point.averageOverallPoints ?? null
+    }));
+}
 
 function heroSubText(me: TournamentEntryRankingSummary | undefined): string {
   if (!me) return "";

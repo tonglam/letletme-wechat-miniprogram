@@ -53,6 +53,8 @@ const empty = buildPlayerLiveDetail({
 } as LivePlayerRow);
 assertEqual(empty.breakdownRows.length, 0, "empty breakdown");
 assertEqual(empty.breakdownHint.includes("官方明细"), true, "empty hint");
+assertEqual(empty.statRows.find((row) => row.label === "防守贡献")?.value, "0", "defensive contribution stat label");
+assertEqual(empty.statRows.some((row) => row.label === "防守"), false, "legacy defensive label removed");
 
 const gkpLines = buildProvisionalBreakdown({
   position: "GKP",

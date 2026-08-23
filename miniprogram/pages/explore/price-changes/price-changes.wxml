@@ -1,0 +1,192 @@
+<view class="page page-tabbar">
+  <view class="section hero-shell">
+    <view class="score-card price-hero">
+      <view class="hero-topline">
+        <view>
+          <view class="score-team">身价预测</view>
+          <view class="score-manager">下一次涨跌信号 · 不是价格保证</view>
+        </view>
+        <view class="board-badge {{boardStatusClass}}">{{boardStatusLabel}}</view>
+      </view>
+      <view class="hero-metrics">
+        <view class="hero-metric hero-deadline">
+          <view class="score-label">下一截止</view>
+          <view class="hero-value hero-deadline-value">{{deadlineText}}</view>
+          <view class="hero-sub">{{countdownText}}</view>
+        </view>
+        <view class="hero-metric hero-coverage">
+          <view class="score-label">球员覆盖</view>
+          <view class="hero-value">{{observedPlayerCount}}<text class="hero-total"> / {{expectedPlayerCount || '—'}}</text></view>
+          <view class="hero-sub">来源 FPL 官方</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasBoard}}" message="{{error}}" bind:retry="onRetry" />
+  <app-loading wx:elif="{{loading && !hasBoard}}" text="加载身价预测" />
+
+  <view id="perf-primary-content" wx:else>
+    <view wx:if="{{noticeMessage}}" class="section status-shell">
+      <data-status
+        status="{{noticeStatus}}"
+        message="{{noticeMessage}}"
+        storedAtText="{{storedAtText}}"
+        showRetry="{{true}}"
+        bind:retry="onRetry"
+      />
+    </view>
+
+    <view wx:if="{{hasBoard}}">
+      <view class="section guide-card">
+        <view class="guide-copy">
+          <view class="guide-title">越接近 ±100%，当前信号越强</view>
+          <view class="guide-text">模型随 FPL 官方数据更新；实际涨跌仍由 FPL 决定。</view>
+        </view>
+        <view class="guide-actions">
+          <text class="action" hover-class="hover-dim" bindtap="onExplain">怎么看</text>
+          <text class="action" hover-class="hover-dim" bindtap="onCopyShare">复制分享</text>
+        </view>
+      </view>
+
+      <view class="section control-card">
+        <view class="scope-tabs" role="tablist">
+          <view class="scope-tab {{scope === 'mine' ? 'active' : ''}}" data-scope="mine" bindtap="onScopeTap" hover-class="hover-dim">我的阵容</view>
+          <view class="scope-tab {{scope === 'all' ? 'active' : ''}}" data-scope="all" bindtap="onScopeTap" hover-class="hover-dim">全部球员</view>
+        </view>
+
+        <filter-bar
+          keyword="{{search}}"
+          placeholder="搜索球员或球队…"
+          bind:search="onSearchDraft"
+          bind:submit="onSearchSubmit"
+          bind:reset="onResetSearch"
+        />
+
+        <scroll-view scroll-x class="movement-scroll" show-scrollbar="{{false}}" enhanced="{{true}}">
+          <view class="movement-tabs">
+            <view
+              wx:for="{{movementOptions}}"
+              wx:key="value"
+              class="movement-tab {{movement === item.value ? 'active' : ''}}"
+              data-movement="{{item.value}}"
+              bindtap="onMovementTap"
+              hover-class="hover-dim"
+            >{{item.label}}</view>
+          </view>
+        </scroll-view>
+
+        <view class="filter-row">
+          <picker class="filter-picker-wrap" mode="selector" range="{{teamOptionNames}}" value="{{selectedTeamIndex}}" bindchange="onTeamChange">
+            <view class="filter-picker">
+              <text class="filter-label">球队</text>
+              <text class="filter-value">{{teamOptionNames[selectedTeamIndex] || '全部球队'}}</text>
+            </view>
+          </picker>
+          <view class="sort-control">
+            <picker class="filter-picker-wrap sort-picker-wrap" mode="selector" range="{{sortOptionNames}}" value="{{selectedSortIndex}}" bindchange="onSortChange">
+              <view class="filter-picker">
+                <text class="filter-label">排序</text>
+                <text class="filter-value">{{sortOptionNames[selectedSortIndex]}}</text>
+              </view>
+            </picker>
+            <view class="sort-direction" bindtap="onToggleSortDirection" hover-class="hover-dim">{{sortDirectionText}}</view>
+          </view>
+        </view>
+
+        <view class="result-bar">
+          <view>
+            <text class="result-count">{{from}}–{{to}}</text>
+            <text class="result-total"> / {{resultCount}} 名球员</text>
+          </view>
+          <text wx:if="{{hasFilters}}" class="action action-muted" bindtap="onResetFilters" hover-class="hover-dim">重置筛选</text>
+        </view>
+        <view wx:if="{{mineMessage}}" class="mine-note">{{mineMessage}}</view>
+      </view>
+
+      <view id="price-change-list" class="section player-list-section">
+        <app-empty-state
+          wx:if="{{rows.length === 0}}"
+          eyebrow="没有匹配"
+          title="当前筛选没有球员"
+          description="调整范围、方向、球队或搜索词后再试"
+          actionText="重置筛选"
+          bind:action="onResetFilters"
+        />
+
+        <view
+          wx:for="{{rows}}"
+          wx:key="playerId"
+          class="prediction-card"
+          data-code="{{item.playerCode}}"
+          bindtap="onOpenPlayer"
+          hover-class="prediction-card-hover"
+        >
+          <view class="player-head">
+            <view class="player-identity">
+              <view class="position-badge {{item.positionClass}}">{{item.position}}</view>
+              <view class="player-copy">
+                <view class="player-name">{{item.name}}</view>
+                <view class="player-meta">{{item.teamLine}} · {{item.priceText}}</view>
+              </view>
+            </view>
+            <view class="status-badge {{item.statusClass}}">{{item.statusText}}</view>
+          </view>
+
+          <view class="progress-row">
+            <view class="progress-track">
+              <view class="progress-fill {{item.progressClass}}" style="{{item.progressBarStyle}}"></view>
+            </view>
+            <text class="progress-value {{item.progressClass}}">{{item.progressText}}</text>
+          </view>
+
+          <view class="stat-grid">
+            <view class="stat-cell">
+              <view class="stat-label">持有率</view>
+              <view class="stat-value {{item.ownershipClass}}">{{item.ownershipTrendText}} {{item.ownershipText}}</view>
+            </view>
+            <view class="stat-cell">
+              <view class="stat-label">净转会</view>
+              <view class="stat-value">{{item.netTransfersText}}</view>
+            </view>
+            <view class="stat-cell stat-cell-wide">
+              <view class="stat-label">本轮流向</view>
+              <view class="stat-value stat-value-small">{{item.transfersText}}</view>
+            </view>
+          </view>
+
+          <view wx:if="{{item.personalPriceVisible}}" class="personal-price-row">
+            <view>
+              <view class="personal-label">购买价</view>
+              <view class="personal-value">{{item.purchasePriceText}}</view>
+            </view>
+            <view>
+              <view class="personal-label">卖出价</view>
+              <view class="personal-value">{{item.sellingPriceText}}</view>
+            </view>
+            <view class="personal-rule">盈利按 FPL 半价规则</view>
+          </view>
+        </view>
+
+        <view wx:if="{{rows.length && pageCount > 1}}" class="pagination">
+          <button class="page-button" disabled="{{!hasPreviousPage}}" bindtap="onPreviousPage">上一页</button>
+          <text class="page-count">{{page}} / {{pageCount}}</text>
+          <button class="page-button" disabled="{{!hasNextPage}}" bindtap="onNextPage">下一页</button>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="section unavailable-card">
+      <app-empty-state
+        eyebrow="预测未就绪"
+        title="身价预测暂不可用"
+        description="预测源恢复后会自动显示，也可以下拉刷新"
+        actionText="重新加载"
+        bind:action="onRetry"
+      />
+    </view>
+  </view>
+
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
+  <bottomNavBar active="explore" />
+</view>

@@ -33,22 +33,46 @@
         bind:action="onRetry"
       />
       <block wx:else>
-        <view wx:if="{{headlineStats.length}}" class="card headline-card">
-          <view wx:for="{{headlineStats}}" wx:key="label" class="headline-stat">
-            <view class="headline-label">{{item.label}}</view>
-            <view class="headline-value">{{item.value}}</view>
-            <view wx:if="{{item.meta}}" class="headline-meta">{{item.meta}}</view>
+        <view wx:if="{{headlineStats.length}}" class="card summary-list-card">
+          <view class="list-heading-row">
+            <view class="section-heading">本轮概览</view>
+            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'headline' ? 'done' : ''}}" data-share-kind="headline" bindtap="onCopyShare" hover-class="hover-dim">
+              <image wx:if="{{shareCopiedKind === 'headline'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareCopiedKind === 'headline' ? '已复制' : '文字分享'}}</text>
+            </view>
+          </view>
+          <view class="headline-card">
+            <view wx:for="{{headlineStats}}" wx:key="label" class="headline-stat">
+              <view class="headline-label">{{item.label}}</view>
+              <view class="headline-value">{{item.value}}</view>
+              <view wx:if="{{item.meta}}" class="headline-meta">{{item.meta}}</view>
+            </view>
           </view>
         </view>
         <view wx:if="{{mostRows.length}}" class="card most-card">
-          <view class="section-heading">本轮之最</view>
+          <view class="list-heading-row">
+            <view class="section-heading">本轮之最</view>
+            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'most' ? 'done' : ''}}" data-share-kind="most" bindtap="onCopyShare" hover-class="hover-dim">
+              <image wx:if="{{shareCopiedKind === 'most'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareCopiedKind === 'most' ? '已复制' : '文字分享'}}</text>
+            </view>
+          </view>
           <view wx:for="{{mostRows}}" wx:key="label" class="most-row">
             <text class="most-label">{{item.label}}</text>
             <view class="most-value">{{item.value}}<text wx:if="{{item.meta}}" class="most-meta">{{item.meta}}</text></view>
           </view>
         </view>
         <view wx:if="{{chipRows.length}}" class="card chip-card">
-          <view class="section-heading">开卡情况</view>
+          <view class="list-heading-row">
+            <view class="section-heading">开卡情况</view>
+            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'chips' ? 'done' : ''}}" data-share-kind="chips" bindtap="onCopyShare" hover-class="hover-dim">
+              <image wx:if="{{shareCopiedKind === 'chips'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareCopiedKind === 'chips' ? '已复制' : '文字分享'}}</text>
+            </view>
+          </view>
           <view wx:for="{{chipRows}}" wx:key="id" class="chip-row">
             <text class="chip-title">{{item.title}}</text>
             <view class="chip-track"><view class="chip-fill" style="{{item.barStyle}}"></view></view>
@@ -70,12 +94,19 @@
       <view wx:else class="dream-pitch-section">
         <view class="live-pitch-bar">
           <text class="live-pitch-label">梦之队</text>
-          <view
-            class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
-            bindtap="onShareDreamPitch"
-            hover-class="hover-dim"
-          >
-            <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+          <view class="live-pitch-actions">
+            <view
+              class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+              bindtap="onShareDreamPitch"
+              hover-class="hover-dim"
+            >
+              <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+            </view>
+            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'dreamTeam' ? 'done' : ''}}" data-share-kind="dreamTeam" bindtap="onCopyShare" hover-class="hover-dim">
+              <image wx:if="{{shareCopiedKind === 'dreamTeam'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareCopiedKind === 'dreamTeam' ? '已复制' : '文字分享'}}</text>
+            </view>
           </view>
         </view>
         <squad-pitch
@@ -97,6 +128,14 @@
         description="GW{{event}} 出现高分表现后会显示在这里"
       />
       <block wx:else>
+        <view class="list-heading-row">
+          <view class="section-heading">高分榜</view>
+          <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'elite' ? 'done' : ''}}" data-share-kind="elite" bindtap="onCopyShare" hover-class="hover-dim">
+            <image wx:if="{{shareCopiedKind === 'elite'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+            <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+            <text class="tool-label">{{shareCopiedKind === 'elite' ? '已复制' : '文字分享'}}</text>
+          </view>
+        </view>
         <view
           wx:for="{{eliteRows}}"
           wx:key="id"
@@ -120,8 +159,15 @@
       <block wx:else>
       <view class="card flow-card">
         <view class="flow-head flow-head-in">
-          <text class="flow-arrow flow-arrow-in">↓</text>
-          <text class="flow-title flow-title-in">转入最多</text>
+          <view class="flow-title-group">
+            <text class="flow-arrow flow-arrow-in">↓</text>
+            <text class="flow-title flow-title-in">转入最多</text>
+          </view>
+          <view wx:if="{{transfersInRows.length}}" class="tool-btn tool-btn-labeled {{shareCopiedKind === 'transfersIn' ? 'done' : ''}}" data-share-kind="transfersIn" bindtap="onCopyShare" hover-class="hover-dim">
+            <image wx:if="{{shareCopiedKind === 'transfersIn'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+            <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+            <text class="tool-label">{{shareCopiedKind === 'transfersIn' ? '已复制' : '文字分享'}}</text>
+          </view>
         </view>
         <view class="flow-body">
           <app-empty-state wx:if="{{transfersInRows.length === 0}}" title="还没有转入趋势" description="本轮产生转会后会显示热门转入" />
@@ -137,8 +183,15 @@
       </view>
       <view class="card flow-card">
         <view class="flow-head flow-head-out">
-          <text class="flow-arrow flow-arrow-out">↑</text>
-          <text class="flow-title flow-title-out">转出最多</text>
+          <view class="flow-title-group">
+            <text class="flow-arrow flow-arrow-out">↑</text>
+            <text class="flow-title flow-title-out">转出最多</text>
+          </view>
+          <view wx:if="{{transfersOutRows.length}}" class="tool-btn tool-btn-labeled {{shareCopiedKind === 'transfersOut' ? 'done' : ''}}" data-share-kind="transfersOut" bindtap="onCopyShare" hover-class="hover-dim">
+            <image wx:if="{{shareCopiedKind === 'transfersOut'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+            <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+            <text class="tool-label">{{shareCopiedKind === 'transfersOut' ? '已复制' : '文字分享'}}</text>
+          </view>
         </view>
         <view class="flow-body">
           <app-empty-state wx:if="{{transfersOutRows.length === 0}}" title="还没有转出趋势" description="本轮产生转会后会显示热门转出" />
@@ -160,6 +213,7 @@
     </view>
   </block>
 
+  <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onCloseDreamPlayer" />
   <bottomNavBar active="explore" />
 </view>

@@ -10,6 +10,14 @@ const {
   LIVE_SNAPSHOT_QUERY,
   TOURNAMENT_LIVE_POINTS
 } = await import("../miniprogram/services/live.service.ts");
+const {
+  MINI_HOME_PERSONAL_LEAGUES_QUERY
+} = await import("../miniprogram/services/home.service.ts");
+const {
+  PRICE_CHANGE_BOARD_QUERY,
+  PRICE_CHANGE_PERSONAL_QUERY,
+  PRICE_CHANGE_START_PRICES_QUERY
+} = await import("../miniprogram/services/price-change.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
 
@@ -22,7 +30,11 @@ const operations = [
   ["CALC_LIVE_POINTS_BY_ENTRY", CALC_LIVE_POINTS_BY_ENTRY],
   ["LIVE_MATCHES_QUERY", LIVE_MATCHES_QUERY],
   ["TOURNAMENT_LIVE_POINTS", TOURNAMENT_LIVE_POINTS],
-  ["LIVE_FIXTURE_PLAYERS_BATCH", buildLiveFixturePlayersQuery(5)]
+  ["LIVE_FIXTURE_PLAYERS_BATCH", buildLiveFixturePlayersQuery(5)],
+  ["MINI_HOME_PERSONAL_LEAGUES_QUERY", MINI_HOME_PERSONAL_LEAGUES_QUERY],
+  ["PRICE_CHANGE_BOARD_QUERY", PRICE_CHANGE_BOARD_QUERY],
+  ["PRICE_CHANGE_PERSONAL_QUERY", PRICE_CHANGE_PERSONAL_QUERY],
+  ["PRICE_CHANGE_START_PRICES_QUERY", PRICE_CHANGE_START_PRICES_QUERY]
 ];
 
 async function loadSchema() {

@@ -204,9 +204,9 @@ function matchStatRows(player: LivePlayerRow, position: string): PlayerLiveStatR
   if (position === "GKP") {
     rows.push(statRow("扑救", saves), statRow("零封", cleanSheets), statRow("扑点", penaltiesSaved));
   } else if (position === "DEF" || position === "MID") {
-    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("零封", cleanSheets), statRow("防守", defensiveContribution));
+    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("零封", cleanSheets), statRow("防守贡献", defensiveContribution));
   } else {
-    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("防守", defensiveContribution));
+    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("防守贡献", defensiveContribution));
   }
   rows.push(statRow("黄牌", yellowCards), statRow("红牌", redCards), statRow("奖励分", bonus));
   if (ownGoals > 0) rows.push(statRow("乌龙", ownGoals));

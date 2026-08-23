@@ -169,35 +169,79 @@
         <view class="cmp-title">对比两队</view>
         <text class="compare-action" bindtap="onCloseCompare">关闭</text>
       </view>
-      <view class="cmp-grid">
-        <text class="cmp-label"></text>
-        <text class="cmp-side">{{compareLeft.entryName}}</text>
-        <text class="cmp-side">{{compareRight.entryName}}</text>
-        <text class="cmp-label">经理</text>
-        <text>{{compareLeft.playerName || '-'}}</text>
-        <text>{{compareRight.playerName || '-'}}</text>
-        <text class="cmp-label">GW</text>
-        <text>{{compareLeft.displayLive}}</text>
-        <text>{{compareRight.displayLive}}</text>
-        <text class="cmp-label">净分</text>
-        <text>{{compareLeft.displayNet}}</text>
-        <text>{{compareRight.displayNet}}</text>
-        <text class="cmp-label">总分</text>
-        <text>{{compareLeft.displayTotal}}</text>
-        <text>{{compareRight.displayTotal}}</text>
-        <text class="cmp-label">队长</text>
-        <text>{{compareLeft.captainName || '-'}}</text>
-        <text>{{compareRight.captainName || '-'}}</text>
-        <text class="cmp-label">开卡</text>
-        <text>{{compareLeft.chipCode || '无'}}</text>
-        <text>{{compareRight.chipCode || '无'}}</text>
-        <text class="cmp-label">上场</text>
-        <text>{{compareLeft.playedText}}</text>
-        <text>{{compareRight.playedText}}</text>
-        <text class="cmp-label">扣分</text>
-        <text>{{compareLeft.displayHit || '0'}}</text>
-        <text>{{compareRight.displayHit || '0'}}</text>
-      </view>
+      <scroll-view scroll-y class="cmp-body">
+        <view class="cmp-grid">
+          <text class="cmp-label"></text>
+          <text class="cmp-side">{{compareLeft.entryName}}</text>
+          <text class="cmp-side">{{compareRight.entryName}}</text>
+          <text class="cmp-label">经理</text>
+          <text>{{compareLeft.playerName || '-'}}</text>
+          <text>{{compareRight.playerName || '-'}}</text>
+          <text class="cmp-label">GW</text>
+          <text>{{compareLeft.displayLive}}</text>
+          <text>{{compareRight.displayLive}}</text>
+          <text class="cmp-label">净分</text>
+          <text>{{compareLeft.displayNet}}</text>
+          <text>{{compareRight.displayNet}}</text>
+          <text class="cmp-label">总分</text>
+          <text>{{compareLeft.displayTotal}}</text>
+          <text>{{compareRight.displayTotal}}</text>
+          <text class="cmp-label">队长</text>
+          <text>{{compareLeft.captainName || '-'}}</text>
+          <text>{{compareRight.captainName || '-'}}</text>
+          <text class="cmp-label">开卡</text>
+          <text>{{compareLeft.chipCode || '无'}}</text>
+          <text>{{compareRight.chipCode || '无'}}</text>
+          <text class="cmp-label">上场</text>
+          <text>{{compareLeft.playedText}}</text>
+          <text>{{compareRight.playedText}}</text>
+          <text class="cmp-label">扣分</text>
+          <text>{{compareLeft.displayHit || '0'}}</text>
+          <text>{{compareRight.displayHit || '0'}}</text>
+        </view>
+
+        <view class="cmp-lineup">
+          <view class="cmp-lineup-head">
+            <text class="cmp-lineup-title">阵容</text>
+            <text class="cmp-lineup-count">{{compareLeftPickCount}}/15 · {{compareRightPickCount}}/15</text>
+          </view>
+          <block wx:if="{{compareLineupRows.length}}">
+            <block wx:for="{{compareLineupRows}}" wx:key="slot">
+              <view wx:if="{{item.sectionLabel}}" class="cmp-lineup-section">
+                <view class="cmp-lineup-rule"></view>
+                <text>{{item.sectionLabel}}</text>
+                <view class="cmp-lineup-rule"></view>
+              </view>
+              <view class="cmp-lineup-row {{item.bench ? 'bench' : ''}}">
+                <view wx:if="{{item.left}}" class="cmp-pick cmp-pick-left">
+                  <view class="cmp-pick-primary">
+                    <text class="cmp-pick-name">{{item.left.name}}</text>
+                    <text wx:if="{{item.left.role}}" class="cmp-pick-role">{{item.left.role}}</text>
+                  </view>
+                  <view class="cmp-pick-meta">
+                    <text class="cmp-pick-detail">{{item.left.meta || '-'}}</text>
+                    <text class="cmp-pick-points">{{item.left.pointsText}}</text>
+                  </view>
+                </view>
+                <view wx:else class="cmp-pick-empty">—</view>
+                <text class="cmp-slot">{{item.slotLabel}}</text>
+                <view wx:if="{{item.right}}" class="cmp-pick">
+                  <view class="cmp-pick-primary">
+                    <text class="cmp-pick-name">{{item.right.name}}</text>
+                    <text wx:if="{{item.right.role}}" class="cmp-pick-role">{{item.right.role}}</text>
+                  </view>
+                  <view class="cmp-pick-meta">
+                    <text class="cmp-pick-detail">{{item.right.meta || '-'}}</text>
+                    <text class="cmp-pick-points">{{item.right.pointsText}}</text>
+                  </view>
+                </view>
+                <view wx:else class="cmp-pick-empty">—</view>
+              </view>
+            </block>
+          </block>
+          <view wx:else class="cmp-lineup-empty">本轮阵容尚未同步</view>
+        </view>
+      </scroll-view>
     </view>
   </view>
   <view wx:if="{{filterSheetOpen}}" class="flt-root">

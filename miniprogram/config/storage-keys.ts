@@ -18,6 +18,7 @@ export const storageKeys = {
   deviceId: "mini-program-device-id",
   graphqlCooldownUntil: "graphql-cooldown-until",
   pendingBugReportDraft: "pending-bug-report-draft",
+  lastPriceChangeBoard: "price-change-board:last-good:v1",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",
   lastTeamId: "stat-team",

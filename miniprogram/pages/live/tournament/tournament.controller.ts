@@ -33,8 +33,10 @@ import {
   openWebsiteAction,
 } from "../../../utils/canonical-action";
 import {
+  buildTournamentLineupComparison,
   copyShareText,
   formatLiveTournamentShareText,
+  type TournamentCompareLineupRow,
 } from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
 import {
@@ -54,7 +56,6 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
-
 type SortKey =
   | "livePoints"
   | "liveNetPoints"
@@ -224,6 +225,9 @@ interface LiveTournamentData {
   compareOpen: boolean;
   compareLeft: DisplayTournamentRow | null;
   compareRight: DisplayTournamentRow | null;
+  compareLineupRows: TournamentCompareLineupRow[];
+  compareLeftPickCount: number;
+  compareRightPickCount: number;
   shareLabel: string;
   shareCopied: boolean;
   shareSheetOpen: boolean;
@@ -331,9 +335,35 @@ function emptyCompareState() {
     compareOpen: false,
     compareLeft: null as DisplayTournamentRow | null,
     compareRight: null as DisplayTournamentRow | null,
+    compareLineupRows: [] as TournamentCompareLineupRow[],
+    compareLeftPickCount: 0,
+    compareRightPickCount: 0,
     filterSheetOpen: false,
     shareSheetOpen: false,
     shareText: "",
+  };
+}
+
+function compareSelectionState(
+  rows: readonly DisplayTournamentRow[],
+  compareIds: readonly number[],
+) {
+  const compareLeft = compareIds[0]
+    ? rows.find((row) => row.entry === compareIds[0]) || null
+    : null;
+  const compareRight = compareIds[1]
+    ? rows.find((row) => row.entry === compareIds[1]) || null
+    : null;
+  const lineup = buildTournamentLineupComparison(
+    compareLeft?.picks,
+    compareRight?.picks,
+  );
+  return {
+    compareLeft,
+    compareRight,
+    compareLineupRows: lineup.rows,
+    compareLeftPickCount: lineup.leftCount,
+    compareRightPickCount: lineup.rightCount,
   };
 }
 
@@ -598,6 +628,9 @@ PerformancePage({
     compareOpen: false,
     compareLeft: null,
     compareRight: null,
+    compareLineupRows: [],
+    compareLeftPickCount: 0,
+    compareRightPickCount: 0,
     shareLabel: "复制分享",
     shareCopied: false,
     shareSheetOpen: false,
@@ -1556,6 +1589,7 @@ PerformancePage({
     }
     const viewerId = numberValue(this.data.entryId);
     const compareIds = this.data.compareIds || [];
+    const compareSelection = compareSelectionState(rows, compareIds);
     const sortedRows = sortRows(
       filteredRows,
       this.data.sortKey,
@@ -1602,6 +1636,7 @@ PerformancePage({
       hasData: true,
       rowCount: rows.length,
       displayedRows: takeVisibleWithPinMe(sortedRows, nextSize, viewerId),
+      ...compareSelection,
       filteredCount: sortedRows.length,
       hasMore: sortedRows.length > nextSize,
       highestText: stats.highestText,
@@ -1875,6 +1910,9 @@ PerformancePage({
         compareOpen: false,
         compareLeft: null,
         compareRight: null,
+        compareLineupRows: [],
+        compareLeftPickCount: 0,
+        compareRightPickCount: 0,
       });
       this.applyRows(this.rows, true);
       return;
@@ -1886,6 +1924,9 @@ PerformancePage({
       compareOpen: false,
       compareLeft: null,
       compareRight: null,
+      compareLineupRows: [],
+      compareLeftPickCount: 0,
+      compareRightPickCount: 0,
     });
     this.applyRows(this.rows, true);
   },
@@ -1895,14 +1936,15 @@ PerformancePage({
   },
 
   onOpenCompareSheet() {
-    if (
-      this.data.compareIds.length !== 2 ||
-      !this.data.compareLeft ||
-      !this.data.compareRight
-    ) {
+    if (this.data.compareIds.length !== 2) {
       return;
     }
-    this.setData({ compareOpen: true });
+    const compareSelection = compareSelectionState(
+      this.rows,
+      this.data.compareIds,
+    );
+    if (!compareSelection.compareLeft || !compareSelection.compareRight) return;
+    this.setData({ ...compareSelection, compareOpen: true });
   },
 
   toggleCompareEntry(entry: number) {
@@ -1915,21 +1957,11 @@ PerformancePage({
     } else {
       current.push(entry);
     }
-    const left = current[0]
-      ? this.rows.find(
-          (row: DisplayTournamentRow) => row.entry === current[0],
-        ) || null
-      : null;
-    const right = current[1]
-      ? this.rows.find(
-          (row: DisplayTournamentRow) => row.entry === current[1],
-        ) || null
-      : null;
+    const compareSelection = compareSelectionState(this.rows, current);
     this.setData({
       compareIds: current,
       compareHint: compareHintText(current.length),
-      compareLeft: left,
-      compareRight: right,
+      ...compareSelection,
       compareOpen: current.length === 2,
     });
     this.applyRows(this.rows, true);

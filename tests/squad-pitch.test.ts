@@ -1,10 +1,12 @@
 import {
+  buildLiveSquadPitchState,
   buildDreamTeamPitchState,
   buildPitchRows,
   buildSquadPitchView,
   formatSquadPitchHeaderView,
   isSquadPitchStarter,
   kitAsset,
+  normalizeSquadPitchLists,
   toSquadPitchHeader,
   toSquadPitchLists,
   toSquadPitchPlayer,
@@ -13,8 +15,11 @@ import {
 import {
   buildShareDrawPlan,
   resetShareImageCache,
-  shareCacheKey
+  shareCacheKey,
+  shareExportPixelRatio,
+  shareUsesPortraitLayout
 } from "../miniprogram/utils/squad-pitch-canvas";
+import { buildShareBrandLayout } from "../miniprogram/utils/share-image-brand";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -88,6 +93,29 @@ assertEqual(elevenAndFour.benchPlayers.map((player) => player.position).join(","
 assertEqual(isSquadPitchStarter({ position: 12, multiplier: 1 }), false, "BB bench stays bench");
 assertEqual(isSquadPitchStarter({ position: 8, multiplier: 0 }), true, "starter slot wins over multiplier");
 assertEqual(isSquadPitchStarter({ multiplier: 0 }), false, "multiplier fallback");
+assertEqual(isSquadPitchStarter({}), false, "missing lineup metadata is not a starter");
+
+const mixedPlayers = formationPicks(4, 4, 2).flatMap((pick, index) => {
+  const player = toSquadPitchPlayer(pick, `mixed-${index}`);
+  return player ? [player] : [];
+});
+const mixedLists = normalizeSquadPitchLists(mixedPlayers);
+assertEqual(mixedLists.players.length, 11, "mixed pitch input keeps XI");
+assertEqual(mixedLists.benchPlayers.length, 4, "mixed pitch input creates bench");
+assertEqual(mixedLists.benchPlayers[0]?.webName, "BenchGk", "mixed input keeps official bench order");
+
+const livePitch = buildLiveSquadPitchState({
+  starters: formationPicks(4, 4, 2).map((entry) => ({
+    webName: entry.webName || undefined,
+    teamShortName: entry.teamShortName || undefined,
+    position: entry.elementTypeName || undefined,
+    squadPosition: entry.position ?? undefined,
+    totalPoints: entry.totalPoints ?? undefined
+  }))
+});
+assertEqual(livePitch.pitchPlayers.length, 11, "live adapter keeps XI");
+assertEqual(livePitch.pitchBench.length, 4, "live adapter creates bench from mixed starters");
+assertEqual(livePitch.pitchBench[0]?.webName, "BenchGk", "live adapter keeps official bench order");
 
 [
   { def: 3, mid: 4, fwd: 3 },
@@ -196,10 +224,63 @@ assert(types.includes("header"), "share has header");
 assert(types.includes("watermark"), "share has watermark");
 assertEqual(types.filter((type) => type === "starter").length, 11, "share has 11 starters");
 assertEqual(types.filter((type) => type === "bench").length, 4, "share has 4 bench");
+const starterLayers = plan.layers.filter((layer) => layer.type === "starter");
+assert(starterLayers.every((layer) => layer.width <= plan.width * 0.17), "bench share narrows starter cards");
+assert(starterLayers.every((layer) => layer.y < plan.height * 0.63), "bench share keeps starter rows above the panel");
+
+const mixedPlan = buildShareDrawPlan({
+  players: mixedPlayers,
+  header,
+  locale: "zh-CN"
+});
+assertEqual(mixedPlan.layers.filter((layer) => layer.type === "starter").length, 11, "share caps mixed input at XI");
+assertEqual(mixedPlan.layers.filter((layer) => layer.type === "bench").length, 4, "share moves mixed overflow to bench");
+assert(Math.abs(mixedPlan.height / mixedPlan.width - 5 / 4) < 0.003, "mixed share reserves bench panel");
+assert(shareUsesPortraitLayout(mixedPlayers), "full squad share uses portrait layout before normalization");
+assert(!shareUsesPortraitLayout(lists.players.slice(0, 11)), "XI-only share keeps plain layout");
+const dreamSharePlan = buildShareDrawPlan({
+  players: dream.pitchPlayers,
+  header: dream.pitchHeader,
+  locale: "zh-CN",
+  forcePortrait: true
+});
+assert(shareUsesPortraitLayout(dream.pitchPlayers, [], true), "dream-team share opts into portrait layout");
+assert(Math.abs(dreamSharePlan.height / dreamSharePlan.width - 5 / 4) < 0.003, "dream-team share uses portrait canvas");
+assert(
+  dreamSharePlan.layers.filter((layer) => layer.type === "starter").every((layer) => layer.width <= dreamSharePlan.width * 0.17),
+  "dream-team share narrows starter cards"
+);
 const watermark = plan.layers.find((layer) => layer.type === "watermark");
 assert(watermark?.type === "watermark" && watermark.title === "LetLetMe", "LetLetMe watermark");
 assert(watermark?.type === "watermark" && watermark.url === "letletme.top", "letletme.top watermark");
 assert(Math.abs(plan.height / plan.width - 5 / 4) < 0.003, "bench share uses 4/5");
+
+const brandLayout = buildShareBrandLayout(plan.width, plan.height);
+assert(brandLayout.tiles.length >= 20, "watermark repeats across the complete share image");
+assert(
+  brandLayout.tiles.some((tile) => tile.x < plan.width * 0.25 && tile.y < plan.height * 0.25),
+  "watermark covers the top-left crop"
+);
+assert(
+  brandLayout.tiles.some((tile) => tile.x > plan.width * 0.75 && tile.y > plan.height * 0.75),
+  "watermark covers the bottom-right crop"
+);
+for (const crop of [
+  { x: 0, y: 0, width: plan.width / 2, height: plan.height / 2 },
+  { x: plan.width / 2, y: 0, width: plan.width / 2, height: plan.height / 2 },
+  { x: 0, y: plan.height / 2, width: plan.width / 2, height: plan.height / 2 },
+  { x: plan.width / 2, y: plan.height / 2, width: plan.width / 2, height: plan.height / 2 }
+]) {
+  assert(
+    brandLayout.tiles.some((tile) => (
+      tile.x >= crop.x && tile.x <= crop.x + crop.width &&
+      tile.y >= crop.y && tile.y <= crop.y + crop.height
+    )),
+    "every half-image crop keeps a watermark"
+  );
+}
+assertEqual(shareExportPixelRatio(3), 2, "share export caps high-DPR devices at 2x");
+assertEqual(shareExportPixelRatio(0), 1, "share export normalizes missing DPR");
 
 resetShareImageCache();
 assert(

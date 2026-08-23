@@ -3,10 +3,28 @@
   font-size: 22rpx;
 }
 
+/* Text-share action used by every list card on this page. */
+.summary-list-card {
+  margin-bottom: 18rpx;
+}
+
+.list-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.list-heading-row .section-heading {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 /* 总览 — KPI 大数字带 */
 .headline-card {
   display: flex;
-  margin-bottom: 18rpx;
+  margin-bottom: 0;
 }
 
 .headline-stat {
@@ -141,6 +159,12 @@
   margin-bottom: 12rpx;
 }
 
+.live-pitch-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .live-pitch-label {
   color: var(--muted-ink);
   font-size: 20rpx;
@@ -203,9 +227,17 @@
 .flow-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14rpx;
   margin: 0 -24rpx 4rpx;
   padding: 18rpx 24rpx;
+}
+
+.flow-title-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 14rpx;
 }
 
 .flow-head-in {

@@ -444,3 +444,140 @@
 .hl-val-owngoal {
   color: var(--danger);
 }
+
+.match-player-section {
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.match-player-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 4rpx 0 12rpx;
+}
+
+.match-player-title {
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 34rpx;
+}
+
+.match-player-subtitle {
+  margin-top: 2rpx;
+  color: var(--muted-ink);
+  font-size: 19rpx;
+  line-height: 28rpx;
+}
+
+.match-player-toggle-label {
+  flex-shrink: 0;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+}
+
+.match-player-panel {
+  overflow: hidden;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--card);
+}
+
+.match-player-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6rpx;
+  padding: 6rpx;
+  background: var(--track);
+}
+
+.match-player-tab {
+  min-width: 0;
+  overflow: hidden;
+  padding: 10rpx 8rpx;
+  border-radius: 8rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 30rpx;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-player-tab.active {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2rpx 6rpx var(--plum-a8);
+}
+
+.match-player-count {
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-player-list {
+  padding: 0 16rpx;
+}
+
+.match-player-empty {
+  padding: 24rpx 8rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: center;
+}
+
+.match-player-row {
+  padding: 16rpx 0;
+}
+
+.match-player-row + .match-player-row {
+  border-top: 1rpx solid var(--line);
+}
+
+.match-player-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.match-player-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 32rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-player-points {
+  flex-shrink: 0;
+  min-width: 54rpx;
+  color: var(--green-ink);
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 32rpx;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-player-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6rpx 18rpx;
+  margin-top: 8rpx;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  line-height: 28rpx;
+}

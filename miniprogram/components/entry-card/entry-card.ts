@@ -3,6 +3,9 @@ import {
   pageHomeLeagues,
   partitionHomeEntryLeagues
 } from "../../utils/entry-leagues";
+import { formatHomeH2HMatchup } from "../../utils/home-h2h";
+import type { HomeH2HDisplay } from "../../utils/home-h2h";
+import type { HomeH2HMatchup } from "../../models/entry";
 
 interface EntryCardInfo {
   entry?: number;
@@ -24,20 +27,27 @@ interface StatRow {
 }
 
 interface LeagueRow {
-  id: number;
+  id: number | string;
   name: string;
   viewerRank?: number;
   rank?: number;
   officialKind?: string;
   shortName?: string | null;
   type?: string | null;
+  tournamentId?: number;
+  h2hMatchup?: HomeH2HMatchup | null;
+}
+
+interface LeagueDisplayRow extends LeagueRow {
+  rankText: string;
+  h2h: HomeH2HDisplay | null;
 }
 
 interface LeaguePanel {
   key: "classic" | "h2h";
   title: string;
   total: number;
-  items: LeagueRow[];
+  items: LeagueDisplayRow[];
   hasMore: boolean;
 }
 
@@ -75,11 +85,21 @@ function buildPanel(
   if (page.total <= 0) {
     return null;
   }
+  const toDisplayRow = (league: LeagueRow): LeagueDisplayRow => {
+    const rank = league.viewerRank ?? league.rank;
+    return {
+      ...league,
+      rankText: typeof rank === "number" ? `#${rank}` : "",
+      h2h: key === "h2h" && league.h2hMatchup
+        ? formatHomeH2HMatchup(league.h2hMatchup)
+        : null
+    };
+  };
   return {
     key,
     title,
     total: page.total,
-    items: page.items,
+    items: page.items.map(toDisplayRow),
     hasMore: page.hasMore
   };
 }

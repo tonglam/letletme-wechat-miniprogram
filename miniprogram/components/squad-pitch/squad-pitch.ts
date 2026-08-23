@@ -3,6 +3,7 @@ import {
   buildBenchViews,
   buildPitchRows,
   formatSquadPitchHeaderView,
+  normalizeSquadPitchLists,
   type SquadPitchHeader,
   type SquadPitchHeaderView,
   type SquadPitchLocale,
@@ -12,7 +13,8 @@ import {
   exportSquadPitchShareImage,
   resetShareImageCache,
   shareCanvasSize,
-  shareExportPixelRatio
+  shareExportPixelRatio,
+  shareUsesPortraitLayout
 } from "../../utils/squad-pitch-canvas";
 
 interface SquadPitchData {
@@ -110,15 +112,19 @@ Component({
       const locale = (this.properties.locale === "en" ? "en" : "zh-CN") as SquadPitchLocale;
       const players = (this.properties.players || []) as SquadPitchPlayer[];
       const benchPlayers = (this.properties.benchPlayers || []) as SquadPitchPlayer[];
+      const lists = normalizeSquadPitchLists(players, benchPlayers);
       const header = (this.properties.header || {}) as SquadPitchHeader;
-      const hasBench = benchPlayers.length > 0;
-      const size = shareCanvasSize(hasBench);
+      const hasBench = lists.benchPlayers.length > 0;
+      const size = shareCanvasSize(shareUsesPortraitLayout(
+        lists.players,
+        lists.benchPlayers
+      ));
       this.setData({
         pitchBg: squadPitchBackgroundSrc(),
         hasBench,
         benchTitle: locale === "en" ? "Substitutes" : "替补",
-        rows: buildPitchRows(players, hasBench),
-        bench: buildBenchViews(benchPlayers, locale),
+        rows: buildPitchRows(lists.players, hasBench),
+        bench: buildBenchViews(lists.benchPlayers, locale),
         headerView: formatSquadPitchHeaderView(header, locale),
         shareWidth: size.width,
         shareHeight: size.height
@@ -132,12 +138,25 @@ Component({
     },
 
     exportShareImage(): Promise<string> {
+      return this.exportShareImageForLayout(false);
+    },
+
+    exportPortraitShareImage(): Promise<string> {
+      return this.exportShareImageForLayout(true);
+    },
+
+    exportShareImageForLayout(forcePortrait = false): Promise<string> {
       const locale = (this.properties.locale === "en" ? "en" : "zh-CN") as SquadPitchLocale;
+      const lists = normalizeSquadPitchLists(
+        (this.properties.players || []) as SquadPitchPlayer[],
+        (this.properties.benchPlayers || []) as SquadPitchPlayer[]
+      );
       const input = {
-        players: (this.properties.players || []) as SquadPitchPlayer[],
-        benchPlayers: (this.properties.benchPlayers || []) as SquadPitchPlayer[],
+        players: lists.players,
+        benchPlayers: lists.benchPlayers,
         header: (this.properties.header || {}) as SquadPitchHeader,
         benchBoost: Boolean(this.properties.benchBoost),
+        forcePortrait,
         locale
       };
       const offscreen = exportViaOffscreenCanvas(input);
@@ -160,6 +179,7 @@ function exportViaOffscreenCanvas(input: {
   benchPlayers: SquadPitchPlayer[];
   header: SquadPitchHeader;
   benchBoost: boolean;
+  forcePortrait: boolean;
   locale: SquadPitchLocale;
 }): Promise<string> | null {
   const createOffscreen = (wx as WechatMiniprogram.Wx & {
@@ -167,7 +187,11 @@ function exportViaOffscreenCanvas(input: {
   }).createOffscreenCanvas;
   if (typeof createOffscreen !== "function") return null;
   const pixelRatio = shareExportPixelRatio(Number(wx.getSystemInfoSync().pixelRatio));
-  const size = shareCanvasSize(input.benchPlayers.length > 0);
+  const size = shareCanvasSize(shareUsesPortraitLayout(
+    input.players,
+    input.benchPlayers,
+    input.forcePortrait
+  ));
   try {
     const canvas = createOffscreen({
       type: "2d",
@@ -184,6 +208,8 @@ function exportViaOffscreenCanvas(input: {
       toTempFilePath: (node) => new Promise((resolve, reject) => {
         wx.canvasToTempFilePath({
           canvas: node as WechatMiniprogram.Canvas,
+          destWidth: node.width,
+          destHeight: node.height,
           fileType: "png",
           quality: 1,
           success: (res) => resolve(res.tempFilePath),
@@ -233,6 +259,8 @@ function canvasToTempFile(
   return new Promise((resolve, reject) => {
     wx.canvasToTempFilePath({
       canvas: canvas as WechatMiniprogram.Canvas,
+      destWidth: canvas.width,
+      destHeight: canvas.height,
       fileType: "png",
       quality: 1,
       success: (res) => resolve(res.tempFilePath),

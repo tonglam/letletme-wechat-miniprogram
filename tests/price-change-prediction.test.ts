@@ -1,0 +1,171 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { PriceChangePlayer } from "../miniprogram/models/price-change";
+import {
+  buildPersonalPurchasePrices,
+  buildPriceChangeViewRow,
+  calculateSellingPrice,
+  DEFAULT_PRICE_CHANGE_SORT,
+  filterPriceChangePlayers,
+  formatPriceChangeShareText,
+  resolveTransferPlayerIds,
+  sortPriceChangePlayers,
+} from "../miniprogram/utils/price-change";
+
+function player(
+  playerId: number,
+  overrides: Partial<PriceChangePlayer> = {},
+): PriceChangePlayer {
+  return {
+    playerId,
+    playerCode: 10_000 + playerId,
+    webName: `Player ${playerId}`,
+    teamId: playerId,
+    teamName: `Team ${playerId}`,
+    teamShortName: `T${playerId}`,
+    position: "MID",
+    currentPrice: 75,
+    selectedByPercent: 12.3,
+    progressPercent: 0,
+    hourlyRate: 0,
+    status: "UNLIKELY",
+    ownershipTrend: "FLAT",
+    transfersInEvent: 0,
+    transfersOutEvent: 0,
+    lockedUntil: null,
+    calibrating: false,
+    ...overrides,
+  };
+}
+
+describe("price change prediction parity", () => {
+  it("prioritizes likely squad players in the default web sort", () => {
+    const players = [
+      player(4, { progressPercent: 98 }),
+      player(3, { status: "LIKELY_RISE", progressPercent: 30 }),
+      player(2, { status: "LIKELY_FALL", progressPercent: -80 }),
+      player(1, { status: "VERY_LIKELY_RISE", progressPercent: 20 }),
+    ];
+    const sorted = sortPriceChangePlayers(players, {
+      sort: DEFAULT_PRICE_CHANGE_SORT,
+      squadElementIds: new Set([3]),
+    });
+    assert.deepEqual(sorted.map((item) => item.playerId), [3, 2, 1, 4]);
+    assert.deepEqual(players.map((item) => item.playerId), [4, 3, 2, 1]);
+  });
+
+  it("combines squad, team, movement and text filters", () => {
+    const players = [
+      player(1, { webName: "Saka", teamId: 5, teamName: "Arsenal", teamShortName: "ARS", progressPercent: 76 }),
+      player(2, { webName: "Saliba", teamId: 5, teamName: "Arsenal", teamShortName: "ARS", progressPercent: -32 }),
+      player(3, { webName: "Palmer", teamId: 7, teamName: "Chelsea", teamShortName: "CHE", progressPercent: 80 }),
+    ];
+    const filtered = filterPriceChangePlayers(players, {
+      search: "ars",
+      movement: "rise",
+      scope: "mine",
+      teamId: "5",
+      squadElementIds: new Set([1, 3]),
+    });
+    assert.deepEqual(filtered.map((item) => item.playerId), [1]);
+  });
+
+  it("groups locked and calibrating players under the locked filter", () => {
+    const filtered = filterPriceChangePlayers([
+      player(1, { status: "LOCKED" }),
+      player(2, { status: "CALIBRATING" }),
+      player(3, { status: "UNLIKELY" }),
+    ], {
+      search: "",
+      movement: "locked",
+      scope: "all",
+      teamId: "all",
+    });
+    assert.deepEqual(filtered.map((item) => item.playerId), [1, 2]);
+  });
+
+  it("uses FPL half-profit selling prices and sorts personal columns", () => {
+    assert.equal(calculateSellingPrice(60, 80), 70);
+    assert.equal(calculateSellingPrice(70, 80), 75);
+    assert.equal(calculateSellingPrice(80, 70), 70);
+    const sorted = sortPriceChangePlayers([
+      player(1, { currentPrice: 80 }),
+      player(2, { currentPrice: 80 }),
+    ], {
+      sort: { column: "sellingPrice", direction: "desc" },
+      purchasePrices: { "1": 60, "2": 70 },
+    });
+    assert.deepEqual(sorted.map((item) => item.playerId), [2, 1]);
+  });
+
+  it("resolves transferred players after a club move and ignores free-hit prices", () => {
+    const board = [
+      player(9, { webName: "Example", teamShortName: "NEW", position: "DEF" }),
+    ];
+    const resolved = resolveTransferPlayerIds([{
+      eventId: 2,
+      transfers: [{
+        eventId: 2,
+        elementInWebName: "Example",
+        elementInTypeName: "DEFENDER",
+        elementInTeamShortName: "OLD",
+        elementInCost: 52,
+        time: "2026-08-20T10:00:00Z",
+      }],
+    }], board);
+    assert.deepEqual(resolved, [{
+      eventId: 2,
+      elementInId: 9,
+      elementInCost: 52,
+      time: "2026-08-20T10:00:00Z",
+    }]);
+    const freeHit = buildPersonalPurchasePrices({
+      squadElementIds: [9],
+      startPrices: { "9": 50 },
+      transfers: resolved,
+      historyChips: { "2": "FREE_HIT" },
+    });
+    assert.deepEqual(freeHit, { state: "READY", purchasePrices: { "9": 50 } });
+  });
+
+  it("marks incomplete personal price coverage as partial", () => {
+    const prices = buildPersonalPurchasePrices({
+      squadElementIds: [1, 2],
+      startPrices: { "1": 60 },
+      transfers: [],
+    });
+    assert.deepEqual(prices, { state: "PARTIAL", purchasePrices: { "1": 60 } });
+  });
+
+  it("builds a mobile row and share text from the same active result", () => {
+    const source = player(1, {
+      webName: "Example",
+      teamShortName: "EXM",
+      teamName: "Example FC",
+      currentPrice: 75,
+      progressPercent: 81.2,
+      hourlyRate: 1.2,
+      status: "LIKELY_RISE",
+      ownershipTrend: "UP",
+      transfersInEvent: 1_200,
+      transfersOutEvent: 200,
+    });
+    const row = buildPriceChangeViewRow(source, {
+      showPersonalPrices: true,
+      purchasePrices: { "1": 65 },
+    });
+    assert.equal(row.progressText, "+81.2%");
+    assert.equal(row.purchasePriceText, "£6.5m");
+    assert.equal(row.sellingPriceText, "£7.0m");
+    assert.equal(row.netTransfersText, "+1k");
+    const text = formatPriceChangeShareText({
+      players: [source],
+      scopeLabel: "我的阵容",
+      deadlineLabel: "8月23日 周日 18:00",
+    });
+    assert.match(text, /身价预测 · 我的阵容/);
+    assert.match(text, /Example EXM · £7\.5m · 进度 \+81\.2%/);
+    assert.match(text, /净转会 \+1k/);
+    assert.match(text, /explore\/price-changes/);
+  });
+});

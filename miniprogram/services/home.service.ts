@@ -1,6 +1,68 @@
 import { graphqlRead } from "./graphql.service";
 import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
 import type { GameweekOverallSummary } from "../models/summary";
+import type { EntryLeague, HomeH2HMatchup } from "../models/entry";
+
+export const MINI_HOME_PERSONAL_LEAGUES_QUERY = `
+  query MiniHomePersonalLeagues {
+    homePersonalDesk {
+      state
+      entryName
+      playerName
+      leagueRanks {
+        key
+        name
+        leagueType
+        rank
+        tournamentId
+        h2hMatchup {
+          officialMatchId
+          eventId
+          isLive
+          isFinal
+          isBye
+          sourceCheckedAt
+          viewer {
+            entryId
+            entryName
+            playerName
+            isAverage
+            points
+          }
+          opponent {
+            entryId
+            entryName
+            playerName
+            isAverage
+            points
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface MiniHomePersonalLeaguesResponse {
+  homePersonalDesk: {
+    state: "READY" | "EMPTY" | "STALE" | "UNAVAILABLE";
+    entryName?: string | null;
+    playerName?: string | null;
+    leagueRanks: Array<{
+      key: string;
+      name: string;
+      leagueType: "CLASSIC" | "H2H";
+      rank?: number | null;
+      tournamentId?: number | null;
+      h2hMatchup?: HomeH2HMatchup | null;
+    }>;
+  };
+}
+
+export interface MiniHomePersonalLeaguesResult {
+  entryName: string;
+  playerName: string;
+  leagues: EntryLeague[];
+}
 
 export const MINI_HOME_SUPPLEMENT_QUERY = `
   query MiniHomeSupplement {
@@ -67,6 +129,43 @@ function rootError(errors: GraphQLErrorInfo[], root: string): string {
     .filter((error) => String(error.path?.[0] || "") === root)
     .map((error) => error.message || "数据加载失败")
     .join("；");
+}
+
+export async function getMiniHomePersonalLeagues(
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<MiniHomePersonalLeaguesResult> {
+  const result = await graphqlRead<MiniHomePersonalLeaguesResponse>(
+    MINI_HOME_PERSONAL_LEAGUES_QUERY,
+    {},
+    {
+      authMode: "session",
+      cachePolicy: "reporting",
+      forceRefresh,
+      trace,
+    },
+  );
+  const error = rootError(result.errors, "homePersonalDesk");
+  if (error) throw new Error(error);
+
+  const desk = result.data.homePersonalDesk;
+  if (!desk || desk.state === "UNAVAILABLE") {
+    throw new Error("首页联赛数据暂时不可用");
+  }
+
+  return {
+    entryName: String(desk.entryName || "").trim(),
+    playerName: String(desk.playerName || "").trim(),
+    leagues: (desk.leagueRanks || []).map((league) => ({
+      id: league.key,
+      name: league.name,
+      rank: league.rank ?? undefined,
+      officialKind: "INVITATIONAL",
+      type: league.leagueType,
+      tournamentId: league.tournamentId ?? undefined,
+      h2hMatchup: league.h2hMatchup ?? null,
+    })),
+  };
 }
 
 const HOME_TEASER_LIMIT = 5;

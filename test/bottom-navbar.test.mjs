@@ -42,9 +42,16 @@ test("tapping 探索 opens the web-aligned section menu from an explore-owned de
   assert.equal(context.data.show, true);
   assert.deepEqual(
     context.data.actions.map((action) => action.name),
-    ["本轮", "赛程", "市场", "趋势", "球员"],
+    ["本轮", "赛程", "市场", "身价预测", "趋势", "球员"],
     "the explore menu mirrors the web section vocabulary"
   );
+});
+
+test("the explore menu exposes the price prediction board", () => {
+  const { context, redirects } = navbarContext("pages/data/price/price", "explore");
+  navbar.methods.onChange.call(context, { detail: "explore" });
+  navbar.methods.onSelect.call(context, { detail: { name: "身价预测" } });
+  assert.deepEqual(redirects, ["/pages/explore/price-changes/price-changes"]);
 });
 
 test("the explore menu routes to the physical destinations", () => {

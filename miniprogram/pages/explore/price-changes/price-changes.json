@@ -1,13 +1,14 @@
 {
-  "navigationBarTitleText": "实时比赛",
+  "navigationBarTitleText": "身价预测",
   "enablePullDownRefresh": true,
+  "enableShareAppMessage": true,
+  "enableShareTimeline": true,
   "usingComponents": {
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
-    "live-status-bar": "../../../components/live-status-bar/live-status-bar",
-    "copy-fallback": "../../../components/copy-fallback/copy-fallback",
-    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet"
+    "filter-bar": "../../../components/filter-bar/filter-bar",
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
   }
 }
