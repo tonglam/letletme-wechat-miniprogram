@@ -58,6 +58,7 @@ import {
 } from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
 import {
+  canPaginateTournamentBoard,
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
@@ -828,6 +829,7 @@ PerformancePage({
   selectionIndexRequestId: 0,
   compareRequestId: 0,
   boardControlRequestId: 0,
+  committedBoardControlRequestId: 0,
   committedBoardControls: null as BoardControlState | null,
   resumeDirectoryAfterShow: false,
   resumeDirectoryForceRefresh: false,
@@ -1516,6 +1518,7 @@ PerformancePage({
 
   commitBoardControls() {
     this.committedBoardControls = this.captureBoardControls();
+    this.committedBoardControlRequestId = this.boardControlRequestId;
   },
 
   restoreCommittedBoardControls() {
@@ -1601,6 +1604,7 @@ PerformancePage({
         }),
       ),
     });
+    this.committedBoardControlRequestId = this.boardControlRequestId;
   },
 
   currentBoardScope() {
@@ -3077,6 +3081,14 @@ PerformancePage({
     }
     if (this.usingLegacyBoard || !this.boardPage) {
       this.applyRows(this.rows, false);
+      return;
+    }
+    if (!canPaginateTournamentBoard({
+      loading: this.data.loading,
+      refreshing: this.data.refreshing,
+      boardControlRequestId: this.boardControlRequestId,
+      committedBoardControlRequestId: this.committedBoardControlRequestId,
+    })) {
       return;
     }
     const currentPage = this.boardPage;

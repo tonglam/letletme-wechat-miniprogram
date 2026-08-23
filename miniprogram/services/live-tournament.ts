@@ -225,6 +225,17 @@ export function filterTournamentLiveRows(rows: LiveTournamentRow[], keyword: str
   return rows.filter((row) => (row.searchText || searchText(row)).includes(normalizedKeyword));
 }
 
+export function canPaginateTournamentBoard(input: {
+  loading: boolean;
+  refreshing: boolean;
+  boardControlRequestId: number;
+  committedBoardControlRequestId: number;
+}): boolean {
+  return !input.loading
+    && !input.refreshing
+    && input.boardControlRequestId === input.committedBoardControlRequestId;
+}
+
 export function filterTournamentRowsByOwnership(
   rows: LiveTournamentRow[],
   filter: TournamentOwnershipFilter

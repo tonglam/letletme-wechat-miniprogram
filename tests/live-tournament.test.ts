@@ -1,4 +1,5 @@
 import {
+  canPaginateTournamentBoard,
   filterTournamentLiveRows,
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
@@ -98,6 +99,37 @@ const rows = mapTournamentLiveRows([
     ]
   }
 ]);
+
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: false,
+    boardControlRequestId: 4,
+    committedBoardControlRequestId: 4,
+  }),
+  true,
+  "pagination is allowed for the committed board controls",
+);
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: true,
+    boardControlRequestId: 5,
+    committedBoardControlRequestId: 4,
+  }),
+  false,
+  "pagination is blocked while changed controls reload page one",
+);
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: false,
+    boardControlRequestId: 5,
+    committedBoardControlRequestId: 4,
+  }),
+  false,
+  "pagination is blocked while controls differ from the visible page",
+);
 
 assertEqual(rows[0]?.entry, 101, "entry id is preserved");
 assertEqual(rows[0]?.liveTotalPoints, 1510, "live total is preserved");
