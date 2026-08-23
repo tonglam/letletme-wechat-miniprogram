@@ -304,6 +304,12 @@ function exactUpdatedTime(value?: string | null): string {
   return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
 }
 
+export function formatBoardAveragePoints(
+  value: number | null | undefined,
+): string {
+  return value == null ? "—" : formatAverageNumber(value);
+}
+
 function boardSortOf(key: SortKey): LiveBoardSort {
   switch (key) {
     case "liveNetPoints":
@@ -1654,10 +1660,7 @@ PerformancePage({
       hasMore: page.hasMore,
       highestText:
         page.highestEventPoints == null ? "—" : String(page.highestEventPoints),
-      averageText:
-        page.averageEventPoints == null
-          ? "—"
-          : String(Math.round(page.averageEventPoints)),
+      averageText: formatBoardAveragePoints(page.averageEventPoints),
       entriesText: String(page.totalEntries),
       scoreStatusText: managerStatusFromBoard(page, options.lastGood === true),
       scoreNextRefreshAt: page.managerNextRefreshAt || "",

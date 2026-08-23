@@ -79,4 +79,7 @@ test("live tournament header keeps the field average at two decimals", () => {
   assert.equal(stats.highestText, "59");
   assert.equal(stats.averageText, "32.67");
   assert.equal(stats.entriesText, "3");
+  assert.equal(liveTournament.formatBoardAveragePoints(32.01020408163265), "32.01");
+  assert.equal(liveTournament.formatBoardAveragePoints(0), "0.00");
+  assert.equal(liveTournament.formatBoardAveragePoints(null), "—");
 });
