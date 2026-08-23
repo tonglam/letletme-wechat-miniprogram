@@ -22,7 +22,7 @@ import {
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
 const LAST_GOOD_MAX_AGE_MS = DAY;
-const START_PRICE_BATCH_SIZE = 5;
+const START_PRICE_BATCH_SIZE = 2;
 
 export const PRICE_CHANGE_BOARD_QUERY = `
   query GetPriceChangeBoard {
@@ -295,8 +295,13 @@ async function getSquadStartPrices(input: {
   const startPrices: Record<string, number> = {};
   pages.flat().forEach((entry) => {
     const value = entry.overview?.value;
-    if (value && Number.isFinite(value.startPrice) && Number(value.startPrice) >= 0) {
-      startPrices[String(entry.playerId)] = Number(value.startPrice);
+    if (
+      typeof value?.startPrice === "number"
+      && Number.isFinite(value.startPrice)
+      && value.startPrice >= 0
+    ) {
+      // PlayerStatsDesk already returns official FPL tenths (60 = £6.0m).
+      startPrices[String(entry.playerId)] = value.startPrice;
     }
   });
   return startPrices;

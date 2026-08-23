@@ -45,6 +45,12 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   );
   assert.match(page, /getMiniHomePersonalLeagues/);
   assert.match(page, /homePersonalLeaguesMatchEntry/);
+  const homeService = source("miniprogram/services/home.service.ts");
+  assert.match(
+    homeService,
+    /desk\.state === "STALE" \|\| result\.meta\.stale/,
+    "stale personal desks must fall back instead of rendering old H2H scores as live",
+  );
   assert.equal(
     (page.match(/getEntryLeagueInfo\(entryId,/g) || []).length,
     1,

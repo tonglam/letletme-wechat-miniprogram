@@ -18,6 +18,11 @@ const {
   PRICE_CHANGE_PERSONAL_QUERY,
   PRICE_CHANGE_START_PRICES_QUERY
 } = await import("../miniprogram/services/price-change.service.ts");
+const {
+  GET_MY_FPL_COMPETITIONS_DESK,
+  GET_MY_FPL_COMPETITION_BOARD,
+  GET_MY_FPL_COMPETITION_SEASON_PATH
+} = await import("../miniprogram/services/tournament.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
 
@@ -34,7 +39,10 @@ const operations = [
   ["MINI_HOME_PERSONAL_LEAGUES_QUERY", MINI_HOME_PERSONAL_LEAGUES_QUERY],
   ["PRICE_CHANGE_BOARD_QUERY", PRICE_CHANGE_BOARD_QUERY],
   ["PRICE_CHANGE_PERSONAL_QUERY", PRICE_CHANGE_PERSONAL_QUERY],
-  ["PRICE_CHANGE_START_PRICES_QUERY", PRICE_CHANGE_START_PRICES_QUERY]
+  ["PRICE_CHANGE_START_PRICES_QUERY", PRICE_CHANGE_START_PRICES_QUERY],
+  ["GET_MY_FPL_COMPETITIONS_DESK", GET_MY_FPL_COMPETITIONS_DESK],
+  ["GET_MY_FPL_COMPETITION_BOARD", GET_MY_FPL_COMPETITION_BOARD],
+  ["GET_MY_FPL_COMPETITION_SEASON_PATH", GET_MY_FPL_COMPETITION_SEASON_PATH]
 ];
 
 async function loadSchema() {
@@ -59,16 +67,15 @@ for (const [name, document] of operations) {
   let errors;
   try {
     const ast = parse(document);
-    if (name === "LIVE_FIXTURE_PLAYERS_BATCH") {
-      let astNodes = 0;
-      visit(ast, { enter: () => void (astNodes += 1) });
-      if (astNodes > 200) {
-        failed += 1;
-        console.error(
-          `[FAIL] ${name}: ${astNodes} AST nodes exceeds the production limit of 200`,
-        );
-        continue;
-      }
+    let astNodes = 0;
+    visit(ast, { enter: () => void (astNodes += 1) });
+    const maxAstNodes = name === "GET_MY_FPL_COMPETITIONS_DESK" ? 400 : 200;
+    if (astNodes > maxAstNodes) {
+      failed += 1;
+      console.error(
+        `[FAIL] ${name}: ${astNodes} AST nodes exceeds the production limit of ${maxAstNodes}`,
+      );
+      continue;
     }
     errors = validate(schema, ast);
   } catch (error) {

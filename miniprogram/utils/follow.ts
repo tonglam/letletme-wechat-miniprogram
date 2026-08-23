@@ -1,5 +1,10 @@
 import { storageKeys } from "../config/storage-keys";
-import { getApiSessionToken } from "../services/auth.service";
+import {
+  getApiSessionToken,
+  getVerifiedSessionEntryId,
+  hasStoredSessionProfileBinding,
+  refreshWechatApiSession
+} from "../services/auth.service";
 
 /**
  * Cold-start entry authority gate. Without a usable API session the app first
@@ -8,14 +13,23 @@ import { getApiSessionToken } from "../services/auth.service";
  * snapshotting the follow or they can fetch and cache the previous team.
  */
 export async function waitForAuthoritativeFollow(): Promise<void> {
-  if (getApiSessionToken()) {
-    return;
+  if (!getApiSessionToken()) {
+    try {
+      const app = getApp<IAppOption>();
+      await app.authReady;
+    } catch {
+      // Failed/blocked auth intentionally keeps the local display-only follow.
+    }
   }
-  try {
-    const app = getApp<IAppOption>();
-    await app.authReady;
-  } catch {
-    // Failed/blocked auth intentionally keeps the local display-only follow.
+  // Existing installs may restore a still-valid encrypted token that predates
+  // the separate verified-entry key. Refresh once so personal surfaces never
+  // infer account identity from a manually followed team.
+  if (getApiSessionToken() && !hasStoredSessionProfileBinding()) {
+    try {
+      await refreshWechatApiSession();
+    } catch {
+      // The local follow remains usable by public, non-personal surfaces.
+    }
   }
 }
 
@@ -36,4 +50,13 @@ export function currentFollowEntryId(): number | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** My FPL is account-owned: a verified session binding wins over the follow. */
+export function currentMyFplEntryId(): number | undefined {
+  // A verified zero binding means the signed-in account has no linked FPL
+  // team; do not silently substitute a display-only followed team.
+  return getApiSessionToken()
+    ? getVerifiedSessionEntryId()
+    : currentFollowEntryId();
 }

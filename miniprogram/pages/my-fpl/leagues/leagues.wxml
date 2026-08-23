@@ -202,7 +202,7 @@
 
       <view class="section">
         <view class="result-row">
-          <view class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{boardRows.length}}</view>
+          <view class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{boardTotalRows || boardRows.length}}</view>
         </view>
         <app-empty-state
           wx:if="{{displayedRows.length === 0}}"

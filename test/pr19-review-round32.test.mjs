@@ -37,7 +37,7 @@ test("My FPL Team resumed startup waits for current entry authority", () => {
   const page = read("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(
     page,
-    /initializeFromContext\([\s\S]*await app\.authReady[\s\S]*this\.perfTracker !== owningTracker[\s\S]*entryId: app\.globalData\.entryId/
+    /initializeFromContext\([\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.perfTracker !== owningTracker[\s\S]*entryId: currentMyFplEntryId\(\) \?\? 0/
   );
   assert.match(
     page,

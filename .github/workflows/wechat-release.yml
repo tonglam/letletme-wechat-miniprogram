@@ -1,29 +1,113 @@
 name: WeChat Release
+run-name: WeChat release ${{ inputs.version }} @ ${{ inputs.commit_sha }}
 
 on:
   workflow_dispatch:
     inputs:
       auditid:
-        description: Audit id returned by the submit_audit step of the upload workflow
+        description: Audit id printed by the selected successful upload workflow run
+        required: true
+        type: string
+      version:
+        description: Exact Mini Program version used by the upload workflow
+        required: true
+        type: string
+      commit_sha:
+        description: Exact 40-character origin/main commit used by the upload workflow
+        required: true
+        type: string
+      upload_run_id:
+        description: Successful Signed WeChat Upload run that submitted this audit id
         required: true
         type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
     environment: wechat-release
     steps:
-      # The audit id must come from the WeChat MP console or an authorized
-      # third-party submission. The upload workflow never fabricates one when
-      # the first-party credential receives errcode 86000.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable upload provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT_SHA: ${{ inputs.commit_sha }}
+          UPLOAD_RUN_ID: ${{ inputs.upload_run_id }}
+          AUDIT_ID: ${{ inputs.auditid }}
+        run: |
+          set -eu
+          printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9A-Za-z._-]+$'
+          printf '%s' "$RELEASE_COMMIT_SHA" | grep -Eq '^[0-9a-fA-F]{40}$'
+          printf '%s' "$UPLOAD_RUN_ID" | grep -Eq '^[0-9]+$'
+          printf '%s' "$AUDIT_ID" | grep -Eq '^[0-9]+$'
+          remote_sha=$(curl -fsSL --max-time 30 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+            | jq -r '.object.sha')
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
+          test "$remote_sha" = "$RELEASE_COMMIT_SHA"
+
+          run_response=$(curl -fsSL --max-time 30 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$UPLOAD_RUN_ID")
+          test "$(printf '%s' "$run_response" | jq -r '.name')" = "Signed WeChat Upload"
+          test "$(printf '%s' "$run_response" | jq -r '.path')" = ".github/workflows/wechat-upload.yml"
+          test "$(printf '%s' "$run_response" | jq -r '.event')" = "workflow_dispatch"
+          test "$(printf '%s' "$run_response" | jq -r '.conclusion')" = "success"
+          test "$(printf '%s' "$run_response" | jq -r '.head_branch')" = "main"
+          test "$(printf '%s' "$run_response" | jq -r '.head_sha')" = "$RELEASE_COMMIT_SHA"
+          expected_title="WeChat upload $RELEASE_VERSION @ $RELEASE_COMMIT_SHA"
+          test "$(printf '%s' "$run_response" | jq -r '.display_title')" = "$expected_title"
+
+      - name: Download verified audit provenance
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: wechat-audit-provenance
+          path: verified-audit-provenance
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.upload_run_id }}
+
+      - name: Verify audit provenance payload
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT_SHA: ${{ inputs.commit_sha }}
+          UPLOAD_RUN_ID: ${{ inputs.upload_run_id }}
+          AUDIT_ID: ${{ inputs.auditid }}
+        run: |
+          set -eu
+          provenance=verified-audit-provenance/wechat-audit-provenance.json
+          test -f "$provenance"
+          test "$(jq -r '.auditid' "$provenance")" = "$AUDIT_ID"
+          test "$(jq -r '.version' "$provenance")" = "$RELEASE_VERSION"
+          test "$(jq -r '.commit_sha' "$provenance")" = "$RELEASE_COMMIT_SHA"
+          test "$(jq -r '.upload_run_id' "$provenance")" = "$UPLOAD_RUN_ID"
+          test "$(jq -r 'keys | sort | join(",")' "$provenance")" = "auditid,commit_sha,upload_run_id,version"
+          echo "Verified upload run $UPLOAD_RUN_ID: version=$RELEASE_VERSION commit=$RELEASE_COMMIT_SHA auditid=$AUDIT_ID"
+
+      # Programmatic release is permitted only when the exact audit id can be
+      # recovered from the immutable successful upload run above. A console-
+      # submitted audit must also be released in the console, where its version
+      # is visible, rather than being guessed by this workflow.
       - name: Check audit status and release when approved
         env:
           WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
           WECHAT_SECRET: ${{ secrets.WECHAT_SECRET }}
           AUDIT_ID: ${{ inputs.auditid }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT_SHA: ${{ inputs.commit_sha }}
+          UPLOAD_RUN_ID: ${{ inputs.upload_run_id }}
         run: |
           set -eu
           test -n "$WECHAT_APPID"
@@ -89,4 +173,7 @@ jobs:
           fi
           echo "Released audit $AUDIT_ID to production"
           echo "## WeChat Release" >> "$GITHUB_STEP_SUMMARY"
-          echo "Released audit $AUDIT_ID to production" >> "$GITHUB_STEP_SUMMARY"
+          echo "- version: $RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: $RELEASE_COMMIT_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- upload run: $UPLOAD_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "- audit: $AUDIT_ID" >> "$GITHUB_STEP_SUMMARY"

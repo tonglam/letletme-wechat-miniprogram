@@ -1,6 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import {
-  getMyFplCompetitionBoard,
+  getCompleteMyFplCompetitionBoard,
   getMyFplCompetitionSeasonPath,
   getMyFplCompetitionsDesk,
   type MyFplCompetitionBoard,
@@ -28,7 +28,7 @@ import {
 } from "../../../utils/season-chart";
 import type { MiniChartPoint } from "../../../utils/mini-chart";
 import { recordMyFplVisit } from "../../../utils/perf";
-import { currentFollowEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
+import { currentMyFplEntryId, waitForAuthoritativeFollow } from "../../../utils/follow";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -145,6 +145,7 @@ interface LeaguesData {
   boardRows: BoardRow[];
   displayedRows: BoardRow[];
   filteredCount: number;
+  boardTotalRows: number;
   sortOptions: SortOption[];
   sortKey: BoardSortKey;
   sortAsc: boolean;
@@ -166,7 +167,7 @@ interface LeaguesData {
   pathHasSelected: boolean;
 }
 
-const DIRECTORY_CACHE_KEY = "my-fpl:tournaments";
+const DIRECTORY_CACHE_KEY = "my-fpl:tournaments:v2";
 const LAST_PICK_KEY = "my-fpl:tournament:last";
 const PAGE_STEP = 20;
 /** Leagues warm-show skip window (aligned with home/live index at 60s; team is 5 min). */
@@ -346,6 +347,7 @@ PerformancePage({
     boardRows: [] as BoardRow[],
     displayedRows: [] as BoardRow[],
     filteredCount: 0,
+    boardTotalRows: 0,
     sortOptions: SEASON_SORT_OPTIONS,
     sortKey: "rank" as BoardSortKey,
     sortAsc: true,
@@ -421,7 +423,7 @@ PerformancePage({
         || shouldReloadLeagues(
           this.lastLoadAt,
           this.loadedEntryId,
-          currentFollowEntryId() ?? 0,
+          currentMyFplEntryId() || 0,
           this.loadedSeason,
           app.globalData.season || undefined,
           this.loadedEvent,
@@ -489,7 +491,7 @@ PerformancePage({
     const isActiveRequest = () => this.pageVisible
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId;
-    const entryId = currentFollowEntryId();
+    const entryId = currentMyFplEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
@@ -552,25 +554,29 @@ PerformancePage({
       const tournaments = desk.tournaments || [];
       if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
-      if ((season && currentSeason && season !== currentSeason) || currentFollowEntryId() !== entryId) {
+      const currentEntryId = currentMyFplEntryId();
+      if ((season && currentSeason && season !== currentSeason) || currentEntryId !== entryId) {
         void this.loadLeagues(true, trace);
         return;
       }
+      const deskViewerEntryId = Number(desk.aggregate?.viewer?.entryId) || 0;
+      const effectiveEntryId = deskViewerEntryId || entryId;
       this.setData({
         loading: false,
+        entryId: effectiveEntryId,
         tournaments,
         tournamentNames: tournaments.map((t) => t.name),
         fromCache: false
       });
       this.loadedSeason = currentSeason || cached?.season;
       this.lastLoadAt = Date.now();
-      this.loadedEntryId = entryId;
+      this.loadedEntryId = effectiveEntryId;
       this.loadedEvent = this.data.event;
       this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
       try {
         if (currentSeason) {
           wx.setStorageSync(DIRECTORY_CACHE_KEY, {
-            entryId,
+            entryId: effectiveEntryId,
             season: currentSeason,
             tournaments,
             storedAt: Date.now()
@@ -648,6 +654,7 @@ PerformancePage({
         hasGwData: false,
         boardRows: [],
         displayedRows: [],
+        boardTotalRows: 0,
         viewError: "",
         ...emptyPathState(),
         pathLoading: true
@@ -686,7 +693,8 @@ PerformancePage({
       hasGwData: false,
       pathLoading: false,
       boardRows: [],
-      displayedRows: []
+      displayedRows: [],
+      boardTotalRows: 0
     });
   },
 
@@ -752,13 +760,12 @@ PerformancePage({
       );
       if (!this.isActiveViewRequest(requestId)) return;
       const eventId = Number(desk.eventId) || 0;
+      const viewerEntryId = Number(desk.aggregate?.viewer?.entryId) || 0;
+      const viewEntryId = viewerEntryId || entryId;
       const board = desk.state === "READY" && eventId > 0 && desk.aggregate
-        ? await getMyFplCompetitionBoard(
+        ? await getCompleteMyFplCompetitionBoard(
             Number(tournament.id),
             eventId,
-            1,
-            100,
-            "",
             forceRefresh,
             trace
           )
@@ -771,7 +778,7 @@ PerformancePage({
       if (view === "season") {
         await this.loadSeasonView(
           Number(tournament.id),
-          entryId,
+          viewEntryId,
           forceRefresh,
           requestId,
           trace,
@@ -782,7 +789,7 @@ PerformancePage({
       } else {
         await this.loadGameweekView(
           Number(tournament.id),
-          entryId,
+          viewEntryId,
           forceRefresh,
           requestId,
           trace,
@@ -829,6 +836,7 @@ PerformancePage({
       this.seasonRows = [];
       this.setData({
         hasSeasonData: false,
+        boardTotalRows: board?.totalRows || board?.fieldSize || 0,
         boardRows: this.data.activeView === "season" ? [] : this.data.boardRows,
         displayedRows: this.data.activeView === "season" ? [] : this.data.displayedRows
       });
@@ -839,6 +847,7 @@ PerformancePage({
     this.seasonRows = snapshot.standings.map((row) => seasonBoardRow(row, entryId));
     this.setData({
       hasSeasonData: true,
+      boardTotalRows: Math.max(board?.totalRows || 0, board?.fieldSize || 0, snapshot.entryCount || 0),
       heroRank: formatCompactNumber(me?.tournamentOverallRank),
       heroRankSub: heroSubText(me),
       heroKicker: `截至第 ${snapshot.asOfEventId || this.data.event} 轮的积分榜`,
@@ -938,6 +947,7 @@ PerformancePage({
   ) {
     let activeDesk = desk;
     let activeBoard = board;
+    let activeEntryId = Number(activeDesk?.aggregate?.viewer?.entryId) || entryId;
     let event = Number(activeDesk?.eventId) || this.data.event;
     let notice = "";
     const ready = (candidateDesk?: MyFplCompetitionsDesk, candidateBoard?: MyFplCompetitionBoard | null) =>
@@ -956,13 +966,11 @@ PerformancePage({
       );
       if (!this.isActiveViewRequest(requestId)) return;
       const retriedEvent = Number(retriedDesk.eventId) || fallback;
+      const retriedViewerEntryId = Number(retriedDesk.aggregate?.viewer?.entryId) || 0;
       const retriedBoard = retriedDesk.state === "READY" && retriedDesk.aggregate
-        ? await getMyFplCompetitionBoard(
+        ? await getCompleteMyFplCompetitionBoard(
             tournamentId,
             retriedEvent,
-            1,
-            100,
-            "",
             forceRefresh,
             trace
           )
@@ -973,12 +981,14 @@ PerformancePage({
         event = retriedEvent;
         activeDesk = retriedDesk;
         activeBoard = retriedBoard;
+        activeEntryId = retriedViewerEntryId || entryId;
       }
     }
     if (!ready(activeDesk, activeBoard)) {
       this.gwRows = [];
       this.setData({
         hasGwData: false,
+        boardTotalRows: activeBoard?.totalRows || activeBoard?.fieldSize || 0,
         gwNotice: notice,
         boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
         displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
@@ -992,6 +1002,7 @@ PerformancePage({
       this.gwRows = [];
       this.setData({
         hasGwData: false,
+        boardTotalRows: activeBoard.totalRows || activeBoard.fieldSize || 0,
         gwNotice: notice,
         boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
         displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
@@ -1000,11 +1011,12 @@ PerformancePage({
       return;
     }
     const prevRankByEntry = previousRanksFromDesk(activeBoard);
-    this.gwRows = results.map((row) => gameweekBoardRow(row, entryId, prevRankByEntry));
+    this.gwRows = results.map((row) => gameweekBoardRow(row, activeEntryId, prevRankByEntry));
     this.setData({
       hasGwData: true,
+      boardTotalRows: Math.max(activeBoard.totalRows || 0, activeBoard.fieldSize || 0, results.length),
       gwNotice: notice,
-      gwTiles: gwPerformanceTiles(results, prevRankByEntry, entryId, event),
+      gwTiles: gwPerformanceTiles(results, prevRankByEntry, activeEntryId, event),
       topRows: gwTopRows(results),
       riserRows: gwMovementRows(results, prevRankByEntry, true),
       fallerRows: gwMovementRows(results, prevRankByEntry, false)
@@ -1041,7 +1053,7 @@ PerformancePage({
     this.syncBoard();
   },
 
-  /** Client-side filter + sort — the board set is one tournament, always small. */
+  /** Client-side filter + sort over the complete server-paginated board. */
   syncBoard() {
     const keyword = this.data.keyword.trim().toLowerCase();
     const filtered = keyword

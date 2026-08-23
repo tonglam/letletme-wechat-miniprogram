@@ -152,6 +152,12 @@ export async function getMiniHomePersonalLeagues(
   if (!desk || desk.state === "UNAVAILABLE") {
     throw new Error("首页联赛数据暂时不可用");
   }
+  // H2H scores are time-sensitive. Never present an explicitly stale desk (or
+  // a stale GraphQL cache read) as the current live matchup; the Home caller
+  // will fall back to the public league directory instead.
+  if (desk.state === "STALE" || result.meta.stale) {
+    throw new Error("首页联赛数据已过期");
+  }
 
   return {
     entryName: String(desk.entryName || "").trim(),

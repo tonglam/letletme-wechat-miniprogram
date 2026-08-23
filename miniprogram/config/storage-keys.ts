@@ -14,6 +14,7 @@ export const storageKeys = {
   apiSessionExpiresAt: "api-session-expires-at",
   pendingSessionRevocations: "api-session-revocations",
   apiProfileCheckedAt: "api-profile-checked-at",
+  apiProfileFplEntryId: "api-profile-fpl-entry-id",
   apiProfileEmail: "api-profile-email",
   deviceId: "mini-program-device-id",
   graphqlCooldownUntil: "graphql-cooldown-until",

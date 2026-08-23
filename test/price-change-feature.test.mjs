@@ -20,6 +20,10 @@ const cachePolicy = readFileSync(
   join(root, "miniprogram/services/graphql-cache-policy.ts"),
   "utf8",
 );
+const pageConfig = JSON.parse(readFileSync(
+  join(root, "miniprogram/pages/explore/price-changes/price-changes.json"),
+  "utf8",
+));
 
 test("price prediction uses the canonical GraphQL board and a public cache policy", () => {
   assert.match(service, /query GetPriceChangeBoard/);
@@ -27,6 +31,8 @@ test("price prediction uses the canonical GraphQL board and a public cache polic
   assert.match(service, /cacheTtl:\s*5 \* MINUTE/);
   assert.match(service, /LAST_GOOD_MAX_AGE_MS = DAY/);
   assert.match(cachePolicy, /GetPriceChangeBoard:\s*\{ authMode: "public"/);
+  assert.match(service, /const START_PRICE_BATCH_SIZE = 2;/);
+  assert.match(service, /startPrices\[String\(entry\.playerId\)\] = value\.startPrice;/);
 });
 
 test("price prediction exposes the web-equivalent mobile controls and caveat", () => {
@@ -48,5 +54,8 @@ test("price prediction is a tracked registered Explore page", () => {
   assert.match(routes, /explorePriceChanges/);
   assert.match(page, /PerformancePage\(/);
   assert.match(view, /id="perf-primary-content"/);
+  assert.doesNotMatch(view, /app-loading id="perf-primary-content"/);
   assert.match(view, /bottomNavBar active="explore"/);
+  assert.equal(pageConfig.enableShareAppMessage, true);
+  assert.equal(pageConfig.enableShareTimeline, true);
 });

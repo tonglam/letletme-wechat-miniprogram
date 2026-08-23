@@ -7,6 +7,7 @@ import {
   isSquadPitchStarter,
   kitAsset,
   normalizeSquadPitchLists,
+  sortSquadPitchBench,
   toSquadPitchHeader,
   toSquadPitchLists,
   toSquadPitchPlayer,
@@ -103,6 +104,18 @@ const mixedLists = normalizeSquadPitchLists(mixedPlayers);
 assertEqual(mixedLists.players.length, 11, "mixed pitch input keeps XI");
 assertEqual(mixedLists.benchPlayers.length, 4, "mixed pitch input creates bench");
 assertEqual(mixedLists.benchPlayers[0]?.webName, "BenchGk", "mixed input keeps official bench order");
+
+const shuffledBench = [
+  toSquadPitchPlayer(pick({ webName: "Slot15Def", elementTypeName: "DEF", position: 15, multiplier: 0 }))!,
+  toSquadPitchPlayer(pick({ webName: "Slot13Fwd", elementTypeName: "FWD", position: 13, multiplier: 0 }))!,
+  toSquadPitchPlayer(pick({ webName: "Slot12Gk", elementTypeName: "GKP", position: 12, multiplier: 0 }))!,
+  toSquadPitchPlayer(pick({ webName: "Slot14Mid", elementTypeName: "MID", position: 14, multiplier: 0 }))!
+];
+assertEqual(
+  sortSquadPitchBench(shuffledBench).map((player) => player.webName).join(","),
+  "Slot12Gk,Slot13Fwd,Slot14Mid,Slot15Def",
+  "bench keeps official slots 12-15 instead of position order"
+);
 
 const livePitch = buildLiveSquadPitchState({
   starters: formationPicks(4, 4, 2).map((entry) => ({

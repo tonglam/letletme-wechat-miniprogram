@@ -357,7 +357,7 @@ test("player route keywords are consumed before the first directory request sett
 test("personal responses never cross an authoritative follow change", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
-  assert.match(leagues, /currentFollowEntryId\(\) !== entryId[\s\S]*this\.loadLeagues\(true\)/);
+  assert.match(leagues, /currentEntryId !== entryId[\s\S]*this\.loadLeagues\(true\)/);
   assert.match(liveEntry, /restartForPrincipalChange\(entryId[\s\S]*currentFollowEntryId\(\)/);
   assert.match(
     liveEntry,

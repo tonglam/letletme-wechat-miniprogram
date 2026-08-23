@@ -366,6 +366,19 @@ export function buildMatchPlayerRows(
     });
 }
 
+export function findMatchPlayer(
+  matches: readonly LiveMatch[],
+  matchId: number | string,
+  element: number
+): LivePlayerRow | undefined {
+  const match = matches.find((item) =>
+    String(item.matchId || item.id || "") === String(matchId)
+  );
+  if (!match) return undefined;
+  return [...(match.homeTeamDataList || []), ...(match.awayTeamDataList || [])]
+    .find((row) => Number(row.element) === element);
+}
+
 /** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
 export function buildMatchHighlights(match: LiveMatch): MatchHighlightGroup[] {
   const status = String(match.status || match.playStatus || "");
@@ -1520,17 +1533,13 @@ Page({
   onOpenMatchPlayer(
     event: WechatMiniprogram.BaseEvent<
       WechatMiniprogram.IAnyObject,
-      { element?: number | string }
+      { element?: number | string; matchid?: number | string }
     >,
   ) {
     const element = Number(event.currentTarget.dataset.element);
-    if (!Number.isFinite(element)) return;
-    const player = this.coreMatches
-      .flatMap((match) => [
-        ...(match.homeTeamDataList || []),
-        ...(match.awayTeamDataList || []),
-      ])
-      .find((row) => Number(row.element) === element);
+    const matchId = event.currentTarget.dataset.matchid ?? "";
+    if (!Number.isFinite(element) || matchId === "") return;
+    const player = findMatchPlayer(this.coreMatches, matchId, element);
     if (!player) return;
     this.setData({
       playerDetailOpen: true,

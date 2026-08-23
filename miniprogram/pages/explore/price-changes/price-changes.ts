@@ -190,9 +190,9 @@ PerformancePage({
     shareText: "",
   },
 
-  board: EMPTY_PRICE_CHANGE_BOARD as PriceChangeBoard,
-  personalContext: EMPTY_PERSONAL_CONTEXT as PriceChangePersonalContext,
-  filteredPlayers: [] as PriceChangePlayer[],
+  board: null as unknown as PriceChangeBoard,
+  personalContext: null as unknown as PriceChangePersonalContext,
+  filteredPlayers: null as unknown as PriceChangePlayer[],
   defaultScope: "all" as PriceChangeScopeFilter,
   requestId: 0,
   lifecycleRevision: 0,
@@ -204,6 +204,11 @@ PerformancePage({
   countdownTimer: 0 as unknown as ReturnType<typeof setInterval>,
 
   async onLoad() {
+    // Free Page fields are shared by the DevTools definition clone. Initialise
+    // collection state per page instance before any lifecycle work reads it.
+    this.board = EMPTY_PRICE_CHANGE_BOARD;
+    this.personalContext = EMPTY_PERSONAL_CONTEXT;
+    this.filteredPlayers = [];
     this.pageVisible = true;
     await this.loadData("load");
   },

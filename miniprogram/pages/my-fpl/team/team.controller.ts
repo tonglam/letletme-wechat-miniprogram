@@ -10,7 +10,6 @@ import {
   type EntrySeasonHistoryItem,
   type EntryTransferMove
 } from "../../../services/summary.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import { goToEntrySearch, goToLiveEntry, setPageTitle } from "../../../utils/navigation";
 import {
   buildPlayerLiveDetail,
@@ -38,7 +37,10 @@ import {
 import type { MiniChartPoint, MiniChartType } from "../../../utils/mini-chart";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentMyFplEntryId,
+  waitForAuthoritativeFollow
+} from "../../../utils/follow";
 import { canReadEventReporting } from "../../../utils/event-context";
 import {
   ensureAppContext,
@@ -375,21 +377,19 @@ Page({
   ) {
     const app = getApp<IAppOption>();
     const owningTracker = tracker ?? this.perfTracker;
-    if (!getApiSessionToken()) {
-      // With no valid session the stored binding is only offline/display
-      // fallback: the account may have been relinked, so wait for the
-      // refreshed profile before snapshotting the entry. Enter the loading
-      // state first so the wait never renders placeholder content.
-      this.setData({ loading: true });
-      try { await app.authReady; } catch {}
-    }
+    // My FPL is account-owned. Wait for cold-start authentication (and migrate
+    // older valid sessions that predate the separate profile binding) before
+    // snapshotting the verified entry. The helper returns immediately for a
+    // current session whose profile binding is already stored.
+    this.setData({ loading: true });
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== owningTracker) return;
     const currentGw = Math.max(0, Number(app.globalData.gw) || 0);
     this.loadedSeason = app.globalData.season || undefined;
     this.startupPending = false;
     this.resumeStartupAfterShow = false;
     this.setData({
-      entryId: app.globalData.entryId ?? 0,
+      entryId: currentMyFplEntryId() ?? 0,
       event: currentGw,
       maxGw: currentGw
     });
@@ -770,7 +770,7 @@ Page({
   },
 
   restartForPrincipalChange(entryId: number | undefined): boolean {
-    const nextEntryId = currentFollowEntryId() ?? 0;
+    const nextEntryId = currentMyFplEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
     this.loadRequestId += 1;

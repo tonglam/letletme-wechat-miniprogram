@@ -270,6 +270,10 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   // Every persisted session carries a freshly fetched authoritative profile,
   // so the 24h revalidation throttle keys off this write.
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
+  // Keep the verified profile binding separate from the display-only follow.
+  // A zero sentinel means the profile was checked and has no verified entry;
+  // a missing key means an older build has not persisted this fact yet.
+  wx.setStorageSync(storageKeys.apiProfileFplEntryId, nextEntryId || 0);
   if (nextEntryId) {
     // The web-verified entry wins over any local selection: adopt it and drop
     // the previous team's entry-scoped caches.
@@ -300,6 +304,7 @@ export function clearApiSession(): void {
   [
     storageKeys.apiSessionToken,
     storageKeys.apiSessionExpiresAt,
+    storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail,
     storageKeys.entryId
   ].forEach((key) => {
@@ -325,6 +330,28 @@ export function getApiSessionToken(): string | null {
   return sessionMemory.token || null;
 }
 
+export function hasStoredSessionProfileBinding(): boolean {
+  if (!getApiSessionToken()) return false;
+  try {
+    const value = wx.getStorageSync(storageKeys.apiProfileFplEntryId) as unknown;
+    if (value === "" || value === undefined || value === null) return false;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= 0;
+  } catch {
+    return false;
+  }
+}
+
+export function getVerifiedSessionEntryId(): number | undefined {
+  if (!getApiSessionToken()) return undefined;
+  try {
+    const parsed = Number(wx.getStorageSync(storageKeys.apiProfileFplEntryId));
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Credentials-only cleanup. Unlike clearApiSession, the followed entry is
  * kept: it is a display-only preference (public FPL data) with no account
@@ -339,6 +366,7 @@ export function clearSessionCredentials(): void {
   [
     storageKeys.apiSessionToken,
     storageKeys.apiSessionExpiresAt,
+    storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail
   ].forEach((key) => {
     try {

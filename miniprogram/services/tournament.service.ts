@@ -102,7 +102,7 @@ const GET_TOURNAMENT_SEASON_SNAPSHOT = `
  * Mini query on the published core fields; snapshot metadata is deliberately
  * omitted until the Mini's local GraphQL baseline has caught up.
  */
-const GET_MY_FPL_COMPETITIONS_DESK = `
+export const GET_MY_FPL_COMPETITIONS_DESK = `
   query MyFplCompetitionsDesk($tournamentId: Int, $eventId: Int) {
     myFplCompetitionsDesk(tournamentId: $tournamentId, eventId: $eventId) {
       state
@@ -219,7 +219,7 @@ const GET_MY_FPL_COMPETITIONS_DESK = `
   }
 `;
 
-const GET_MY_FPL_COMPETITION_BOARD = `
+export const GET_MY_FPL_COMPETITION_BOARD = `
   query MyFplCompetitionBoard(
     $tournamentId: Int!
     $eventId: Int!
@@ -291,7 +291,7 @@ const GET_MY_FPL_COMPETITION_BOARD = `
   }
 `;
 
-const GET_MY_FPL_COMPETITION_SEASON_PATH = `
+export const GET_MY_FPL_COMPETITION_SEASON_PATH = `
   query MyFplCompetitionSeasonPath($tournamentId: Int!, $throughEventId: Int!) {
     myFplCompetitionSeasonPath(
       tournamentId: $tournamentId
@@ -675,6 +675,83 @@ export async function getMyFplCompetitionBoard(
     { tournamentId, eventId, page, pageSize, search: search || null },
     { cachePolicy: "reporting", forceRefresh, trace }
   ).then((data) => data.myFplCompetitionBoard);
+}
+
+const MY_FPL_BOARD_PAGE_SIZE = 100;
+const MY_FPL_BOARD_PAGE_CONCURRENCY = 4;
+
+export function mergeMyFplCompetitionBoardPages(
+  pages: readonly MyFplCompetitionBoard[]
+): MyFplCompetitionBoard {
+  const first = pages[0];
+  if (!first) throw new Error("赛事榜单没有返回分页数据");
+  const rows: MyFplCompetitionBoardRow[] = [];
+  const seen = new Set<number>();
+  for (const page of [...pages].sort((left, right) => left.page - right.page)) {
+    for (const row of page.rows || []) {
+      if (seen.has(row.entryId)) continue;
+      seen.add(row.entryId);
+      rows.push(row);
+    }
+  }
+  if (rows.length < first.totalRows) {
+    throw new Error(`赛事榜单加载不完整（${rows.length}/${first.totalRows}）`);
+  }
+  return { ...first, page: 1, rows };
+}
+
+/** Load every server page so local search and sort operate on the full field. */
+export async function getCompleteMyFplCompetitionBoard(
+  tournamentId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace
+): Promise<MyFplCompetitionBoard> {
+  const first = await getMyFplCompetitionBoard(
+    tournamentId,
+    eventId,
+    1,
+    MY_FPL_BOARD_PAGE_SIZE,
+    "",
+    forceRefresh,
+    trace
+  );
+  const totalPages = Math.max(1, Number(first.totalPages) || 1);
+  if (totalPages === 1) return mergeMyFplCompetitionBoardPages([first]);
+
+  const pages: MyFplCompetitionBoard[] = [first];
+  for (let start = 2; start <= totalPages; start += MY_FPL_BOARD_PAGE_CONCURRENCY) {
+    const pageNumbers = Array.from(
+      { length: Math.min(MY_FPL_BOARD_PAGE_CONCURRENCY, totalPages - start + 1) },
+      (_, index) => start + index
+    );
+    const batch = await Promise.all(pageNumbers.map((page) =>
+      getMyFplCompetitionBoard(
+        tournamentId,
+        eventId,
+        page,
+        MY_FPL_BOARD_PAGE_SIZE,
+        "",
+        forceRefresh,
+        trace
+      )
+    ));
+    for (let index = 0; index < batch.length; index += 1) {
+      const page = batch[index];
+      const expectedPage = pageNumbers[index];
+      if (
+        page.page !== expectedPage
+        || page.eventId !== first.eventId
+        || page.totalPages !== first.totalPages
+        || page.totalRows !== first.totalRows
+        || page.fieldSize !== first.fieldSize
+      ) {
+        throw new Error("赛事榜单在分页加载期间已更新，请重试");
+      }
+    }
+    pages.push(...batch);
+  }
+  return mergeMyFplCompetitionBoardPages(pages);
 }
 
 export async function getMyFplCompetitionSeasonPath(

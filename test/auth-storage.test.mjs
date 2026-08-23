@@ -6,11 +6,81 @@ import {
   clearSessionCredentials,
   confirmMiniProgramEmailLink,
   getApiSessionToken,
+  getVerifiedSessionEntryId,
+  hasStoredSessionProfileBinding,
   getLinkedAccountSnapshot,
   logoutMiniProgramSession,
   refreshWechatApiSession,
   restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
+import { currentMyFplEntryId } from "../miniprogram/utils/follow.ts";
+
+test("verified session identity stays separate from a later local follow", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 8743559]]);
+  const globalData = { entryId: 8743559 };
+  let loginSuccess;
+  let loginRequest;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        loginRequest = options;
+      }
+    };
+    globalThis.getApp = () => ({ globalData });
+    clearSessionCredentials();
+
+    const refresh = refreshWechatApiSession();
+    loginSuccess({ code: "verified-entry-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        linked: true,
+        token: "verified-entry-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: {
+          id: "profile",
+          name: null,
+          email: null,
+          fplEntryId: 6953,
+          fplEntryVerifiedAt: "2026-08-23T00:00:00.000Z",
+          wechatLinked: true
+        }
+      }
+    });
+    await refresh;
+
+    storage.set("entry", 8743559);
+    globalData.entryId = 8743559;
+    assert.equal(hasStoredSessionProfileBinding(), true);
+    assert.equal(getVerifiedSessionEntryId(), 6953);
+    assert.equal(currentMyFplEntryId(), 6953);
+
+    storage.set("api-profile-fpl-entry-id", 0);
+    assert.equal(
+      currentMyFplEntryId(),
+      undefined,
+      "an account with no verified FPL entry must not inherit the local follow",
+    );
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
 
 test("sign-out clears account caches without deleting public GraphQL data", () => {
   const previousWx = globalThis.wx;

@@ -1,6 +1,6 @@
 <view class="page page-tabbar">
   <view class="section hero-shell">
-    <view class="score-card price-hero">
+    <view class="scoreboard score-card price-hero">
       <view class="hero-topline">
         <view>
           <view class="score-team">身价预测</view>

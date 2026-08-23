@@ -16,6 +16,14 @@ test("My FPL Team loads the selected event before lazy support tabs", () => {
   assert.match(page, /restartForPrincipalChange\(entryId\)[\s\S]*this\.historyPayload = historyPayload/);
 });
 
+test("My FPL Team waits for and keeps the verified session entry", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
+  assert.match(page, /await waitForAuthoritativeFollow\(\)/);
+  assert.match(page, /entryId: currentMyFplEntryId\(\) \?\? 0/);
+  assert.match(page, /restartForPrincipalChange\(entryId[\s\S]*currentMyFplEntryId\(\) \?\? 0/);
+  assert.doesNotMatch(page, /currentFollowEntryId/);
+});
+
 test("My FPL Team owns independent primary and tab status surfaces", () => {
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(template, /id="perf-primary-content"/);

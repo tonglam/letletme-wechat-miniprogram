@@ -306,6 +306,22 @@ export function sortSquadPitchPlayers(players: readonly SquadPitchPlayer[]): Squ
   });
 }
 
+export function sortSquadPitchBench(players: readonly SquadPitchPlayer[]): SquadPitchPlayer[] {
+  return players
+    .map((player, index) => ({ player, index }))
+    .sort((left, right) => {
+      const leftSlot = Number(left.player.squadPosition);
+      const rightSlot = Number(right.player.squadPosition);
+      const leftHasSlot = Number.isSafeInteger(leftSlot) && leftSlot > 11;
+      const rightHasSlot = Number.isSafeInteger(rightSlot) && rightSlot > 11;
+      if (leftHasSlot && rightHasSlot) return leftSlot - rightSlot;
+      if (leftHasSlot) return -1;
+      if (rightHasSlot) return 1;
+      return left.index - right.index;
+    })
+    .map(({ player }) => player);
+}
+
 export interface SquadPitchRowInput {
   id?: string;
   element?: number | string;
@@ -484,7 +500,7 @@ export function normalizeSquadPitchLists(
 
   return {
     players: sortSquadPitchPlayers(starters),
-    benchPlayers: sortSquadPitchPlayers(bench).slice(0, 4)
+    benchPlayers: sortSquadPitchBench(bench).slice(0, 4)
   };
 }
 

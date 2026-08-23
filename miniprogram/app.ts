@@ -1,6 +1,7 @@
 import { getEntryId } from "./utils/storage";
 import {
   getApiSessionToken,
+  hasStoredSessionProfileBinding,
   isLogoutInFlight,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
@@ -181,7 +182,11 @@ App<IAppOption>({
   revalidateSessionProfile() {
     const lastChecked =
       Number(wx.getStorageSync(storageKeys.apiProfileCheckedAt)) || 0;
-    if (lastChecked && Date.now() - lastChecked < 24 * 60 * 60 * 1000) {
+    if (
+      hasStoredSessionProfileBinding()
+      && lastChecked
+      && Date.now() - lastChecked < 24 * 60 * 60 * 1000
+    ) {
       return;
     }
     const boundEntryAtStart = this.globalData.entryId;

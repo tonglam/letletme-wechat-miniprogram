@@ -76,6 +76,16 @@ test("league view failures take precedence over misleading empty states", async 
   assert.match(template, /showGameweek && !viewLoading && \(!viewError \|\| hasGwData\)/);
 });
 
+test("My FPL board loads every server page before local search and sort", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url), "utf8");
+  const template = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.wxml", import.meta.url), "utf8");
+  assert.match(page, /getCompleteMyFplCompetitionBoard/);
+  assert.doesNotMatch(page, /getMyFplCompetitionBoard\([\s\S]{0,160}?\b1,\s*\b100,/);
+  assert.match(page, /currentMyFplEntryId/);
+  assert.match(template, /boardTotalRows \|\| boardRows\.length/);
+});
+
 test("season path window loads the latest 8 gameweeks first", () => {
   assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
     recentStart: 31,
