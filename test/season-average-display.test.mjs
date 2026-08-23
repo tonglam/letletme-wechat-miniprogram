@@ -15,6 +15,9 @@ const summaryFormat = await import(
 const seasonChart = await import(
   "../miniprogram/utils/season-chart.ts"
 );
+const liveTournament = await import(
+  "../miniprogram/pages/live/tournament/tournament.controller.ts"
+);
 
 test("past-season rows use the authoritative season instead of row order", () => {
   const historyRow = {
@@ -64,4 +67,16 @@ test("league path summaries keep averages and differences at two decimals", () =
 
   assert.match(summary, /平均 32\.01/);
   assert.match(summary, /低 7\.01/);
+});
+
+test("live tournament header keeps the field average at two decimals", () => {
+  const stats = liveTournament.buildTournamentStats([
+    { eventPointsKnown: true, livePoints: 59 },
+    { eventPointsKnown: true, livePoints: 39 },
+    { eventPointsKnown: true, livePoints: 0 }
+  ]);
+
+  assert.equal(stats.highestText, "59");
+  assert.equal(stats.averageText, "32.67");
+  assert.equal(stats.entriesText, "3");
 });
