@@ -5,10 +5,10 @@
 export function presentImage(path: string): Promise<void> {
   return new Promise((resolve) => {
     const showMenu = (wx as WechatMiniprogram.Wx & {
-      showShareImageMenu?: (options: { path: string; success?: () => void; fail?: () => void; complete?: () => void }) => void;
+      showShareImageMenu?: (options: { path: string; needShowEntrance?: boolean; success?: () => void; fail?: () => void; complete?: () => void }) => void;
     }).showShareImageMenu;
     if (typeof showMenu === "function") {
-      showMenu({ path, complete: () => resolve() });
+      showMenu({ path, needShowEntrance: true, complete: () => resolve() });
       return;
     }
     void authorizeAlbum()

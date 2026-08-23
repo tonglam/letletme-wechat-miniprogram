@@ -126,10 +126,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12rpx;
   margin-bottom: 14rpx;
 }
 
 /* Per-match share — quiet circular tool, same language as the web icon button */
+.match-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.match-card-actions .tool-btn-labeled {
+  padding: 0 16rpx;
+}
+
 .status-pill {
   flex-shrink: 0;
   padding: 6rpx 12rpx;
