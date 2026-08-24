@@ -126,6 +126,7 @@ interface LiveEntryData {
   netPoints: number;
   netPointsKnown: boolean;
   transferCost: number;
+  transferCostKnown: boolean;
   captainText: string;
   chipText: string;
   playedText: string;
@@ -234,6 +235,7 @@ Page({
     netPoints: 0,
     netPointsKnown: false,
     transferCost: 0,
+    transferCostKnown: false,
     captainText: "-",
     chipText: "无",
     playedText: "-",
@@ -514,6 +516,7 @@ Page({
           totalText: "—",
           netPoints: 0,
           transferCost: 0,
+          transferCostKnown: false,
           captainText: "-",
           chipText: "无",
           playedText: "-",
@@ -790,6 +793,7 @@ Page({
       totalText: "—",
       netPoints: 0,
       transferCost: 0,
+      transferCostKnown: false,
       captainText: "-",
       chipText: "无",
       playedText: "-",
@@ -966,6 +970,9 @@ Page({
             result.score?.totalScope === "OVERALL" &&
             typeof result.score.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
+          const transferCostKnown =
+            typeof result.score?.transferCost === "number" &&
+            Number.isFinite(result.score.transferCost);
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
@@ -991,9 +998,10 @@ Page({
               totalText,
               netPoints,
               netPointsKnown,
-              transferCost: numberValue(
-                result.score?.transferCost ?? result.transferCost,
-              ),
+              transferCost: transferCostKnown
+                ? numberValue(result.score?.transferCost)
+                : 0,
+              transferCostKnown,
               summaryTiles: hasOfficialHeadline
                 ? [
                     { label: "实时积分", value: `${headlinePoints}` },
@@ -1053,9 +1061,12 @@ Page({
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
           : 0;
-        const transferCost = numberValue(
-          result.score?.transferCost ?? result.transferCost,
-        );
+        const transferCostKnown =
+          typeof result.score?.transferCost === "number" &&
+          Number.isFinite(result.score.transferCost);
+        const transferCost = transferCostKnown
+          ? numberValue(result.score?.transferCost)
+          : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
         this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
@@ -1078,6 +1089,7 @@ Page({
             netPoints,
             netPointsKnown,
             transferCost,
+            transferCostKnown,
             captainText: captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
@@ -1090,7 +1102,11 @@ Page({
               { label: "实时总分", value: totalText },
               {
                 label: "转会扣分",
-                value: transferCost > 0 ? `-${transferCost}` : "0",
+                value: transferCostKnown
+                  ? transferCost > 0
+                    ? `-${transferCost}`
+                    : "0"
+                  : "—",
               },
             ],
             starters,

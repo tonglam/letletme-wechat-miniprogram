@@ -108,9 +108,10 @@ export function tournamentManagerScoreStatus(
         )
       : 0;
   if (observedAvailable === 0) return "官方分数不可用";
-  const available = unavailableCount > 0
+  const metadataAvailable = unavailableCount > 0
     ? Math.max(0, total - unavailableCount)
     : Math.max(observedAvailable, reportedAvailable);
+  const available = Math.min(observedAvailable, metadataAvailable);
   if (states.includes("SETTLING")) return "结算中";
   if (states.includes("STALE")) return "官方数据延迟";
   if (states.length === 0 || available === 0) return "官方分数不可用";
@@ -177,7 +178,7 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
-      rank: row.rank ?? row.overallRank,
+      rank: officialScore ? row.rank ?? row.overallRank : undefined,
       livePoints: officialEventPoints,
       transferCost: officialScore?.transferCost,
       liveNetPoints: officialNetPoints,
@@ -196,6 +197,19 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       searchText: searchText(mapped)
     };
   });
+}
+
+/** Keep unavailable score values after every known score in either direction. */
+export function compareKnownTournamentValues(
+  left: number | undefined,
+  right: number | undefined,
+  desc: boolean,
+): number {
+  const leftKnown = typeof left === "number" && Number.isFinite(left);
+  const rightKnown = typeof right === "number" && Number.isFinite(right);
+  if (leftKnown !== rightKnown) return leftKnown ? -1 : 1;
+  if (!leftKnown || !rightKnown || left === right) return 0;
+  return (left - right) * (desc ? -1 : 1);
 }
 
 export function filterTournamentLiveRows(rows: LiveTournamentRow[], keyword: string): LiveTournamentRow[] {

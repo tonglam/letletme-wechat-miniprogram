@@ -4,6 +4,7 @@ import {
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
   mapTournamentLiveRows,
+  compareKnownTournamentValues,
   mergeUnavailableTournamentEntryIds,
   tournamentManagerScoreStatus
 } from "../miniprogram/services/live-tournament";
@@ -206,8 +207,8 @@ assertEqual(
     unavailableEntryIds: [404],
     totalEntries: 98,
   }),
-  "官方实时：97/98 支球队已有分数",
-  "official coverage reports the whole league rather than only returned rows",
+  "官方实时：1/98 支球队已有分数",
+  "official coverage reports only rows whose event/live provenance was verified",
 );
 assertEqual(
   tournamentManagerScoreStatus([
@@ -246,6 +247,8 @@ const staleClassicRows = mapTournamentLiveRows([
 ]);
 assertEqual(staleClassicRows[0]?.livePoints, undefined, "Classic points cannot become live points");
 assertEqual(staleClassicRows[0]?.score, undefined, "Classic score provenance is rejected");
+assertEqual(staleClassicRows[0]?.rank, undefined, "Classic rank cannot become a live rank");
+assertEqual(staleClassicRows[0]?.transferCost, undefined, "rejected transfer cost stays unknown");
 assertEqual(
   tournamentManagerScoreStatus(staleClassicRows, {
     officialCoverage: 1,
@@ -253,6 +256,45 @@ assertEqual(
   }),
   "官方分数不可用",
   "coverage metadata cannot make an untraceable Classic score official"
+);
+
+assertEqual(
+  compareKnownTournamentValues(undefined, -4, true),
+  1,
+  "unavailable scores sort after known negative scores when descending",
+);
+assertEqual(
+  compareKnownTournamentValues(-4, undefined, false),
+  -1,
+  "unavailable scores sort after known negative scores when ascending",
+);
+
+const unknownTransferCostRows = mapTournamentLiveRows([
+  {
+    entry: 306,
+    entryName: "Transfer cost pending",
+    playerName: "Manager",
+    rank: 1,
+    livePoints: 6,
+    transferCost: 0,
+    liveNetPoints: 0,
+    liveTotalPoints: 0,
+    played: 1,
+    toPlay: 10,
+    captainName: "Saka",
+    score: {
+      eventPoints: 6,
+      source: "FPL_EVENT_LIVE",
+      state: "SETTLING",
+      revision: "event-live:gw1:r10:306",
+      checkedAt: "2026-08-24T06:02:00.000Z"
+    }
+  }
+]);
+assertEqual(
+  unknownTransferCostRows[0]?.transferCost,
+  undefined,
+  "missing official transfer cost stays unknown",
 );
 
 const h2hRows = mapTournamentLiveRows([

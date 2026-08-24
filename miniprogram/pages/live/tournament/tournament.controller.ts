@@ -43,6 +43,7 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  compareKnownTournamentValues,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
@@ -116,6 +117,7 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   eventPointsKnown: boolean;
   totalPointsKnown: boolean;
   netPointsKnown: boolean;
+  transferCostKnown: boolean;
   displayLive: string;
   displayNet: string;
   displayTotal: string;
@@ -289,6 +291,8 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const officialTotalPoints = officialTournamentTotalPoints(row.score);
   const totalPoints = numberValue(officialTotalPoints);
   const totalPointsKnown = officialTotalPoints !== undefined;
+  const transferCostKnown =
+    typeof row.transferCost === "number" && Number.isFinite(row.transferCost);
   const transferCost = numberValue(row.transferCost);
   const played = numberValue(row.played);
   const toPlay = numberValue(row.toPlay);
@@ -301,6 +305,7 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     netPointsKnown,
     eventPointsKnown,
     totalPointsKnown,
+    transferCostKnown,
     livePoints,
     liveNetPoints,
     totalPoints,
@@ -310,8 +315,12 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     displayLive: eventPointsKnown ? `${livePoints}` : "—",
     displayNet: netPointsKnown ? `${liveNetPoints}` : "—",
     displayTotal: totalPointsKnown ? `${totalPoints}` : "—",
-    displayHit: transferCost > 0 ? `-${transferCost}` : "0",
-    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCost} · ${played}/${played + toPlay}`,
+    displayHit: transferCostKnown
+      ? transferCost > 0
+        ? `-${transferCost}`
+        : "0"
+      : "—",
+    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
     chipCode,
     displayCaptain: captain && captain !== "无队长" ? `${captain} (C)` : "",
     playedText: `${played}/${played + toPlay}`,
@@ -414,6 +423,38 @@ function sortRows(
       return (
         textValue(a.entryName, "").localeCompare(textValue(b.entryName, "")) *
         direction
+      );
+    }
+    const knownValue = (row: DisplayTournamentRow): number | undefined => {
+      if (key === "livePoints") {
+        return row.eventPointsKnown ? row.livePoints : undefined;
+      }
+      if (key === "liveNetPoints") {
+        return row.netPointsKnown ? row.liveNetPoints : undefined;
+      }
+      if (key === "transferCost") {
+        return row.transferCostKnown ? row.transferCost : undefined;
+      }
+      if (key === "totalPoints") {
+        return row.totalPointsKnown ? row.totalPoints : undefined;
+      }
+      return undefined;
+    };
+    if (
+      key === "livePoints" ||
+      key === "liveNetPoints" ||
+      key === "transferCost" ||
+      key === "totalPoints"
+    ) {
+      const scoreComparison = compareKnownTournamentValues(
+        knownValue(a),
+        knownValue(b),
+        desc,
+      );
+      if (scoreComparison !== 0) return scoreComparison;
+      return (
+        numberValue(a.entry, Number.MAX_SAFE_INTEGER) -
+        numberValue(b.entry, Number.MAX_SAFE_INTEGER)
       );
     }
     const fallback = key === "overallRank" ? Number.MAX_SAFE_INTEGER : 0;
