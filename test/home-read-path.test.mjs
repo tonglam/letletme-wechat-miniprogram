@@ -51,6 +51,21 @@ describe("home public read path", () => {
     );
   });
 
+  it("keeps secondary work pending until personal viewer data settles", () => {
+    const personalTask = home.indexOf("const personalTask =");
+    const publicSettled = home.indexOf(
+      "const [marketResult, supplement] = await Promise.all",
+    );
+    const pendingCleared = home.indexOf("this._secondaryPending = false");
+    assert.ok(personalTask >= 0);
+    assert.ok(publicSettled > personalTask);
+    assert.ok(pendingCleared > publicSettled);
+    assert.match(
+      home,
+      /const personalTask = \(async \(\): Promise<void> =>[\s\S]*?await personalTask;[\s\S]*?this\._secondaryPending = false/,
+    );
+  });
+
   it("refreshes event context only when missing or expired", () => {
     assert.match(home, /contextMissing \|\| deadlineExpired/);
     assert.doesNotMatch(home, /refreshEventAndDeadline/);

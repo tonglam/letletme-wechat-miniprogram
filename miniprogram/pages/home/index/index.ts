@@ -602,7 +602,7 @@ Page({
       gameweekStatsError: "",
       entryError: ""
     });
-    void (async (): Promise<void> => {
+    const personalTask = (async (): Promise<void> => {
       if (!getApiSessionToken()) {
         try { await app.authReady; } catch {}
       }
@@ -659,7 +659,7 @@ Page({
       } catch {
         // League load failure is non-critical, ignore silently
       }
-    })();
+    })().catch(() => undefined);
     const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
       : null;
@@ -744,6 +744,8 @@ Page({
       supplementLoading: false,
       ...(gwStats ? { gameweekStats: gwStats } : {})
     });
+    if (!isActiveSecondary()) return;
+    await personalTask;
     if (!isActiveSecondary()) return;
     this._secondaryPending = false;
     if (!this.data.noticeClosed && nextNotice) this.scheduleNoticeAutoClose(nextNotice);

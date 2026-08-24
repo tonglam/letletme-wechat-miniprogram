@@ -146,6 +146,23 @@ test("player directory coalesces latest filters and serializes pagination", () =
   );
 });
 
+test("Players prioritize a queued replacement search when resuming", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  assert.match(
+    onShow,
+    /const resumeSearch = resumed && \([\s\S]*Boolean\(this\.pendingSearchSnapshot\)/,
+  );
+  assert.ok(
+    onShow.indexOf("if (resumeSearch)") <
+      onShow.indexOf("if (resumePagination && resumeCursor !== null)"),
+  );
+  assert.match(
+    onShow,
+    /if \(resumeSearch\)[\s\S]*?if \(this\.pendingSearchSnapshot\) \{[\s\S]*?this\.resumePaginationAfterShow = false[\s\S]*?this\.startSearch\(/,
+  );
+});
+
 test("My FPL last-good views survive context and refresh failures", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");

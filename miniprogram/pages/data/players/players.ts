@@ -523,10 +523,36 @@ PerformancePage({
     this.hasShown = true;
     const resumePagination = resumed && this.resumePaginationAfterShow;
     const resumeCursor = this.resumePaginationCursor;
-    const resumeSearch = resumed && this.resumeSearchAfterShow;
+    const resumeSearch = resumed && (
+      this.resumeSearchAfterShow || Boolean(this.pendingSearchSnapshot)
+    );
     const resumeSearchForceRefresh = this.resumeSearchForceRefresh;
     if (this.data.loadingMore) {
       this.setData({ loadingMore: false });
+    }
+    if (resumeSearch) {
+      if (this.pendingSearchSnapshot) {
+        this.resumePaginationAfterShow = false;
+        this.resumePaginationCursor = null;
+      }
+      const task = this.startSearch(this.data.keyword, resumeSearchForceRefresh);
+      if (
+        this.searchPending &&
+        this.searchPendingForceRefresh === resumeSearchForceRefresh
+      ) {
+        this.resumeSearchAfterShow = false;
+        this.resumeSearchForceRefresh = false;
+      }
+      return task.finally(() => {
+        if (
+          this.pageVisible &&
+          !this.searchPending &&
+          this.resumeSearchAfterShow
+        ) {
+          this.resumeSearchAfterShow = false;
+          this.resumeSearchForceRefresh = false;
+        }
+      });
     }
     if (resumePagination && resumeCursor !== null) {
       const startPagination = () => {
@@ -545,26 +571,6 @@ PerformancePage({
         ) {
           this.resumePaginationAfterShow = false;
           this.resumePaginationCursor = null;
-        }
-      });
-    }
-    if (resumeSearch) {
-      const task = this.startSearch(this.data.keyword, resumeSearchForceRefresh);
-      if (
-        this.searchPending &&
-        this.searchPendingForceRefresh === resumeSearchForceRefresh
-      ) {
-        this.resumeSearchAfterShow = false;
-        this.resumeSearchForceRefresh = false;
-      }
-      return task.finally(() => {
-        if (
-          this.pageVisible &&
-          !this.searchPending &&
-          this.resumeSearchAfterShow
-        ) {
-          this.resumeSearchAfterShow = false;
-          this.resumeSearchForceRefresh = false;
         }
       });
     }
