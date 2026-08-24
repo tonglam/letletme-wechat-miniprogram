@@ -3,7 +3,7 @@
     <view class="subtitle">20 支球队的阵容、赛程和定位球。</view>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队" />
   <view id="perf-primary-content" wx:else class="section card team-list">
     <app-empty-state

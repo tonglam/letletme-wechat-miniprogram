@@ -5,14 +5,17 @@ import {
   GRAPHQL_COOLDOWN_READY_MESSAGE,
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  isGraphQLWorkload,
   isGraphQLCooldownMessage,
   subscribeGraphQLCooldown,
+  type GraphQLWorkload,
 } from "../../services/graphql-cooldown";
 
 interface DataStatusHost {
   transientTimer?: ReturnType<typeof setTimeout>;
   cooldownTimer?: ReturnType<typeof setInterval>;
   unsubscribeCooldown?: () => void;
+  cooldownWorkload?: GraphQLWorkload;
 }
 
 function host(component: WechatMiniprogram.Component.TrivialInstance): DataStatusHost {
@@ -49,6 +52,11 @@ Component({
     transientDuration: {
       type: Number,
       value: 3200
+    },
+    /** Optional workload key for workload-scoped rate-limit cooldowns. */
+    workload: {
+      type: String,
+      value: ""
     }
   },
 
@@ -60,7 +68,7 @@ Component({
   },
 
   observers: {
-    "message,status,transient,transientDuration": function () {
+    "message,status,transient,transientDuration,workload": function () {
       this.refreshCooldownState();
       this.scheduleTransientHide();
     }
@@ -70,7 +78,8 @@ Component({
     attached() {
       const state = host(this);
       state.unsubscribeCooldown?.();
-      state.unsubscribeCooldown = subscribeGraphQLCooldown(() => {
+      state.unsubscribeCooldown = subscribeGraphQLCooldown((cooldown) => {
+        state.cooldownWorkload = cooldown.workload;
         this.refreshCooldownState();
       });
       this.refreshCooldownState();
@@ -86,8 +95,20 @@ Component({
   },
 
   methods: {
+    cooldownWorkload(): GraphQLWorkload | undefined {
+      const state = host(this);
+      const configuredWorkload = isGraphQLWorkload(this.properties.workload)
+        ? this.properties.workload
+        : undefined;
+      return configuredWorkload ?? state.cooldownWorkload;
+    },
+
     refreshCooldownState() {
-      const cooldown = getGraphQLCooldownState();
+      const state = host(this);
+      const cooldown = getGraphQLCooldownState(
+        Date.now(),
+        this.cooldownWorkload(),
+      );
       const storedMessage = this.properties.message;
       this.setData({
         displayMessage: cooldown.active
@@ -108,7 +129,6 @@ Component({
         visible: true,
       });
 
-      const state = host(this);
       if (cooldown.active && !state.cooldownTimer) {
         this.clearTransientHide();
         state.cooldownTimer = setInterval(() => {
@@ -124,7 +144,7 @@ Component({
     scheduleTransientHide() {
       this.clearTransientHide();
       this.setData({ visible: true });
-      if (getGraphQLCooldownState().active) return;
+      if (getGraphQLCooldownState(Date.now(), this.cooldownWorkload()).active) return;
       if (this.properties.transient !== true) return;
 
       const state = host(this);
@@ -150,7 +170,12 @@ Component({
     },
 
     onRetry() {
-      if (getGraphQLCooldownState().active) {
+      if (
+        getGraphQLCooldownState(
+          Date.now(),
+          this.cooldownWorkload(),
+        ).active
+      ) {
         this.refreshCooldownState();
         return;
       }

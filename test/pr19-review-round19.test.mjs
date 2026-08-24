@@ -27,7 +27,7 @@ test("cold Live Entry startup stops after the originating page hides", () => {
   assert.match(entry, /onLoad\([\s\S]*this\.pageVisible = true[\s\S]*initializeFromContext\("page-load", this\.perfTracker\)/);
   assert.match(
     entry,
-    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return[\s\S]*await app\.authReady[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
+    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return/
   );
 });
 

@@ -6,7 +6,6 @@ import {
   getLivePointsByEntrySnapshot,
   getLiveSnapshot,
 } from "../../../services/live.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import type {
   LiveManagerScore,
   LivePlayerRow,
@@ -34,7 +33,10 @@ import {
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { miniLogger } from "../../../utils/logger";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
   buildPlayerLiveDetail,
@@ -71,6 +73,7 @@ export function noLiveEventState() {
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as const,
     transfersError: "",
     emptyState: "preseason" as const,
     event: 0,
@@ -106,6 +109,7 @@ interface LiveEntryData {
   hasData: boolean;
   noPicks: boolean;
   error: string;
+  errorWorkload: "home" | "gameweek";
   transfersError: string;
   emptyState: LiveEntryEmptyState;
   displayState: LiveDisplayState;
@@ -226,6 +230,7 @@ Page({
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as "home" | "gameweek",
     transfersError: "",
     emptyState: "",
     displayState: "fresh",
@@ -351,15 +356,7 @@ Page({
     }
     tracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
-    if (!this.hasRouteEntry && !getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked to a different entry
-      // since, so wait for the refreshed profile to re-assert it (the login
-      // may not even have started while the privacy callback is pending).
-      try {
-        await app.authReady;
-      } catch {}
-    }
+    if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
     const currentGw = currentLiveEventId(context);
@@ -460,6 +457,11 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed && !this.hasRouteEntry) {
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
+    const previousEntryId = this.data.entryId;
     let showContext = getAppContextSnapshot();
     if (resumed) {
       const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
@@ -487,7 +489,6 @@ Page({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
-      if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason =
         showContext?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
@@ -500,6 +501,18 @@ Page({
         nextEventId > 0 && this.data.emptyState === "preseason";
       const eventContextChanged =
         seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      const restartAfterContext = async (): Promise<boolean> => {
+        if (!this.restartForPrincipalChange(previousEntryId, false)) return false;
+        if (this.data.event > 0) {
+          this.liveRefresh?.sync();
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+        } else {
+          this.liveRefresh?.stop();
+          this.setData(noLiveEventState());
+        }
+        this.syncDisplayState();
+        return true;
+      };
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
@@ -544,6 +557,7 @@ Page({
           ...emptyLiveOverlayState(),
           ...emptyLivePitchState(),
         });
+        if (await restartAfterContext()) return;
         this.liveRefresh?.sync();
         if (nextEventId > 0) {
           await this.loadData({ includeTransfers: true, forceRefresh: true });
@@ -554,6 +568,7 @@ Page({
       if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
+      if (await restartAfterContext()) return;
     }
     if (
       resumed &&
@@ -665,6 +680,8 @@ Page({
     this.forcedRefreshPending = true;
     this.refreshContextPending = true;
     try {
+      if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
         context = await this.ensureContext("pull-refresh", true);
@@ -702,6 +719,7 @@ Page({
         loading: false,
         refreshing: false,
         error: message,
+        errorWorkload: "home",
         ...(this.data.emptyState === "preseason"
           ? { emptyState: "" as const }
           : {}),
@@ -772,7 +790,10 @@ Page({
     }
   },
 
-  restartForPrincipalChange(entryId: number | undefined): boolean {
+  restartForPrincipalChange(
+    entryId: number | undefined,
+    loadData = true,
+  ): boolean {
     // An explicit non-followed route entry is a stable read-only view. The
     // normal personal surface, however, must track the authoritative follow
     // even when a request's 401 recovery changes it mid-flight.
@@ -824,8 +845,10 @@ Page({
     });
     if (nextEntryId) {
       void this.loadEntryIdentity(nextEntryId);
-      this.liveRefresh?.sync();
-      void this.loadData({ includeTransfers: true, forceRefresh: true });
+      if (loadData) {
+        this.liveRefresh?.sync();
+        void this.loadData({ includeTransfers: true, forceRefresh: true });
+      }
     }
     this.syncDisplayState();
     return true;
@@ -924,10 +947,11 @@ Page({
         : this.perfTracker;
     this.setData(
       background
-        ? { refreshing: true, error: "" }
+        ? { refreshing: true, error: "", errorWorkload: "gameweek" as const }
         : {
             loading: true,
             error: "",
+            errorWorkload: "gameweek" as const,
             emptyState: "",
             noPicks: false,
           },

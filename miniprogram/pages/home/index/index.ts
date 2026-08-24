@@ -21,6 +21,7 @@ import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 import {
   ensureAppContext,
@@ -238,6 +239,12 @@ Page({
         || tracker !== this._perfTracker
       ) return;
       tracker.mark("contextReadyAt");
+      await waitForAuthoritativeFollow();
+      if (
+        !this._pageVisible
+        || lifecycleRevision !== this._lifecycleRevision
+        || tracker !== this._perfTracker
+      ) return;
       await this.syncAccountLink();
       this.syncAppState();
       if (shouldReloadHome(
@@ -355,6 +362,8 @@ Page({
       : originatingTracker;
     const requestId = ++this._loadRequestId;
     const app = getApp<IAppOption>();
+    await waitForAuthoritativeFollow();
+    if (!this._pageVisible || requestId !== this._loadRequestId) return false;
     await this.syncAccountLink();
     if (!this._pageVisible || requestId !== this._loadRequestId) return false;
     if (!app.globalData.gw) {
@@ -601,13 +610,23 @@ Page({
       gameweekStatsError: "",
       entryError: ""
     });
-    void (async (): Promise<void> => {
+    const personalTask = (async (): Promise<void> => {
       if (!getApiSessionToken()) {
         try { await app.authReady; } catch {}
       }
+      if (getApiSessionToken()) {
+        await waitForAuthoritativeFollow();
+      }
       if (!isActiveSecondary()) return;
       const entryId = app.globalData.entryId;
-      if (!entryId) return;
+      if (!entryId) {
+        this.setData({
+          entry: {},
+          leagues: [],
+          entryError: ""
+        });
+        return;
+      }
       let loadedEntry: EntryInfo | null = null;
       try {
         const entryTrace: PageRequestTrace | null = primaryTrace
@@ -616,7 +635,15 @@ Page({
         const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
         if (!isActiveSecondary()) return;
         loadedEntry = entry;
-        this.setData({ entry, entryError: "" });
+        const previousEntryId = Number(
+          this.data.entry.entryId ?? this.data.entry.entry ?? 0,
+        );
+        const nextEntryId = Number(entry.entryId ?? entry.entry ?? 0);
+        this.setData({
+          entry,
+          entryError: "",
+          ...(previousEntryId !== nextEntryId ? { leagues: [] } : {}),
+        });
       } catch (error) {
         if (isActiveSecondary()) {
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
@@ -648,7 +675,7 @@ Page({
       } catch {
         // League load failure is non-critical, ignore silently
       }
-    })();
+    })().catch(() => undefined);
     const supplementTrace: PageRequestTrace | null = primaryTrace
       ? { ...primaryTrace, callerSurface: "home-supplement" }
       : null;
@@ -733,6 +760,8 @@ Page({
       supplementLoading: false,
       ...(gwStats ? { gameweekStats: gwStats } : {})
     });
+    if (!isActiveSecondary()) return;
+    await personalTask;
     if (!isActiveSecondary()) return;
     this._secondaryPending = false;
     if (!this.data.noticeClosed && nextNotice) this.scheduleNoticeAutoClose(nextNotice);

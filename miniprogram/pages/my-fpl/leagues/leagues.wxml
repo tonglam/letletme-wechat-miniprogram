@@ -19,7 +19,7 @@
     <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && !tournaments.length && !emptyState}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && !tournaments.length && !emptyState}}" message="{{error}}" workload="interactive" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载赛事" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
@@ -34,12 +34,13 @@
   </view>
 
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <data-status wx:if="{{viewError && ((showSeason && hasSeasonData) || (showGameweek && hasGwData))}}" status="stale" message="{{viewError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{viewError && ((showSeason && hasSeasonData) || (showGameweek && hasGwData))}}" status="stale" message="{{viewError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <app-error-state
       id="perf-primary-content"
       wx:if="{{viewError && ((showSeason && !hasSeasonData) || (showGameweek && !hasGwData))}}"
       message="{{viewError}}"
+      workload="interactive"
       bind:retry="onRetry"
     />
     <app-loading wx:if="{{viewLoading}}" text="加载赛事数据" />

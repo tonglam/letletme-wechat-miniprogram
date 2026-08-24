@@ -23,7 +23,7 @@
     </view>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && !hasBoard}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasBoard}}" message="{{error}}" workload="market" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasBoard}}" text="加载身价预测" />
 
   <view id="perf-primary-content" wx:else>
@@ -31,6 +31,7 @@
       <data-status
         status="{{noticeStatus}}"
         message="{{noticeMessage}}"
+        workload="market"
         storedAtText="{{storedAtText}}"
         showRetry="{{true}}"
         bind:retry="onRetry"

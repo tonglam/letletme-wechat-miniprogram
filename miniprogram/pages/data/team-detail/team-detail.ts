@@ -13,6 +13,7 @@ PerformancePage({
   data: {
     loading: false,
     error: "",
+    errorWorkload: "home" as "home" | "player-stats",
     emptyState: false,
     teamId: "",
     season: "",
@@ -85,7 +86,7 @@ PerformancePage({
       callerSurface: "data-team-detail",
       trigger
     });
-    this.setData({ loading: true, error: "", emptyState: false });
+    this.setData({ loading: true, error: "", errorWorkload: "home", emptyState: false });
     try {
       let season = this.data.season;
       try {
@@ -98,7 +99,7 @@ PerformancePage({
         if (!season) throw error;
       }
       if (!isActiveRequest()) return;
-      this.setData({ season });
+      this.setData({ season, errorWorkload: "player-stats" });
       const team = await getTeamSummary(this.data.teamId, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
       const strength = Math.max(0, Math.min(5, Number(team.strength) || 0));

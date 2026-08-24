@@ -4,6 +4,7 @@ import {
   getTournamentSelectionStats
 } from "../../../services/tournament.service";
 import { getApiSessionToken } from "../../../services/auth.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
@@ -148,6 +149,8 @@ PerformancePage({
       try { await app.authReady; } catch {}
     }
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({
       entryId: app.globalData.entryId ?? 0,
@@ -162,7 +165,27 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (!resumed || !this.resumeOnShow) return;
+    if (!resumed) return;
+    const lifecycleRevision = this.lifecycleRevision;
+    const showTrace = capturePageRequestTrace({
+      callerSurface: "data-selections",
+      trigger: "show"
+    });
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    const nextEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
+    if (nextEntryId !== this.data.entryId) {
+      this.clearEntryScopedState();
+      this.resumeOnShow = false;
+      this.resumeStage = null;
+      this.resumeTournamentForceRefresh = false;
+      this.resumeStatsForceRefresh = false;
+      await this.initializePage(showTrace);
+      return;
+    }
+    if (!this.resumeOnShow) {
+      return;
+    }
     const resumeStage = this.resumeStage;
     const resumeTournamentForceRefresh = this.resumeTournamentForceRefresh;
     const resumeStatsForceRefresh = this.resumeStatsForceRefresh;
@@ -185,6 +208,41 @@ PerformancePage({
       return;
     }
     await this.initializePage(trace);
+  },
+
+  clearEntryScopedState() {
+    this.directoryRequestId += 1;
+    this.activeTournamentForceRefresh = false;
+    this.activeStatsForceRefresh = false;
+    try {
+      wx.removeStorageSync(storageKeys.selectedDataSelectionsTournamentId);
+      wx.removeStorageSync(storageKeys.selectedDataSelectionsTournamentName);
+    } catch {}
+    this.setData({
+      entryId: 0,
+      loadingTournaments: true,
+      loadingStats: false,
+      error: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: "",
+      tournaments: [],
+      tournamentNames: [],
+      selectedTournamentIndex: 0,
+      selectedTournamentName: "",
+      headerSubtitle: "",
+      totalEntriesText: "",
+      selectedRows: [],
+      captainRows: [],
+      transferInRows: [],
+      transferOutRows: [],
+      visibleRows: [],
+      shareCopied: false,
+      shareSheetOpen: false,
+      shareText: ""
+    });
   },
 
   onHide() {

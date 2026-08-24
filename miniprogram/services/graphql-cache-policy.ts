@@ -1,5 +1,16 @@
 export type GraphQLAuthMode = "public" | "session";
 
+export const GRAPHQL_WORKLOADS = [
+  "interactive",
+  "home",
+  "fixtures",
+  "market",
+  "player-stats",
+  "gameweek",
+  "public-other",
+] as const;
+export type GraphQLWorkload = (typeof GRAPHQL_WORKLOADS)[number];
+
 export type GraphQLCachePolicyName =
   | "network-only"
   | "live"
@@ -22,6 +33,7 @@ export interface GraphQLCachePolicy {
 export interface GraphQLOperationPolicy {
   authMode: GraphQLAuthMode;
   cachePolicy: GraphQLCachePolicyName;
+  workload?: GraphQLWorkload;
 }
 
 const SECOND = 1000;
@@ -29,17 +41,25 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export const GRAPHQL_CACHE_POLICIES: Record<GraphQLCachePolicyName, GraphQLCachePolicy> = {
+export const GRAPHQL_CACHE_POLICIES: Record<
+  GraphQLCachePolicyName,
+  GraphQLCachePolicy
+> = {
   "network-only": { freshTtl: 0, staleTtl: 0, persist: false },
   live: { freshTtl: 10 * SECOND, staleTtl: 0, persist: false },
   deadline: { freshTtl: 5 * MINUTE, staleTtl: DAY, persist: true },
   reporting: { freshTtl: 5 * MINUTE, staleTtl: DAY, persist: true },
   fixtures: { freshTtl: 30 * MINUTE, staleTtl: DAY, persist: true },
-  "player-picker": { freshTtl: 6 * HOUR, emptyFreshTtl: MINUTE, staleTtl: 7 * DAY, persist: true },
+  "player-picker": {
+    freshTtl: 6 * HOUR,
+    emptyFreshTtl: MINUTE,
+    staleTtl: 7 * DAY,
+    persist: true,
+  },
   "team-directory": { freshTtl: DAY, staleTtl: 7 * DAY, persist: true },
   market: { freshTtl: 30 * MINUTE, staleTtl: DAY, persist: true },
   historical: { freshTtl: 6 * HOUR, staleTtl: 7 * DAY, persist: true },
-  notice: { freshTtl: HOUR, staleTtl: DAY, persist: true }
+  notice: { freshTtl: HOUR, staleTtl: DAY, persist: true },
 };
 
 const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
@@ -58,7 +78,10 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   MiniMarketAvailability: { authMode: "public", cachePolicy: "market" },
   GetPriceChangeBoard: { authMode: "public", cachePolicy: "market" },
   GetPriceChangePersonal: { authMode: "session", cachePolicy: "reporting" },
-  GetPriceChangeStartPrices: { authMode: "public", cachePolicy: "player-picker" },
+  GetPriceChangeStartPrices: {
+    authMode: "public",
+    cachePolicy: "player-picker",
+  },
   MiniPlayerStatsDesk: { authMode: "public", cachePolicy: "player-picker" },
   TournamentSeasonSnapshot: { authMode: "session", cachePolicy: "reporting" },
   GetPlayerValues: { authMode: "public", cachePolicy: "market" },
@@ -92,16 +115,66 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   MyFplCompetitionBoard: { authMode: "session", cachePolicy: "reporting" },
   MyFplCompetitionSeasonPath: { authMode: "session", cachePolicy: "reporting" },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
-  GetEntryLiveCompetitionsDesk: { authMode: "session", cachePolicy: "live" }
+  GetEntryLiveCompetitionsDesk: { authMode: "session", cachePolicy: "live" },
 };
 
-export function getGraphQLCachePolicy(name: GraphQLCachePolicyName): GraphQLCachePolicy {
+function workloadForCachePolicy(
+  operationName: string,
+  cachePolicy: GraphQLCachePolicyName,
+): GraphQLWorkload {
+  if (
+    /^myFpl|^entry|^tournament|^competition|^league|^trend/i.test(operationName)
+  ) {
+    return "interactive";
+  }
+  switch (cachePolicy) {
+    case "fixtures":
+      return "fixtures";
+    case "market":
+      return "market";
+    case "player-picker":
+    case "team-directory":
+      return "player-stats";
+    case "live":
+    case "historical":
+      return "gameweek";
+    case "deadline":
+    case "notice":
+      return "home";
+    case "reporting":
+      return "interactive";
+    default:
+      return "public-other";
+  }
+}
+
+export function getGraphQLWorkload(
+  operationName: string,
+  cachePolicy?: GraphQLCachePolicyName,
+): GraphQLWorkload {
+  const configured = OPERATION_POLICIES[operationName];
+  if (configured?.workload) return configured.workload;
+  return workloadForCachePolicy(
+    operationName,
+    cachePolicy ?? configured?.cachePolicy ?? "network-only",
+  );
+}
+
+export function getGraphQLCachePolicy(
+  name: GraphQLCachePolicyName,
+): GraphQLCachePolicy {
   return GRAPHQL_CACHE_POLICIES[name];
 }
 
-export function getGraphQLOperationPolicy(operationName: string): GraphQLOperationPolicy {
-  return OPERATION_POLICIES[operationName] || {
+export function getGraphQLOperationPolicy(
+  operationName: string,
+): GraphQLOperationPolicy {
+  const configured = OPERATION_POLICIES[operationName] || {
     authMode: "session",
-    cachePolicy: "network-only"
+    cachePolicy: "network-only",
+  };
+  return {
+    ...configured,
+    workload: getGraphQLWorkload(operationName, configured.cachePolicy),
   };
 }

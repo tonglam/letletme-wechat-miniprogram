@@ -6,24 +6,29 @@ import {
   getPendingSessionRefresh,
   isLogoutInFlight,
   refreshWechatApiSession,
-  WechatSessionTransportError
+  WechatSessionTransportError,
 } from "./auth.service";
 import { recordApi, recordPageOperation } from "../utils/perf";
 import type { ApiRecordSource } from "../utils/perf";
 import {
   graphQLErrorMessage,
   httpErrorMessage,
-  networkErrorMessage
+  networkErrorMessage,
 } from "../utils/request-error";
-import { initializeNetworkStatus, isKnownOffline } from "../utils/network-status";
+import {
+  initializeNetworkStatus,
+  isKnownOffline,
+} from "../utils/network-status";
 import { getActivePagePerformanceTrace } from "../utils/page-performance";
 import {
   getGraphQLCachePolicy,
-  getGraphQLOperationPolicy
+  getGraphQLWorkload,
+  getGraphQLOperationPolicy,
 } from "./graphql-cache-policy";
 import type {
   GraphQLAuthMode,
-  GraphQLCachePolicyName
+  GraphQLCachePolicyName,
+  GraphQLWorkload,
 } from "./graphql-cache-policy";
 import {
   CACHE_VERSION,
@@ -35,11 +40,12 @@ import {
   readCacheEntry,
   recordServedFromCache,
   writeCacheEntry,
-  type CacheEntry
+  type CacheEntry,
 } from "./graphql-cache";
 import { registerGraphQLInFlightClear } from "./graphql-session-hooks";
 import { recordBugReportDiagnostic } from "../utils/bug-report-diagnostics";
 import {
+  GRAPHQL_WORKLOADS,
   getGraphQLCooldownState,
   graphQLCooldownMessage,
   parseRetryAfterSeconds,
@@ -49,7 +55,7 @@ import {
 
 export {
   buildGraphQLRequestCacheKey,
-  purgeGraphQLStorageCache
+  purgeGraphQLStorageCache,
 } from "./graphql-cache";
 
 export { clearGraphQLMemoryCache } from "./graphql-session-hooks";
@@ -96,9 +102,13 @@ export interface GraphQLReadMeta {
   storedAt?: number;
   cacheAgeMs?: number;
   requestId?: string;
+  statusCode?: number;
   rateLimited?: boolean;
   cooldownUntil?: number;
   retryAfterSeconds?: number;
+  rateLimitPolicy?: string;
+  rateLimitScope?: string;
+  rateLimitWorkload?: string;
   durationMs: number;
 }
 
@@ -108,8 +118,15 @@ export interface GraphQLReadResult<T> {
   meta: GraphQLReadMeta;
 }
 
+class GraphQLInFlightJoin extends Error {
+  constructor(readonly request: Promise<GraphQLReadResult<unknown>>) {
+    super("joined existing GraphQL request");
+    this.name = "GraphQLInFlightJoin";
+  }
+}
+
 function resolvePageRequestTrace(
-  explicitTrace?: PageRequestTrace | null
+  explicitTrace?: PageRequestTrace | null,
 ): PageRequestTrace | undefined {
   if (explicitTrace === null) return undefined;
   if (explicitTrace) return explicitTrace;
@@ -125,17 +142,20 @@ function resolvePageRequestTrace(
   return {
     navigationId: activeTrace.navigationId,
     callerSurface: activeTrace.route,
-    trigger: activeTrace.trigger === "refresh"
-      ? "refresh"
-      : activeTrace.trigger === "warm-enter"
-        ? "show"
-        : "load",
-    contextRevision
+    trigger:
+      activeTrace.trigger === "refresh"
+        ? "refresh"
+        : activeTrace.trigger === "warm-enter"
+          ? "show"
+          : "load",
+    contextRevision,
   };
 }
 
 export function capturePageRequestTrace(
-  overrides: Partial<Pick<PageRequestTrace, "callerSurface" | "trigger" | "forceReason">> = {}
+  overrides: Partial<
+    Pick<PageRequestTrace, "callerSurface" | "trigger" | "forceReason">
+  > = {},
 ): PageRequestTrace | undefined {
   const trace = resolvePageRequestTrace();
   return trace ? { ...trace, ...overrides } : undefined;
@@ -151,35 +171,47 @@ interface ResolvedRequestPolicy {
   persist: boolean;
   cacheVariant: string;
   cacheable: boolean;
+  workload: GraphQLWorkload;
 }
 
 export class GraphQLTransportError extends Error {
   statusCode?: number;
+  code?: string;
   transient: boolean;
   retryAfterSeconds?: number;
   retryAt?: number;
   requestId?: string;
+  rateLimitPolicy?: string;
+  rateLimitScope?: string;
+  rateLimitWorkload?: string;
 
   constructor(
     message: string,
     transient: boolean,
     statusCode?: number,
     options: {
+      code?: string;
       retryAfterSeconds?: number;
       retryAt?: number;
       requestId?: string;
+      rateLimitPolicy?: string;
+      rateLimitScope?: string;
+      rateLimitWorkload?: string;
     } = {},
   ) {
     super(message);
     this.name = "GraphQLTransportError";
     this.transient = transient;
     this.statusCode = statusCode;
+    this.code = options.code;
     this.retryAfterSeconds = options.retryAfterSeconds;
     this.retryAt = options.retryAt;
     this.requestId = options.requestId;
+    this.rateLimitPolicy = options.rateLimitPolicy;
+    this.rateLimitScope = options.rateLimitScope;
+    this.rateLimitWorkload = options.rateLimitWorkload;
   }
 }
-
 
 export class GraphQLApplicationError extends Error {
   readonly errors: GraphQLErrorInfo[];
@@ -192,8 +224,29 @@ export class GraphQLApplicationError extends Error {
 }
 
 export function hasGraphQLErrorCode(error: unknown, code: string): boolean {
-  return error instanceof GraphQLApplicationError
-    && error.errors.some((item) => item.extensions?.code === code);
+  return (
+    error instanceof GraphQLApplicationError &&
+    error.errors.some((item) => item.extensions?.code === code)
+  );
+}
+
+export function hasGraphQLCode(error: unknown, code: string): boolean {
+  return (
+    hasGraphQLErrorCode(error, code) ||
+    (error instanceof GraphQLTransportError && error.code === code)
+  );
+}
+
+/**
+ * Legacy GraphQL deployments returned FORBIDDEN for an absent viewer entry.
+ * Callers must use this only on the My FPL entry-scoped surface; a generic
+ * FORBIDDEN elsewhere remains a real authorization failure.
+ */
+export function isViewerEntryAuthorizationError(error: unknown): boolean {
+  return (
+    hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED") ||
+    hasGraphQLCode(error, "FORBIDDEN")
+  );
 }
 
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
@@ -201,7 +254,7 @@ const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
   "player-picker",
   "team-directory",
   "reporting",
-  "historical"
+  "historical",
 ]);
 
 const inFlightRequests = new Map<string, Promise<GraphQLReadResult<unknown>>>();
@@ -220,12 +273,16 @@ export function extractGraphQLOperationName(query: string): string {
 
 export function buildGraphQLRequestPayload(
   query: string,
-  variables: Record<string, unknown>
-): { query: string; variables: Record<string, unknown>; operationName: string } {
+  variables: Record<string, unknown>,
+): {
+  query: string;
+  variables: Record<string, unknown>;
+  operationName: string;
+} {
   return {
     query,
     variables,
-    operationName: extractOpName(query)
+    operationName: extractOpName(query),
   };
 }
 
@@ -237,16 +294,24 @@ function currentSeason(): string {
   }
 }
 
-function resolveSeason(cachePolicy: GraphQLCachePolicyName, options?: GraphQLOptions): string {
+function resolveSeason(
+  cachePolicy: GraphQLCachePolicyName,
+  options?: GraphQLOptions,
+): string {
   if (!SEASON_SCOPED_POLICIES.has(cachePolicy)) return "";
   const explicit = String(options?.season || "").trim();
   if (explicit) return explicit;
-  const fromVariant = /(?:^|\|)season:([^|]+)/.exec(String(options?.cacheVariant || ""));
+  const fromVariant = /(?:^|\|)season:([^|]+)/.exec(
+    String(options?.cacheVariant || ""),
+  );
   if (fromVariant?.[1]) return fromVariant[1].trim();
   return currentSeason().trim();
 }
 
-function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequestPolicy {
+function resolvePolicy(
+  query: string,
+  options?: GraphQLOptions,
+): ResolvedRequestPolicy {
   const operationName = extractOpName(query);
   const configured = getGraphQLOperationPolicy(operationName);
   const cachePolicy = options?.cachePolicy ?? configured.cachePolicy;
@@ -260,8 +325,12 @@ function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequest
   const cacheVariant = [cachePolicy, seasonVariant, options?.cacheVariant || ""]
     .filter(Boolean)
     .join("|");
-  const freshTtl = mutation ? 0 : Math.max(0, options?.cacheTtl ?? policy.freshTtl);
-  const staleTtl = mutation ? 0 : Math.max(0, options?.staleTtl ?? policy.staleTtl);
+  const freshTtl = mutation
+    ? 0
+    : Math.max(0, options?.cacheTtl ?? policy.freshTtl);
+  const staleTtl = mutation
+    ? 0
+    : Math.max(0, options?.staleTtl ?? policy.staleTtl);
 
   return {
     operationName,
@@ -272,7 +341,8 @@ function resolvePolicy(query: string, options?: GraphQLOptions): ResolvedRequest
     staleTtl,
     persist: !mutation && policy.persist,
     cacheVariant,
-    cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry))
+    cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
+    workload: getGraphQLWorkload(operationName, cachePolicy),
   };
 }
 
@@ -296,7 +366,15 @@ function recordRequest(
   storedAt?: number,
   trace?: PageRequestTrace,
   cacheVariantHash?: string,
-  requestId?: string
+  requestId?: string,
+  details?: {
+    code?: string;
+    status?: number;
+    retryAfterSeconds?: number;
+    rateLimitPolicy?: string;
+    rateLimitScope?: string;
+    workload?: string;
+  },
 ): void {
   recordApi(operationName, Date.now() - startedAt, ok, {
     operationName,
@@ -308,20 +386,31 @@ function recordRequest(
     forceReason: trace?.forceReason,
     contextRevision: trace?.contextRevision,
     cacheVariantHash: trace?.cacheVariantHash || cacheVariantHash,
-    requestId
+    requestId,
   });
   if (requestId || !ok) {
     recordBugReportDiagnostic({
       at: new Date().toISOString(),
       requestId,
       operation: operationName,
-      message: ok ? undefined : source
+      message: ok ? undefined : source,
+      code: details?.code,
+      status: details?.status,
+      retryAfterSeconds: details?.retryAfterSeconds,
+      rateLimitPolicy: details?.rateLimitPolicy,
+      rateLimitScope: details?.rateLimitScope,
+      workload: details?.workload,
     });
   }
 }
 
 export function isTransientGraphQLStatus(statusCode: number): boolean {
-  return statusCode === 429 || statusCode === 502 || statusCode === 503 || statusCode === 504;
+  return (
+    statusCode === 429 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504
+  );
 }
 
 function isTransientFailure(error: unknown): boolean {
@@ -350,36 +439,78 @@ function responseHeader(
   return value === undefined || value === null ? undefined : String(value);
 }
 
+function responseErrorCode(
+  body: GraphQLResponse<unknown> | undefined,
+): string | undefined {
+  return body?.errors?.find(
+    (error) => typeof error.extensions?.code === "string",
+  )?.extensions?.code;
+}
+
 function toHttpError(
   statusCode: number,
   headers: Record<string, unknown> | undefined,
+  body?: GraphQLResponse<unknown>,
   now = Date.now(),
 ): GraphQLTransportError {
   const requestId = responseHeader(headers, "x-request-id");
+  const code =
+    responseErrorCode(body) ||
+    (statusCode === 429 ? "RATE_LIMITED" : undefined);
+  const rateLimitPolicy = responseHeader(headers, "x-ratelimit-policy");
+  const rateLimitScope = responseHeader(headers, "x-ratelimit-scope");
+  const rawRateLimitWorkload = responseHeader(headers, "x-ratelimit-workload");
+  const rateLimitWorkload =
+    rawRateLimitWorkload &&
+    GRAPHQL_WORKLOADS.includes(
+      rawRateLimitWorkload as (typeof GRAPHQL_WORKLOADS)[number],
+    )
+      ? rawRateLimitWorkload
+      : undefined;
   if (statusCode === 429) {
     const retryAfterSeconds = parseRetryAfterSeconds(
       responseHeader(headers, "retry-after"),
       now,
     );
-    const state = persistGraphQLCooldown(retryAfterSeconds, now);
+    const state = persistGraphQLCooldown(
+      retryAfterSeconds,
+      now,
+      rateLimitScope === "workload"
+        ? (rateLimitWorkload as GraphQLWorkload | undefined)
+        : undefined,
+    );
     const retryAt = state.cooldownUntil ?? now + retryAfterSeconds * 1000;
     return new GraphQLTransportError(
       graphQLCooldownMessage(state, false),
       true,
       statusCode,
-      { retryAfterSeconds, retryAt, requestId },
+      {
+        code,
+        retryAfterSeconds,
+        retryAt,
+        requestId,
+        rateLimitPolicy,
+        rateLimitScope,
+        rateLimitWorkload,
+      },
     );
   }
   return new GraphQLTransportError(
-    httpErrorMessage(statusCode),
+    code === "VIEWER_ENTRY_REQUIRED"
+      ? "请先选择我的球队"
+      : httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
     statusCode,
-    { requestId },
+    { code, requestId, rateLimitPolicy, rateLimitScope, rateLimitWorkload },
   );
 }
 
-function isUnauthenticated(body: GraphQLResponse<unknown> | undefined): boolean {
-  return Boolean(body?.errors?.some((error) => error.extensions?.code === "UNAUTHENTICATED"));
+function isUnauthenticated(
+  body: GraphQLResponse<unknown> | undefined,
+): boolean {
+  return Boolean(
+    body?.errors?.some((error) => error.extensions?.code === "UNAUTHENTICATED"),
+  );
 }
 
 export function buildGraphQLRequestHeaders(
@@ -403,21 +534,34 @@ function makeRequest<T>(
   variables: Record<string, unknown>,
   operationName: string,
   authMode: GraphQLAuthMode,
+  workload: GraphQLWorkload,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
-): Promise<{ body: GraphQLResponse<T>; token: string | null; requestId?: string }> {
-  const cooldown = getGraphQLCooldownState();
+  onSessionRetry?: (
+    token: string,
+  ) => Promise<GraphQLReadResult<unknown>> | undefined,
+): Promise<{
+  body: GraphQLResponse<T>;
+  token: string | null;
+  requestId?: string;
+  statusCode: number;
+}> {
+  const cooldown = getGraphQLCooldownState(Date.now(), workload);
   if (cooldown.active) {
-    return Promise.reject(new GraphQLTransportError(
-      graphQLCooldownMessage(cooldown, false),
-      true,
-      429,
-      {
-        retryAfterSeconds: cooldown.remainingSeconds,
-        retryAt: cooldown.cooldownUntil,
-      },
-    ));
+    return Promise.reject(
+      new GraphQLTransportError(
+        graphQLCooldownMessage(cooldown, false),
+        true,
+        429,
+        {
+          retryAfterSeconds: cooldown.remainingSeconds,
+          retryAt: cooldown.cooldownUntil,
+          rateLimitScope: cooldown.workload ? "workload" : undefined,
+          rateLimitWorkload: cooldown.workload,
+        },
+      ),
+    );
   }
 
   return new Promise((resolve, reject) => {
@@ -436,7 +580,8 @@ function makeRequest<T>(
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         const body = response.data;
-        const unauthorized = response.statusCode === 401 || isUnauthenticated(body);
+        const unauthorized =
+          response.statusCode === 401 || isUnauthenticated(body);
 
         if (authMode === "session" && unauthorized && retryOnUnauthorized) {
           if (isLogoutInFlight()) {
@@ -446,14 +591,21 @@ function makeRequest<T>(
 
           const currentToken = getApiSessionToken();
           if (currentToken && currentToken !== token) {
+            const existingRequest = onSessionRetry?.(currentToken);
+            if (existingRequest) {
+              reject(new GraphQLInFlightJoin(existingRequest));
+              return;
+            }
             makeRequest<T>(
               query,
               variables,
               operationName,
               authMode,
+              workload,
               false,
               currentToken,
               onNetworkAttempt,
+              onSessionRetry,
             )
               .then(resolve)
               .catch(reject);
@@ -465,14 +617,20 @@ function makeRequest<T>(
             if (!freshToken) {
               throw new Error("登录状态刷新失败，请重新登录");
             }
+            const existingRequest = onSessionRetry?.(freshToken);
+            if (existingRequest) {
+              throw new GraphQLInFlightJoin(existingRequest);
+            }
             return makeRequest<T>(
               query,
               variables,
               operationName,
               authMode,
+              workload,
               false,
               freshToken,
               onNetworkAttempt,
+              onSessionRetry,
             );
           };
 
@@ -496,10 +654,13 @@ function makeRequest<T>(
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(toHttpError(
-            response.statusCode,
-            response.header as Record<string, unknown> | undefined,
-          ));
+          reject(
+            toHttpError(
+              response.statusCode,
+              response.header as Record<string, unknown> | undefined,
+              body,
+            ),
+          );
           return;
         }
 
@@ -512,11 +673,11 @@ function makeRequest<T>(
           response.header as Record<string, unknown> | undefined,
           "x-request-id",
         );
-        resolve({ body, token, requestId });
+        resolve({ body, token, requestId, statusCode: response.statusCode });
       },
       fail(error) {
         reject(new GraphQLTransportError(networkErrorMessage(error), true));
-      }
+      },
     });
   });
 }
@@ -525,24 +686,24 @@ function requestIdentity(
   query: string,
   variables: Record<string, unknown>,
   policy: ResolvedRequestPolicy,
-  token: string | null
+  token: string | null,
 ): { requestKey: string; cacheKey: string } {
   const cacheToken = policy.authMode === "session" ? token : null;
   const requestKey = buildGraphQLRequestCacheKey(
     query,
     variables,
     cacheToken,
-    policy.cacheVariant
+    policy.cacheVariant,
   );
   return {
     requestKey,
-    cacheKey: getStorageCacheKey(requestKey, policy.authMode)
+    cacheKey: getStorageCacheKey(requestKey, policy.authMode),
   };
 }
 
 export function getServedCacheStoredAt(
   query: string,
-  variables: Record<string, unknown>
+  variables: Record<string, unknown>,
 ): number | undefined {
   const policy = resolvePolicy(query);
   const token = policy.authMode === "session" ? getApiSessionToken() : null;
@@ -553,7 +714,7 @@ export function getServedCacheStoredAt(
 function resolveFreshUntil(
   data: unknown,
   policy: ResolvedRequestPolicy,
-  options?: GraphQLOptions
+  options?: GraphQLOptions,
 ): number {
   if (options?.getCacheExpiry) {
     try {
@@ -579,7 +740,10 @@ function hasEmptyItemsPayload(data: unknown): boolean {
 }
 
 /** Missing GetEntry rows must not become a sticky miss after a later FPL/sync hit. */
-export function shouldCacheGraphQLData(operationName: string, data: unknown): boolean {
+export function shouldCacheGraphQLData(
+  operationName: string,
+  data: unknown,
+): boolean {
   if (operationName !== "GetEntry") {
     return true;
   }
@@ -592,7 +756,7 @@ export function shouldCacheGraphQLData(operationName: string, data: unknown): bo
 export async function graphqlRead<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  options?: GraphQLOptions
+  options?: GraphQLOptions,
 ): Promise<GraphQLReadResult<T>> {
   const startedAt = Date.now();
   const policy = resolvePolicy(query, options);
@@ -625,7 +789,7 @@ export async function graphqlRead<T>(
       false,
       cached.entry.storedAt,
       trace,
-      cacheVariantHash
+      cacheVariantHash,
     );
     return {
       data: cached.entry.data as T,
@@ -637,14 +801,13 @@ export async function graphqlRead<T>(
         stale: false,
         storedAt: cached.entry.storedAt,
         cacheAgeMs: Math.max(0, Date.now() - cached.entry.storedAt),
-        durationMs: Date.now() - startedAt
-      }
+        durationMs: Date.now() - startedAt,
+      },
     };
   }
 
-  const staleCandidate = cached && now < cached.entry.staleUntil
-    ? cached.entry
-    : undefined;
+  const staleCandidate =
+    cached && now < cached.entry.staleUntil ? cached.entry : undefined;
 
   const joinInFlight = async (
     inFlight: Promise<GraphQLReadResult<T>>,
@@ -660,15 +823,22 @@ export async function graphqlRead<T>(
         result.meta.storedAt,
         trace,
         cacheVariantHash,
-        result.meta.requestId
+        result.meta.requestId,
+        {
+          status: result.meta.statusCode,
+          retryAfterSeconds: result.meta.retryAfterSeconds,
+          rateLimitPolicy: result.meta.rateLimitPolicy,
+          rateLimitScope: result.meta.rateLimitScope,
+          workload: result.meta.rateLimitWorkload,
+        },
       );
       return {
         ...result,
         meta: {
           ...result.meta,
           source: "in-flight",
-          durationMs: Date.now() - startedAt
-        }
+          durationMs: Date.now() - startedAt,
+        },
       };
     } catch (error) {
       recordRequest(
@@ -679,15 +849,25 @@ export async function graphqlRead<T>(
         false,
         undefined,
         trace,
-        cacheVariantHash
+        cacheVariantHash,
+        error instanceof GraphQLTransportError ? error.requestId : undefined,
+        error instanceof GraphQLTransportError
+          ? {
+              code: error.code,
+              status: error.statusCode,
+              retryAfterSeconds: error.retryAfterSeconds,
+              rateLimitPolicy: error.rateLimitPolicy,
+              rateLimitScope: error.rateLimitScope,
+              workload: error.rateLimitWorkload,
+            }
+          : undefined,
       );
       throw error;
     }
   };
 
   const existingInFlight = inFlightRequests.get(identity.requestKey) as
-    | Promise<GraphQLReadResult<T>>
-    | undefined;
+    Promise<GraphQLReadResult<T>> | undefined;
 
   if (existingInFlight) {
     // Joining an identical request starts no new network traffic, so it remains
@@ -695,7 +875,7 @@ export async function graphqlRead<T>(
     return joinInFlight(existingInFlight);
   }
 
-  const cooldown = getGraphQLCooldownState(now);
+  const cooldown = getGraphQLCooldownState(now, policy.workload);
   if (cooldown.active) {
     if (staleCandidate) {
       showGraphQLCooldownNotice(cooldown, true);
@@ -709,6 +889,14 @@ export async function graphqlRead<T>(
         staleCandidate.storedAt,
         trace,
         cacheVariantHash,
+        undefined,
+        {
+          code: "RATE_LIMITED",
+          status: 429,
+          retryAfterSeconds: cooldown.remainingSeconds,
+          rateLimitScope: cooldown.workload ? "workload" : "global",
+          workload: cooldown.workload,
+        },
       );
       return {
         data: staleCandidate.data as T,
@@ -723,6 +911,9 @@ export async function graphqlRead<T>(
           rateLimited: true,
           cooldownUntil: cooldown.cooldownUntil,
           retryAfterSeconds: cooldown.remainingSeconds,
+          statusCode: 429,
+          rateLimitScope: cooldown.workload ? "workload" : "global",
+          rateLimitWorkload: cooldown.workload,
           durationMs: Date.now() - startedAt,
         },
       };
@@ -737,6 +928,14 @@ export async function graphqlRead<T>(
       undefined,
       trace,
       cacheVariantHash,
+      undefined,
+      {
+        code: "RATE_LIMITED",
+        status: 429,
+        retryAfterSeconds: cooldown.remainingSeconds,
+        rateLimitScope: cooldown.workload ? "workload" : "global",
+        workload: cooldown.workload,
+      },
     );
     throw new GraphQLTransportError(
       graphQLCooldownMessage(cooldown, false),
@@ -745,6 +944,8 @@ export async function graphqlRead<T>(
       {
         retryAfterSeconds: cooldown.remainingSeconds,
         retryAt: cooldown.cooldownUntil,
+        rateLimitScope: cooldown.workload ? "workload" : undefined,
+        rateLimitWorkload: cooldown.workload,
       },
     );
   }
@@ -761,7 +962,7 @@ export async function graphqlRead<T>(
         false,
         staleCandidate.storedAt,
         trace,
-        cacheVariantHash
+        cacheVariantHash,
       );
       return {
         data: staleCandidate.data as T,
@@ -773,8 +974,8 @@ export async function graphqlRead<T>(
           stale: true,
           storedAt: staleCandidate.storedAt,
           cacheAgeMs: Math.max(0, Date.now() - staleCandidate.storedAt),
-          durationMs: Date.now() - startedAt
-        }
+          durationMs: Date.now() - startedAt,
+        },
       };
     }
     recordRequest(
@@ -785,7 +986,7 @@ export async function graphqlRead<T>(
       false,
       undefined,
       trace,
-      cacheVariantHash
+      cacheVariantHash,
     );
     throw new GraphQLTransportError("当前处于离线状态，请检查网络后重试", true);
   }
@@ -794,9 +995,30 @@ export async function graphqlRead<T>(
   // probe still join the request that won the race instead of issuing a second
   // POST after the cooldown/in-flight gate.
   const racedInFlight = inFlightRequests.get(identity.requestKey) as
-    | Promise<GraphQLReadResult<T>>
-    | undefined;
+    Promise<GraphQLReadResult<T>> | undefined;
   if (racedInFlight) return joinInFlight(racedInFlight);
+
+  let inFlightRequest: Promise<GraphQLReadResult<unknown>> | null = null;
+  const inFlightKeys = new Set<string>();
+  const pendingRetryKeys = new Set<string>();
+  const registerInFlightKey = (
+    requestKey: string,
+  ): Promise<GraphQLReadResult<unknown>> | undefined => {
+    const existing = inFlightRequests.get(requestKey);
+    if (existing && existing !== inFlightRequest) return existing;
+    if (!inFlightRequest) {
+      pendingRetryKeys.add(requestKey);
+      return undefined;
+    }
+    inFlightRequests.set(requestKey, inFlightRequest);
+    inFlightKeys.add(requestKey);
+    return undefined;
+  };
+  const registerSessionRetry = (retryToken: string) => {
+    return registerInFlightKey(
+      requestIdentity(query, variables, policy, retryToken).requestKey,
+    );
+  };
 
   const networkRequest = (async (): Promise<GraphQLReadResult<T>> => {
     let networkAttempted = false;
@@ -806,37 +1028,52 @@ export async function graphqlRead<T>(
         variables,
         policy.operationName,
         policy.authMode,
+        policy.workload,
         true,
         token,
         () => {
           networkAttempted = true;
           if (trace) recordPageOperation(trace.navigationId, "network");
         },
+        registerSessionRetry,
       );
       const errors = response.body.errors || [];
-      const hasData = response.body.data !== undefined && response.body.data !== null;
+      const hasData =
+        response.body.data !== undefined && response.body.data !== null;
 
       if (!hasData) {
         throw new GraphQLApplicationError(errors);
       }
 
       const storedAt = Date.now();
-      const responseIdentity = requestIdentity(query, variables, policy, response.token);
+      const responseIdentity = requestIdentity(
+        query,
+        variables,
+        policy,
+        response.token,
+      );
 
       if (errors.length === 0 && policy.cacheable) {
         const producingSessionStillActive =
-          policy.authMode === "public"
-          || response.token === getApiSessionToken();
+          policy.authMode === "public" ||
+          response.token === getApiSessionToken();
 
-        if (producingSessionStillActive && shouldCacheGraphQLData(policy.operationName, response.body.data)) {
-          const freshUntil = resolveFreshUntil(response.body.data, policy, options);
+        if (
+          producingSessionStillActive &&
+          shouldCacheGraphQLData(policy.operationName, response.body.data)
+        ) {
+          const freshUntil = resolveFreshUntil(
+            response.body.data,
+            policy,
+            options,
+          );
           const entry: CacheEntry = {
             version: CACHE_VERSION,
             requestKey: responseIdentity.requestKey,
             data: response.body.data,
             freshUntil,
             staleUntil: Math.max(freshUntil, freshUntil + policy.staleTtl),
-            storedAt
+            storedAt,
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
           forgetServedFromCache(responseIdentity.requestKey);
@@ -852,7 +1089,8 @@ export async function graphqlRead<T>(
         undefined,
         trace,
         cacheVariantHash,
-        response.requestId
+        response.requestId,
+        { status: response.statusCode },
       );
       return {
         data: response.body.data as T,
@@ -865,17 +1103,25 @@ export async function graphqlRead<T>(
           storedAt,
           cacheAgeMs: 0,
           requestId: response.requestId,
-          durationMs: Date.now() - startedAt
-        }
+          statusCode: response.statusCode,
+          durationMs: Date.now() - startedAt,
+        },
       };
     } catch (error) {
+      if (error instanceof GraphQLInFlightJoin) {
+        return joinInFlight(
+          error.request as Promise<GraphQLReadResult<T>>,
+        );
+      }
       if (staleCandidate && isTransientFailure(error)) {
-        const transportError = error instanceof GraphQLTransportError
-          ? error
-          : undefined;
+        const transportError =
+          error instanceof GraphQLTransportError ? error : undefined;
         const rateLimited = transportError?.statusCode === 429;
         if (rateLimited) {
-          showGraphQLCooldownNotice(getGraphQLCooldownState(), true);
+          showGraphQLCooldownNotice(
+            getGraphQLCooldownState(Date.now(), policy.workload),
+            true,
+          );
         }
         recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
         recordRequest(
@@ -888,6 +1134,16 @@ export async function graphqlRead<T>(
           trace,
           cacheVariantHash,
           transportError?.requestId,
+          transportError
+            ? {
+                code: transportError.code,
+                status: transportError.statusCode,
+                retryAfterSeconds: transportError.retryAfterSeconds,
+                rateLimitPolicy: transportError.rateLimitPolicy,
+                rateLimitScope: transportError.rateLimitScope,
+                workload: transportError.rateLimitWorkload,
+              }
+            : undefined,
         );
         return {
           data: staleCandidate.data as T,
@@ -905,16 +1161,20 @@ export async function graphqlRead<T>(
             retryAfterSeconds: rateLimited
               ? transportError?.retryAfterSeconds
               : undefined,
-            durationMs: Date.now() - startedAt
-          }
+            statusCode: transportError?.statusCode,
+            rateLimitPolicy: transportError?.rateLimitPolicy,
+            rateLimitScope: transportError?.rateLimitScope,
+            rateLimitWorkload: transportError?.rateLimitWorkload,
+            durationMs: Date.now() - startedAt,
+          },
         };
       }
 
-      if (
-        error instanceof GraphQLTransportError
-        && error.statusCode === 429
-      ) {
-        showGraphQLCooldownNotice(getGraphQLCooldownState(), false);
+      if (error instanceof GraphQLTransportError && error.statusCode === 429) {
+        showGraphQLCooldownNotice(
+          getGraphQLCooldownState(Date.now(), policy.workload),
+          false,
+        );
       }
 
       recordRequest(
@@ -927,26 +1187,42 @@ export async function graphqlRead<T>(
         trace,
         cacheVariantHash,
         error instanceof GraphQLTransportError ? error.requestId : undefined,
+        error instanceof GraphQLTransportError
+          ? {
+              code: error.code,
+              status: error.statusCode,
+              retryAfterSeconds: error.retryAfterSeconds,
+              rateLimitPolicy: error.rateLimitPolicy,
+              rateLimitScope: error.rateLimitScope,
+              workload: error.rateLimitWorkload,
+            }
+          : undefined,
       );
       throw error;
     }
   })();
 
-  inFlightRequests.set(
-    identity.requestKey,
-    networkRequest as Promise<GraphQLReadResult<unknown>>
-  );
-  void networkRequest.then(
-    () => inFlightRequests.delete(identity.requestKey),
-    () => inFlightRequests.delete(identity.requestKey)
-  );
+  inFlightRequest = networkRequest as Promise<GraphQLReadResult<unknown>>;
+  inFlightRequests.set(identity.requestKey, inFlightRequest);
+  inFlightKeys.add(identity.requestKey);
+  for (const requestKey of pendingRetryKeys) {
+    registerInFlightKey(requestKey);
+  }
+  const clearSettledInFlight = () => {
+    for (const requestKey of inFlightKeys) {
+      if (inFlightRequests.get(requestKey) === inFlightRequest) {
+        inFlightRequests.delete(requestKey);
+      }
+    }
+  };
+  void networkRequest.then(clearSettledInFlight, clearSettledInFlight);
   return networkRequest;
 }
 
 export async function graphqlRequest<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  options?: GraphQLOptions
+  options?: GraphQLOptions,
 ): Promise<T> {
   const result = await graphqlRead<T>(query, variables, options);
   if (result.errors.length > 0) {

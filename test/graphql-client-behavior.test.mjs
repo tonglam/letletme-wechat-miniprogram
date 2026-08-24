@@ -236,6 +236,146 @@ test("session refresh network failure serves stale data without a second refresh
   }
 });
 
+test("session retry re-keys the in-flight request for the refreshed token", async () => {
+  let graphQLRequests = 0;
+  let retryRequest;
+  const runtime = installRuntime((request) => {
+    if (request.url.endsWith("/wechat/login")) {
+      request.success({
+        statusCode: 200,
+        data: {
+          success: true,
+          contractVersion: 2,
+          authenticated: true,
+          webAccountLinked: false,
+          token: "refreshed-token",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          profile: {
+            id: "refreshed-account",
+            followEntryId: 202,
+            effectiveEntryId: 202,
+            effectiveEntrySource: "MINI",
+            webAccountLinked: false,
+            entryConflict: false,
+            wechatLinked: true,
+          },
+        },
+      });
+      return;
+    }
+    graphQLRequests += 1;
+    if (graphQLRequests === 1) {
+      request.success({
+        statusCode: 401,
+        data: { errors: [{ extensions: { code: "UNAUTHENTICATED" } }] },
+      });
+      return;
+    }
+    retryRequest = request;
+  });
+  globalThis.wx.login = ({ success: loginSuccess }) => {
+    loginSuccess({ code: "refresh-code" });
+  };
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "expired-session-token");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  await restoreApiSessionCredentials();
+
+  const query = "query SessionRetryRekey { value }";
+  const options = {
+    authMode: "session",
+    cachePolicy: "reporting",
+    forceRefresh: true,
+  };
+  const first = graphqlRead(query, {}, options);
+  for (let attempt = 0; attempt < 10 && !retryRequest; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(retryRequest, "the refreshed-token retry is pending");
+
+  const second = graphqlRead(query, {}, options);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    graphQLRequests,
+    2,
+    "the second caller joins the refreshed-token retry",
+  );
+  retryRequest.success({
+    statusCode: 200,
+    data: { data: { value: "refreshed" } },
+  });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.data.value, "refreshed");
+  assert.equal(secondResult.data.value, "refreshed");
+  assert.equal(secondResult.meta.source, "in-flight");
+  clearSessionCredentials();
+});
+
+test("session retry joins a request already running under the refreshed token", async () => {
+  let graphQLRequests = 0;
+  let firstRequest;
+  let secondRequest;
+  const runtime = installRuntime((request) => {
+    graphQLRequests += 1;
+    if (graphQLRequests === 1) {
+      firstRequest = request;
+      return;
+    }
+    if (graphQLRequests === 2) {
+      secondRequest = request;
+      return;
+    }
+    request.fail({ errMsg: "unexpected duplicate GraphQL request" });
+  });
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "session-a");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  await restoreApiSessionCredentials();
+
+  const query = "query SessionRetryCollision { value }";
+  const options = {
+    authMode: "session",
+    cachePolicy: "reporting",
+    forceRefresh: true,
+  };
+  const first = graphqlRead(query, {}, options);
+  for (let attempt = 0; attempt < 10 && !firstRequest; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(firstRequest, "the old-token request is pending");
+
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "session-b");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  await restoreApiSessionCredentials();
+  const second = graphqlRead(query, {}, options);
+  for (let attempt = 0; attempt < 10 && !secondRequest; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(secondRequest, "the refreshed-token request is pending");
+
+  firstRequest.success({
+    statusCode: 401,
+    data: { errors: [{ extensions: { code: "UNAUTHENTICATED" } }] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    graphQLRequests,
+    2,
+    "the old-token retry joins the existing refreshed-token request",
+  );
+
+  secondRequest.success({
+    statusCode: 200,
+    data: { data: { value: "refreshed" } },
+  });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.data.value, "refreshed");
+  assert.equal(secondResult.data.value, "refreshed");
+  assert.equal(firstResult.meta.source, "in-flight");
+  clearSessionCredentials();
+});
+
 test("application error text containing 429 never serves stale data", async () => {
   const runtime = installRuntime(success({ value: "last-good" }));
   const query = "query BehaviorApplicationText429 { value }";

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GraphQLApplicationError,
   GraphQLTransportError,
   graphqlRead,
+  isViewerEntryAuthorizationError,
 } from "../miniprogram/services/graphql.service.ts";
 import {
   getGraphQLCooldownState,
@@ -19,6 +21,7 @@ import {
   getPerf,
   recordPagePerformance,
 } from "../miniprogram/utils/perf.ts";
+import { readBugReportDiagnostics } from "../miniprogram/utils/bug-report-diagnostics.ts";
 
 function installRuntime(handler) {
   const storage = new Map();
@@ -69,10 +72,7 @@ test("Retry-After accepts seconds and HTTP-date and clamps invalid values", () =
     parseRetryAfterSeconds("Thu, 20 Aug 2026 00:01:30 GMT", now),
     90,
   );
-  assert.equal(
-    parseRetryAfterSeconds("Wed, 19 Aug 2026 23:59:59 GMT", now),
-    1,
-  );
+  assert.equal(parseRetryAfterSeconds("Wed, 19 Aug 2026 23:59:59 GMT", now), 1);
   assert.equal(parseRetryAfterSeconds("not-a-date", now), 15);
   assert.equal(parseRetryAfterSeconds("2099-01-01", now), 15);
   assert.equal(parseRetryAfterSeconds("1.5", now), 15);
@@ -147,7 +147,8 @@ test("cooldown remains active and notifies subscribers when storage fails", asyn
   assert.equal(getGraphQLCooldownState().active, true);
   await assert.rejects(
     graphqlRead("query StorageFailureCooldown { value }", {}, policy),
-    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+    (error) =>
+      error instanceof GraphQLTransportError && error.statusCode === 429,
   );
   assert.equal(runtime.requests.length, 0);
   unsubscribe();
@@ -209,31 +210,107 @@ test("a cooldown storage read failure does not release corrupt-value quarantine"
   assert.equal(afterReadRecovery.remainingSeconds, 118);
 });
 
+test("a corrupted workload cooldown stays anchored when storage writes fail", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set(
+    "graphql-cooldown-workloads-v1:player-stats",
+    now + 5 * 60 * 1000,
+  );
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+  globalThis.wx.removeStorageSync = () => {
+    throw new Error("storage locked");
+  };
+
+  const first = getGraphQLCooldownState(now, "player-stats");
+  const second = getGraphQLCooldownState(now + 1_000, "player-stats");
+  assert.equal(first.cooldownUntil, now + 120_000);
+  assert.equal(second.cooldownUntil, first.cooldownUntil);
+  assert.equal(second.remainingSeconds, 119);
+  assert.equal(
+    getGraphQLCooldownState(now + 120_001, "player-stats").active,
+    false,
+  );
+  assert.equal(
+    getGraphQLCooldownState(now + 181_000, "player-stats").active,
+    false,
+    "the quarantined workload value must not become valid again",
+  );
+
+  const freshEvidenceAt = now + 181_000;
+  const fresh = persistGraphQLCooldown(1, freshEvidenceAt, "player-stats");
+  assert.equal(fresh.cooldownUntil, freshEvidenceAt + 1_000);
+  assert.equal(fresh.remainingSeconds, 1);
+});
+
+test("a longer global cooldown wins over a shorter workload cooldown", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set("graphql-cooldown-until", now + 60_000);
+  runtime.storage.set(
+    "graphql-cooldown-workloads-v1:player-stats",
+    now + 20_000,
+  );
+
+  const state = getGraphQLCooldownState(now, "player-stats");
+  assert.equal(state.active, true);
+  assert.equal(state.cooldownUntil, now + 60_000);
+  assert.equal(
+    state.workload,
+    undefined,
+    "a global cooldown must remain global when it is the effective deadline",
+  );
+  assert.equal(state.remainingSeconds, 60);
+});
+
+test("legacy FORBIDDEN application errors are limited to the viewer-entry recovery predicate", () => {
+  assert.equal(
+    isViewerEntryAuthorizationError(
+      new GraphQLApplicationError([{ extensions: { code: "FORBIDDEN" } }]),
+    ),
+    true,
+  );
+  assert.equal(
+    isViewerEntryAuthorizationError(
+      new GraphQLApplicationError([{ extensions: { code: "UNAUTHENTICATED" } }]),
+    ),
+    false,
+  );
+});
+
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {
-  const runtime = installRuntime((request) => request.success({
-    statusCode: 429,
-    header: {
-      "Retry-After": "20",
-      "X-Request-Id": "req-rate-limited",
-    },
-    data: { errors: [{ message: "rate limited" }] },
-  }));
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 429,
+      header: {
+        "Retry-After": "20",
+        "X-Request-Id": "req-rate-limited",
+      },
+      data: { errors: [{ message: "rate limited" }] },
+    }),
+  );
   const query = "query RateLimitColdNoCache { value }";
 
-  await assert.rejects(
-    graphqlRead(query, {}, policy),
-    (error) => {
-      assert.ok(error instanceof GraphQLTransportError);
-      assert.equal(error.statusCode, 429);
-      assert.equal(error.transient, true);
-      assert.equal(error.retryAfterSeconds, 20);
-      assert.equal(error.requestId, "req-rate-limited");
-      assert.ok(error.retryAt > Date.now());
-      return true;
-    },
+  await assert.rejects(graphqlRead(query, {}, policy), (error) => {
+    assert.ok(error instanceof GraphQLTransportError);
+    assert.equal(error.statusCode, 429);
+    assert.equal(error.transient, true);
+    assert.equal(error.retryAfterSeconds, 20);
+    assert.equal(error.requestId, "req-rate-limited");
+    assert.ok(error.retryAt > Date.now());
+    return true;
+  });
+  assert.equal(
+    runtime.requests.length,
+    1,
+    "429 must not be retried automatically",
   );
-  assert.equal(runtime.requests.length, 1, "429 must not be retried automatically");
-  assert.equal(runtime.requests[0].header["X-Letletme-Client"], "wechat-miniprogram");
+  assert.equal(
+    runtime.requests[0].header["X-Letletme-Client"],
+    "wechat-miniprogram",
+  );
   assert.match(runtime.requests[0].header["X-Letletme-Device-Id"], /^wx-/);
   assert.equal("Authorization" in runtime.requests[0].header, false);
 
@@ -242,11 +319,16 @@ test("429 persists one global cooldown, exposes request metadata, and never auto
   assert.ok(state.remainingSeconds >= 19);
 
   await assert.rejects(
-    graphqlRead("query RateLimitSecondSurface { value }", {}, {
-      ...policy,
-      forceRefresh: true,
-    }),
-    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+    graphqlRead(
+      "query RateLimitSecondSurface { value }",
+      {},
+      {
+        ...policy,
+        forceRefresh: true,
+      },
+    ),
+    (error) =>
+      error instanceof GraphQLTransportError && error.statusCode === 429,
   );
   assert.equal(
     runtime.requests.length,
@@ -255,11 +337,101 @@ test("429 persists one global cooldown, exposes request metadata, and never auto
   );
 });
 
+test("workload-scoped 429 cools only the affected Mini workload", async () => {
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 429,
+      header: {
+        "Retry-After": "20",
+        "X-Request-Id": "req-player-stats-rate-limited",
+        "X-RateLimit-Policy": "graphql-v4",
+        "X-RateLimit-Scope": "workload",
+        "X-RateLimit-Workload": "player-stats",
+      },
+      data: { errors: [{ message: "rate limited" }] },
+    }),
+  );
+
+  await assert.rejects(
+    graphqlRead(
+      "query PlayersForPicker { playersForPicker { items { id } } }",
+      {},
+      { forceRefresh: true },
+    ),
+    (error) => {
+      assert.ok(error instanceof GraphQLTransportError);
+      assert.equal(error.statusCode, 429);
+      assert.equal(error.rateLimitPolicy, "graphql-v4");
+      assert.equal(error.rateLimitScope, "workload");
+      assert.equal(error.rateLimitWorkload, "player-stats");
+      return true;
+    },
+  );
+
+  assert.equal(
+    getGraphQLCooldownState(Date.now(), "player-stats").active,
+    true,
+  );
+  assert.equal(getGraphQLCooldownState(Date.now(), "fixtures").active, false);
+  assert.equal(getGraphQLCooldownState(Date.now()).active, false);
+  await assert.rejects(
+    graphqlRead(
+      "query PlayersForPicker { playersForPicker { items { id } } }",
+      {},
+      { forceRefresh: true },
+    ),
+    (error) =>
+      error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  assert.equal(runtime.requests.length, 1);
+});
+
+test("cache-policy overrides derive the matching workload cooldown key", async () => {
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 429,
+      header: {
+        "Retry-After": "20",
+        "X-RateLimit-Scope": "workload",
+        "X-RateLimit-Workload": "market",
+      },
+      data: { errors: [{ message: "rate limited" }] },
+    }),
+  );
+  const options = {
+    ...policy,
+    cachePolicy: "market",
+    forceRefresh: true,
+  };
+
+  await assert.rejects(
+    graphqlRead(
+      "query MiniMarketOwnershipDay { value }",
+      {},
+      options,
+    ),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  await assert.rejects(
+    graphqlRead(
+      "query MiniMarketOwnershipDay { value }",
+      {},
+      options,
+    ),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  assert.equal(runtime.requests.length, 1);
+  assert.equal(getGraphQLCooldownState(Date.now(), "market").active, true);
+  assert.equal(getGraphQLCooldownState(Date.now(), "public-other").active, false);
+});
+
 test("429 serves stale data and every cooldown read performs zero network requests", async () => {
-  const runtime = installRuntime((request) => request.success({
-    statusCode: 200,
-    data: { data: { value: "last-good" } },
-  }));
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 200,
+      data: { data: { value: "last-good" } },
+    }),
+  );
   const query = "query RateLimitStaleFallback { value }";
   const options = {
     ...policy,
@@ -269,36 +441,74 @@ test("429 serves stale data and every cooldown read performs zero network reques
 
   await graphqlRead(query, {}, options);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  runtime.setHandler((request) => request.success({
-    statusCode: 429,
-    header: { "retry-after": "30", "x-request-id": "req-stale-429" },
-    data: { errors: [{ message: "rate limited" }] },
-  }));
+  runtime.setHandler((request) =>
+    request.success({
+      statusCode: 429,
+      header: {
+        "retry-after": "30",
+        "x-request-id": "req-stale-429",
+        "x-ratelimit-policy": "graphql-v4",
+        "x-ratelimit-scope": "workload",
+        "x-ratelimit-workload": "interactive",
+      },
+      data: { errors: [{ message: "rate limited" }] },
+    }),
+  );
 
-  const firstStale = await graphqlRead(query, {}, {
-    ...options,
-    forceRefresh: true,
-  });
+  const firstStale = await graphqlRead(
+    query,
+    {},
+    {
+      ...options,
+      forceRefresh: true,
+    },
+  );
   assert.equal(firstStale.data.value, "last-good");
   assert.equal(firstStale.meta.source, "stale");
   assert.equal(firstStale.meta.rateLimited, true);
   assert.equal(firstStale.meta.requestId, "req-stale-429");
+  assert.equal(firstStale.meta.statusCode, 429);
+  assert.equal(firstStale.meta.retryAfterSeconds, 30);
+  assert.equal(firstStale.meta.rateLimitPolicy, "graphql-v4");
+  assert.equal(firstStale.meta.rateLimitScope, "workload");
+  assert.equal(firstStale.meta.rateLimitWorkload, "interactive");
+  assert.deepEqual(
+    readBugReportDiagnostics().at(-1),
+    {
+      at: readBugReportDiagnostics().at(-1).at,
+      requestId: "req-stale-429",
+      operation: "RateLimitStaleFallback",
+      code: "RATE_LIMITED",
+      status: 429,
+      retryAfterSeconds: 30,
+      rateLimitPolicy: "graphql-v4",
+      rateLimitScope: "workload",
+      workload: "interactive",
+      message: "stale",
+    },
+  );
   assert.equal(runtime.requests.length, 2);
 
-  const secondStale = await graphqlRead(query, {}, {
-    ...options,
-    forceRefresh: true,
-  });
+  const secondStale = await graphqlRead(
+    query,
+    {},
+    {
+      ...options,
+      forceRefresh: true,
+    },
+  );
   assert.equal(secondStale.data.value, "last-good");
   assert.equal(secondStale.meta.rateLimited, true);
   assert.equal(runtime.requests.length, 2);
 });
 
 test("persisted cooldown surfaces a stale-data notice before returning cached data", async () => {
-  const runtime = installRuntime((request) => request.success({
-    statusCode: 200,
-    data: { data: { value: "last-good" } },
-  }));
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 200,
+      data: { data: { value: "last-good" } },
+    }),
+  );
   const query = "query PersistedCooldownStaleNotice { value }";
   const options = {
     ...policy,
@@ -310,7 +520,11 @@ test("persisted cooldown surfaces a stale-data notice before returning cached da
   await new Promise((resolve) => setTimeout(resolve, 5));
   runtime.storage.set("graphql-cooldown-until", Date.now() + 30_000);
 
-  const stale = await graphqlRead(query, {}, { ...options, forceRefresh: true });
+  const stale = await graphqlRead(
+    query,
+    {},
+    { ...options, forceRefresh: true },
+  );
   assert.equal(stale.meta.rateLimited, true);
   assert.equal(stale.meta.source, "stale");
   assert.equal(runtime.requests.length, 1);
@@ -344,15 +558,19 @@ test("a cooldown established during the network probe is not counted as network 
     networkOperationCount: 0,
   });
 
-  const read = graphqlRead("query CooldownProbeRace { value }", {}, {
-    ...policy,
-    trace: {
-      navigationId,
-      callerSurface: "cooldown-race",
-      trigger: "refresh",
-      contextRevision: 1,
+  const read = graphqlRead(
+    "query CooldownProbeRace { value }",
+    {},
+    {
+      ...policy,
+      trace: {
+        navigationId,
+        callerSurface: "cooldown-race",
+        trigger: "refresh",
+        contextRevision: 1,
+      },
     },
-  });
+  );
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(typeof finishProbe, "function");
   persistGraphQLCooldown(20);
@@ -360,7 +578,8 @@ test("a cooldown established during the network probe is not counted as network 
 
   await assert.rejects(
     read,
-    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+    (error) =>
+      error instanceof GraphQLTransportError && error.statusCode === 429,
   );
   const perf = getPerf();
   const page = perf.pagePerformance.find(
@@ -373,22 +592,35 @@ test("a cooldown established during the network probe is not counted as network 
 
 test("after cooldown expiry, concurrent refreshes share one in-flight request", async () => {
   const runtime = installRuntime((request) => {
-    setTimeout(() => request.success({
-      statusCode: 200,
-      data: { data: { value: "fresh" } },
-    }), 10);
+    setTimeout(
+      () =>
+        request.success({
+          statusCode: 200,
+          data: { data: { value: "fresh" } },
+        }),
+      10,
+    );
   });
   runtime.storage.set("graphql-cooldown-until", Date.now() - 1);
   const query = "query RateLimitRecoverySingleFlight { value }";
 
   const reads = await Promise.all(
-    Array.from({ length: 20 }, () => graphqlRead(query, {}, {
-      ...policy,
-      forceRefresh: true,
-    })),
+    Array.from({ length: 20 }, () =>
+      graphqlRead(
+        query,
+        {},
+        {
+          ...policy,
+          forceRefresh: true,
+        },
+      ),
+    ),
   );
   assert.equal(runtime.requests.length, 1);
-  assert.equal(reads.every((read) => read.data.value === "fresh"), true);
+  assert.equal(
+    reads.every((read) => read.data.value === "fresh"),
+    true,
+  );
 });
 
 test("an identical in-flight read is joined after another operation starts cooldown", async () => {
@@ -397,10 +629,11 @@ test("an identical in-flight read is joined after another operation starts coold
   const runtime = installRuntime((request) => {
     requestCount += 1;
     if (requestCount === 1) {
-      completeFirst = () => request.success({
-        statusCode: 200,
-        data: { data: { value: "completed" } },
-      });
+      completeFirst = () =>
+        request.success({
+          statusCode: 200,
+          data: { data: { value: "completed" } },
+        });
       return;
     }
     request.success({
@@ -411,18 +644,31 @@ test("an identical in-flight read is joined after another operation starts coold
   });
   const pendingQuery = "query InFlightBeforeCooldown { value }";
 
-  const first = graphqlRead(pendingQuery, {}, { ...policy, forceRefresh: true });
+  const first = graphqlRead(
+    pendingQuery,
+    {},
+    { ...policy, forceRefresh: true },
+  );
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(typeof completeFirst, "function");
   await assert.rejects(
-    graphqlRead("query StartsOtherCooldown { value }", {}, {
-      ...policy,
-      forceRefresh: true,
-    }),
-    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+    graphqlRead(
+      "query StartsOtherCooldown { value }",
+      {},
+      {
+        ...policy,
+        forceRefresh: true,
+      },
+    ),
+    (error) =>
+      error instanceof GraphQLTransportError && error.statusCode === 429,
   );
 
-  const joined = graphqlRead(pendingQuery, {}, { ...policy, forceRefresh: true });
+  const joined = graphqlRead(
+    pendingQuery,
+    {},
+    { ...policy, forceRefresh: true },
+  );
   completeFirst();
   const [firstResult, joinedResult] = await Promise.all([first, joined]);
   assert.equal(firstResult.meta.source, "network");

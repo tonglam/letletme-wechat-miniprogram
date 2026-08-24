@@ -5,7 +5,6 @@ import {
   getLiveSnapshot,
   searchLivePointsByTournamentSnapshot,
 } from "../../../services/live.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import type {
   LiveManagerScoreState,
   LiveSnapshotStatus,
@@ -14,7 +13,10 @@ import type {
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch } from "../../../utils/navigation";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import {
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot,
@@ -94,6 +96,7 @@ export function noLiveEventState() {
     refreshing: false,
     hasData: false,
     error: "",
+    errorWorkload: "home" as const,
     errorSuffix: "",
     tournamentListError: "",
     tournamentListErrorSuffix: "",
@@ -585,6 +588,7 @@ PerformancePage({
     displayState: "fresh",
     retainedRowCount: 0,
     error: "",
+    errorWorkload: "home" as "home" | "gameweek",
     errorSuffix: "",
     tournamentListError: "",
     tournamentListErrorSuffix: "",
@@ -768,15 +772,7 @@ PerformancePage({
     )
       return;
     this.loadedSeason = context.season || undefined;
-    if (!getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked to a different entry
-      // since, so wait for the refreshed profile to re-assert it (the login
-      // may not even have started while the privacy callback is pending).
-      try {
-        await app.authReady;
-      } catch {}
-    }
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.startupGeneration !== startupGeneration)
       return;
     const liveWindow = await getLiveSnapshot().catch(() => null);
@@ -884,6 +880,7 @@ PerformancePage({
       loading: false,
       refreshing: false,
       error: message,
+      errorWorkload: "home",
       errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
       ...(this.data.emptyState === "preseason"
         ? {
@@ -902,6 +899,12 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    let previousEntryId = 0;
+    if (resumed) {
+      previousEntryId = Number(this.data.entryId) || 0;
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
     if (resumed && this.resumeStartupAfterShow) {
       const forceRefresh = this.resumeStartupForceRefresh;
       this.resumeStartupAfterShow = false;
@@ -922,6 +925,8 @@ PerformancePage({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
+      const principalChanged =
+        this.restartForPrincipalChange(previousEntryId, false);
       const nextSeason = context?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
         this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
@@ -1022,6 +1027,10 @@ PerformancePage({
       if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
+      if (principalChanged) {
+        await this.loadTournaments(true);
+        return;
+      }
     }
     if (resumed && this.resumeDirectoryAfterShow) {
       const forceRefresh = this.resumeDirectoryForceRefresh;
@@ -1100,6 +1109,8 @@ PerformancePage({
   },
 
   async retryWithContext() {
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
       const recoveryGeneration = ++this.startupGeneration;
@@ -1142,7 +1153,7 @@ PerformancePage({
     clearTournamentBoard(this);
   },
 
-  restartForPrincipalChange(entryId: number): boolean {
+  restartForPrincipalChange(entryId: number, loadDirectory = true): boolean {
     const nextEntryId = currentFollowEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
@@ -1174,7 +1185,7 @@ PerformancePage({
       scoreNextRefreshAt: "",
       ...emptyCompareState(),
     });
-    void this.loadTournaments(true);
+    if (loadDirectory) void this.loadTournaments(true);
     return true;
   },
 
@@ -1182,6 +1193,8 @@ PerformancePage({
     forceRefresh = false,
     originatingTrace?: PageRequestTrace,
   ) {
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     const trace =
       originatingTrace ||
       capturePageRequestTrace({
@@ -1413,8 +1426,18 @@ PerformancePage({
     }
     this.setData(
       preserveData
-        ? { refreshing: true, error: "", errorSuffix: "" }
-        : { loading: true, error: "", errorSuffix: "" },
+        ? {
+            refreshing: true,
+            error: "",
+            errorWorkload: "gameweek" as const,
+            errorSuffix: "",
+          }
+        : {
+            loading: true,
+            error: "",
+            errorWorkload: "gameweek" as const,
+            errorSuffix: "",
+          },
     );
 
     const request = (async () => {

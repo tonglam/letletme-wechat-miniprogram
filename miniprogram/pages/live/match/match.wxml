@@ -23,7 +23,7 @@
   </block>
 
   <view wx:if="{{error && !hasData}}" id="perf-primary-content">
-    <app-error-state message="{{error}}" bind:retry="onRetry" />
+    <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载比赛" />
   <view wx:elif="{{scheduleEmpty}}" id="perf-primary-content" class="section">
@@ -37,8 +37,8 @@
     />
   </view>
   <view wx:else id="perf-primary-content" class="match-content">
-    <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <app-empty-state
       wx:if="{{matches.length === 0}}"
       title="当前没有{{activeStatusLabel}}的比赛"
