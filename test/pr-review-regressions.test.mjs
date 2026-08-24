@@ -130,6 +130,10 @@ test("tournament status reports only rows actually retained", () => {
   const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
   assert.match(tournament, /this\.retainedRowCount = retainedRows\.length/);
+  assert.match(
+    tournament,
+    /this\.officialTraceableEntries = combinedTournamentTraceableEntries\(\s*liveResult\.traceableEntries,\s*retainedRows,\s*liveResult\.totalEntries/,
+  );
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
 });

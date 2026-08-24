@@ -77,6 +77,34 @@ export function mergeUnavailableTournamentEntryIds(
   return [...new Set([...failedEntryIds, ...unavailableEntryIds])];
 }
 
+export function combinedTournamentTraceableEntries(
+  refreshedTraceableEntries: number | undefined,
+  retainedRows: readonly LiveTournamentRow[],
+  totalEntries?: number,
+): number | undefined {
+  const hasRefreshedCount =
+    typeof refreshedTraceableEntries === "number" &&
+    Number.isFinite(refreshedTraceableEntries) &&
+    refreshedTraceableEntries >= 0;
+  const retainedTraceableEntries = retainedRows.filter(
+    (row) => officialManagerEventPoints(row.score) !== undefined,
+  ).length;
+  if (!hasRefreshedCount && retainedTraceableEntries === 0) {
+    return undefined;
+  }
+
+  const combined =
+    (hasRefreshedCount ? Math.floor(refreshedTraceableEntries) : 0) +
+    retainedTraceableEntries;
+  const total =
+    typeof totalEntries === "number" &&
+    Number.isFinite(totalEntries) &&
+    totalEntries > 0
+      ? Math.floor(totalEntries)
+      : combined;
+  return Math.min(total, combined);
+}
+
 export function officialTournamentTotalPoints(
   score?: LiveManagerScore,
 ): number | undefined {
@@ -101,12 +129,14 @@ export function tournamentManagerScoreStatus(
       ? Math.floor(coverage.totalEntries)
       : rows.length;
   const unavailableCount = new Set(coverage.unavailableEntryIds || []).size;
-  const verifiedAvailable =
-    typeof coverage.traceableEntries === "number" &&
-    Number.isFinite(coverage.traceableEntries) &&
-    coverage.traceableEntries >= 0
-      ? Math.min(total, Math.floor(coverage.traceableEntries))
-      : observedAvailable;
+  const traceableEntryCount = coverage.traceableEntries;
+  const verifiedCoverage =
+    typeof traceableEntryCount === "number" &&
+    Number.isFinite(traceableEntryCount) &&
+    traceableEntryCount >= 0
+      ? Math.min(total, Math.floor(traceableEntryCount))
+      : undefined;
+  const verifiedAvailable = verifiedCoverage ?? observedAvailable;
   const reportedAvailable =
     typeof coverage.officialCoverage === "number" &&
     Number.isFinite(coverage.officialCoverage)
@@ -121,7 +151,12 @@ export function tournamentManagerScoreStatus(
   const metadataAvailable = unavailableCount > 0
     ? Math.max(0, total - unavailableCount)
     : Math.max(observedAvailable, reportedAvailable);
-  const available = Math.min(verifiedAvailable, metadataAvailable);
+  // A traceable count is derived from the actual revisioned scores, including
+  // retained last-good rows after a partial refresh. Current failure metadata
+  // must not subtract those still-verifiable scores a second time.
+  const available = verifiedCoverage !== undefined
+    ? verifiedCoverage
+    : Math.min(verifiedAvailable, metadataAvailable);
   if (states.length === 0 || available === 0) return "官方分数不可用";
   if (available < total) {
     return `官方实时：${available}/${total} 支球队已有分数`;

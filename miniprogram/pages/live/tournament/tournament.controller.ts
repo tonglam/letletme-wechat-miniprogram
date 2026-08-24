@@ -44,6 +44,7 @@ import {
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
   compareKnownTournamentValues,
+  combinedTournamentTraceableEntries,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
@@ -1436,7 +1437,6 @@ PerformancePage({
         );
         const failedEntryIds = new Set(unavailableEntryIds);
         this.officialCoverage = liveResult.officialCoverage;
-        this.officialTraceableEntries = liveResult.traceableEntries;
         this.officialTotalEntries = liveResult.totalEntries;
         this.unavailableEntryIds = unavailableEntryIds;
         this.failedEntryCount = Math.max(
@@ -1459,6 +1459,11 @@ PerformancePage({
             )
           : [];
         this.retainedRowCount = retainedRows.length;
+        this.officialTraceableEntries = combinedTournamentTraceableEntries(
+          liveResult.traceableEntries,
+          retainedRows,
+          liveResult.totalEntries,
+        );
         const nextRows = [...refreshedRows, ...retainedRows];
         this.setData({
           scoreNextRefreshAt: tournamentScoreNextRefreshAt(nextRows) || "",

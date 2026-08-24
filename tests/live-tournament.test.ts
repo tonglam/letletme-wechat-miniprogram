@@ -5,6 +5,7 @@ import {
   getTournamentTeamOptions,
   mapTournamentLiveRows,
   compareKnownTournamentValues,
+  combinedTournamentTraceableEntries,
   mergeUnavailableTournamentEntryIds,
   tournamentManagerScoreStatus,
   tournamentScoreNextRefreshAt,
@@ -248,6 +249,21 @@ assertEqual(
   "server-side search preserves the pre-filter traceable league coverage",
 );
 assertEqual(
+  combinedTournamentTraceableEntries(97, eventLiveRows, 98),
+  98,
+  "retained traceable rows extend fresh pre-filter coverage",
+);
+assertEqual(
+  tournamentManagerScoreStatus(eventLiveRows, {
+    officialCoverage: 97 / 98,
+    traceableEntries: 98,
+    unavailableEntryIds: [404],
+    totalEntries: 98,
+  }),
+  "官方实时",
+  "retained traceable rows remain available despite a failed refresh",
+);
+assertEqual(
   tournamentManagerScoreStatus([
     ...eventLiveRows,
     { ...eventLiveRows[0], entry: 404, score: undefined }
@@ -292,6 +308,11 @@ assertEqual(
 );
 assertEqual(staleClassicRows[0]?.rank, undefined, "Classic rank cannot become a live rank");
 assertEqual(staleClassicRows[0]?.transferCost, undefined, "rejected transfer cost stays unknown");
+assertEqual(
+  combinedTournamentTraceableEntries(97, staleClassicRows, 98),
+  97,
+  "an untraceable retained Classic row cannot extend official coverage",
+);
 assertEqual(
   tournamentManagerScoreStatus(staleClassicRows, {
     officialCoverage: 1,
