@@ -66,9 +66,12 @@ test("completed personal pages revalidate authority on warm show", () => {
     const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
     assert.match(
       onShow,
-      /if \(!this\.resumeOnShow\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*(?:nextEntryId[\s\S]*initializePage|normalizedEntryId[\s\S]*loadAuthoritativeEntry)/,
+      /(?:await waitForAuthoritativeFollow\(\)|if \(!this\.routeEntry\)[\s\S]*await waitForAuthoritativeFollow\(\))[\s\S]*if \(!this\.resumeOnShow\)/,
       path,
     );
+    if (path !== "miniprogram/pages/entry/profile/profile.ts") {
+      assert.match(onShow, /nextEntryId[\s\S]*initializePage/, path);
+    }
   }
 });
 

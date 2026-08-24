@@ -156,16 +156,22 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return;
+    const lifecycleRevision = this.lifecycleRevision;
+    const showTrace = capturePageRequestTrace({
+      callerSurface: "summary-tournament",
+      trigger: "show"
+    });
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    const nextEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
+    if (nextEntryId !== this.data.entryId) {
+      this.resumeOnShow = false;
+      this.resumeStage = null;
+      this.resumeForceRefresh = false;
+      await this.initializePage(showTrace);
+      return;
+    }
     if (!this.resumeOnShow) {
-      const lifecycleRevision = this.lifecycleRevision;
-      const trace = capturePageRequestTrace({
-        callerSurface: "summary-tournament",
-        trigger: "show"
-      });
-      await waitForAuthoritativeFollow();
-      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-      const nextEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
-      if (nextEntryId !== this.data.entryId) await this.initializePage(trace);
       return;
     }
     const resumeStage = this.resumeStage;
