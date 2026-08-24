@@ -45,6 +45,10 @@ describe("home public read path", () => {
       home,
       /loadSecondaryData\([\s\S]*?await waitForAuthoritativeFollow\(\);[\s\S]*?const entryId = app\.globalData\.entryId/,
     );
+    assert.match(
+      home,
+      /const entryId = app\.globalData\.entryId;[\s\S]*?if \(!entryId\) \{[\s\S]*?entry: \{\},[\s\S]*?leagues: \[\],[\s\S]*?entryError: ""[\s\S]*?return;/,
+    );
   });
 
   it("refreshes event context only when missing or expired", () => {

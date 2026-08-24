@@ -611,7 +611,14 @@ Page({
       }
       if (!isActiveSecondary()) return;
       const entryId = app.globalData.entryId;
-      if (!entryId) return;
+      if (!entryId) {
+        this.setData({
+          entry: {},
+          leagues: [],
+          entryError: ""
+        });
+        return;
+      }
       let loadedEntry: EntryInfo | null = null;
       try {
         const entryTrace: PageRequestTrace | null = primaryTrace
