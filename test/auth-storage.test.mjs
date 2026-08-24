@@ -270,11 +270,11 @@ test("standalone account migrates, replays, and preserves its team across Web un
       "offline selection applies locally",
     );
     assert.equal(storage.has("pending-follow-entry-v1"), true);
-    await synchronizeMiniProgramAccount();
+    await ensureMiniProgramAccountFresh();
     assert.equal(
       serverFollowEntryId,
       7002,
-      "pending selection replays on profile sync",
+      "pending selection replays even while the cached profile is fresh",
     );
     assert.equal(storage.has("pending-follow-entry-v1"), false);
 

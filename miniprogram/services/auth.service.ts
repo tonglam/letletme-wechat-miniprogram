@@ -1341,6 +1341,13 @@ export function isMiniProgramProfileFresh(
   return Boolean(profile) && age < Math.max(0, maxAgeMs);
 }
 
+function hasPendingAccountMutation(): boolean {
+  return (
+    readPendingFollowEntry() !== undefined ||
+    readPendingEntryChoice() !== null
+  );
+}
+
 /**
  * Refresh the standalone profile only when the cached profile is stale. The
  * synchronization function itself remains single-flight and still replays
@@ -1353,7 +1360,11 @@ export async function ensureMiniProgramAccountFresh(
   } = {},
 ): Promise<MiniProgramProfile | null> {
   if (!getApiSessionToken()) return null;
-  if (!options.forceRefresh && isMiniProgramProfileFresh(options.maxAgeMs)) {
+  if (
+    !options.forceRefresh &&
+    !hasPendingAccountMutation() &&
+    isMiniProgramProfileFresh(options.maxAgeMs)
+  ) {
     return getStoredMiniProgramProfile();
   }
   return synchronizeMiniProgramAccount();

@@ -71,6 +71,10 @@ test("retry controls use the workload of the operation they retry", () => {
     /fixtureStaleMessage[\s\S]*workload="fixtures"[\s\S]*onRetry/,
   );
   assert.match(
+    liveMatch,
+    /wx:elif="\{\{error\}\}"[\s\S]*workload="gameweek"[\s\S]*onRetry/,
+  );
+  assert.match(
     players,
     /data-status[\s\S]*error && players\.length[\s\S]*workload="player-stats"[\s\S]*onRetry/,
   );

@@ -38,7 +38,7 @@
   </view>
   <view wx:else id="perf-primary-content" class="match-content">
     <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="gameweek" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <app-empty-state
       wx:if="{{matches.length === 0}}"
       title="当前没有{{activeStatusLabel}}的比赛"
