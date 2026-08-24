@@ -23,6 +23,7 @@ import {
   officialManagerEventPoints,
   officialManagerNetPoints,
   officialManagerTotalPoints,
+  managerScoreNextRefreshAt,
   traceableOfficialManagerScore,
 } from "./live-manager-score";
 
@@ -287,6 +288,7 @@ export async function getLivePointsByEntrySnapshot(
       netPointsKnown: officialManagerNetPoints(score) !== undefined,
       liveTotalPoints: officialManagerTotalPoints(score),
       transferCost: score?.transferCost,
+      scoreNextRefreshAt: managerScoreNextRefreshAt(result.score),
       captainName: result.captainName,
       chip: result.chip,
       played: result.played,

@@ -70,3 +70,13 @@ export function officialManagerTotalPoints(
     ? traceable.totalPoints
     : undefined;
 }
+
+/** Scheduling metadata is safe to retain without promoting untraceable score values. */
+export function managerScoreNextRefreshAt(
+  score?: LiveManagerScore,
+): string | undefined {
+  const value = score?.nextRefreshAt;
+  return typeof value === "string" && Number.isFinite(Date.parse(value))
+    ? value
+    : undefined;
+}

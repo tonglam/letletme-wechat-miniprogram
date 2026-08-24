@@ -176,6 +176,10 @@ function managerScoreStatusText(score?: LiveManagerScore): string {
   return "官方实时";
 }
 
+function hasRefreshDeadline(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
 function captainDisplayName(
   players: Array<{
     captain?: boolean;
@@ -990,7 +994,8 @@ Page({
                 result.score?.reconciliation === "SOURCE_SKEW"
                   ? "明细同步中"
                   : "",
-              scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+              scoreNextRefreshAt:
+                result.score?.nextRefreshAt || result.scoreNextRefreshAt || "",
               error: "",
               total,
               livePoints: headlinePoints,
@@ -1028,7 +1033,11 @@ Page({
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
-          if (hasOfficialHeadline || result.score?.state === "SETTLING") {
+          if (
+            hasOfficialHeadline ||
+            result.score?.state === "SETTLING" ||
+            hasRefreshDeadline(result.scoreNextRefreshAt)
+          ) {
             this.liveRefresh?.sync();
           } else {
             this.liveRefresh?.stop();
@@ -1080,7 +1089,8 @@ Page({
               result.score?.reconciliation === "SOURCE_SKEW"
                 ? "明细同步中"
                 : "",
-            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+            scoreNextRefreshAt:
+              result.score?.nextRefreshAt || result.scoreNextRefreshAt || "",
             error: "",
             total,
             livePoints,
@@ -1237,8 +1247,10 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
+    const hasManagerRetry = hasRefreshDeadline(this.data.scoreNextRefreshAt);
     if (
       this.data.noPicks &&
+      !hasManagerRetry &&
       this.data.scoreState !== "SETTLING" &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
@@ -1259,6 +1271,7 @@ Page({
   revalidateCachedSnapshot(): boolean {
     if (
       this.data.noPicks &&
+      !hasRefreshDeadline(this.data.scoreNextRefreshAt) &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
       return false;

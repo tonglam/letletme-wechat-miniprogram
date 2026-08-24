@@ -71,9 +71,9 @@ const tableText = formatLiveTournamentShareText({
   averageText: "62",
   entriesText: "2",
   rows: [
-    { entryName: "Dream Team FC", playerName: "John D", visibleRank: 1, playedText: "11/11", displayLive: "85", displayHit: "0", displayNet: "85", displayTotal: "2100", transferCostKnown: true },
-    { entryName: "WhoamI FC", playerName: "Tong W", visibleRank: 2, playedText: "9/11", displayLive: "72", displayHit: "-10", displayNet: "62", displayTotal: "1856", transferCostKnown: true },
-    { entryName: "Pending FC", playerName: "Pending", visibleRank: 3, displayLive: "—", displayHit: "—", displayTotal: "—", transferCostKnown: false }
+    { entryName: "Dream Team FC", playerName: "John D", visibleRank: 1, eventPointsKnown: true, playedText: "11/11", displayLive: "85", displayHit: "0", displayNet: "85", displayTotal: "2100", transferCostKnown: true },
+    { entryName: "WhoamI FC", playerName: "Tong W", visibleRank: 2, eventPointsKnown: true, playedText: "9/11", displayLive: "72", displayHit: "-10", displayNet: "62", displayTotal: "1856", transferCostKnown: true },
+    { entryName: "Pending FC", playerName: "Pending", visibleRank: 3, eventPointsKnown: false, displayLive: "—", displayHit: "—", displayTotal: "—", transferCostKnown: false }
   ]
 });
 
@@ -83,8 +83,8 @@ assertIncludes(tableText, "1. Dream Team FC · GW 85 · 总 2100", "clean row");
 assertIncludes(tableText, "2. WhoamI FC · GW 72 (−10) · 总 1856", "hit folds into GW");
 assertIncludes(
   tableText,
-  "3. Pending FC · GW — (转会扣分待确认) · 总 —",
-  "tournament share preserves an unknown transfer cost",
+  "—. Pending FC · GW — (转会扣分待确认) · 总 —",
+  "tournament share preserves unavailable rank and transfer cost",
 );
 if (tableText.includes("Tong W ·") || tableText.includes("出场")) {
   throw new Error("tournament rows stay concise: no manager, no played count");

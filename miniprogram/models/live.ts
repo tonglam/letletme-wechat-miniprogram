@@ -160,6 +160,8 @@ export interface LiveEntryResult {
   netPointsKnown?: boolean;
   liveTotalPoints?: number;
   transferCost?: number;
+  /** Retry metadata retained even when an untraceable score payload is rejected. */
+  scoreNextRefreshAt?: string;
   captainName?: string;
   chip?: string;
   played?: number;

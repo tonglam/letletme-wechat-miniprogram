@@ -8,6 +8,7 @@ import {
   mergeUnavailableTournamentEntryIds,
   tournamentManagerScoreStatus
 } from "../miniprogram/services/live-tournament";
+import { managerScoreNextRefreshAt } from "../miniprogram/services/live-manager-score";
 
 function assertEqual(actual: unknown, expected: unknown, message: string): void {
   if (actual !== expected) {
@@ -200,6 +201,20 @@ assertEqual(
   mergeUnavailableTournamentEntryIds([2, 3], [3, 4]).join(","),
   "2,3,4",
   "failed and unavailable manager ids are unified",
+);
+assertEqual(
+  managerScoreNextRefreshAt({
+    source: "FPL_ENTRY_SUMMARY",
+    state: "FRESH",
+    nextRefreshAt: "2026-08-24T06:05:00.000Z",
+  }),
+  "2026-08-24T06:05:00.000Z",
+  "retry metadata survives rejection of an untraceable score",
+);
+assertEqual(
+  managerScoreNextRefreshAt({ nextRefreshAt: "not-a-date" }),
+  undefined,
+  "invalid retry metadata is rejected",
 );
 assertEqual(
   tournamentManagerScoreStatus(eventLiveRows, {

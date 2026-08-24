@@ -15,7 +15,7 @@ test("Live Entry uses one CalcLive root and no independent LiveSnapshot root", (
   assert.match(query, /availability[\s\S]*snapshot\s*\{/);
 });
 
-test("NO_PICKS completes before transfers and disables polling", () => {
+test("NO_PICKS completes before transfers and stops polling only without retry evidence", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   const noPicks = page.indexOf('result.availability === "NO_PICKS"');
   const transferLoad = page.indexOf("await this.loadTransfers", noPicks);
@@ -23,6 +23,8 @@ test("NO_PICKS completes before transfers and disables polling", () => {
   const branch = page.slice(noPicks, page.indexOf("const players", noPicks));
   assert.match(branch, /transfers: \[\]/);
   assert.match(branch, /this\.liveRefresh\?\.stop\(\)/);
+  assert.match(branch, /result\.scoreNextRefreshAt/);
+  assert.match(page, /hasManagerRetry/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
 });
 

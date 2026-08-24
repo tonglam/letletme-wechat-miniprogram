@@ -229,6 +229,7 @@ export function formatLiveTournamentShareText(input: {
     displayTotal?: string;
     displayHit?: string;
     transferCostKnown?: boolean;
+    eventPointsKnown?: boolean;
     playedText?: string;
   }>;
 }): string {
@@ -239,8 +240,20 @@ export function formatLiveTournamentShareText(input: {
     ""
   ];
 
-  input.rows.forEach((row, index) => {
-    const rank = row.visibleRank || index + 1;
+  input.rows.forEach((row) => {
+    const eventPointsKnown =
+      typeof row.eventPointsKnown === "boolean"
+        ? row.eventPointsKnown
+        : row.displayLive !== undefined
+          ? row.displayLive !== "—"
+          : typeof row.livePoints === "number" && Number.isFinite(row.livePoints);
+    const rank =
+      eventPointsKnown &&
+      typeof row.visibleRank === "number" &&
+      Number.isSafeInteger(row.visibleRank) &&
+      row.visibleRank > 0
+        ? String(row.visibleRank)
+        : "—";
     const team = textValue(row.entryName, "-");
     const gw = textValue(row.displayLive, String(numberValue(row.livePoints)));
     const displayHit = String(row.displayHit || "").trim();
