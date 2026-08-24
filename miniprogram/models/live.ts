@@ -79,6 +79,8 @@ export interface LiveSnapshotResult<T> {
   failedEntryIds?: number[];
   unavailableEntryIds?: number[];
   officialCoverage?: number;
+  /** Traceable rows before any client-side search narrows the returned data. */
+  traceableEntries?: number;
   totalEntries?: number;
   partialError?: string;
 }

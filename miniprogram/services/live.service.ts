@@ -884,8 +884,11 @@ export async function getLivePointsByTournamentSnapshot(
     data.entryLiveCompetitionsDesk.failedEntryIds,
     data.entryLiveCompetitionsDesk.unavailableEntryIds,
   );
+  const mappedRows = mapTournamentLiveRows(
+    data.entryLiveCompetitionsDesk.board,
+  );
   return {
-    data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
+    data: mappedRows,
     snapshot: data.entryLiveCompetitionsDesk.revision
       ? {
           eventId: data.entryLiveCompetitionsDesk.eventId,
@@ -904,6 +907,9 @@ export async function getLivePointsByTournamentSnapshot(
     failedEntryIds: unavailableEntryIds,
     unavailableEntryIds,
     officialCoverage: data.entryLiveCompetitionsDesk.officialCoverage,
+    traceableEntries: mappedRows.filter(
+      (row) => officialManagerEventPoints(row.score) !== undefined,
+    ).length,
     totalEntries: data.entryLiveCompetitionsDesk.totalEntries,
     partialError: data.entryLiveCompetitionsDesk.partial
       ? `部分结果不可用：${Math.max(1, unavailableEntryIds.length)}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
@@ -968,6 +974,7 @@ export async function searchLivePointsByTournamentSnapshot(
     failedEntryIds: result.failedEntryIds,
     unavailableEntryIds: result.unavailableEntryIds,
     officialCoverage: result.officialCoverage,
+    traceableEntries: result.traceableEntries,
     totalEntries: result.totalEntries,
     partialError: result.partialError,
   };

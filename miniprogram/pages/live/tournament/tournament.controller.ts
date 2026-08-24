@@ -558,6 +558,7 @@ function clearTournamentBoard(page: object): void {
     ownershipPlayers?: OwnershipPlayerOption[];
     shareRows?: DisplayTournamentRow[];
     officialCoverage?: number;
+    officialTraceableEntries?: number;
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
   };
@@ -565,6 +566,7 @@ function clearTournamentBoard(page: object): void {
   board.ownershipPlayers = [];
   board.shareRows = [];
   board.officialCoverage = undefined;
+  board.officialTraceableEntries = undefined;
   board.officialTotalEntries = undefined;
   board.unavailableEntryIds = [];
 }
@@ -695,6 +697,7 @@ PerformancePage({
   failedEntryCount: 0,
   retainedRowCount: 0,
   officialCoverage: undefined as number | undefined,
+  officialTraceableEntries: undefined as number | undefined,
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   resumeDirectoryAfterShow: false,
@@ -1438,6 +1441,7 @@ PerformancePage({
         );
         const failedEntryIds = new Set(unavailableEntryIds);
         this.officialCoverage = liveResult.officialCoverage;
+        this.officialTraceableEntries = liveResult.traceableEntries;
         this.officialTotalEntries = liveResult.totalEntries;
         this.unavailableEntryIds = unavailableEntryIds;
         this.failedEntryCount = Math.max(
@@ -1659,6 +1663,7 @@ PerformancePage({
     const stats = buildTournamentStats(rows);
     const scoreStatusText = tournamentManagerScoreStatus(rows, {
       officialCoverage: this.officialCoverage,
+      traceableEntries: this.officialTraceableEntries,
       unavailableEntryIds: this.unavailableEntryIds,
       totalEntries: this.officialTotalEntries,
     });

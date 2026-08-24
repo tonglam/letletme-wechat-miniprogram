@@ -211,6 +211,16 @@ assertEqual(
   "official coverage reports only rows whose event/live provenance was verified",
 );
 assertEqual(
+  tournamentManagerScoreStatus(eventLiveRows, {
+    officialCoverage: 97 / 98,
+    traceableEntries: 97,
+    unavailableEntryIds: [404],
+    totalEntries: 98,
+  }),
+  "官方实时：97/98 支球队已有分数",
+  "server-side search preserves the pre-filter traceable league coverage",
+);
+assertEqual(
   tournamentManagerScoreStatus([
     ...eventLiveRows,
     { ...eventLiveRows[0], entry: 404, score: undefined }
