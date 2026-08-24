@@ -180,6 +180,13 @@ function hasRefreshDeadline(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
+function firstRefreshDeadline(...values: unknown[]): string {
+  for (const value of values) {
+    if (hasRefreshDeadline(value)) return value;
+  }
+  return "";
+}
+
 function captainDisplayName(
   players: Array<{
     captain?: boolean;
@@ -391,16 +398,21 @@ Page({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(),
-      shouldReloadOnUnchangedProbe: () =>
-        Boolean(
+      shouldReloadOnUnchangedProbe: () => {
+        const nextRefreshAt = firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        );
+        return Boolean(
           this.data.scoreState === "SETTLING" ||
-          (this.data.scoreNextRefreshAt &&
-            Date.parse(this.data.scoreNextRefreshAt) <= Date.now()),
-        ),
+          (nextRefreshAt && Date.parse(nextRefreshAt) <= Date.now()),
+        );
+      },
       getNextRefreshAt: () =>
-        this.data.scoreNextRefreshAt ||
-        this.liveSnapshot?.nextRefreshAt ||
-        null,
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ) || null,
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -980,7 +992,17 @@ Page({
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
+          const priorSnapshotNextRefreshAt =
+            this.liveSnapshot?.eventId === eventId
+              ? this.liveSnapshot.nextRefreshAt
+              : undefined;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+          const scoreNextRefreshAt = firstRefreshDeadline(
+            result.score?.nextRefreshAt,
+            result.scoreNextRefreshAt,
+            liveResult.snapshot?.nextRefreshAt,
+            priorSnapshotNextRefreshAt,
+          );
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData(
             {
@@ -994,8 +1016,7 @@ Page({
                 result.score?.reconciliation === "SOURCE_SKEW"
                   ? "明细同步中"
                   : "",
-              scoreNextRefreshAt:
-                result.score?.nextRefreshAt || result.scoreNextRefreshAt || "",
+              scoreNextRefreshAt,
               error: "",
               total,
               livePoints: headlinePoints,
@@ -1036,7 +1057,7 @@ Page({
           if (
             hasOfficialHeadline ||
             result.score?.state === "SETTLING" ||
-            hasRefreshDeadline(result.scoreNextRefreshAt)
+            hasRefreshDeadline(scoreNextRefreshAt)
           ) {
             this.liveRefresh?.sync();
           } else {
@@ -1077,7 +1098,17 @@ Page({
           ? numberValue(result.score?.transferCost)
           : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
+        const priorSnapshotNextRefreshAt =
+          this.liveSnapshot?.eventId === eventId
+            ? this.liveSnapshot.nextRefreshAt
+            : undefined;
         this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+        const scoreNextRefreshAt = firstRefreshDeadline(
+          result.score?.nextRefreshAt,
+          result.scoreNextRefreshAt,
+          liveResult.snapshot?.nextRefreshAt,
+          priorSnapshotNextRefreshAt,
+        );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         this.setData(
           {
@@ -1089,8 +1120,7 @@ Page({
               result.score?.reconciliation === "SOURCE_SKEW"
                 ? "明细同步中"
                 : "",
-            scoreNextRefreshAt:
-              result.score?.nextRefreshAt || result.scoreNextRefreshAt || "",
+            scoreNextRefreshAt,
             error: "",
             total,
             livePoints,
@@ -1247,7 +1277,12 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
-    const hasManagerRetry = hasRefreshDeadline(this.data.scoreNextRefreshAt);
+    const hasManagerRetry = hasRefreshDeadline(
+      firstRefreshDeadline(
+        this.data.scoreNextRefreshAt,
+        this.liveSnapshot?.nextRefreshAt,
+      ),
+    );
     if (
       this.data.noPicks &&
       !hasManagerRetry &&
@@ -1271,7 +1306,12 @@ Page({
   revalidateCachedSnapshot(): boolean {
     if (
       this.data.noPicks &&
-      !hasRefreshDeadline(this.data.scoreNextRefreshAt) &&
+      !hasRefreshDeadline(
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ),
+      ) &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
       return false;

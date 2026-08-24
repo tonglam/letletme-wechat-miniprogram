@@ -314,7 +314,7 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     liveNetPoints,
     totalPoints,
     transferCost,
-    overallRank: row.overallRank ?? row.rank,
+    overallRank: row.overallRank,
     visibleRank: 0,
     displayLive: eventPointsKnown ? `${livePoints}` : "—",
     displayNet: netPointsKnown ? `${liveNetPoints}` : "—",

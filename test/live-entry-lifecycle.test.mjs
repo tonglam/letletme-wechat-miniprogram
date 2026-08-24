@@ -24,7 +24,10 @@ test("NO_PICKS completes before transfers and stops polling only without retry e
   assert.match(branch, /transfers: \[\]/);
   assert.match(branch, /this\.liveRefresh\?\.stop\(\)/);
   assert.match(branch, /result\.scoreNextRefreshAt/);
+  assert.match(branch, /liveResult\.snapshot\?\.nextRefreshAt/);
+  assert.match(branch, /priorSnapshotNextRefreshAt/);
   assert.match(page, /hasManagerRetry/);
+  assert.match(page, /this\.liveSnapshot\?\.nextRefreshAt/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
 });
 

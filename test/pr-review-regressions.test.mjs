@@ -140,6 +140,7 @@ test("tournament status reports only rows actually retained", () => {
   );
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
+  assert.doesNotMatch(tournament, /overallRank: row\.overallRank \?\? row\.rank/);
 });
 
 test("team summary requests discard older GW responses", () => {
