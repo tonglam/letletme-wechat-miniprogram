@@ -1,4 +1,10 @@
 import type { LiveManagerScore, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import {
+  officialManagerEventPoints,
+  officialManagerNetPoints,
+  officialManagerTotalPoints,
+  traceableOfficialManagerScore,
+} from "./live-manager-score";
 
 export type TournamentOwnershipScope = "any" | "starter" | "bench";
 export type TournamentCaptainMode = "any" | "captain" | "vice";
@@ -72,36 +78,19 @@ export function mergeUnavailableTournamentEntryIds(
 export function officialTournamentTotalPoints(
   score?: LiveManagerScore,
 ): number | undefined {
-  return typeof score?.totalPoints === "number" && Number.isFinite(score.totalPoints)
-    ? score.totalPoints
-    : undefined;
-}
-
-function officialTournamentEventPoints(
-  score?: LiveManagerScore,
-): number | undefined {
-  return typeof score?.eventPoints === "number" && Number.isFinite(score.eventPoints)
-    ? score.eventPoints
-    : undefined;
-}
-
-function officialTournamentNetPoints(
-  score?: LiveManagerScore,
-): number | undefined {
-  return typeof score?.netEventPoints === "number" && Number.isFinite(score.netEventPoints)
-    ? score.netEventPoints
-    : undefined;
+  return officialManagerTotalPoints(score);
 }
 
 export function tournamentManagerScoreStatus(
   rows: readonly LiveTournamentRow[],
   coverage: TournamentManagerCoverage = {},
 ): string {
-  const states = rows.map((row) => row.score?.state).filter(Boolean);
+  const traceableScores = rows
+    .map((row) => traceableOfficialManagerScore(row.score))
+    .filter((score): score is LiveManagerScore => score !== undefined);
+  const states = traceableScores.map((score) => score.state).filter(Boolean);
   const observedAvailable = rows.filter(
-    (row) =>
-      row.score?.source !== "UNAVAILABLE" &&
-      typeof row.score?.eventPoints === "number",
+    (row) => officialManagerEventPoints(row.score) !== undefined,
   ).length;
   const total =
     typeof coverage.totalEntries === "number" &&
@@ -118,10 +107,7 @@ export function tournamentManagerScoreStatus(
           Math.max(0, Math.round(coverage.officialCoverage * total)),
         )
       : 0;
-  // H2H desks report zero official *net* coverage until the source can prove
-  // the transfer-cost semantics, while each row may already contain an
-  // authoritative gross event score. Never let that metadata zero out rows
-  // that were actually returned with official event points.
+  if (observedAvailable === 0) return "官方分数不可用";
   const available = unavailableCount > 0
     ? Math.max(0, total - unavailableCount)
     : Math.max(observedAvailable, reportedAvailable);
@@ -183,30 +169,26 @@ function searchText(row: LiveTournamentRow): string {
 
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
-    // H2H live responses intentionally keep the legacy flat headline aliases
-    // at zero when FPL has not published a provable net-point semantic. The
-    // nested official score is still authoritative for gross event points.
-    // Promote it here so sorting, sharing, and any consumer before page-level
-    // normalization cannot silently render the compatibility zero.
-    const officialEventPoints = officialTournamentEventPoints(row.score);
-    const officialNetPoints = officialTournamentNetPoints(row.score);
-    const officialTotal = officialTournamentTotalPoints(row.score);
+    const officialScore = traceableOfficialManagerScore(row.score);
+    const officialEventPoints = officialManagerEventPoints(officialScore);
+    const officialNetPoints = officialManagerNetPoints(officialScore);
+    const officialTotal = officialManagerTotalPoints(officialScore);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
       rank: row.rank ?? row.overallRank,
-      livePoints: officialEventPoints ?? row.livePoints,
-      transferCost: row.transferCost,
-      liveNetPoints: officialNetPoints ?? row.liveNetPoints,
-      liveTotalPoints: officialTotal ?? row.liveTotalPoints,
-      totalPoints: officialTotal ?? row.liveTotalPoints,
+      livePoints: officialEventPoints,
+      transferCost: officialScore?.transferCost,
+      liveNetPoints: officialNetPoints,
+      liveTotalPoints: officialTotal,
+      totalPoints: officialTotal,
       played: row.played,
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
-      overallRank: row.score?.overallRank ?? row.overallRank,
-      score: row.score,
+      overallRank: officialScore?.overallRank ?? row.overallRank,
+      score: officialScore,
       picks: (row.pickList || []).map(mapTournamentPick)
     };
     return {

@@ -37,6 +37,20 @@ export type LiveDataAvailability =
 
 export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
 
+export type LiveManagerScoreSource =
+  | "FPL_EVENT_LIVE"
+  | "FPL_ENTRY_SUMMARY"
+  | "FPL_CLASSIC_STANDINGS"
+  | "FPL_FINAL_RESULT"
+  | "UNAVAILABLE";
+
+export type LiveManagerScoreState =
+  | "FRESH"
+  | "STALE"
+  | "SETTLING"
+  | "FINAL"
+  | "UNAVAILABLE";
+
 export interface LiveSnapshotStatus {
   eventId: number;
   revision: string | null;
@@ -78,8 +92,8 @@ export interface LiveManagerScore {
   overallRank?: number | null;
   leagueRank?: number | null;
   transferCost?: number;
-  source?: string;
-  state?: string;
+  source?: LiveManagerScoreSource;
+  state?: LiveManagerScoreState;
   eventPointSemantics?: string;
   revision?: string | null;
   checkedAt?: string | null;

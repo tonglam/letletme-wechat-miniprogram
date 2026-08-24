@@ -28,6 +28,17 @@ const rows = mapTournamentLiveRows([
     toPlay: 3,
     captainName: "Saka",
     chip: "WILDCARD",
+    score: {
+      eventPoints: 45,
+      netEventPoints: 41,
+      totalPoints: 1510,
+      totalScope: "OVERALL",
+      transferCost: 4,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r8:101",
+      checkedAt: "2026-08-24T06:00:00.000Z"
+    },
     pickList: [
       {
         element: 1,
@@ -74,6 +85,17 @@ const rows = mapTournamentLiveRows([
     toPlay: 2,
     captainName: "Pedro",
     chip: null,
+    score: {
+      eventPoints: 50,
+      netEventPoints: 50,
+      totalPoints: 1520,
+      totalScope: "OVERALL",
+      transferCost: 0,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r8:202",
+      checkedAt: "2026-08-24T06:00:00.000Z"
+    },
     pickList: [
       {
         element: 4,
@@ -140,7 +162,7 @@ const teams = getTournamentTeamOptions(rows);
 assertEqual(teams.length, 2, "team options are deduplicated");
 assertEqual(teams[0]?.name, "Arsenal", "team options are sorted by name");
 
-const classicRows = mapTournamentLiveRows([
+const eventLiveRows = mapTournamentLiveRows([
   {
     entry: 303,
     entryName: "Official",
@@ -157,25 +179,29 @@ const classicRows = mapTournamentLiveRows([
     score: {
       eventPoints: 6,
       totalPoints: 101,
-      totalScope: "CLASSIC_PHASE",
+      netEventPoints: 6,
+      totalScope: "OVERALL",
       overallRank: 123,
-      source: "FPL_CLASSIC_STANDINGS",
-      state: "LIVE"
+      transferCost: 0,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r9:303",
+      checkedAt: "2026-08-24T06:01:00.000Z"
     }
   }
 ]);
-assertEqual(classicRows[0]?.rank, 4, "official tournament rank is preserved");
-assertEqual(classicRows[0]?.livePoints, 6, "official event points replace legacy headline zero");
-assertEqual(classicRows[0]?.totalPoints, 101, "classic phase total remains visible");
-assertEqual(classicRows[0]?.overallRank, 123, "official overall rank wins");
-assertEqual(tournamentManagerScoreStatus(classicRows), "官方实时", "official rows are available");
+assertEqual(eventLiveRows[0]?.rank, 4, "official tournament rank is preserved");
+assertEqual(eventLiveRows[0]?.livePoints, 6, "event/live points replace legacy headline zero");
+assertEqual(eventLiveRows[0]?.totalPoints, 101, "event/live overall total remains visible");
+assertEqual(eventLiveRows[0]?.overallRank, 123, "official overall rank wins");
+assertEqual(tournamentManagerScoreStatus(eventLiveRows), "官方实时", "event/live rows are available");
 assertEqual(
   mergeUnavailableTournamentEntryIds([2, 3], [3, 4]).join(","),
   "2,3,4",
   "failed and unavailable manager ids are unified",
 );
 assertEqual(
-  tournamentManagerScoreStatus(classicRows, {
+  tournamentManagerScoreStatus(eventLiveRows, {
     officialCoverage: 97 / 98,
     unavailableEntryIds: [404],
     totalEntries: 98,
@@ -185,11 +211,48 @@ assertEqual(
 );
 assertEqual(
   tournamentManagerScoreStatus([
-    ...classicRows,
-    { ...classicRows[0], entry: 404, score: { source: "UNAVAILABLE", state: "UNAVAILABLE" } }
+    ...eventLiveRows,
+    { ...eventLiveRows[0], entry: 404, score: undefined }
   ]),
   "官方实时：1/2 支球队已有分数",
   "one missing score keeps the available board visible"
+);
+
+const staleClassicRows = mapTournamentLiveRows([
+  {
+    entry: 305,
+    entryName: "Lagging Classic",
+    playerName: "Manager",
+    rank: 5,
+    overallRank: 999,
+    livePoints: 23,
+    transferCost: 0,
+    liveNetPoints: 23,
+    liveTotalPoints: 118,
+    played: 7,
+    toPlay: 4,
+    captainName: "Haaland",
+    score: {
+      eventPoints: 23,
+      netEventPoints: 23,
+      totalPoints: 118,
+      totalScope: "CLASSIC_PHASE",
+      source: "FPL_CLASSIC_STANDINGS",
+      state: "FRESH",
+      revision: "classic:gw1:r4",
+      checkedAt: "2026-08-24T06:01:00.000Z"
+    }
+  }
+]);
+assertEqual(staleClassicRows[0]?.livePoints, undefined, "Classic points cannot become live points");
+assertEqual(staleClassicRows[0]?.score, undefined, "Classic score provenance is rejected");
+assertEqual(
+  tournamentManagerScoreStatus(staleClassicRows, {
+    officialCoverage: 1,
+    totalEntries: 1
+  }),
+  "官方分数不可用",
+  "coverage metadata cannot make an untraceable Classic score official"
 );
 
 const h2hRows = mapTournamentLiveRows([
@@ -207,20 +270,50 @@ const h2hRows = mapTournamentLiveRows([
     captainName: "",
     score: {
       eventPoints: 43,
-      netEventPoints: null,
+      netEventPoints: 43,
       totalPoints: 146,
-      source: "FPL_ENTRY_SUMMARY",
+      totalScope: "OVERALL",
+      transferCost: 0,
+      source: "FPL_EVENT_LIVE",
       state: "FRESH",
-      eventPointSemantics: "UNKNOWN"
+      eventPointSemantics: "ZERO_COST_EQUIVALENT",
+      revision: "event-live:gw1:r9:31056",
+      checkedAt: "2026-08-24T06:01:00.000Z"
     }
   }
 ]);
-assertEqual(h2hRows[0]?.livePoints, 43, "H2H official gross event points are preserved");
+assertEqual(h2hRows[0]?.livePoints, 43, "H2H uses event/live manager points");
+assertEqual(h2hRows[0]?.liveNetPoints, 43, "H2H uses event/live net points");
 assertEqual(
   tournamentManagerScoreStatus(h2hRows, {
-    officialCoverage: 0,
+    officialCoverage: 1,
     totalEntries: 1
   }),
   "官方实时",
-  "H2H gross score rows are not hidden by zero net coverage"
+  "H2H event/live score is available"
 );
+
+const staleH2hRows = mapTournamentLiveRows([
+  {
+    entry: 31056,
+    entryName: "Lagging H2H",
+    playerName: "Manager",
+    rank: 0,
+    livePoints: 23,
+    transferCost: 0,
+    liveNetPoints: 23,
+    liveTotalPoints: 23,
+    played: 7,
+    toPlay: 4,
+    captainName: "Haaland",
+    score: {
+      eventPoints: 23,
+      source: "FPL_ENTRY_SUMMARY",
+      state: "FRESH",
+      revision: "summary:gw1:r4",
+      checkedAt: "2026-08-24T06:01:00.000Z"
+    }
+  }
+]);
+assertEqual(staleH2hRows[0]?.livePoints, undefined, "H2H summary points cannot become live points");
+assertEqual(staleH2hRows[0]?.score, undefined, "H2H summary provenance is rejected");

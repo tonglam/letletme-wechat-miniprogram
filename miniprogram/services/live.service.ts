@@ -19,6 +19,12 @@ import {
   mergeUnavailableTournamentEntryIds,
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
+import {
+  officialManagerEventPoints,
+  officialManagerNetPoints,
+  officialManagerTotalPoints,
+  traceableOfficialManagerScore,
+} from "./live-manager-score";
 
 // Live payloads are expensive enough to deduplicate rapid page revisits, but
 // short-lived enough to stay process-local (graphql.service does not persist
@@ -267,6 +273,7 @@ export async function getLivePointsByEntrySnapshot(
     CALC_LIVE_POINTS_BY_ENTRY,
     variables,
   );
+  const score = traceableOfficialManagerScore(result.score);
   return {
     data: {
       availability: result.availability,
@@ -274,12 +281,12 @@ export async function getLivePointsByEntrySnapshot(
       event: result.event,
       entryName: result.entryName,
       playerName: result.playerName,
-      score: result.score,
-      livePoints: result.livePoints,
-      liveNetPoints: result.liveNetPoints,
-      netPointsKnown: result.score?.netEventPoints != null,
-      liveTotalPoints: result.liveTotalPoints,
-      transferCost: result.transferCost,
+      score,
+      livePoints: officialManagerEventPoints(score),
+      liveNetPoints: officialManagerNetPoints(score),
+      netPointsKnown: officialManagerNetPoints(score) !== undefined,
+      liveTotalPoints: officialManagerTotalPoints(score),
+      transferCost: score?.transferCost,
       captainName: result.captainName,
       chip: result.chip,
       played: result.played,
