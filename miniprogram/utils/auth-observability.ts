@@ -70,6 +70,7 @@ function readPlatform(value: unknown): MiniProgramLoginContext["platform"] {
   ) {
     return normalized;
   }
+  if (normalized === "mac") return "macos";
   return "unknown";
 }
 
@@ -91,7 +92,10 @@ function currentPageRoute(): string | undefined {
   try {
     const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
     const route = pages.length ? (pages[pages.length - 1] as { route?: unknown }).route : undefined;
-    return boundedString(route, ROUTE_PATTERN, 160);
+    const current = boundedString(route, ROUTE_PATTERN, 160);
+    if (current) return current;
+    const launchPath = runtimeApi().getLaunchOptionsSync?.()?.path;
+    return boundedString(launchPath, ROUTE_PATTERN, 160);
   } catch {
     return undefined;
   }
@@ -104,6 +108,8 @@ function runtimeApi(): {
     model?: unknown;
     deviceModel?: unknown;
   };
+  getSystemInfoSync?: () => { platform?: unknown; system?: unknown };
+  getLaunchOptionsSync?: () => { path?: unknown };
   getAppBaseInfo?: () => { SDKVersion?: unknown; version?: unknown };
   getAccountInfoSync?: () => { miniProgram?: { envVersion?: unknown; version?: unknown } };
   canIUse?: (schema: string) => boolean;
@@ -127,10 +133,14 @@ export function collectMiniProgramLoginContext(
 ): MiniProgramLoginContext {
   const api = runtimeApi();
   let device: ReturnType<NonNullable<typeof api.getDeviceInfo>> = {};
+  let systemInfo: ReturnType<NonNullable<typeof api.getSystemInfoSync>> = {};
   let appBase: ReturnType<NonNullable<typeof api.getAppBaseInfo>> = {};
   let account: ReturnType<NonNullable<typeof api.getAccountInfoSync>> = {};
   try {
     device = api.getDeviceInfo?.() ?? {};
+  } catch {}
+  try {
+    systemInfo = api.getSystemInfoSync?.() ?? {};
   } catch {}
   try {
     appBase = api.getAppBaseInfo?.() ?? {};
@@ -139,8 +149,13 @@ export function collectMiniProgramLoginContext(
     account = api.getAccountInfoSync?.() ?? {};
   } catch {}
 
-  const platform = readPlatform(device.platform);
-  const system = typeof device.system === "string" ? device.system : "";
+  const platform = readPlatform(device.platform ?? systemInfo.platform);
+  const system =
+    typeof systemInfo.system === "string"
+      ? systemInfo.system
+      : typeof device.system === "string"
+        ? device.system
+        : "";
   const osFamily =
     platform !== "unknown"
       ? platform

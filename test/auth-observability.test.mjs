@@ -23,10 +23,10 @@ test("mini login context keeps only coarse, bounded runtime fields", () => {
     globalThis.wx = {
       getDeviceInfo: () => ({
         platform: "ios",
-        system: "iOS 17.5.1",
         model: "iPad Pro 12.9",
         brand: "private-brand-must-not-upload",
       }),
+      getSystemInfoSync: () => ({ platform: "ios", system: "iOS 17.5.1" }),
       getAppBaseInfo: () => ({ SDKVersion: "3.17.1", version: "8.0.50" }),
       getAccountInfoSync: () => ({
         miniProgram: { envVersion: "trial", version: "2026.08.25" },
@@ -58,9 +58,31 @@ test("mini login context keeps only coarse, bounded runtime fields", () => {
     assert.equal(normalizeMiniProgramRequestId("wx-valid-request"), "wx-valid-request");
 
     globalThis.wx = {
-      getDeviceInfo: () => ({ platform: "windows", system: "Windows 11" }),
+      getDeviceInfo: () => ({ platform: "windows" }),
     };
     assert.equal(collectMiniProgramLoginContext("session_missing").deviceClass, "desktop");
+
+    globalThis.getCurrentPages = () => [];
+    globalThis.wx = {
+      getDeviceInfo: () => ({ platform: "mac", model: "MacBook Pro" }),
+      getSystemInfoSync: () => ({ platform: "mac", system: "macOS 14.5" }),
+      getLaunchOptionsSync: () => ({ path: "pages/home/index/index" }),
+    };
+    assert.deepEqual(
+      collectMiniProgramLoginContext("session_missing"),
+      {
+        schemaVersion: 1,
+        trigger: "session_missing",
+        platform: "macos",
+        deviceClass: "desktop",
+        osFamily: "macos",
+        osMajor: "14",
+        envVersion: "unknown",
+        pageRoute: "pages/home/index/index",
+        encryptedStorageSupported: false,
+        credentialState: "unknown",
+      },
+    );
   } finally {
     globalThis.wx = previousWx;
     globalThis.getCurrentPages = previousPages;

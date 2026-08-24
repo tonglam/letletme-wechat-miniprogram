@@ -1390,7 +1390,7 @@ async function requestProfileWithSessionRetry(
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
   onSessionAccepted?: (snapshot: SessionSnapshot) => void,
-  refreshTrigger: MiniProgramLoginTrigger = "session_missing",
+  refreshTrigger: MiniProgramLoginTrigger = "profile_401",
 ): Promise<MiniProgramProfile> {
   let token = await ensureMiniProgramSessionToken();
   const requestEpoch = sessionEpoch;
