@@ -645,7 +645,7 @@ function makeRequest<T>(
           }
 
           clearSessionCredentials();
-          refreshWechatApiSession()
+          refreshWechatApiSession("graphql_401")
             .catch(rethrowSessionRefreshFailure)
             .then(retryWithRefreshedSession)
             .then(resolve)

@@ -1,6 +1,7 @@
 import { getEntryId } from "./utils/storage";
 import {
   getApiSessionToken,
+  getLastSessionRestoreState,
   isLogoutInFlight,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
@@ -151,7 +152,12 @@ App<IAppOption>({
       commitEntryBinding(this.globalData.entryId || null, "restore");
       const authenticate = async () => {
         if (!getApiSessionToken()) {
-          await refreshWechatApiSession();
+          const restoreState = getLastSessionRestoreState();
+          await refreshWechatApiSession(
+            restoreState === "expired"
+              ? "cold_start_expired"
+              : "cold_start_missing",
+          );
         }
         await this.revalidateSessionProfile();
       };
@@ -162,7 +168,7 @@ App<IAppOption>({
         })
         .finally(markAuthReady);
     } catch {
-      refreshWechatApiSession()
+      refreshWechatApiSession("cold_start_restore_failed")
         .then(() => this.revalidateSessionProfile())
         .catch(() => {
           // Restore failed; still attempt an independent WeChat session so
