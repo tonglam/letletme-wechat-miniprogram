@@ -1,4 +1,9 @@
-import type { LiveManagerScore, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import type {
+  LiveManagerScore,
+  LiveManagerScoreState,
+  LivePlayerRow,
+  LiveTournamentRow,
+} from "../models/live";
 import {
   officialManagerEventPoints,
   officialManagerNetPoints,
@@ -66,6 +71,7 @@ export interface TournamentTeamOption {
 export interface TournamentManagerCoverage {
   officialCoverage?: number;
   traceableEntries?: number;
+  traceableScoreStates?: readonly LiveManagerScoreState[];
   unavailableEntryIds?: readonly number[];
   totalEntries?: number;
 }
@@ -105,6 +111,20 @@ export function combinedTournamentTraceableEntries(
   return Math.min(total, combined);
 }
 
+export function combinedTournamentTraceableScoreStates(
+  refreshedStates: readonly LiveManagerScoreState[] | undefined,
+  retainedRows: readonly LiveTournamentRow[],
+): LiveManagerScoreState[] | undefined {
+  const retainedStates = retainedRows.flatMap((row) => {
+    const state = traceableOfficialManagerScore(row.score)?.state;
+    return state ? [state] : [];
+  });
+  if (refreshedStates === undefined && retainedStates.length === 0) {
+    return undefined;
+  }
+  return [...new Set([...(refreshedStates ?? []), ...retainedStates])];
+}
+
 export function officialTournamentTotalPoints(
   score?: LiveManagerScore,
 ): number | undefined {
@@ -118,7 +138,10 @@ export function tournamentManagerScoreStatus(
   const traceableScores = rows
     .map((row) => traceableOfficialManagerScore(row.score))
     .filter((score): score is LiveManagerScore => score !== undefined);
-  const states = traceableScores.map((score) => score.state).filter(Boolean);
+  const observedStates = traceableScores
+    .map((score) => score.state)
+    .filter((state): state is LiveManagerScoreState => state !== undefined);
+  const states = coverage.traceableScoreStates ?? observedStates;
   const observedAvailable = rows.filter(
     (row) => officialManagerEventPoints(row.score) !== undefined,
   ).length;

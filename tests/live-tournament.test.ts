@@ -6,6 +6,7 @@ import {
   mapTournamentLiveRows,
   compareKnownTournamentValues,
   combinedTournamentTraceableEntries,
+  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   tournamentManagerScoreStatus,
   tournamentScoreNextRefreshAt,
@@ -262,6 +263,29 @@ assertEqual(
   }),
   "官方实时",
   "retained traceable rows remain available despite a failed refresh",
+);
+assertEqual(
+  combinedTournamentTraceableScoreStates(undefined, eventLiveRows)?.join(","),
+  "FRESH",
+  "prefilter score states retain official evidence for keyword searches",
+);
+assertEqual(
+  tournamentManagerScoreStatus([], {
+    traceableEntries: 97,
+    traceableScoreStates: ["FRESH"],
+    totalEntries: 98,
+  }),
+  "官方实时：97/98 支球队已有分数",
+  "an empty keyword result preserves the full-board official status",
+);
+assertEqual(
+  tournamentManagerScoreStatus([], {
+    traceableEntries: 97,
+    traceableScoreStates: ["STALE"],
+    totalEntries: 98,
+  }),
+  "官方数据延迟",
+  "an empty keyword result preserves the full-board stale state",
 );
 assertEqual(
   tournamentManagerScoreStatus([

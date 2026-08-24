@@ -16,6 +16,7 @@ import type {
 import {
   filterTournamentLiveRows,
   mapTournamentLiveRows,
+  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
@@ -912,6 +913,10 @@ export async function getLivePointsByTournamentSnapshot(
     traceableEntries: mappedRows.filter(
       (row) => officialManagerEventPoints(row.score) !== undefined,
     ).length,
+    traceableScoreStates: combinedTournamentTraceableScoreStates(
+      undefined,
+      mappedRows,
+    ),
     totalEntries: data.entryLiveCompetitionsDesk.totalEntries,
     partialError: data.entryLiveCompetitionsDesk.partial
       ? `部分结果不可用：${Math.max(1, unavailableEntryIds.length)}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
@@ -977,6 +982,7 @@ export async function searchLivePointsByTournamentSnapshot(
     unavailableEntryIds: result.unavailableEntryIds,
     officialCoverage: result.officialCoverage,
     traceableEntries: result.traceableEntries,
+    traceableScoreStates: result.traceableScoreStates,
     totalEntries: result.totalEntries,
     partialError: result.partialError,
   };

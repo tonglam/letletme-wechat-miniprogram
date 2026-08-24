@@ -81,6 +81,8 @@ export interface LiveSnapshotResult<T> {
   officialCoverage?: number;
   /** Traceable rows before any client-side search narrows the returned data. */
   traceableEntries?: number;
+  /** Traceable score states before any client-side search narrows the rows. */
+  traceableScoreStates?: LiveManagerScoreState[];
   totalEntries?: number;
   partialError?: string;
 }

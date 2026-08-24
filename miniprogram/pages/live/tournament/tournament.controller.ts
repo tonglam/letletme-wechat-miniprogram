@@ -7,6 +7,7 @@ import {
 } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type {
+  LiveManagerScoreState,
   LiveSnapshotStatus,
   LiveTournamentRow,
 } from "../../../models/live";
@@ -45,6 +46,7 @@ import {
   getTournamentTeamOptions,
   compareKnownTournamentValues,
   combinedTournamentTraceableEntries,
+  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
@@ -561,6 +563,7 @@ function clearTournamentBoard(page: object): void {
     shareRows?: DisplayTournamentRow[];
     officialCoverage?: number;
     officialTraceableEntries?: number;
+    officialTraceableScoreStates?: LiveManagerScoreState[];
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
   };
@@ -569,6 +572,7 @@ function clearTournamentBoard(page: object): void {
   board.shareRows = [];
   board.officialCoverage = undefined;
   board.officialTraceableEntries = undefined;
+  board.officialTraceableScoreStates = undefined;
   board.officialTotalEntries = undefined;
   board.unavailableEntryIds = [];
 }
@@ -700,6 +704,9 @@ PerformancePage({
   retainedRowCount: 0,
   officialCoverage: undefined as number | undefined,
   officialTraceableEntries: undefined as number | undefined,
+  officialTraceableScoreStates: undefined as
+    | LiveManagerScoreState[]
+    | undefined,
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   resumeDirectoryAfterShow: false,
@@ -1464,6 +1471,11 @@ PerformancePage({
           retainedRows,
           liveResult.totalEntries,
         );
+        this.officialTraceableScoreStates =
+          combinedTournamentTraceableScoreStates(
+            liveResult.traceableScoreStates,
+            retainedRows,
+          );
         const nextRows = [...refreshedRows, ...retainedRows];
         this.setData({
           scoreNextRefreshAt: tournamentScoreNextRefreshAt(nextRows) || "",
@@ -1668,6 +1680,7 @@ PerformancePage({
     const scoreStatusText = tournamentManagerScoreStatus(rows, {
       officialCoverage: this.officialCoverage,
       traceableEntries: this.officialTraceableEntries,
+      traceableScoreStates: this.officialTraceableScoreStates,
       unavailableEntryIds: this.unavailableEntryIds,
       totalEntries: this.officialTotalEntries,
     });

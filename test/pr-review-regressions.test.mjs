@@ -134,6 +134,10 @@ test("tournament status reports only rows actually retained", () => {
     tournament,
     /this\.officialTraceableEntries = combinedTournamentTraceableEntries\(\s*liveResult\.traceableEntries,\s*retainedRows,\s*liveResult\.totalEntries/,
   );
+  assert.match(
+    tournament,
+    /combinedTournamentTraceableScoreStates\(\s*liveResult\.traceableScoreStates,\s*retainedRows/,
+  );
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
 });
