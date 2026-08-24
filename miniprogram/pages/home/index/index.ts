@@ -21,6 +21,7 @@ import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 import {
   ensureAppContext,
@@ -604,6 +605,9 @@ Page({
     void (async (): Promise<void> => {
       if (!getApiSessionToken()) {
         try { await app.authReady; } catch {}
+      }
+      if (getApiSessionToken()) {
+        await waitForAuthoritativeFollow();
       }
       if (!isActiveSecondary()) return;
       const entryId = app.globalData.entryId;

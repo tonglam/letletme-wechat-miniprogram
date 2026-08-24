@@ -40,6 +40,13 @@ describe("home public read path", () => {
     );
   });
 
+  it("refreshes the viewer before reading personal home data", () => {
+    assert.match(
+      home,
+      /loadSecondaryData\([\s\S]*?await waitForAuthoritativeFollow\(\);[\s\S]*?const entryId = app\.globalData\.entryId/,
+    );
+  });
+
   it("refreshes event context only when missing or expired", () => {
     assert.match(home, /contextMissing \|\| deadlineExpired/);
     assert.doesNotMatch(home, /refreshEventAndDeadline/);

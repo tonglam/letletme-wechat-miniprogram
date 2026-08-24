@@ -78,5 +78,9 @@ test("retry controls use the workload of the operation they retry", () => {
     players,
     /data-status[\s\S]*error && players\.length[\s\S]*workload="player-stats"[\s\S]*onRetry/,
   );
+  assert.match(
+    players,
+    /data-status[\s\S]*loading && players\.length[\s\S]*正在加载新结果，当前显示上次成功数据[\s\S]*workload="player-stats"/,
+  );
   assert.match(players, /hasMore && !error/);
 });
