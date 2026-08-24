@@ -13,7 +13,8 @@ test("429 cooldown disables generic retry actions and renders a countdown", () =
     assert.match(component, /getGraphQLCooldownState/);
     assert.match(component, /remainingSeconds/);
     assert.match(component, /retryDisabled: cooldown\.active/);
-    assert.match(component, /if \(getGraphQLCooldownState\(\)\.active\)/);
+    assert.match(component, /configuredWorkload \?\? state\.cooldownWorkload/);
+    assert.match(component, /onRetry\(\)[\s\S]*getGraphQLCooldownState\(/);
     assert.match(component, /subscribeGraphQLCooldown/);
     assert.match(component, /unsubscribeCooldown/);
     assert.match(component, /isGraphQLCooldownMessage/);
