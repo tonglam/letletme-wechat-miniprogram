@@ -23,7 +23,7 @@
   </view>
 
   <view wx:if="{{error}}" id="perf-primary-home-error">
-    <app-error-state message="{{error}}" bind:retry="onRetry" />
+    <app-error-state message="{{error}}" workload="home" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading}}" text="加载首页数据" />
 
@@ -59,7 +59,7 @@
 
     <view wx:if="{{pos.hasTeam(entry) || entryError}}" class="section">
       <block wx:if="{{entryError}}">
-        <app-error-state message="{{entryError}}" bind:retry="onRetry" />
+        <app-error-state message="{{entryError}}" workload="interactive" bind:retry="onRetry" />
         <view class="action section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
       </block>
       <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" bind:openleagues="onOpenLeagues" />
@@ -73,7 +73,7 @@
         </view>
         <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
       </view>
-      <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0 && !marketUnavailable}}" class="section-status">转会台加载中</view>
       <block wx:else>
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
@@ -143,7 +143,7 @@
       <view class="gw-stats-head">
         <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
       </view>
-      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="gameweek" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
         <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
@@ -171,10 +171,10 @@
           </view>
         </view>
       </view>
-      <app-error-state wx:if="{{fixtureError && fixtureCount === 0}}" message="{{fixtureError}}" bind:retry="onRetryFixtures" />
+      <app-error-state wx:if="{{fixtureError && fixtureCount === 0}}" message="{{fixtureError}}" workload="fixtures" bind:retry="onRetryFixtures" />
       <app-loading wx:elif="{{fixtureLoading && fixtureCount === 0}}" text="加载赛程" />
       <block wx:else>
-        <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
+        <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
         <app-empty-state
           wx:if="{{fixtureCount === 0}}"
           title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"

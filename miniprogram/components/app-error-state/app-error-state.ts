@@ -12,13 +12,16 @@ import {
   GRAPHQL_COOLDOWN_READY_MESSAGE,
   getGraphQLCooldownState,
   graphQLCooldownMessage,
+  isGraphQLWorkload,
   isGraphQLCooldownMessage,
   subscribeGraphQLCooldown,
+  type GraphQLWorkload,
 } from "../../services/graphql-cooldown";
 
 interface ErrorStateHost {
   cooldownTimer?: ReturnType<typeof setInterval>;
   unsubscribeCooldown?: () => void;
+  cooldownWorkload?: GraphQLWorkload;
 }
 
 function host(
@@ -48,6 +51,11 @@ Component({
     reportText: {
       type: String,
       value: "告诉我们可以看一看"
+    },
+    /** Optional workload key for workload-scoped rate-limit cooldowns. */
+    workload: {
+      type: String,
+      value: ""
     }
   },
 
@@ -67,7 +75,8 @@ Component({
     attached() {
       const state = host(this);
       state.unsubscribeCooldown?.();
-      state.unsubscribeCooldown = subscribeGraphQLCooldown(() => {
+      state.unsubscribeCooldown = subscribeGraphQLCooldown((cooldown) => {
+        state.cooldownWorkload = cooldown.workload;
         this.refreshCooldownState(this.properties.message);
       });
       this.refreshCooldownState(this.properties.message);
@@ -82,7 +91,14 @@ Component({
 
   methods: {
     refreshCooldownState(message?: string) {
-      const cooldown = getGraphQLCooldownState();
+      const state = host(this);
+      const configuredWorkload = isGraphQLWorkload(this.properties.workload)
+        ? this.properties.workload
+        : undefined;
+      const cooldown = getGraphQLCooldownState(
+        Date.now(),
+        configuredWorkload ?? state.cooldownWorkload,
+      );
       const storedMessage = message ?? this.properties.message;
       this.setData({
         displayMessage: cooldown.active
@@ -99,7 +115,6 @@ Component({
           : this.properties.retryText,
       });
 
-      const state = host(this);
       if (cooldown.active && !state.cooldownTimer) {
         state.cooldownTimer = setInterval(() => {
           this.refreshCooldownState(this.properties.message);
@@ -117,7 +132,16 @@ Component({
     },
 
     onRetry() {
-      if (getGraphQLCooldownState().active) {
+      const state = host(this);
+      const configuredWorkload = isGraphQLWorkload(this.properties.workload)
+        ? this.properties.workload
+        : undefined;
+      if (
+        getGraphQLCooldownState(
+          Date.now(),
+          configuredWorkload ?? state.cooldownWorkload,
+        ).active
+      ) {
         this.refreshCooldownState(this.properties.message);
         return;
       }

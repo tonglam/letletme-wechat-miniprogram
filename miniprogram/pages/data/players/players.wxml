@@ -116,7 +116,7 @@
     </view>
   </block>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" workload="player-stats" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && players.length === 0}}" text="加载球员" />
   <view id="perf-primary-content" wx:else class="section card">
     <view wx:if="{{players.length}}" class="result-summary">

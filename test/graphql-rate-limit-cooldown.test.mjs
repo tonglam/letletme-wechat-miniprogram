@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GraphQLApplicationError,
   GraphQLTransportError,
   graphqlRead,
+  isViewerEntryAuthorizationError,
 } from "../miniprogram/services/graphql.service.ts";
 import {
   getGraphQLCooldownState,
@@ -208,6 +210,56 @@ test("a cooldown storage read failure does not release corrupt-value quarantine"
   assert.equal(afterReadRecovery.remainingSeconds, 118);
 });
 
+test("a corrupted workload cooldown stays anchored when storage writes fail", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set(
+    "graphql-cooldown-workloads-v1:player-stats",
+    now + 5 * 60 * 1000,
+  );
+  globalThis.wx.setStorageSync = () => {
+    throw new Error("storage full");
+  };
+  globalThis.wx.removeStorageSync = () => {
+    throw new Error("storage locked");
+  };
+
+  const first = getGraphQLCooldownState(now, "player-stats");
+  const second = getGraphQLCooldownState(now + 1_000, "player-stats");
+  assert.equal(first.cooldownUntil, now + 120_000);
+  assert.equal(second.cooldownUntil, first.cooldownUntil);
+  assert.equal(second.remainingSeconds, 119);
+  assert.equal(
+    getGraphQLCooldownState(now + 120_001, "player-stats").active,
+    false,
+  );
+  assert.equal(
+    getGraphQLCooldownState(now + 181_000, "player-stats").active,
+    false,
+    "the quarantined workload value must not become valid again",
+  );
+
+  const freshEvidenceAt = now + 181_000;
+  const fresh = persistGraphQLCooldown(1, freshEvidenceAt, "player-stats");
+  assert.equal(fresh.cooldownUntil, freshEvidenceAt + 1_000);
+  assert.equal(fresh.remainingSeconds, 1);
+});
+
+test("legacy FORBIDDEN application errors are limited to the viewer-entry recovery predicate", () => {
+  assert.equal(
+    isViewerEntryAuthorizationError(
+      new GraphQLApplicationError([{ extensions: { code: "FORBIDDEN" } }]),
+    ),
+    true,
+  );
+  assert.equal(
+    isViewerEntryAuthorizationError(
+      new GraphQLApplicationError([{ extensions: { code: "UNAUTHENTICATED" } }]),
+    ),
+    false,
+  );
+});
+
 test("429 persists one global cooldown, exposes request metadata, and never auto-retries", async () => {
   const runtime = installRuntime((request) =>
     request.success({
@@ -314,6 +366,45 @@ test("workload-scoped 429 cools only the affected Mini workload", async () => {
   assert.equal(runtime.requests.length, 1);
 });
 
+test("cache-policy overrides derive the matching workload cooldown key", async () => {
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 429,
+      header: {
+        "Retry-After": "20",
+        "X-RateLimit-Scope": "workload",
+        "X-RateLimit-Workload": "market",
+      },
+      data: { errors: [{ message: "rate limited" }] },
+    }),
+  );
+  const options = {
+    ...policy,
+    cachePolicy: "market",
+    forceRefresh: true,
+  };
+
+  await assert.rejects(
+    graphqlRead(
+      "query MiniMarketOwnershipDay { value }",
+      {},
+      options,
+    ),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  await assert.rejects(
+    graphqlRead(
+      "query MiniMarketOwnershipDay { value }",
+      {},
+      options,
+    ),
+    (error) => error instanceof GraphQLTransportError && error.statusCode === 429,
+  );
+  assert.equal(runtime.requests.length, 1);
+  assert.equal(getGraphQLCooldownState(Date.now(), "market").active, true);
+  assert.equal(getGraphQLCooldownState(Date.now(), "public-other").active, false);
+});
+
 test("429 serves stale data and every cooldown read performs zero network requests", async () => {
   const runtime = installRuntime((request) =>
     request.success({
@@ -338,7 +429,7 @@ test("429 serves stale data and every cooldown read performs zero network reques
         "x-request-id": "req-stale-429",
         "x-ratelimit-policy": "graphql-v4",
         "x-ratelimit-scope": "workload",
-        "x-ratelimit-workload": "public-other",
+        "x-ratelimit-workload": "interactive",
       },
       data: { errors: [{ message: "rate limited" }] },
     }),
@@ -360,7 +451,7 @@ test("429 serves stale data and every cooldown read performs zero network reques
   assert.equal(firstStale.meta.retryAfterSeconds, 30);
   assert.equal(firstStale.meta.rateLimitPolicy, "graphql-v4");
   assert.equal(firstStale.meta.rateLimitScope, "workload");
-  assert.equal(firstStale.meta.rateLimitWorkload, "public-other");
+  assert.equal(firstStale.meta.rateLimitWorkload, "interactive");
   assert.deepEqual(
     readBugReportDiagnostics().at(-1),
     {
@@ -372,7 +463,7 @@ test("429 serves stale data and every cooldown read performs zero network reques
       retryAfterSeconds: 30,
       rateLimitPolicy: "graphql-v4",
       rateLimitScope: "workload",
-      workload: "public-other",
+      workload: "interactive",
       message: "stale",
     },
   );

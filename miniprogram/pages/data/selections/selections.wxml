@@ -23,7 +23,7 @@
     </picker>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" workload="gameweek" bind:retry="onRetry" />
   <app-loading wx:elif="{{loadingTournaments}}" text="加载赛事" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state

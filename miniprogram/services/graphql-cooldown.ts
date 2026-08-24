@@ -16,6 +16,13 @@ export const GRAPHQL_WORKLOADS = [
 ] as const;
 export type GraphQLWorkload = (typeof GRAPHQL_WORKLOADS)[number];
 
+export function isGraphQLWorkload(value: unknown): value is GraphQLWorkload {
+  return (
+    typeof value === "string" &&
+    GRAPHQL_WORKLOADS.includes(value as GraphQLWorkload)
+  );
+}
+
 const IMF_FIXDATE_PATTERN =
   /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
 const OBSOLETE_RFC850_PATTERN =
@@ -44,6 +51,10 @@ let cooldownNoticeActiveUntil = 0;
 let cooldownRuntime: unknown;
 let cooldownUntilMemory = 0;
 let workloadCooldownMemory = new Map<GraphQLWorkload, number>();
+let corruptedWorkloadCooldowns = new Map<
+  GraphQLWorkload,
+  { value: number; until: number }
+>();
 let corruptedStoredCooldownValue: number | null = null;
 let corruptedStoredCooldownUntil = 0;
 let cooldownListeners = new Set<GraphQLCooldownListener>();
@@ -53,6 +64,7 @@ function ensureCooldownRuntime(): void {
   cooldownRuntime = wx;
   cooldownUntilMemory = 0;
   workloadCooldownMemory = new Map<GraphQLWorkload, number>();
+  corruptedWorkloadCooldowns = new Map();
   corruptedStoredCooldownValue = null;
   corruptedStoredCooldownUntil = 0;
   cooldownNoticeActiveUntil = 0;
@@ -111,7 +123,7 @@ export function persistGraphQLCooldown(
   const seconds = clampRetryAfterSeconds(retryAfterSeconds);
   const requestedUntil = now + seconds * 1000;
   if (workload) {
-    const current = readWorkloadCooldown(workload);
+    const current = readWorkloadCooldown(workload, now);
     const cooldownUntil = Math.max(current, requestedUntil);
     workloadCooldownMemory.set(workload, cooldownUntil);
     try {
@@ -154,14 +166,34 @@ function readWorkloadCooldown(
   now = Date.now(),
 ): number {
   let stored = 0;
+  let storageReadSucceeded = false;
   try {
-    stored =
-      Number(wx.getStorageSync(workloadCooldownStorageKey(workload))) || 0;
+    const numeric = Number(
+      wx.getStorageSync(workloadCooldownStorageKey(workload)),
+    );
+    stored = Number.isNaN(numeric) ? 0 : numeric;
+    storageReadSucceeded = true;
   } catch {}
   const maximumUntil = now + MAX_GRAPHQL_RETRY_AFTER_SECONDS * 1000;
-  const storedUntil = Number.isFinite(stored)
-    ? Math.min(stored, maximumUntil)
-    : 0;
+  const corrupted = corruptedWorkloadCooldowns.get(workload);
+  let storedUntil = 0;
+  if (!storageReadSucceeded) {
+    // A failed read does not prove that a quarantined raw value was removed.
+    // Keep using the original fixed anchor instead of recalculating now+120s.
+    storedUntil = corrupted?.until ?? 0;
+  } else if (corrupted && stored === corrupted.value) {
+    storedUntil = corrupted.until;
+  } else if (!Number.isFinite(stored) || stored > maximumUntil) {
+    const until = corrupted?.until ?? maximumUntil;
+    corruptedWorkloadCooldowns.set(workload, { value: stored, until });
+    storedUntil = until;
+    try {
+      wx.setStorageSync(workloadCooldownStorageKey(workload), until);
+    } catch {}
+  } else {
+    corruptedWorkloadCooldowns.delete(workload);
+    storedUntil = stored;
+  }
   const memoryUntil = workloadCooldownMemory.get(workload) || 0;
   const effectiveUntil = Math.min(
     Math.max(memoryUntil, storedUntil),
@@ -170,14 +202,14 @@ function readWorkloadCooldown(
   workloadCooldownMemory.set(workload, effectiveUntil);
   if (effectiveUntil <= now) {
     workloadCooldownMemory.delete(workload);
-    if (stored) {
+    if (storageReadSucceeded && stored) {
       try {
         wx.removeStorageSync(workloadCooldownStorageKey(workload));
       } catch {}
     }
     return 0;
   }
-  if (stored !== effectiveUntil) {
+  if (storageReadSucceeded && stored !== effectiveUntil) {
     try {
       wx.setStorageSync(workloadCooldownStorageKey(workload), effectiveUntil);
     } catch {}

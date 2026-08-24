@@ -22,6 +22,7 @@ import {
 import { getActivePagePerformanceTrace } from "../utils/page-performance";
 import {
   getGraphQLCachePolicy,
+  getGraphQLWorkload,
   getGraphQLOperationPolicy,
 } from "./graphql-cache-policy";
 import type {
@@ -237,9 +238,7 @@ export function hasGraphQLCode(error: unknown, code: string): boolean {
 export function isViewerEntryAuthorizationError(error: unknown): boolean {
   return (
     hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED") ||
-    (error instanceof GraphQLTransportError &&
-      error.statusCode === 403 &&
-      error.code === "FORBIDDEN")
+    hasGraphQLCode(error, "FORBIDDEN")
   );
 }
 
@@ -336,7 +335,7 @@ function resolvePolicy(
     persist: !mutation && policy.persist,
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
-    workload: configured.workload || "public-other",
+    workload: getGraphQLWorkload(operationName, cachePolicy),
   };
 }
 

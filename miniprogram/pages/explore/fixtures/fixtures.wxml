@@ -25,10 +25,10 @@
 
   <app-loading wx:if="{{loading}}" text="加载赛程" />
   <view wx:elif="{{error && !runCards.length}}" class="section">
-    <app-error-state message="{{error}}" bind:retry="onRetry" />
+    <app-error-state message="{{error}}" workload="fixtures" bind:retry="onRetry" />
   </view>
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view wx:if="{{glanceCards.length}}" class="section glance-grid">
       <view
         wx:for="{{glanceCards}}"

@@ -27,7 +27,7 @@
     <text class="phase-banner-text">本轮结果结算处理中，最终结果以官方确认为准</text>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData && !supportAvailable}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData && !supportAvailable}}" message="{{error}}" workload="interactive" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasTeamData && !supportAvailable}}" text="加载球队数据" />
   <view id="perf-primary-content" wx:elif="{{emptyState && !supportAvailable}}" class="section">
     <app-empty-state
@@ -41,7 +41,7 @@
   </view>
 
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData}}" class="section">
       <app-empty-state
         eyebrow="{{emptyEyebrow}}"
@@ -77,7 +77,7 @@
       <view class="tab-item {{showHistory ? 'tab-active' : ''}}" data-tab="history" catchtap="onTabTap" hover-class="hover-dim">历史</view>
     </view>
     <app-loading wx:if="{{tabLoading}}" text="加载当前栏目" />
-    <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{tabError && !tabLoading}}" status="partial" message="{{tabError}}" workload="interactive" showRetry="{{true}}" bind:retry="onRetry" />
 
     <view wx:if="{{showSquad && hasTeamData}}" class="section card lineup-card">
       <view class="lineup-head">
@@ -118,8 +118,8 @@
     </view>
 
     <view wx:if="{{showTransfer}}" class="section">
-      <data-status wx:if="{{transferError && hasTransfers}}" status="stale" message="{{transferError}} · 当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-      <app-error-state wx:if="{{transferError && !hasTransfers}}" message="{{transferError}}" bind:retry="onRetry" />
+      <data-status wx:if="{{transferError && hasTransfers}}" status="stale" message="{{transferError}} · 当前显示上次成功结果" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <app-error-state wx:if="{{transferError && !hasTransfers}}" message="{{transferError}}" workload="interactive" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{!hasTransfers}}" title="还没有转会记录" description="产生转会后会按比赛周显示在这里" />
       <block wx:else>
         <view class="summary-grid transfer-summary-grid">

@@ -148,6 +148,18 @@ function workloadForCachePolicy(
   }
 }
 
+export function getGraphQLWorkload(
+  operationName: string,
+  cachePolicy?: GraphQLCachePolicyName,
+): GraphQLWorkload {
+  const configured = OPERATION_POLICIES[operationName];
+  if (configured?.workload) return configured.workload;
+  return workloadForCachePolicy(
+    operationName,
+    cachePolicy ?? configured?.cachePolicy ?? "network-only",
+  );
+}
+
 export function getGraphQLCachePolicy(
   name: GraphQLCachePolicyName,
 ): GraphQLCachePolicy {
@@ -163,8 +175,6 @@ export function getGraphQLOperationPolicy(
   };
   return {
     ...configured,
-    workload:
-      configured.workload ||
-      workloadForCachePolicy(operationName, configured.cachePolicy),
+    workload: getGraphQLWorkload(operationName, configured.cachePolicy),
   };
 }

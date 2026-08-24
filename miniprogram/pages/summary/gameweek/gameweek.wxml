@@ -1,5 +1,5 @@
 <view class="page page-tabbar">
-  <data-status wx:if="{{staleNotice}}" status="stale" message="{{staleNotice}}" transient="{{true}}" />
+  <data-status wx:if="{{staleNotice}}" status="stale" message="{{staleNotice}}" workload="gameweek" transient="{{true}}" />
   <view class="section">
     <view class="score-card scoreboard">
       <view class="score-top">
@@ -12,7 +12,7 @@
     </view>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" workload="gameweek" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载 GW 总结" />
 
   <block wx:else>
@@ -24,7 +24,7 @@
     </view>
 
     <view wx:if="{{showSummary}}" class="section">
-      <app-error-state wx:if="{{summaryError}}" message="{{summaryError}}" bind:retry="onRetry" />
+      <app-error-state wx:if="{{summaryError}}" message="{{summaryError}}" workload="gameweek" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasSummary}}"
         title="GW{{event}} 总览还没生成"
@@ -83,7 +83,7 @@
     </view>
 
     <view wx:if="{{showDreamTeam}}" class="section">
-      <app-error-state wx:if="{{dreamTeamError}}" message="{{dreamTeamError}}" bind:retry="onRetry" />
+      <app-error-state wx:if="{{dreamTeamError}}" message="{{dreamTeamError}}" workload="gameweek" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasDreamTeam}}"
         title="GW{{event}} 梦之队还没公布"
@@ -121,7 +121,7 @@
     </view>
 
     <view wx:if="{{showElite}}" class="section card">
-      <app-error-state wx:if="{{eliteError}}" message="{{eliteError}}" bind:retry="onRetry" />
+      <app-error-state wx:if="{{eliteError}}" message="{{eliteError}}" workload="gameweek" bind:retry="onRetry" />
       <app-empty-state
         wx:elif="{{!hasElite}}"
         title="还没有达到 10 分的球员"
@@ -155,7 +155,7 @@
     </view>
 
     <view wx:if="{{showTransfers}}" class="section transfer-grid">
-      <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
+      <app-error-state wx:if="{{transfersError}}" message="{{transfersError}}" workload="gameweek" bind:retry="onRetry" />
       <block wx:else>
       <view class="card flow-card">
         <view class="flow-head flow-head-in">
