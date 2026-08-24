@@ -737,6 +737,18 @@ test("personal responses never cross an authoritative follow change", () => {
   assert.match(liveEntry, /if \(this\.data\.viewOnly\) return false/);
 });
 
+test("league authorization recovery clears retained view state", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(
+    leagues,
+    /refreshedEntryId === entryId[\s\S]*return;[\s\S]*this\.clearEntryScopedViewState\(\)[\s\S]*entryId = refreshedEntryId/,
+  );
+  assert.match(
+    leagues,
+    /if \(refreshedEntryId !== entryId\) \{[\s\S]*this\.clearEntryScopedViewState\(\)[\s\S]*this\.loadedEntryId = 0/,
+  );
+});
+
 test("all Live surfaces refresh event context before resume polling", () => {
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(entry, /async onShow\(\)/);

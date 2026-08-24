@@ -1159,11 +1159,14 @@ async function requestProfileWithSessionRetry(
   path: string,
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
+  onSessionAccepted?: (snapshot: SessionSnapshot) => void,
 ): Promise<MiniProgramProfile> {
   let token = await ensureMiniProgramSessionToken();
   const requestEpoch = sessionEpoch;
   try {
-    return await requestAuthenticatedProfile(path, method, data, token);
+    const profile = await requestAuthenticatedProfile(path, method, data, token);
+    onSessionAccepted?.({ epoch: requestEpoch, token });
+    return profile;
   } catch (error) {
     if (
       !(error instanceof MiniProgramApiResponseError) ||
@@ -1175,11 +1178,27 @@ async function requestProfileWithSessionRetry(
     // token finally received 401. The caller will use the current credential.
     if (sessionEpoch !== requestEpoch || getApiSessionToken() !== token) {
       token = await ensureMiniProgramSessionToken();
-      return requestAuthenticatedProfile(path, method, data, token);
+      const retryEpoch = sessionEpoch;
+      const profile = await requestAuthenticatedProfile(
+        path,
+        method,
+        data,
+        token,
+      );
+      onSessionAccepted?.({ epoch: retryEpoch, token });
+      return profile;
     }
     clearSessionCredentials();
     token = (await refreshWechatApiSession()).token;
-    return requestAuthenticatedProfile(path, method, data, token);
+    const retryEpoch = sessionEpoch;
+    const profile = await requestAuthenticatedProfile(
+      path,
+      method,
+      data,
+      token,
+    );
+    onSessionAccepted?.({ epoch: retryEpoch, token });
+    return profile;
   }
 }
 
@@ -1405,7 +1424,7 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
   const run = (async () => {
     for (;;) {
       const token = await ensureMiniProgramSessionToken();
-      const sessionSnapshot: SessionSnapshot = {
+      let sessionSnapshot: SessionSnapshot = {
         epoch: sessionEpoch,
         token,
       };
@@ -1415,6 +1434,10 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
       const serverProfile = await requestProfileWithSessionRetry(
         "/profile",
         "GET",
+        undefined,
+        (acceptedSession) => {
+          sessionSnapshot = acceptedSession;
+        },
       );
       // A profile response may have been issued before logout, token rotation,
       // or an email confirmation installed a newer session. Never let that

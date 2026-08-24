@@ -687,6 +687,115 @@ test("profile sync discards a response from a superseded session", async () => {
   }
 });
 
+test("profile sync reuses the response from a same-session 401 retry", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId) => ({
+    id,
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            options.success({
+              statusCode: 401,
+              data: { success: false, error: "session expired" },
+            });
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("account-b", 202),
+            },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const sync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(profileRequestCount, 1);
+    loginSuccess({ code: "retry-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-b", 202),
+      },
+    });
+    await sync;
+
+    assert.equal(profileRequestCount, 2, "the successful retry is reused");
+    assert.equal(getApiSessionToken(), "session-b");
+    assert.equal(getStoredMiniProgramProfile()?.id, "account-b");
+    assert.equal(currentMyFplEntryId(), 202);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
 test("sign-out clears account caches without deleting public GraphQL data", () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;

@@ -750,6 +750,9 @@ PerformancePage({
           });
           return;
         }
+        this.clearEntryScopedViewState();
+        this.loadedSeason = undefined;
+        this.loadedEntryId = 0;
         entryId = refreshedEntryId;
         this.setData({
           loading: true,
@@ -1067,7 +1070,9 @@ PerformancePage({
             return;
           }
           if (refreshedEntryId !== entryId) {
+            this.clearEntryScopedViewState();
             this.loadedSeason = undefined;
+            this.loadedEntryId = 0;
             this.pathLoadedKey = "";
             this.setData({
               entryId: refreshedEntryId,
