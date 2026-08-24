@@ -18,7 +18,9 @@ test("429 cooldown disables generic retry actions and renders a countdown", () =
     assert.ok(onRetry, `${componentPath} must define onRetry`);
     assert.match(
       onRetry,
-      /getGraphQLCooldownState\([\s\S]*?configuredWorkload \?\? state\.cooldownWorkload/,
+      componentPath.includes("data-status")
+        ? /getGraphQLCooldownState\([\s\S]*?cooldownWorkload\(\)/
+        : /getGraphQLCooldownState\([\s\S]*?configuredWorkload \?\? state\.cooldownWorkload/,
     );
     assert.match(component, /subscribeGraphQLCooldown/);
     assert.match(component, /unsubscribeCooldown/);
@@ -76,6 +78,7 @@ test("retry controls use the workload of the operation they retry", () => {
   const teamDetail = source("miniprogram/pages/data/team-detail/team-detail.ts");
   const teamDetailTemplate = source("miniprogram/pages/data/team-detail/team-detail.wxml");
   const priceController = source("miniprogram/pages/data/price/price.controller.ts");
+  const dataStatus = source("miniprogram/components/data-status/data-status.ts");
 
   assert.match(liveEntry, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
   assert.match(liveEntry, /data-status[\s\S]*workload="\{\{errorWorkload\}\}"/);
@@ -143,4 +146,6 @@ test("retry controls use the workload of the operation they retry", () => {
   assert.match(priceController, /playersErrorWorkload: "home"/);
   assert.match(priceController, /playersErrorWorkload: "player-stats"/);
   assert.match(source("miniprogram/pages/data/price/price.wxml"), /perf-primary-player[\s\S]*workload="\{\{playersErrorWorkload\}\}"/);
+  assert.match(dataStatus, /cooldownWorkload\(\)[\s\S]*getGraphQLCooldownState\(Date\.now\(\), this\.cooldownWorkload\(\)\)/);
+  assert.match(dataStatus, /scheduleTransientHide\(\)[\s\S]*getGraphQLCooldownState\(Date\.now\(\), this\.cooldownWorkload\(\)\)/);
 });

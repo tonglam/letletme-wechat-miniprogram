@@ -73,11 +73,22 @@ PerformancePage({
     }
   },
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (!resumed || !this.resumeOnShow) return undefined;
+    if (!resumed) return undefined;
+    if (!this.resumeOnShow) {
+      const lifecycleRevision = this.lifecycleRevision;
+      if (!this.routeEntry) await waitForAuthoritativeFollow();
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return undefined;
+      const nextEntryId = Number(this.routeEntry || getApp<IAppOption>().globalData.entryId);
+      const normalizedEntryId = Number.isFinite(nextEntryId) ? nextEntryId : 0;
+      if (normalizedEntryId !== Number(this.data.entryId)) {
+        return this.loadAuthoritativeEntry("show", lifecycleRevision);
+      }
+      return undefined;
+    }
     const forceRefresh = this.resumeForceRefresh;
     this.resumeOnShow = false;
     this.resumeForceRefresh = false;

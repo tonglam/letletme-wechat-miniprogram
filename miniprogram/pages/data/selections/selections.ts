@@ -165,7 +165,19 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
-    if (!resumed || !this.resumeOnShow) return;
+    if (!resumed) return;
+    if (!this.resumeOnShow) {
+      const lifecycleRevision = this.lifecycleRevision;
+      const trace = capturePageRequestTrace({
+        callerSurface: "data-selections",
+        trigger: "show"
+      });
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+      const nextEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
+      if (nextEntryId !== this.data.entryId) await this.initializePage(trace);
+      return;
+    }
     const resumeStage = this.resumeStage;
     const resumeTournamentForceRefresh = this.resumeTournamentForceRefresh;
     const resumeStatsForceRefresh = this.resumeStatsForceRefresh;

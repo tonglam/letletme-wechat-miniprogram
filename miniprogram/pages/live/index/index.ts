@@ -107,7 +107,8 @@ PerformancePage({
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     const entryId = app.globalData.entryId ?? 0;
-    let entryName = this.data.entryName || "";
+    const entryChanged = this.data.entryId !== entryId;
+    let entryName = entryChanged ? "" : this.data.entryName || "";
     if (entryId && !entryName) {
       try {
         const entry = await getEntryInfo(entryId);

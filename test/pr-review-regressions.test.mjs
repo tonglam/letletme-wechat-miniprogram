@@ -56,6 +56,28 @@ test("personal list pages wait for cold-start auth before reading the follow", a
   }
 });
 
+test("completed personal pages revalidate authority on warm show", () => {
+  for (const path of [
+    "miniprogram/pages/entry/profile/profile.ts",
+    "miniprogram/pages/data/selections/selections.ts",
+    "miniprogram/pages/summary/tournament/tournament.ts",
+  ]) {
+    const page = source(path);
+    const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
+    assert.match(
+      onShow,
+      /if \(!this\.resumeOnShow\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*(?:nextEntryId[\s\S]*initializePage|normalizedEntryId[\s\S]*loadAuthoritativeEntry)/,
+      path,
+    );
+  }
+});
+
+test("Live landing refreshes the displayed entry name after authority changes", () => {
+  const page = source("miniprogram/pages/live/index/index.ts");
+  assert.match(page, /const entryChanged = this\.data\.entryId !== entryId/);
+  assert.match(page, /let entryName = entryChanged \? "" : this\.data\.entryName \|\| ""/);
+});
+
 test("initial request failures do not also claim an empty list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.wxml");
   assert.match(leagues, /error && !tournaments\.length && !emptyState/);

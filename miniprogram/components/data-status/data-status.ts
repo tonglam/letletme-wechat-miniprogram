@@ -68,7 +68,7 @@ Component({
   },
 
   observers: {
-    "message,status,transient,transientDuration": function () {
+    "message,status,transient,transientDuration,workload": function () {
       this.refreshCooldownState();
       this.scheduleTransientHide();
     }
@@ -95,14 +95,19 @@ Component({
   },
 
   methods: {
-    refreshCooldownState() {
+    cooldownWorkload(): GraphQLWorkload | undefined {
       const state = host(this);
       const configuredWorkload = isGraphQLWorkload(this.properties.workload)
         ? this.properties.workload
         : undefined;
+      return configuredWorkload ?? state.cooldownWorkload;
+    },
+
+    refreshCooldownState() {
+      const state = host(this);
       const cooldown = getGraphQLCooldownState(
         Date.now(),
-        configuredWorkload ?? state.cooldownWorkload,
+        this.cooldownWorkload(),
       );
       const storedMessage = this.properties.message;
       this.setData({
@@ -139,7 +144,7 @@ Component({
     scheduleTransientHide() {
       this.clearTransientHide();
       this.setData({ visible: true });
-      if (getGraphQLCooldownState().active) return;
+      if (getGraphQLCooldownState(Date.now(), this.cooldownWorkload()).active) return;
       if (this.properties.transient !== true) return;
 
       const state = host(this);
@@ -165,14 +170,10 @@ Component({
     },
 
     onRetry() {
-      const state = host(this);
-      const configuredWorkload = isGraphQLWorkload(this.properties.workload)
-        ? this.properties.workload
-        : undefined;
       if (
         getGraphQLCooldownState(
           Date.now(),
-          configuredWorkload ?? state.cooldownWorkload,
+          this.cooldownWorkload(),
         ).active
       ) {
         this.refreshCooldownState();
