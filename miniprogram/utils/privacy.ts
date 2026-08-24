@@ -8,6 +8,8 @@
  * DevTools: 详情 → 本地设置 → 使用本地用户隐私保护指引, then include 剪切板.
  */
 
+import { storageKeys } from "../config/storage-keys";
+
 export const PRIVACY_AGREE_BUTTON_ID = "privacy-agree-btn";
 export const DEFAULT_PRIVACY_CONTRACT_NAME = "《小程序用户隐私保护指引》";
 
@@ -26,6 +28,9 @@ export interface PrivacyPromptInfo {
 }
 
 export type PrivacyPromptListener = (info: PrivacyPromptInfo) => void;
+export type DiagnosticDisclosureListener = (
+  info: Pick<PrivacyPromptInfo, "privacyContractName">,
+) => void;
 
 export interface PrivacyApiError {
   errno?: number;
@@ -38,6 +43,9 @@ let privacyContractName = DEFAULT_PRIVACY_CONTRACT_NAME;
 let lastReferrer = "";
 const pendingResolves: PrivacyResolve[] = [];
 const listeners = new Set<PrivacyPromptListener>();
+const diagnosticDisclosureResolves: Array<() => void> = [];
+const diagnosticDisclosureListeners = new Set<DiagnosticDisclosureListener>();
+let diagnosticDisclosureAcknowledged = false;
 
 function asErrorMessage(err?: PrivacyApiError | string | null): string {
   if (!err) return "";
@@ -77,6 +85,12 @@ function emitPrompt(): void {
   listeners.forEach((listener) => listener(info));
 }
 
+function emitDiagnosticDisclosure(): void {
+  if (!diagnosticDisclosureListeners.size) return;
+  const info = { privacyContractName };
+  diagnosticDisclosureListeners.forEach((listener) => listener(info));
+}
+
 function refreshPrivacyContractName(): void {
   if (typeof wx === "undefined" || typeof wx.getPrivacySetting !== "function") return;
   wx.getPrivacySetting({
@@ -85,8 +99,55 @@ function refreshPrivacyContractName(): void {
       if (!name) return;
       privacyContractName = name;
       if (pendingResolves.length) emitPrompt();
+      if (diagnosticDisclosureResolves.length) emitDiagnosticDisclosure();
     }
   });
+}
+
+function hasDiagnosticDisclosure(): boolean {
+  if (diagnosticDisclosureAcknowledged) return true;
+  try {
+    diagnosticDisclosureAcknowledged =
+      wx.getStorageSync(storageKeys.diagnosticDisclosure) === true;
+  } catch {}
+  return diagnosticDisclosureAcknowledged;
+}
+
+/**
+ * Holds the cold-start login until the one-time diagnostics notice is shown
+ * by the mounted privacy-dialog component and acknowledged by the user.
+ */
+export function requestDiagnosticDisclosure(): Promise<void> {
+  if (hasDiagnosticDisclosure()) return Promise.resolve();
+  return new Promise((resolve) => {
+    diagnosticDisclosureResolves.push(resolve);
+    refreshPrivacyContractName();
+    emitDiagnosticDisclosure();
+  });
+}
+
+export function subscribeDiagnosticDisclosure(
+  listener: DiagnosticDisclosureListener,
+): () => void {
+  diagnosticDisclosureListeners.add(listener);
+  if (diagnosticDisclosureResolves.length) {
+    listener({ privacyContractName });
+  }
+  return () => {
+    diagnosticDisclosureListeners.delete(listener);
+  };
+}
+
+export function acknowledgeDiagnosticDisclosure(): void {
+  diagnosticDisclosureAcknowledged = true;
+  try {
+    wx.setStorageSync(storageKeys.diagnosticDisclosure, true);
+  } catch {}
+  const batch = diagnosticDisclosureResolves.splice(
+    0,
+    diagnosticDisclosureResolves.length,
+  );
+  batch.forEach((resolve) => resolve());
 }
 
 export function installPrivacyAuthorizationHandler(): void {
@@ -133,4 +194,7 @@ export function resetPrivacyAuthorizationForTests(): void {
   lastReferrer = "";
   pendingResolves.splice(0, pendingResolves.length);
   listeners.clear();
+  diagnosticDisclosureResolves.splice(0, diagnosticDisclosureResolves.length);
+  diagnosticDisclosureListeners.clear();
+  diagnosticDisclosureAcknowledged = false;
 }

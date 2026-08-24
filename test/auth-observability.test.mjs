@@ -9,6 +9,12 @@ import {
   collectMiniProgramLoginContext,
   normalizeMiniProgramRequestId,
 } from "../miniprogram/utils/auth-observability.ts";
+import {
+  acknowledgeDiagnosticDisclosure,
+  requestDiagnosticDisclosure,
+  resetPrivacyAuthorizationForTests,
+  subscribeDiagnosticDisclosure,
+} from "../miniprogram/utils/privacy.ts";
 
 test("mini login context keeps only coarse, bounded runtime fields", () => {
   const previousWx = globalThis.wx;
@@ -66,6 +72,7 @@ test("wx login sends a request id and persistence outcome without changing respo
   const storage = new Map();
   let loginSuccess;
   const requests = [];
+  const realtimeEvents = [];
   try {
     globalThis.wx = {
       getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial", version: "1.0.0" } }),
@@ -77,7 +84,7 @@ test("wx login sends a request id and persistence outcome without changing respo
       removeStorageSync: (key) => storage.delete(key),
       canIUse: () => true,
       setStorage: (options) => options.success(),
-      getRealtimeLogManager: () => ({ info: () => {} }),
+      getRealtimeLogManager: () => ({ info: (payload) => realtimeEvents.push(payload) }),
       login: (options) => {
         loginSuccess = options.success;
       },
@@ -100,11 +107,13 @@ test("wx login sends a request id and persistence outcome without changing respo
           return;
         }
         if (options.url.endsWith("/session/persistence")) {
-          options.success({
-            statusCode: 200,
-            header: { "x-request-id": options.header["X-Request-Id"] },
-            data: { success: true },
-          });
+          setTimeout(() => {
+            options.success({
+              statusCode: 200,
+              header: { "x-request-id": options.header["X-Request-Id"] },
+              data: { success: true },
+            });
+          }, 5);
           return;
         }
         throw new Error(`unexpected request ${options.url}`);
@@ -114,7 +123,7 @@ test("wx login sends a request id and persistence outcome without changing respo
     const refresh = refreshWechatApiSession("cold_start_missing");
     loginSuccess({ code: "wechat-login-code" });
     const session = await refresh;
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 15));
 
     const loginRequest = requests.find((request) => request.url.endsWith("/wechat/login"));
     const persistenceRequest = requests.find((request) => request.url.endsWith("/session/persistence"));
@@ -130,6 +139,11 @@ test("wx login sends a request id and persistence outcome without changing respo
       outcome: "encrypted",
     });
     assert.equal(persistenceRequest.header.Authorization, "Bearer memory-token");
+    const persistenceEvent = realtimeEvents.find(
+      (event) => event.eventCode === "session_persistence_reported",
+    );
+    assert.ok(persistenceEvent);
+    assert.ok(persistenceEvent.durationMs >= 1);
   } finally {
     clearSessionCredentials();
     globalThis.wx = previousWx;
@@ -203,6 +217,39 @@ test("reports write_failed when encrypted session persistence is unavailable", a
     assert.equal(storage.has("api-session-token"), false);
   } finally {
     clearSessionCredentials();
+    globalThis.wx = previousWx;
+  }
+});
+
+test("cold-start login diagnostics wait for a visible disclosure", async () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map();
+  let prompt;
+  try {
+    globalThis.wx = {
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      getPrivacySetting: ({ success }) =>
+        success({ privacyContractName: "《测试隐私指引》" }),
+    };
+    resetPrivacyAuthorizationForTests();
+    const unsubscribe = subscribeDiagnosticDisclosure((info) => {
+      prompt = info;
+    });
+    let settled = false;
+    const pending = requestDiagnosticDisclosure().then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(prompt, { privacyContractName: "《测试隐私指引》" });
+    assert.equal(settled, false);
+    acknowledgeDiagnosticDisclosure();
+    await pending;
+    assert.equal(settled, true);
+    assert.equal(storage.get("auth-diagnostic-disclosure-v1"), true);
+    unsubscribe();
+  } finally {
+    resetPrivacyAuthorizationForTests();
     globalThis.wx = previousWx;
   }
 });

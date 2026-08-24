@@ -542,6 +542,7 @@ async function reportSessionPersistence(
   persistence: MiniProgramPersistenceResult,
 ): Promise<void> {
   if (!session.requestId) return;
+  const startedAt = Date.now();
   try {
     await requestMiniProgramApi(
       "/session/persistence",
@@ -561,7 +562,7 @@ async function reportSessionPersistence(
       requestId: session.requestId,
       trigger: session.loginTrigger ?? "session_missing",
       statusCode: 200,
-      durationMs: 0,
+      durationMs: Date.now() - startedAt,
     });
   } catch (error) {
     const statusCode =
@@ -574,7 +575,7 @@ async function reportSessionPersistence(
       requestId: session.requestId,
       trigger: session.loginTrigger ?? "session_missing",
       statusCode,
-      durationMs: 0,
+      durationMs: Date.now() - startedAt,
     });
   }
 }
@@ -639,7 +640,7 @@ export function getApiSessionToken(): string | null {
   if (sessionMemory === undefined) return null;
   if (!sessionMemory) return null;
   if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
-    clearSessionCredentials();
+    clearSessionCredentialsAsExpired();
     return null;
   }
   return sessionMemory.token || null;
@@ -669,6 +670,11 @@ export function clearSessionCredentials(): void {
       wx.removeStorageSync(key);
     } catch {}
   });
+}
+
+function clearSessionCredentialsAsExpired(): void {
+  clearSessionCredentials();
+  lastSessionCredentialState = "expired";
 }
 
 /** Clears the rejected credential while retaining its storage state for the next login diagnostic. */
@@ -1165,7 +1171,7 @@ async function revokeSessionToken(token: string): Promise<boolean> {
         recordMiniProgramRealtimeAuthEvent({
           eventCode: "session_revoke_network_failed",
           requestId,
-          trigger: "session_missing",
+          trigger: "logout_revoke",
           statusCode: 503,
           durationMs: Date.now() - t0,
         });

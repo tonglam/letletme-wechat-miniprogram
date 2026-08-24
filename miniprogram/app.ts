@@ -14,7 +14,10 @@ import {
   commitEntryBinding,
   ensureAppContext,
 } from "./services/app-context.service";
-import { installPrivacyAuthorizationHandler } from "./utils/privacy";
+import {
+  installPrivacyAuthorizationHandler,
+  requestDiagnosticDisclosure,
+} from "./utils/privacy";
 import { flushPerfNow } from "./utils/perf";
 
 App<IAppOption>({
@@ -145,6 +148,7 @@ App<IAppOption>({
       this._authReadyResolve = null;
     };
     try {
+      await requestDiagnosticDisclosure();
       // Restore only through WeChat's encrypted asynchronous storage. Legacy
       // plaintext is migrated before any GraphQL request can read the token.
       await restoreApiSessionCredentials();

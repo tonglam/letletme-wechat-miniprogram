@@ -7,6 +7,10 @@ export type MiniProgramLoginTrigger =
   | "account_link"
   | "session_missing";
 
+export type MiniProgramAuthEventTrigger =
+  | MiniProgramLoginTrigger
+  | "logout_revoke";
+
 export type MiniProgramLoginContext = {
   schemaVersion: 1;
   trigger: MiniProgramLoginTrigger;
@@ -178,7 +182,7 @@ export function collectMiniProgramLoginContext(
 export function recordMiniProgramRealtimeAuthEvent(input: {
   eventCode: string;
   requestId: string;
-  trigger: MiniProgramLoginTrigger;
+  trigger: MiniProgramAuthEventTrigger;
   statusCode?: number;
   durationMs: number;
 }): void {

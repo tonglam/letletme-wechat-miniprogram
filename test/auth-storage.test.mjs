@@ -7,6 +7,7 @@ import {
   confirmMiniProgramEmailLink,
   ensureMiniProgramAccountFresh,
   getApiSessionToken,
+  getLastSessionCredentialState,
   getLinkedAccountSnapshot,
   getStoredMiniProgramProfile,
   isMiniProgramProfileFresh,
@@ -1080,6 +1081,7 @@ test("remote sign-out failure still clears local credentials", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
+  const realtimeEvents = [];
   let requestCount = 0;
 
   try {
@@ -1093,6 +1095,9 @@ test("remote sign-out failure still clears local credentials", async () => {
       getStorage: ({ success }) =>
         success({ data: "token", errMsg: "getStorage:ok" }),
       removeStorageSync: (key) => removed.push(key),
+      getRealtimeLogManager: () => ({
+        info: (payload) => realtimeEvents.push(payload),
+      }),
       request: ({ fail, success }) => {
         requestCount += 1;
         if (requestCount === 1) {
@@ -1107,6 +1112,11 @@ test("remote sign-out failure still clears local credentials", async () => {
     await restoreApiSessionCredentials();
     const result = await logoutMiniProgramSession();
     assert.deepEqual(result, { localCleared: true, remoteRevoked: false });
+    assert.equal(
+      realtimeEvents.find((event) => event.eventCode === "session_revoke_network_failed")
+        ?.trigger,
+      "logout_revoke",
+    );
     assert.equal(getApiSessionToken(), null);
     assert.ok(removed.includes("api-session-token"));
     assert.deepEqual(await logoutMiniProgramSession(), {
@@ -1117,6 +1127,33 @@ test("remote sign-out failure still clears local credentials", async () => {
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
+  }
+});
+
+test("resident expiry keeps the expired credential state for the next refresh", async () => {
+  const previousWx = globalThis.wx;
+  const now = Date.now();
+  const originalNow = Date.now;
+  const expiresAt = new Date(now + 1_000).toISOString();
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => (key === "api-session-expires-at" ? expiresAt : undefined),
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => true,
+      getStorage: ({ success }) => success({ data: "resident-token", errMsg: "getStorage:ok" }),
+    };
+    clearSessionCredentials();
+    Date.now = () => now;
+    await restoreApiSessionCredentials();
+    Date.now = () => now + 2_000;
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getLastSessionCredentialState(), "expired");
+  } finally {
+    Date.now = originalNow;
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
   }
 });
 

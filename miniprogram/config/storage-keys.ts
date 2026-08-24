@@ -24,6 +24,7 @@ export const storageKeys = {
   graphqlCooldownUntil: "graphql-cooldown-until",
   graphqlCooldownWorkloads: "graphql-cooldown-workloads-v1",
   pendingBugReportDraft: "pending-bug-report-draft",
+  diagnosticDisclosure: "auth-diagnostic-disclosure-v1",
   lastPriceChangeBoard: "price-change-board:last-good:v1",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",

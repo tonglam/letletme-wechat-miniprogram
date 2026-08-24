@@ -2,20 +2,33 @@
   <view class="pd-mask" catchtouchmove="onNoop"></view>
   <view class="pd-card" catchtap="onNoop">
     <view class="pd-title">隐私保护提示</view>
-    <view class="pd-body">
+    <view wx:if="{{diagnostics}}" class="pd-body">
+      为完成登录和故障定位，我们会收集平台、系统主版本、小程序/SDK 版本、页面和随机请求标识等最小诊断信息；不会上传完整设备型号、原始设备标识或登录凭据。详情请阅读
+      <text class="pd-link" bindtap="onOpenContract">{{privacyContractName}}</text>。
+    </view>
+    <view wx:else class="pd-body">
       使用复制分享等功能前，请阅读并同意
       <text class="pd-link" bindtap="onOpenContract">{{privacyContractName}}</text>
       。我们会读取剪切板，用于把实时积分和赛事榜单复制到你的设备，方便你分享。
-      登录和故障定位会使用平台、系统主版本、小程序/SDK 版本、页面和随机请求标识等最小诊断信息；不会上传完整设备型号、原始设备标识或登录凭据。
     </view>
     <view class="pd-actions">
-      <button class="btn-secondary pd-btn" bindtap="onDisagree">拒绝</button>
       <button
+        wx:if="{{!diagnostics}}"
+        class="btn-secondary pd-btn"
+        bindtap="onDisagree"
+      >拒绝</button>
+      <button
+        wx:if="{{!diagnostics}}"
         id="privacy-agree-btn"
         class="btn-primary pd-btn"
         open-type="agreePrivacyAuthorization"
         bindagreeprivacyauthorization="onAgree"
       >同意</button>
+      <button
+        wx:else
+        class="btn-primary pd-btn"
+        bindtap="onAcknowledgeDiagnostics"
+      >知道了，继续</button>
     </view>
   </view>
 </view>
