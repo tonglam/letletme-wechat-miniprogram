@@ -4,7 +4,7 @@ import { clearEntryScopedStorage } from "../utils/storage";
 import { recordApi } from "../utils/perf";
 import {
   authApiErrorMessage,
-  networkErrorMessage
+  networkErrorMessage,
 } from "../utils/request-error";
 import { commitEntryBindingState as commitEntryBinding } from "./app-context-state";
 import { isStoredSessionUsable } from "./auth-session";
@@ -32,7 +32,8 @@ export interface MiniProgramProfile {
   wechatLinked: boolean;
 }
 
-type RawMiniProgramProfile = Partial<MiniProgramProfile> & Pick<MiniProgramProfile, "id">;
+type RawMiniProgramProfile = Partial<MiniProgramProfile> &
+  Pick<MiniProgramProfile, "id">;
 
 interface ApiSession {
   token: string;
@@ -75,10 +76,12 @@ class MiniProgramApiResponseError extends Error {
 }
 
 function isTransientAuthStatus(statusCode: number): boolean {
-  return statusCode === 429
-    || statusCode === 502
-    || statusCode === 503
-    || statusCode === 504;
+  return (
+    statusCode === 429 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504
+  );
 }
 
 function loginCode(): Promise<string> {
@@ -88,7 +91,8 @@ function loginCode(): Promise<string> {
         if (code) resolve(code);
         else reject(new WechatSessionTransportError("微信登录失败，请重试"));
       },
-      fail: () => reject(new WechatSessionTransportError("微信登录失败，请重试"))
+      fail: () =>
+        reject(new WechatSessionTransportError("微信登录失败，请重试")),
     });
   });
 }
@@ -115,10 +119,10 @@ function getDeviceId(): string {
     deviceIdMemory = existing;
     return existing;
   }
-  const memoryFallback = deviceIdMemory
-    && SAFE_MINI_PROGRAM_DEVICE_ID.test(deviceIdMemory)
-    ? deviceIdMemory
-    : undefined;
+  const memoryFallback =
+    deviceIdMemory && SAFE_MINI_PROGRAM_DEVICE_ID.test(deviceIdMemory)
+      ? deviceIdMemory
+      : undefined;
   if ((!storageReadable || !storedValue) && memoryFallback) {
     return memoryFallback;
   }
@@ -142,7 +146,7 @@ function requestMiniProgramApi(
   path: string,
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
-  token?: string
+  token?: string,
 ): Promise<ApiResponse> {
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
@@ -152,17 +156,24 @@ function requestMiniProgramApi(
       data,
       header: {
         "content-type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
-        if (response.statusCode < 200 || response.statusCode >= 300 || !response.data?.success) {
+        if (
+          response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          !response.data?.success
+        ) {
           recordApi(`auth:${path}`, Date.now() - t0, false);
-          const message = authApiErrorMessage(response.statusCode, response.data?.error);
+          const message = authApiErrorMessage(
+            response.statusCode,
+            response.data?.error,
+          );
           reject(
             isTransientAuthStatus(response.statusCode)
               ? new WechatSessionTransportError(message, response.statusCode)
-              : new MiniProgramApiResponseError(message, response.statusCode)
+              : new MiniProgramApiResponseError(message, response.statusCode),
           );
           return;
         }
@@ -172,12 +183,15 @@ function requestMiniProgramApi(
       fail(error) {
         recordApi(`auth:${path}`, Date.now() - t0, false);
         reject(new WechatSessionTransportError(networkErrorMessage(error)));
-      }
+      },
     });
   });
 }
 
-function requestWebAuth(path: string, data: Record<string, unknown>): Promise<ApiResponse> {
+function requestWebAuth(
+  path: string,
+  data: Record<string, unknown>,
+): Promise<ApiResponse> {
   return requestMiniProgramApi(path, "POST", data);
 }
 
@@ -196,25 +210,28 @@ function readLocalEntryId(): number | null {
 
 function normalizeProfile(
   profile: RawMiniProgramProfile,
-  webAccountLinkedFallback = false
+  webAccountLinkedFallback = false,
 ): MiniProgramProfile {
   const verifiedEntryId = profile.fplEntryVerifiedAt
     ? positiveEntryId(profile.webVerifiedEntryId ?? profile.fplEntryId)
     : positiveEntryId(profile.webVerifiedEntryId);
   const followEntryId = positiveEntryId(profile.followEntryId);
   const explicitEffectiveEntryId = positiveEntryId(profile.effectiveEntryId);
-  const effectiveEntryId = explicitEffectiveEntryId ?? followEntryId ?? verifiedEntryId;
-  const effectiveEntrySource = profile.effectiveEntrySource === "MINI"
-    || profile.effectiveEntrySource === "WEB"
-    ? profile.effectiveEntrySource
-    : effectiveEntryId === followEntryId
-      ? "MINI"
-      : effectiveEntryId === verifiedEntryId
-        ? "WEB"
-        : null;
-  const webAccountLinked = typeof profile.webAccountLinked === "boolean"
-    ? profile.webAccountLinked
-    : webAccountLinkedFallback;
+  const effectiveEntryId =
+    explicitEffectiveEntryId ?? followEntryId ?? verifiedEntryId;
+  const effectiveEntrySource =
+    profile.effectiveEntrySource === "MINI" ||
+    profile.effectiveEntrySource === "WEB"
+      ? profile.effectiveEntrySource
+      : effectiveEntryId === followEntryId
+        ? "MINI"
+        : effectiveEntryId === verifiedEntryId
+          ? "WEB"
+          : null;
+  const webAccountLinked =
+    typeof profile.webAccountLinked === "boolean"
+      ? profile.webAccountLinked
+      : webAccountLinkedFallback;
   return {
     id: profile.id,
     name: profile.name ?? null,
@@ -232,7 +249,7 @@ function normalizeProfile(
     fplEntryId: verifiedEntryId,
     fplEntryBoundAt: profile.fplEntryBoundAt ?? null,
     fplEntryVerifiedAt: profile.fplEntryVerifiedAt ?? null,
-    wechatLinked: true
+    wechatLinked: true,
   };
 }
 
@@ -245,8 +262,8 @@ function asSession(response: ApiResponse): ApiSession {
     expiresAt: response.expiresAt,
     profile: normalizeProfile(
       response.profile,
-      response.webAccountLinked ?? response.linked === true
-    )
+      response.webAccountLinked ?? response.linked === true,
+    ),
   };
 }
 
@@ -254,9 +271,10 @@ function clearStoredGraphQLSessionCache(): void {
   try {
     const { keys } = wx.getStorageInfoSync();
     keys
-      .filter((key) =>
-        key.startsWith(storagePrefixes.graphqlCache)
-        && !key.startsWith(storagePrefixes.graphqlPublicCache)
+      .filter(
+        (key) =>
+          key.startsWith(storagePrefixes.graphqlCache) &&
+          !key.startsWith(storagePrefixes.graphqlPublicCache),
       )
       .forEach((key) => wx.removeStorageSync(key));
   } catch {}
@@ -279,8 +297,8 @@ function supportsEncryptedSessionStorage(): boolean {
   try {
     const api = wx as unknown as { canIUse?: (schema: string) => boolean };
     return Boolean(
-      api.canIUse?.("setStorage.object.encrypt")
-      && api.canIUse?.("getStorage.object.encrypt")
+      api.canIUse?.("setStorage.object.encrypt") &&
+      api.canIUse?.("getStorage.object.encrypt"),
     );
   } catch {
     return false;
@@ -298,7 +316,7 @@ function readEncryptedSessionToken(): Promise<string | null> {
       },
       fail() {
         resolve(null);
-      }
+      },
     } as WechatMiniprogram.GetStorageOption);
   });
 }
@@ -306,7 +324,9 @@ function readEncryptedSessionToken(): Promise<string | null> {
 async function persistEncryptedSessionToken(token: string): Promise<boolean> {
   // Remove a legacy synchronous value before writing the encrypted row. If
   // encryption is unavailable or fails, the session remains memory-only.
-  try { wx.removeStorageSync(storageKeys.apiSessionToken); } catch {}
+  try {
+    wx.removeStorageSync(storageKeys.apiSessionToken);
+  } catch {}
   if (!supportsEncryptedSessionStorage()) return false;
   return new Promise((resolve) => {
     wx.setStorage({
@@ -317,9 +337,11 @@ async function persistEncryptedSessionToken(token: string): Promise<boolean> {
         resolve(true);
       },
       fail() {
-        try { wx.removeStorageSync(storageKeys.apiSessionToken); } catch {}
+        try {
+          wx.removeStorageSync(storageKeys.apiSessionToken);
+        } catch {}
         resolve(false);
-      }
+      },
     } as WechatMiniprogram.SetStorageOption);
   });
 }
@@ -328,8 +350,10 @@ async function persistEncryptedSessionToken(token: string): Promise<boolean> {
 export async function restoreApiSessionCredentials(): Promise<void> {
   await ensureRevocationQueueRestored();
   if (sessionMemory !== undefined) return;
-  const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as string | undefined;
-  const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as string | undefined;
+  const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as
+    string | undefined;
+  const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as
+    string | undefined;
   const encryptedToken = await readEncryptedSessionToken();
   const token = encryptedToken || legacyToken || "";
 
@@ -343,7 +367,9 @@ export async function restoreApiSessionCredentials(): Promise<void> {
   if (legacyToken) {
     const persisted = await persistEncryptedSessionToken(token);
     if (!persisted) {
-      try { wx.removeStorageSync(storageKeys.apiSessionExpiresAt); } catch {}
+      try {
+        wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
+      } catch {}
     }
   }
 }
@@ -351,17 +377,16 @@ export async function restoreApiSessionCredentials(): Promise<void> {
 async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   const previousToken = sessionMemory?.token;
   const previousProfile = getStoredMiniProgramProfile();
-  const bindingReason = previousToken === undefined
-    ? "login"
-    : previousToken !== session.token
-      ? "token-rotation"
-      : previousProfile?.effectiveEntryId !== session.profile.effectiveEntryId
-        ? "rebind"
-        : "restore";
+  const bindingReason =
+    previousToken === undefined
+      ? "login"
+      : previousToken !== session.token
+        ? "token-rotation"
+        : previousProfile?.effectiveEntryId !== session.profile.effectiveEntryId
+          ? "rebind"
+          : "restore";
 
-  if (
-    previousToken !== session.token
-  ) {
+  if (previousToken !== session.token) {
     clearStoredGraphQLSessionCache();
   }
 
@@ -370,7 +395,9 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   storeReceivedProfile(session.profile, bindingReason);
   const persisted = await persistEncryptedSessionToken(session.token);
   if (!persisted) {
-    try { wx.removeStorageSync(storageKeys.apiSessionExpiresAt); } catch {}
+    try {
+      wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
+    } catch {}
   }
   return session;
 }
@@ -386,7 +413,7 @@ export function clearApiSession(): void {
     storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
-    storageKeys.apiProfileV2
+    storageKeys.apiProfileV2,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
@@ -426,7 +453,7 @@ export function clearSessionCredentials(): void {
     storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
-    storageKeys.apiProfileV2
+    storageKeys.apiProfileV2,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
@@ -461,7 +488,7 @@ function readPendingFollowEntry(): number | null | undefined {
 function writePendingFollowEntry(entryId: number | null): void {
   wx.setStorageSync(storageKeys.pendingFollowEntry, {
     version: 1,
-    entryId
+    entryId,
   } satisfies StoredPendingFollowEntry);
 }
 
@@ -479,11 +506,11 @@ function readPendingEntryChoice(): StoredPendingEntryChoice | null {
     const miniEntryId = positiveEntryId(value?.miniEntryId);
     const webEntryId = positiveEntryId(value?.webEntryId);
     if (
-      value?.version !== 1
-      || (value.choice !== "MINI" && value.choice !== "WEB")
-      || !miniEntryId
-      || !webEntryId
-      || miniEntryId === webEntryId
+      value?.version !== 1 ||
+      (value.choice !== "MINI" && value.choice !== "WEB") ||
+      !miniEntryId ||
+      !webEntryId ||
+      miniEntryId === webEntryId
     ) {
       return null;
     }
@@ -500,12 +527,10 @@ function writePendingEntryChoice(value: StoredPendingEntryChoice): void {
 function clearPendingEntryChoice(expected?: StoredPendingEntryChoice): void {
   const current = readPendingEntryChoice();
   if (
-    expected
-    && (
-      current?.choice !== expected.choice
-      || current.miniEntryId !== expected.miniEntryId
-      || current.webEntryId !== expected.webEntryId
-    )
+    expected &&
+    (current?.choice !== expected.choice ||
+      current.miniEntryId !== expected.miniEntryId ||
+      current.webEntryId !== expected.webEntryId)
   ) {
     return;
   }
@@ -539,13 +564,16 @@ function persistMiniProgramProfile(profile: MiniProgramProfile): void {
   wx.setStorageSync(storageKeys.apiProfileV2, profile);
   wx.setStorageSync(storageKeys.apiProfileV2Initialized, true);
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
-  wx.setStorageSync(storageKeys.apiProfileFplEntryId, profile.webVerifiedEntryId || 0);
+  wx.setStorageSync(
+    storageKeys.apiProfileFplEntryId,
+    profile.webVerifiedEntryId || 0,
+  );
   persistProfileEmail(profile.webAccountLinked ? profile.email : null);
 }
 
 function applyEffectiveEntry(
   entryId: number | null,
-  reason: "restore" | "login" | "logout" | "rebind" | "token-rotation"
+  reason: "restore" | "login" | "logout" | "rebind" | "token-rotation",
 ): void {
   const previousEntryId = readLocalEntryId();
   if (previousEntryId !== entryId) {
@@ -564,15 +592,15 @@ function applyEffectiveEntry(
 
 function storeReceivedProfile(
   profile: MiniProgramProfile,
-  reason: "restore" | "login" | "logout" | "rebind" | "token-rotation"
+  reason: "restore" | "login" | "logout" | "rebind" | "token-rotation",
 ): MiniProgramProfile {
   const previousProfile = getStoredMiniProgramProfile();
   const previousEntryId = readLocalEntryId();
   if (
-    !hasInitializedMiniProgramProfile()
-    && readPendingFollowEntry() === undefined
-    && previousEntryId
-    && profile.followEntryId === null
+    !hasInitializedMiniProgramProfile() &&
+    readPendingFollowEntry() === undefined &&
+    previousEntryId &&
+    profile.followEntryId === null
   ) {
     // One-time upgrade for existing installs: their local follow predates the
     // standalone account table, so queue it before the first v2 profile can
@@ -580,26 +608,30 @@ function storeReceivedProfile(
     writePendingFollowEntry(previousEntryId);
   }
   const pendingFollow = readPendingFollowEntry();
-  const storedProfile = pendingFollow === undefined
-    ? profile
-    : {
-      ...profile,
-      followEntryId: pendingFollow,
-      effectiveEntryId: pendingFollow,
-      effectiveEntrySource: pendingFollow === null ? null : "MINI" as const
-    };
+  const storedProfile =
+    pendingFollow === undefined
+      ? profile
+      : {
+          ...profile,
+          followEntryId: pendingFollow,
+          effectiveEntryId: pendingFollow,
+          effectiveEntrySource:
+            pendingFollow === null ? null : ("MINI" as const),
+        };
   if (
-    previousProfile?.id !== storedProfile.id
-    || previousProfile?.webAccountLinked !== storedProfile.webAccountLinked
-    || previousProfile?.webVerifiedEntryId !== storedProfile.webVerifiedEntryId
-    || previousProfile?.effectiveEntryId !== storedProfile.effectiveEntryId
+    previousProfile?.id !== storedProfile.id ||
+    previousProfile?.webAccountLinked !== storedProfile.webAccountLinked ||
+    previousProfile?.webVerifiedEntryId !== storedProfile.webVerifiedEntryId ||
+    previousProfile?.effectiveEntryId !== storedProfile.effectiveEntryId
   ) {
     clearStoredGraphQLSessionCache();
   }
   persistMiniProgramProfile(storedProfile);
   applyEffectiveEntry(
-    pendingFollow === undefined ? storedProfile.effectiveEntryId : pendingFollow,
-    reason
+    pendingFollow === undefined
+      ? storedProfile.effectiveEntryId
+      : pendingFollow,
+    reason,
   );
   return storedProfile;
 }
@@ -672,13 +704,13 @@ function revocationQueueSnapshot(): StoredRevocationQueue {
     entries: [...retainedRefreshTokens].flatMap((token) => {
       const expiresAt = retainedRefreshTokenExpiry.get(token);
       return expiresAt && expiresAt > Date.now() ? [{ token, expiresAt }] : [];
-    })
+    }),
   };
 }
 
 function writeRevocationQueueSnapshot(
   snapshot: StoredRevocationQueue,
-  attempt = 1
+  attempt = 1,
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const retry = () => {
@@ -695,7 +727,7 @@ function writeRevocationQueueSnapshot(
         wx.removeStorage({
           key: storageKeys.pendingSessionRevocations,
           success: () => resolve(true),
-          fail: retry
+          fail: retry,
         });
         return;
       }
@@ -704,7 +736,7 @@ function writeRevocationQueueSnapshot(
         data: snapshot,
         encrypt: true,
         success: () => resolve(true),
-        fail: retry
+        fail: retry,
       } as WechatMiniprogram.SetStorageOption);
     } catch {
       retry();
@@ -729,10 +761,13 @@ function persistRetainedRefreshTokens(): Promise<void> {
 }
 
 function isMissingRevocationQueue(error: unknown): boolean {
-  const message = typeof error === "object" && error !== null && "errMsg" in error
-    ? String((error as { errMsg?: unknown }).errMsg)
-    : String(error ?? "");
-  return /(?:data|key).*(?:not found|not exist)|not found|no data/i.test(message);
+  const message =
+    typeof error === "object" && error !== null && "errMsg" in error
+      ? String((error as { errMsg?: unknown }).errMsg)
+      : String(error ?? "");
+  return /(?:data|key).*(?:not found|not exist)|not found|no data/i.test(
+    message,
+  );
 }
 
 function ensureRevocationQueueRestored(): Promise<void> {
@@ -750,19 +785,21 @@ function ensureRevocationQueueRestored(): Promise<void> {
         encrypt: true,
         success(result) {
           revocationQueueRestored = true;
-          const data = result.data as Partial<StoredRevocationQueue> | undefined;
-          const entries = data?.version === 1 && Array.isArray(data.entries)
-            ? data.entries
-            : null;
+          const data = result.data as
+            Partial<StoredRevocationQueue> | undefined;
+          const entries =
+            data?.version === 1 && Array.isArray(data.entries)
+              ? data.entries
+              : null;
           let dirty = entries === null;
           if (entries) {
             const now = Date.now();
             entries.forEach((entry) => {
               if (
-                typeof entry?.token === "string"
-                && entry.token.length > 0
-                && Number.isFinite(entry.expiresAt)
-                && entry.expiresAt > now
+                typeof entry?.token === "string" &&
+                entry.token.length > 0 &&
+                Number.isFinite(entry.expiresAt) &&
+                entry.expiresAt > now
               ) {
                 retainedRefreshTokens.add(entry.token);
                 retainedRefreshTokenExpiry.set(entry.token, entry.expiresAt);
@@ -796,7 +833,7 @@ function ensureRevocationQueueRestored(): Promise<void> {
           // queue that can be overwritten.
           retryAfterResolve = true;
           resolve();
-        }
+        },
       } as WechatMiniprogram.GetStorageOption);
     } catch {
       retryAfterResolve = true;
@@ -821,7 +858,7 @@ function retainRefreshToken(token: string, expiresAt?: string | null): void {
   retainedRefreshTokens.add(token);
   retainedRefreshTokenExpiry.set(
     token,
-    Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry)
+    Math.max(retainedRefreshTokenExpiry.get(token) ?? 0, expiry),
   );
   if (!revocationQueueRestored) {
     revocationQueueWriteDirty = true;
@@ -851,7 +888,7 @@ function discardExpiredRetainedRefreshTokens(): void {
 
 function registerPendingRefreshState(
   state: PendingSessionRefresh,
-  promise: Promise<ApiSession>
+  promise: Promise<ApiSession>,
 ): void {
   if (pendingRefresh && pendingRefresh !== state) {
     pendingRefresh.displaced = true;
@@ -863,7 +900,7 @@ function registerPendingRefreshState(
 
 function releasePendingRefreshState(
   state: PendingSessionRefresh,
-  promise: Promise<ApiSession>
+  promise: Promise<ApiSession>,
 ): void {
   pendingRefreshStates.delete(state);
   if (pendingRefresh?.promise === promise) {
@@ -883,7 +920,11 @@ async function revokeSessionToken(token: string): Promise<boolean> {
       header: { Authorization: `Bearer ${token}` },
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
-        recordApi("auth:/session", Date.now() - t0, response.statusCode >= 200 && response.statusCode < 300);
+        recordApi(
+          "auth:/session",
+          Date.now() - t0,
+          response.statusCode >= 200 && response.statusCode < 300,
+        );
         if (response.statusCode >= 200 && response.statusCode < 300) {
           resolve(true);
           return;
@@ -898,7 +939,7 @@ async function revokeSessionToken(token: string): Promise<boolean> {
       fail(_error) {
         recordApi("auth:/session", Date.now() - t0, false);
         resolve(false);
-      }
+      },
     });
   });
 }
@@ -915,7 +956,9 @@ async function performLogout(): Promise<LogoutResult> {
   clearApiSession();
   await ensureRevocationQueueRestored();
   const queueRestoredForLogout = revocationQueueRestored;
-  await Promise.all(pendingStates.map((state) => state.promise.catch(() => undefined)));
+  await Promise.all(
+    pendingStates.map((state) => state.promise.catch(() => undefined)),
+  );
   if (queueRestoredForLogout && revocationQueueWriteDirty) {
     revocationQueueWriteDirty = false;
     await persistRetainedRefreshTokens();
@@ -925,31 +968,39 @@ async function performLogout(): Promise<LogoutResult> {
   const tokenExpiries = new Map<string, string | null>();
   if (token) tokenExpiries.set(token, tokenExpiresAt ?? null);
   pendingStates.forEach((state) => {
-    if (state.issuedToken) tokenExpiries.set(state.issuedToken, state.issuedExpiresAt);
+    if (state.issuedToken)
+      tokenExpiries.set(state.issuedToken, state.issuedExpiresAt);
   });
   retainedRefreshTokens.forEach((retainedToken) => {
     const expiry = retainedRefreshTokenExpiry.get(retainedToken);
-    if (expiry) tokenExpiries.set(retainedToken, new Date(expiry).toISOString());
+    if (expiry)
+      tokenExpiries.set(retainedToken, new Date(expiry).toISOString());
   });
-  const tokens = [...new Set([
-    token,
-    ...pendingStates.map((state) => state.issuedToken),
-    ...retainedRefreshTokens
-  ].filter((value): value is string => Boolean(value)))];
+  const tokens = [
+    ...new Set(
+      [
+        token,
+        ...pendingStates.map((state) => state.issuedToken),
+        ...retainedRefreshTokens,
+      ].filter((value): value is string => Boolean(value)),
+    ),
+  ];
   if (tokens.length === 0) {
     await revocationPersistChain;
     return { localCleared: true, remoteRevoked: queueRestoredForLogout };
   }
 
-  const revocations = await Promise.all(tokens.map(async (currentToken) => {
-    const revoked = await revokeSessionToken(currentToken);
-    if (revoked) {
-      forgetRetainedRefreshToken(currentToken);
-    } else {
-      retainRefreshToken(currentToken, tokenExpiries.get(currentToken));
-    }
-    return revoked;
-  }));
+  const revocations = await Promise.all(
+    tokens.map(async (currentToken) => {
+      const revoked = await revokeSessionToken(currentToken);
+      if (revoked) {
+        forgetRetainedRefreshToken(currentToken);
+      } else {
+        retainRefreshToken(currentToken, tokenExpiries.get(currentToken));
+      }
+      return revoked;
+    }),
+  );
   await revocationPersistChain;
   const remoteRevoked = queueRestoredForLogout && revocations.every(Boolean);
   return { localCleared: true, remoteRevoked };
@@ -983,14 +1034,14 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
 
 /** Creates or restores the independent Mini Program account for this WeChat identity. */
 async function performWechatSessionRefresh(
-  onSessionIssued?: (token: string, expiresAt: string) => void
+  onSessionIssued?: (token: string, expiresAt: string) => void,
 ): Promise<ApiSession> {
   const epoch = sessionEpoch;
   const code = await loginCode();
   const response = await requestWebAuth("/wechat/login", {
     code,
     deviceId: getDeviceId(),
-    contractVersion: 2
+    contractVersion: 2,
   });
   if (response.contractVersion !== 2 || response.authenticated !== true) {
     if (epoch !== sessionEpoch) {
@@ -1041,7 +1092,7 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
   const state: PendingSessionRefresh = {
     promise: Promise.resolve(undefined as never),
     issuedToken: null,
-    issuedExpiresAt: null
+    issuedExpiresAt: null,
   };
   const refresh = performWechatSessionRefresh((issuedToken, expiresAt) => {
     state.issuedToken = issuedToken;
@@ -1069,7 +1120,7 @@ function profileFromResponse(response: ApiResponse): MiniProgramProfile {
   }
   return normalizeProfile(
     response.profile,
-    response.webAccountLinked ?? response.profile.webAccountLinked === true
+    response.webAccountLinked ?? response.profile.webAccountLinked === true,
   );
 }
 
@@ -1077,11 +1128,13 @@ async function requestAuthenticatedProfile(
   path: string,
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
-  tokenInput?: string
+  tokenInput?: string,
 ): Promise<MiniProgramProfile> {
   const token = tokenInput || getApiSessionToken();
   if (!token) throw new MiniProgramApiResponseError("请重新进入小程序", 401);
-  return profileFromResponse(await requestMiniProgramApi(path, method, data, token));
+  return profileFromResponse(
+    await requestMiniProgramApi(path, method, data, token),
+  );
 }
 
 async function ensureMiniProgramSessionToken(): Promise<string> {
@@ -1093,13 +1146,16 @@ async function ensureMiniProgramSessionToken(): Promise<string> {
 async function requestProfileWithSessionRetry(
   path: string,
   method: MiniProgramApiMethod,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): Promise<MiniProgramProfile> {
   let token = await ensureMiniProgramSessionToken();
   try {
     return await requestAuthenticatedProfile(path, method, data, token);
   } catch (error) {
-    if (!(error instanceof MiniProgramApiResponseError) || error.statusCode !== 401) {
+    if (
+      !(error instanceof MiniProgramApiResponseError) ||
+      error.statusCode !== 401
+    ) {
       throw error;
     }
     clearSessionCredentials();
@@ -1110,10 +1166,10 @@ async function requestProfileWithSessionRetry(
 
 function scheduleEntryConflictPrompt(profile: MiniProgramProfile): void {
   if (
-    !profile.entryConflict
-    || !profile.followEntryId
-    || !profile.webVerifiedEntryId
-    || typeof wx.showModal !== "function"
+    !profile.entryConflict ||
+    !profile.followEntryId ||
+    !profile.webVerifiedEntryId ||
+    typeof wx.showModal !== "function"
   ) {
     return;
   }
@@ -1140,25 +1196,27 @@ function showEntryConflictModal(profile: MiniProgramProfile): Promise<boolean> {
       confirmText: "使用网页",
       cancelText: "保留小程序",
       success: ({ confirm }) => resolve(confirm),
-      fail: () => resolve(false)
+      fail: () => resolve(false),
     });
   });
 }
 
 async function chooseEntrySource(
   profile: MiniProgramProfile,
-  choice: MiniProgramEntrySource
+  choice: MiniProgramEntrySource,
 ): Promise<MiniProgramProfile> {
   if (!profile.followEntryId || !profile.webVerifiedEntryId) return profile;
   const next = await requestProfileWithSessionRetry("/entry-choice", "PUT", {
     choice,
     miniEntryId: profile.followEntryId,
-    webEntryId: profile.webVerifiedEntryId
+    webEntryId: profile.webVerifiedEntryId,
   });
   return storeReceivedProfile(next, "rebind");
 }
 
-async function resolveEntryConflict(profile: MiniProgramProfile): Promise<void> {
+async function resolveEntryConflict(
+  profile: MiniProgramProfile,
+): Promise<void> {
   if (pendingEntryConflictResolution) {
     queuedEntryConflictProfile = profile;
     return pendingEntryConflictResolution;
@@ -1166,9 +1224,9 @@ async function resolveEntryConflict(profile: MiniProgramProfile): Promise<void> 
   const run = (async () => {
     const current = getStoredMiniProgramProfile();
     if (
-      !current?.entryConflict
-      || current.followEntryId !== profile.followEntryId
-      || current.webVerifiedEntryId !== profile.webVerifiedEntryId
+      !current?.entryConflict ||
+      current.followEntryId !== profile.followEntryId ||
+      current.webVerifiedEntryId !== profile.webVerifiedEntryId
     ) {
       return;
     }
@@ -1185,7 +1243,7 @@ async function resolveEntryConflict(profile: MiniProgramProfile): Promise<void> 
       version: 1,
       choice: "WEB",
       miniEntryId: profile.followEntryId as number,
-      webEntryId: profile.webVerifiedEntryId as number
+      webEntryId: profile.webVerifiedEntryId as number,
     };
     writePendingEntryChoice(pendingChoice);
     try {
@@ -1213,15 +1271,22 @@ async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
   const pending = readPendingEntryChoice();
   if (!pending) return null;
   try {
-    const profile = await requestProfileWithSessionRetry("/entry-choice", "PUT", {
-      choice: pending.choice,
-      miniEntryId: pending.miniEntryId,
-      webEntryId: pending.webEntryId
-    });
+    const profile = await requestProfileWithSessionRetry(
+      "/entry-choice",
+      "PUT",
+      {
+        choice: pending.choice,
+        miniEntryId: pending.miniEntryId,
+        webEntryId: pending.webEntryId,
+      },
+    );
     clearPendingEntryChoice(pending);
     return storeReceivedProfile(profile, "rebind");
   } catch (error) {
-    if (error instanceof MiniProgramApiResponseError && error.statusCode === 409) {
+    if (
+      error instanceof MiniProgramApiResponseError &&
+      error.statusCode === 409
+    ) {
       clearPendingEntryChoice(pending);
       return null;
     }
@@ -1230,19 +1295,68 @@ async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
 }
 
 async function replayPendingFollowEntry(
-  expectedMutationRevision = accountMutationRevision
+  expectedMutationRevision = accountMutationRevision,
 ): Promise<MiniProgramProfile | null> {
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
-  const profile = pending === null
-    ? await requestProfileWithSessionRetry("/follow-entry", "DELETE")
-    : await requestProfileWithSessionRetry("/follow-entry", "PUT", { entryId: pending });
+  const profile =
+    pending === null
+      ? await requestProfileWithSessionRetry("/follow-entry", "DELETE")
+      : await requestProfileWithSessionRetry("/follow-entry", "PUT", {
+          entryId: pending,
+        });
   if (expectedMutationRevision !== accountMutationRevision) return null;
   clearPendingFollowEntry(pending);
   return storeReceivedProfile(profile, "rebind");
 }
 
 let pendingAccountSynchronization: Promise<MiniProgramProfile> | null = null;
+
+/**
+ * Personal pages need a fresh standalone-account profile before they snapshot
+ * the local viewer entry. Keep this short enough to notice a selection made in
+ * another client without adding a profile request on every warm page render.
+ */
+export const MINI_PROGRAM_PROFILE_MAX_AGE_MS = 60 * 1000;
+
+export function getMiniProgramProfileCheckedAt(): number | null {
+  try {
+    const checkedAt = Number(
+      wx.getStorageSync(storageKeys.apiProfileCheckedAt),
+    );
+    return Number.isFinite(checkedAt) && checkedAt > 0 ? checkedAt : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isMiniProgramProfileFresh(
+  maxAgeMs = MINI_PROGRAM_PROFILE_MAX_AGE_MS,
+  now = Date.now(),
+): boolean {
+  const profile = getStoredMiniProgramProfile();
+  const checkedAt = getMiniProgramProfileCheckedAt();
+  const age = checkedAt === null ? Infinity : Math.max(0, now - checkedAt);
+  return Boolean(profile) && age < Math.max(0, maxAgeMs);
+}
+
+/**
+ * Refresh the standalone profile only when the cached profile is stale. The
+ * synchronization function itself remains single-flight and still replays
+ * pending offline follow changes.
+ */
+export async function ensureMiniProgramAccountFresh(
+  options: {
+    maxAgeMs?: number;
+    forceRefresh?: boolean;
+  } = {},
+): Promise<MiniProgramProfile | null> {
+  if (!getApiSessionToken()) return null;
+  if (!options.forceRefresh && isMiniProgramProfileFresh(options.maxAgeMs)) {
+    return getStoredMiniProgramProfile();
+  }
+  return synchronizeMiniProgramAccount();
+}
 
 /** Restores the server profile and replays any offline/local team change. */
 export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
@@ -1251,16 +1365,19 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
     const synchronizationRevision = accountMutationRevision;
     const mutationInFlight = accountMutationInFlight > 0;
     const pendingFollowAtStart = readPendingFollowEntry() !== undefined;
-    const serverProfile = await requestProfileWithSessionRetry("/profile", "GET");
-    let profile = (
-      synchronizationRevision === accountMutationRevision
-      && !mutationInFlight
-      && !pendingFollowAtStart
-    )
-      ? storeReceivedProfile(serverProfile, "restore")
-      : getStoredMiniProgramProfile() ?? serverProfile;
-    profile = await replayPendingFollowEntry(synchronizationRevision) ?? profile;
-    profile = await replayPendingEntryChoice().catch(() => null) ?? profile;
+    const serverProfile = await requestProfileWithSessionRetry(
+      "/profile",
+      "GET",
+    );
+    let profile =
+      synchronizationRevision === accountMutationRevision &&
+      !mutationInFlight &&
+      !pendingFollowAtStart
+        ? storeReceivedProfile(serverProfile, "restore")
+        : (getStoredMiniProgramProfile() ?? serverProfile);
+    profile =
+      (await replayPendingFollowEntry(synchronizationRevision)) ?? profile;
+    profile = (await replayPendingEntryChoice().catch(() => null)) ?? profile;
     scheduleEntryConflictPrompt(profile);
     return profile;
   })();
@@ -1278,7 +1395,9 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
  * Changes the Mini Program viewer team locally first, then syncs it to the
  * standalone account. A failed network write remains queued for next launch.
  */
-export async function saveMiniProgramFollowEntry(entryId: number | null): Promise<boolean> {
+export async function saveMiniProgramFollowEntry(
+  entryId: number | null,
+): Promise<boolean> {
   const normalized = entryId === null ? null : positiveEntryId(entryId);
   if (entryId !== null && !normalized) {
     throw new Error("请输入有效的参赛 ID");
@@ -1300,7 +1419,10 @@ export async function saveMiniProgramFollowEntry(entryId: number | null): Promis
 
 /** Removes only the optional Web relation; Mini identity/session/follow survive. */
 export async function unlinkMiniProgramWebAccount(): Promise<MiniProgramProfile> {
-  const profile = await requestProfileWithSessionRetry("/account-link", "DELETE");
+  const profile = await requestProfileWithSessionRetry(
+    "/account-link",
+    "DELETE",
+  );
   clearPendingEntryChoice();
   return storeReceivedProfile(profile, "rebind");
 }
@@ -1311,7 +1433,7 @@ export async function startMiniProgramEmailLink(email: string): Promise<void> {
 
 export function confirmMiniProgramEmailLink(
   email: string,
-  emailCode: string
+  emailCode: string,
 ): Promise<ApiSession> {
   if (logoutInFlight) {
     return Promise.reject(new Error("正在退出登录，请稍后重试"));
@@ -1323,7 +1445,7 @@ export function confirmMiniProgramEmailLink(
   const state: PendingSessionRefresh = {
     promise: Promise.resolve(undefined as never),
     issuedToken: null,
-    issuedExpiresAt: null
+    issuedExpiresAt: null,
   };
   const run = (async () => {
     // Settle any in-flight /wechat/login first, same as logout: if the server
@@ -1338,7 +1460,7 @@ export function confirmMiniProgramEmailLink(
       email,
       code: emailCode,
       wechatCode,
-      deviceId: getDeviceId()
+      deviceId: getDeviceId(),
     });
     // An explicit link confirmation supersedes any background /wechat/login
     // that started before it — bump the epoch so the older response can never

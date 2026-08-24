@@ -1,16 +1,22 @@
 import { storageKeys } from "../config/storage-keys";
 import {
+  ensureMiniProgramAccountFresh,
   getApiSessionToken,
-  getStoredMiniProgramProfile,
+  MINI_PROGRAM_PROFILE_MAX_AGE_MS,
   restoreApiSessionCredentials,
-  synchronizeMiniProgramAccount
+  synchronizeMiniProgramAccount,
 } from "../services/auth.service";
 
 /**
  * Cold-start viewer gate. Personal pages wait until the standalone account has
  * replayed any offline team selection before snapshotting the local pointer.
  */
-export async function waitForAuthoritativeFollow(): Promise<void> {
+export async function waitForAuthoritativeFollow(
+  options: {
+    maxAgeMs?: number;
+    forceRefresh?: boolean;
+  } = {},
+): Promise<void> {
   // A DevTools hot reload can recreate this module's in-memory credential
   // mirror while leaving App.authReady already resolved. Restore encrypted
   // storage here as well so a personal page cannot snapshot a stale local
@@ -30,14 +36,25 @@ export async function waitForAuthoritativeFollow(): Promise<void> {
     // Failed/offline auth intentionally keeps the local viewer team.
   }
   // DevTools hot reload can preserve an already-resolved App.authReady while
-  // recreating this module. Restore the standalone profile in that gap.
-  if (getApiSessionToken() && !getStoredMiniProgramProfile()) {
+  // recreating this module. More importantly, a resident Mini page can retain
+  // a profile whose follow pointer changed elsewhere. Refresh stale profiles
+  // before any personal page snapshots the local pointer.
+  if (getApiSessionToken()) {
     try {
-      await synchronizeMiniProgramAccount();
+      await ensureMiniProgramAccountFresh({
+        maxAgeMs: options.maxAgeMs ?? MINI_PROGRAM_PROFILE_MAX_AGE_MS,
+        forceRefresh: options.forceRefresh,
+      });
     } catch {
       // Offline mode keeps the local viewer team and retries next launch.
     }
   }
+}
+
+/** Force one authoritative profile read for a bounded viewer-entry recovery. */
+export async function refreshAuthoritativeFollow(): Promise<number | null> {
+  const profile = await synchronizeMiniProgramAccount();
+  return profile.effectiveEntryId;
 }
 
 /**
@@ -50,7 +67,9 @@ export function currentFollowEntryId(): number | undefined {
     if (Number.isInteger(appEntryId) && appEntryId > 0) {
       return appEntryId;
     }
-  } catch { /* app not ready */ }
+  } catch {
+    /* app not ready */
+  }
   try {
     const stored = Number(wx.getStorageSync(storageKeys.entryId));
     return Number.isInteger(stored) && stored > 0 ? stored : undefined;

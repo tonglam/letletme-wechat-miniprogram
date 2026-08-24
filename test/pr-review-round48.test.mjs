@@ -9,7 +9,7 @@ test("Price and Players consume resumed pagination only after replacement owners
   const price = source("miniprogram/pages/data/price/price.controller.ts");
   const players = source("miniprogram/pages/data/players/players.ts");
   assert.match(price, /const task = this\.loadMorePlayers\(resumePaginationCursor\);[\s\S]*if \(this\.paginationPending && this\.paginationCursor === resumePaginationCursor\)[\s\S]*this\.resumePaginationAfterShow = false/);
-  assert.match(players, /const task = this\.loadMoreFromCursor\(resumeCursor\);[\s\S]*if \(this\.paginationPending && this\.paginationCursor === resumeCursor\)[\s\S]*this\.resumePaginationAfterShow = false/);
+  assert.match(players, /const startPagination = \(\) => \{[\s\S]*this\.loadMoreFromCursor\(resumeCursor\)[\s\S]*const task = this\.paginationPromise[\s\S]*startPagination\(\)/);
   assert.match(players, /const task = this\.startSearch\(this\.data\.keyword, resumeSearchForceRefresh\);[\s\S]*this\.searchPendingForceRefresh === resumeSearchForceRefresh/);
 });
 

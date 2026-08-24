@@ -1,10 +1,39 @@
 import { getMiniProgramEnv } from "../config/env";
+import { GRAPHQL_WORKLOADS } from "../services/graphql-cooldown";
+
+const GRAPHQL_RATE_LIMIT_POLICIES = new Set([
+  "graphql-v2",
+  "graphql-v3",
+  "graphql-v4",
+]);
+const GRAPHQL_RATE_LIMIT_SCOPES = new Set(["global", "client", "workload"]);
+const SAFE_DIAGNOSTIC_CODE = /^[A-Z][A-Z0-9_]{0,79}$/;
+
+function boundedString(value: unknown, maxLength: number): string | undefined {
+  return typeof value === "string" && value.length > 0
+    ? value.slice(0, maxLength)
+    : undefined;
+}
+
+function allowedEnum(
+  value: unknown,
+  allowed: ReadonlySet<string>,
+  maxLength = 80,
+): string | undefined {
+  const candidate = boundedString(value, maxLength);
+  return candidate && allowed.has(candidate) ? candidate : undefined;
+}
 
 export type BugReportDiagnostic = {
   at?: string;
   requestId?: string;
   message?: string;
   code?: string;
+  status?: number;
+  retryAfterSeconds?: number;
+  rateLimitPolicy?: string;
+  rateLimitScope?: string;
+  workload?: string;
   operation?: string;
 };
 
@@ -12,12 +41,44 @@ const MAX_DIAGNOSTICS = 3;
 const diagnostics: BugReportDiagnostic[] = [];
 
 export function recordBugReportDiagnostic(entry: BugReportDiagnostic): void {
+  const status = entry.status;
+  const retryAfterSeconds = entry.retryAfterSeconds;
+  const code = boundedString(entry.code, 80);
   diagnostics.push({
-    at: entry.at,
-    requestId: entry.requestId?.slice(0, 80),
-    message: entry.message?.slice(0, 180),
-    code: entry.code?.slice(0, 80),
-    operation: entry.operation?.slice(0, 80)
+    at: boundedString(entry.at, 40),
+    requestId: boundedString(entry.requestId, 80),
+    message: boundedString(entry.message, 180),
+    code: code && SAFE_DIAGNOSTIC_CODE.test(code) ? code : undefined,
+    status:
+      typeof status === "number" &&
+      Number.isSafeInteger(status) &&
+      status >= 0 &&
+      status <= 599
+        ? status
+        : undefined,
+    retryAfterSeconds:
+      typeof retryAfterSeconds === "number" &&
+      Number.isSafeInteger(retryAfterSeconds) &&
+      retryAfterSeconds >= 0 &&
+      retryAfterSeconds <= 120
+        ? retryAfterSeconds
+        : undefined,
+    rateLimitPolicy: allowedEnum(
+      entry.rateLimitPolicy,
+      GRAPHQL_RATE_LIMIT_POLICIES,
+      32,
+    ),
+    rateLimitScope: allowedEnum(
+      entry.rateLimitScope,
+      GRAPHQL_RATE_LIMIT_SCOPES,
+      16,
+    ),
+    workload: allowedEnum(
+      entry.workload,
+      new Set<string>(GRAPHQL_WORKLOADS),
+      32,
+    ),
+    operation: boundedString(entry.operation, 80),
   });
   if (diagnostics.length > MAX_DIAGNOSTICS) diagnostics.shift();
 }
@@ -53,15 +114,16 @@ function readDeviceMeta(): Record<string, unknown> {
     const osMajor = system.match(/\d+/)?.[0] || "unknown";
     const width = Number(windowInfo.windowWidth);
     const height = Number(windowInfo.windowHeight);
-    const viewportBucket = Number.isFinite(width) && Number.isFinite(height)
-      ? `${Math.round(width / 40) * 40}x${Math.round(height / 100) * 100}`
-      : "unknown";
+    const viewportBucket =
+      Number.isFinite(width) && Number.isFinite(height)
+        ? `${Math.round(width / 40) * 40}x${Math.round(height / 100) * 100}`
+        : "unknown";
     return {
       platform: device.platform || "unknown",
       osMajor,
       sdkVersion: appBase.SDKVersion || "unknown",
       language: appBase.language || "unknown",
-      viewportBucket
+      viewportBucket,
     };
   } catch {
     return {};
@@ -80,10 +142,16 @@ export function collectMiniProgramBugReportMeta(): Record<string, unknown> {
     clientTime: new Date().toISOString(),
     ...device,
     operations: readBugReportDiagnostics().map((item) => ({
+      at: item.at,
       requestId: item.requestId,
       code: item.code,
+      status: item.status,
+      retryAfterSeconds: item.retryAfterSeconds,
+      rateLimitPolicy: item.rateLimitPolicy,
+      rateLimitScope: item.rateLimitScope,
+      workload: item.workload,
       message: item.message,
-      operation: item.operation
-    }))
+      operation: item.operation,
+    })),
   };
 }
