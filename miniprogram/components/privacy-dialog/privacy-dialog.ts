@@ -1,7 +1,9 @@
 import {
+  acknowledgeDiagnosticDisclosure,
   DEFAULT_PRIVACY_CONTRACT_NAME,
   PRIVACY_AGREE_BUTTON_ID,
   resolvePrivacyAuthorization,
+  subscribeDiagnosticDisclosure,
   subscribePrivacyPrompt
 } from "../../utils/privacy";
 
@@ -10,18 +12,30 @@ const unsubscribers = new WeakMap<object, () => void>();
 Component({
   data: {
     show: false,
+    diagnostics: false,
     privacyContractName: DEFAULT_PRIVACY_CONTRACT_NAME
   },
 
   lifetimes: {
     attached() {
-      const unsubscribe = subscribePrivacyPrompt((info) => {
+      const unsubscribePrivacy = subscribePrivacyPrompt((info) => {
         this.setData({
           show: true,
+          diagnostics: false,
           privacyContractName: info.privacyContractName || DEFAULT_PRIVACY_CONTRACT_NAME
         });
       });
-      unsubscribers.set(this, unsubscribe);
+      const unsubscribeDiagnostics = subscribeDiagnosticDisclosure((info) => {
+        this.setData({
+          show: true,
+          diagnostics: true,
+          privacyContractName: info.privacyContractName || DEFAULT_PRIVACY_CONTRACT_NAME
+        });
+      });
+      unsubscribers.set(this, () => {
+        unsubscribePrivacy();
+        unsubscribeDiagnostics();
+      });
     },
 
     detached() {
@@ -37,6 +51,11 @@ Component({
         buttonId: PRIVACY_AGREE_BUTTON_ID
       });
       this.setData({ show: false });
+    },
+
+    onAcknowledgeDiagnostics() {
+      acknowledgeDiagnosticDisclosure();
+      this.setData({ show: false, diagnostics: false });
     },
 
     onDisagree() {

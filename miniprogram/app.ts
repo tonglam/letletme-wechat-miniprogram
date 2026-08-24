@@ -1,6 +1,7 @@
 import { getEntryId } from "./utils/storage";
 import {
   getApiSessionToken,
+  getLastSessionRestoreState,
   isLogoutInFlight,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
@@ -13,7 +14,10 @@ import {
   commitEntryBinding,
   ensureAppContext,
 } from "./services/app-context.service";
-import { installPrivacyAuthorizationHandler } from "./utils/privacy";
+import {
+  installPrivacyAuthorizationHandler,
+  requestDiagnosticDisclosure,
+} from "./utils/privacy";
 import { flushPerfNow } from "./utils/perf";
 
 App<IAppOption>({
@@ -144,6 +148,7 @@ App<IAppOption>({
       this._authReadyResolve = null;
     };
     try {
+      await requestDiagnosticDisclosure();
       // Restore only through WeChat's encrypted asynchronous storage. Legacy
       // plaintext is migrated before any GraphQL request can read the token.
       await restoreApiSessionCredentials();
@@ -151,7 +156,12 @@ App<IAppOption>({
       commitEntryBinding(this.globalData.entryId || null, "restore");
       const authenticate = async () => {
         if (!getApiSessionToken()) {
-          await refreshWechatApiSession();
+          const restoreState = getLastSessionRestoreState();
+          await refreshWechatApiSession(
+            restoreState === "expired"
+              ? "cold_start_expired"
+              : "cold_start_missing",
+          );
         }
         await this.revalidateSessionProfile();
       };
@@ -162,7 +172,7 @@ App<IAppOption>({
         })
         .finally(markAuthReady);
     } catch {
-      refreshWechatApiSession()
+      refreshWechatApiSession("cold_start_restore_failed")
         .then(() => this.revalidateSessionProfile())
         .catch(() => {
           // Restore failed; still attempt an independent WeChat session so

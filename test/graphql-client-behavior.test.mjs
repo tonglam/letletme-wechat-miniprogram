@@ -12,6 +12,7 @@ import {
   clearSessionCredentials,
   restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
+import { acknowledgeDiagnosticDisclosure } from "../miniprogram/utils/privacy.ts";
 
 function installRuntime(handler) {
   const storage = new Map();
@@ -37,6 +38,8 @@ function installRuntime(handler) {
       requestHandler(options);
     }
   };
+  acknowledgeDiagnosticDisclosure();
+  storage.delete("auth-diagnostic-disclosure-v1");
   return {
     requests,
     storage,
@@ -240,6 +243,13 @@ test("session retry re-keys the in-flight request for the refreshed token", asyn
   let graphQLRequests = 0;
   let retryRequest;
   const runtime = installRuntime((request) => {
+    if (request.url.endsWith("/session/persistence")) {
+      request.success({
+        statusCode: 200,
+        data: { success: true },
+      });
+      return;
+    }
     if (request.url.endsWith("/wechat/login")) {
       request.success({
         statusCode: 200,

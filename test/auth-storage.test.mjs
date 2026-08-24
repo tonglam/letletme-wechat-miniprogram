@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 
 import {
   clearApiSession,
@@ -7,6 +7,7 @@ import {
   confirmMiniProgramEmailLink,
   ensureMiniProgramAccountFresh,
   getApiSessionToken,
+  getLastSessionCredentialState,
   getLinkedAccountSnapshot,
   getStoredMiniProgramProfile,
   isMiniProgramProfileFresh,
@@ -21,6 +22,13 @@ import {
   currentMyFplEntryId,
   waitForAuthoritativeFollow,
 } from "../miniprogram/utils/follow.ts";
+import { acknowledgeDiagnosticDisclosure } from "../miniprogram/utils/privacy.ts";
+
+beforeEach(() => {
+  // Auth-storage tests exercise the post-disclosure session contract. The
+  // dedicated observability suite covers the waiting path itself.
+  acknowledgeDiagnosticDisclosure();
+});
 
 test("standalone viewer entry stays separate from optional Web ownership", async () => {
   const previousWx = globalThis.wx;
@@ -1080,6 +1088,7 @@ test("remote sign-out failure still clears local credentials", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
+  const realtimeEvents = [];
   let requestCount = 0;
 
   try {
@@ -1093,6 +1102,9 @@ test("remote sign-out failure still clears local credentials", async () => {
       getStorage: ({ success }) =>
         success({ data: "token", errMsg: "getStorage:ok" }),
       removeStorageSync: (key) => removed.push(key),
+      getRealtimeLogManager: () => ({
+        info: (payload) => realtimeEvents.push(payload),
+      }),
       request: ({ fail, success }) => {
         requestCount += 1;
         if (requestCount === 1) {
@@ -1107,6 +1119,11 @@ test("remote sign-out failure still clears local credentials", async () => {
     await restoreApiSessionCredentials();
     const result = await logoutMiniProgramSession();
     assert.deepEqual(result, { localCleared: true, remoteRevoked: false });
+    assert.equal(
+      realtimeEvents.find((event) => event.eventCode === "session_revoke_network_failed")
+        ?.trigger,
+      "logout_revoke",
+    );
     assert.equal(getApiSessionToken(), null);
     assert.ok(removed.includes("api-session-token"));
     assert.deepEqual(await logoutMiniProgramSession(), {
@@ -1117,6 +1134,33 @@ test("remote sign-out failure still clears local credentials", async () => {
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
+  }
+});
+
+test("resident expiry keeps the expired credential state for the next refresh", async () => {
+  const previousWx = globalThis.wx;
+  const now = Date.now();
+  const originalNow = Date.now;
+  const expiresAt = new Date(now + 1_000).toISOString();
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => (key === "api-session-expires-at" ? expiresAt : undefined),
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => true,
+      getStorage: ({ success }) => success({ data: "resident-token", errMsg: "getStorage:ok" }),
+    };
+    clearSessionCredentials();
+    Date.now = () => now;
+    await restoreApiSessionCredentials();
+    Date.now = () => now + 2_000;
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getLastSessionCredentialState(), "expired");
+  } finally {
+    Date.now = originalNow;
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
   }
 });
 
@@ -1180,6 +1224,81 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
     await assert.rejects(refresh, /登录状态已变更/);
     assert.equal(getApiSessionToken(), null);
   } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("logout does not let delayed encrypted persistence restore a session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  const revoked = [];
+  let loginSuccess;
+  let loginRequest;
+  let releaseEncryptedWrite;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => true,
+      getStorage: ({ fail }) => fail({ errMsg: "getStorage:fail data not found" }),
+      setStorage: (options) => {
+        releaseEncryptedWrite = () => {
+          storage.set(options.key, options.data);
+          options.success();
+        };
+      },
+      login: (options) => {
+        loginSuccess = options.success;
+      },
+      request: (options) => {
+        if (options.method === "POST") {
+          loginRequest = options;
+          return;
+        }
+        revoked.push(options.header.Authorization);
+        options.success({ statusCode: 204, data: { success: true } });
+      },
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+    clearSessionCredentials();
+
+    const refresh = refreshWechatApiSession();
+    loginSuccess({ code: "wechat-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(loginRequest);
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "delayed-persistence-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: { id: "profile", webAccountLinked: false },
+      },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(typeof releaseEncryptedWrite, "function");
+
+    const logout = logoutMiniProgramSession();
+    releaseEncryptedWrite();
+
+    assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
+    await refresh;
+    assert.deepEqual(revoked, ["Bearer delayed-persistence-token"]);
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getLastSessionCredentialState(), "missing");
+    assert.equal(storage.has("api-session-token"), false);
+    assert.equal(storage.has("api-session-expires-at"), false);
+  } finally {
+    clearSessionCredentials();
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
   }

@@ -6,9 +6,22 @@ import {
   authApiErrorMessage,
   networkErrorMessage,
 } from "../utils/request-error";
+import {
+  isDiagnosticDisclosureAcknowledged,
+  requestDiagnosticDisclosure,
+} from "../utils/privacy";
 import { commitEntryBindingState as commitEntryBinding } from "./app-context-state";
 import { isStoredSessionUsable } from "./auth-session";
 import { clearGraphQLMemoryCache } from "./graphql-session-hooks";
+import {
+  collectMiniProgramLoginContext,
+  createMiniProgramRequestId,
+  normalizeMiniProgramRequestId,
+  recordMiniProgramRealtimeAuthEvent,
+  type MiniProgramLoginContext,
+  type MiniProgramLoginTrigger,
+  type MiniProgramPersistenceResult,
+} from "../utils/auth-observability";
 
 export type MiniProgramEntrySource = "MINI" | "WEB";
 
@@ -39,10 +52,13 @@ interface ApiSession {
   token: string;
   expiresAt: string;
   profile: MiniProgramProfile;
+  requestId?: string;
+  loginTrigger?: MiniProgramLoginTrigger;
 }
 
 interface ApiResponse {
   success: boolean;
+  requestId?: string;
   error?: string;
   contractVersion?: number;
   authenticated?: boolean;
@@ -57,21 +73,25 @@ type MiniProgramApiMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export class WechatSessionTransportError extends Error {
   readonly statusCode?: number;
+  readonly requestId?: string;
 
-  constructor(message: string, statusCode?: number) {
+  constructor(message: string, statusCode?: number, requestId?: string) {
     super(message);
     this.name = "WechatSessionTransportError";
     this.statusCode = statusCode;
+    this.requestId = requestId;
   }
 }
 
 class MiniProgramApiResponseError extends Error {
   readonly statusCode: number;
+  readonly requestId?: string;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode: number, requestId?: string) {
     super(message);
     this.name = "MiniProgramApiResponseError";
     this.statusCode = statusCode;
+    this.requestId = requestId;
   }
 }
 
@@ -84,15 +104,58 @@ function isTransientAuthStatus(statusCode: number): boolean {
   );
 }
 
-function loginCode(): Promise<string> {
+interface LoginAttempt {
+  code: string;
+  requestId: string;
+  loginContext: MiniProgramLoginContext;
+}
+
+type SessionCredentialState = NonNullable<MiniProgramLoginContext["credentialState"]>;
+
+function loginCode(trigger: MiniProgramLoginTrigger): Promise<LoginAttempt> {
+  const requestId = createMiniProgramRequestId();
+  const startedAt = Date.now();
+  const loginContext = collectMiniProgramLoginContext(
+    trigger,
+    getLastSessionCredentialState(),
+  );
   return new Promise((resolve, reject) => {
     wx.login({
       success: ({ code }) => {
-        if (code) resolve(code);
-        else reject(new WechatSessionTransportError("微信登录失败，请重试"));
+        if (code) {
+          recordMiniProgramRealtimeAuthEvent({
+            eventCode: "wx_login_succeeded",
+            requestId,
+            trigger,
+            statusCode: 200,
+            durationMs: Date.now() - startedAt,
+          });
+          resolve({ code, requestId, loginContext });
+          return;
+        }
+        recordMiniProgramRealtimeAuthEvent({
+          eventCode: "wx_login_empty_code",
+          requestId,
+          trigger,
+          statusCode: 502,
+          durationMs: Date.now() - startedAt,
+        });
+        reject(
+          new WechatSessionTransportError("微信登录失败，请重试", 502, requestId),
+        );
       },
-      fail: () =>
-        reject(new WechatSessionTransportError("微信登录失败，请重试")),
+      fail: () => {
+        recordMiniProgramRealtimeAuthEvent({
+          eventCode: "wx_login_failed",
+          requestId,
+          trigger,
+          statusCode: 502,
+          durationMs: Date.now() - startedAt,
+        });
+        reject(
+          new WechatSessionTransportError("微信登录失败，请重试", 502, requestId),
+        );
+      },
     });
   });
 }
@@ -147,8 +210,11 @@ function requestMiniProgramApi(
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
   token?: string,
+  requestIdInput?: string,
+  realtimeTrigger?: MiniProgramLoginTrigger,
 ): Promise<ApiResponse> {
   const t0 = Date.now();
+  const requestId = normalizeMiniProgramRequestId(requestIdInput) ?? createMiniProgramRequestId();
   return new Promise((resolve, reject) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}${path}`,
@@ -156,33 +222,50 @@ function requestMiniProgramApi(
       data,
       header: {
         "content-type": "application/json",
+        "X-Request-Id": requestId,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
+        const responseRequestId = normalizeMiniProgramRequestId(
+          (response.header as Record<string, unknown> | undefined)?.["x-request-id"] ??
+            (response.header as Record<string, unknown> | undefined)?.["X-Request-Id"],
+        );
+        const responseData = response.data
+          ? { ...response.data, requestId: responseRequestId ?? requestId }
+          : response.data;
         if (
           response.statusCode < 200 ||
           response.statusCode >= 300 ||
-          !response.data?.success
+          !responseData?.success
         ) {
           recordApi(`auth:${path}`, Date.now() - t0, false);
           const message = authApiErrorMessage(
             response.statusCode,
-            response.data?.error,
+            responseData?.error,
           );
           reject(
             isTransientAuthStatus(response.statusCode)
-              ? new WechatSessionTransportError(message, response.statusCode)
-              : new MiniProgramApiResponseError(message, response.statusCode),
+              ? new WechatSessionTransportError(message, response.statusCode, responseData?.requestId)
+              : new MiniProgramApiResponseError(message, response.statusCode, responseData?.requestId),
           );
           return;
         }
         recordApi(`auth:${path}`, Date.now() - t0, true);
-        resolve(response.data);
+        resolve(responseData);
       },
       fail(error) {
         recordApi(`auth:${path}`, Date.now() - t0, false);
-        reject(new WechatSessionTransportError(networkErrorMessage(error)));
+        if (realtimeTrigger) {
+          recordMiniProgramRealtimeAuthEvent({
+            eventCode: "auth_network_failed",
+            requestId,
+            trigger: realtimeTrigger,
+            statusCode: 503,
+            durationMs: Date.now() - t0,
+          });
+        }
+        reject(new WechatSessionTransportError(networkErrorMessage(error), undefined, requestId));
       },
     });
   });
@@ -191,8 +274,17 @@ function requestMiniProgramApi(
 function requestWebAuth(
   path: string,
   data: Record<string, unknown>,
+  requestId?: string,
+  realtimeTrigger?: MiniProgramLoginTrigger,
 ): Promise<ApiResponse> {
-  return requestMiniProgramApi(path, "POST", data);
+  return requestMiniProgramApi(
+    path,
+    "POST",
+    data,
+    undefined,
+    requestId,
+    realtimeTrigger,
+  );
 }
 
 function positiveEntryId(value: unknown): number | null {
@@ -260,6 +352,7 @@ function asSession(response: ApiResponse): ApiSession {
   return {
     token: response.token,
     expiresAt: response.expiresAt,
+    requestId: response.requestId,
     profile: normalizeProfile(
       response.profile,
       response.webAccountLinked ?? response.linked === true,
@@ -317,76 +410,182 @@ function supportsEncryptedSessionStorage(): boolean {
   }
 }
 
+class EncryptedSessionRestoreError extends Error {
+  constructor() {
+    super("Encrypted session restore failed");
+    this.name = "EncryptedSessionRestoreError";
+  }
+}
+
+function isMissingStorageError(error: unknown): boolean {
+  const message =
+    typeof error === "object" && error !== null && "errMsg" in error
+      ? (error as { errMsg?: unknown }).errMsg
+      : undefined;
+  return (
+    typeof message === "string" &&
+    /(?:not found|data not found|not encrypted)/i.test(message)
+  );
+}
+
 function readEncryptedSessionToken(): Promise<string | null> {
   if (!supportsEncryptedSessionStorage()) return Promise.resolve(null);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     wx.getStorage({
       key: storageKeys.apiSessionToken,
       encrypt: true,
       success(result: WechatMiniprogram.GetStorageSuccessCallbackResult) {
         resolve(typeof result.data === "string" ? result.data : null);
       },
-      fail() {
-        resolve(null);
+      fail(error) {
+        if (isMissingStorageError(error)) {
+          resolve(null);
+          return;
+        }
+        reject(new EncryptedSessionRestoreError());
       },
     } as WechatMiniprogram.GetStorageOption);
   });
 }
 
-async function persistEncryptedSessionToken(token: string): Promise<boolean> {
+async function persistEncryptedSessionToken(
+  token: string,
+): Promise<MiniProgramPersistenceResult> {
   // Remove a legacy synchronous value before writing the encrypted row. If
   // encryption is unavailable or fails, the session remains memory-only.
   try {
     wx.removeStorageSync(storageKeys.apiSessionToken);
   } catch {}
-  if (!supportsEncryptedSessionStorage()) return false;
+  if (!supportsEncryptedSessionStorage()) {
+    return { outcome: "memory_only", reason: "unsupported" };
+  }
   return new Promise((resolve) => {
     wx.setStorage({
       key: storageKeys.apiSessionToken,
       data: token,
       encrypt: true,
       success() {
-        resolve(true);
+        resolve({ outcome: "encrypted" });
       },
       fail() {
         try {
           wx.removeStorageSync(storageKeys.apiSessionToken);
         } catch {}
-        resolve(false);
+        resolve({ outcome: "memory_only", reason: "write_failed" });
       },
     } as WechatMiniprogram.SetStorageOption);
   });
 }
 
+export type SessionRestoreState =
+  | "missing"
+  | "expired"
+  | "restored"
+  | "restore_failed";
+
+let lastSessionRestoreState: SessionRestoreState = "missing";
+let lastSessionCredentialState: SessionCredentialState = "missing";
+
+export function getLastSessionRestoreState(): SessionRestoreState {
+  return lastSessionRestoreState;
+}
+
+export function getLastSessionCredentialState(): SessionCredentialState {
+  return lastSessionCredentialState;
+}
+
 /** Restores an encrypted credential and upgrades legacy plaintext in place. */
 export async function restoreApiSessionCredentials(): Promise<void> {
-  await ensureRevocationQueueRestored();
-  if (sessionMemory !== undefined) return;
-  const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as
-    string | undefined;
-  const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as
-    string | undefined;
-  const encryptedToken = await readEncryptedSessionToken();
-  const token = encryptedToken || legacyToken || "";
-
-  if (!isStoredSessionUsable(token, expiresAt || "")) {
-    clearSessionCredentials();
-    sessionMemory = null;
-    return;
-  }
-
-  sessionMemory = { token, expiresAt: expiresAt || "" };
-  if (legacyToken) {
-    const persisted = await persistEncryptedSessionToken(token);
-    if (!persisted) {
-      try {
-        wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
-      } catch {}
+  try {
+    await ensureRevocationQueueRestored();
+    if (sessionMemory !== undefined) {
+      lastSessionRestoreState = sessionMemory ? "restored" : "missing";
+      if (!sessionMemory) lastSessionCredentialState = "missing";
+      return;
     }
+    const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as
+      | string
+      | undefined;
+    const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as
+      | string
+      | undefined;
+    const encryptedToken = await readEncryptedSessionToken();
+    const token = encryptedToken || legacyToken || "";
+
+    if (!isStoredSessionUsable(token, expiresAt || "")) {
+      const restoreState = token ? "expired" : "missing";
+      clearSessionCredentials();
+      sessionMemory = null;
+      lastSessionRestoreState = restoreState;
+      lastSessionCredentialState = restoreState;
+      return;
+    }
+
+    sessionMemory = { token, expiresAt: expiresAt || "" };
+    lastSessionRestoreState = "restored";
+    lastSessionCredentialState = encryptedToken ? "encrypted" : "memory_only";
+    if (legacyToken) {
+      const persisted = await persistEncryptedSessionToken(token);
+      lastSessionCredentialState =
+        persisted.outcome === "encrypted" ? "encrypted" : "memory_only";
+      if (persisted.outcome !== "encrypted") {
+        try {
+          wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
+        } catch {}
+      }
+    }
+  } catch (error) {
+    lastSessionRestoreState = "restore_failed";
+    lastSessionCredentialState = "restore_failed";
+    throw error;
+  }
+}
+
+async function reportSessionPersistence(
+  session: ApiSession,
+  persistence: MiniProgramPersistenceResult,
+): Promise<void> {
+  if (!session.requestId) return;
+  const startedAt = Date.now();
+  try {
+    await requestMiniProgramApi(
+      "/session/persistence",
+      "POST",
+      {
+        requestId: session.requestId,
+        outcome: persistence.outcome,
+        ...(persistence.outcome === "memory_only"
+          ? { reason: persistence.reason }
+          : {}),
+      },
+      session.token,
+      createMiniProgramRequestId(),
+    );
+    recordMiniProgramRealtimeAuthEvent({
+      eventCode: "session_persistence_reported",
+      requestId: session.requestId,
+      trigger: session.loginTrigger ?? "session_missing",
+      statusCode: 200,
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    const statusCode =
+      error instanceof WechatSessionTransportError ||
+      error instanceof MiniProgramApiResponseError
+        ? error.statusCode ?? 503
+        : 503;
+    recordMiniProgramRealtimeAuthEvent({
+      eventCode: "session_persistence_report_failed",
+      requestId: session.requestId,
+      trigger: session.loginTrigger ?? "session_missing",
+      statusCode,
+      durationMs: Date.now() - startedAt,
+    });
   }
 }
 
 async function storeApiSession(session: ApiSession): Promise<ApiSession> {
+  const storeEpoch = sessionEpoch;
   const previousToken = sessionMemory?.token;
   const previousProfile = getStoredMiniProgramProfile();
   const bindingReason =
@@ -406,16 +605,35 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
   storeReceivedProfile(session.profile, bindingReason);
   const persisted = await persistEncryptedSessionToken(session.token);
-  if (!persisted) {
+  // Logout (or a competing credential clear) may have completed while the
+  // encrypted write was pending. Do not let that stale continuation restore a
+  // credential or overwrite the diagnostic state selected by the newer epoch.
+  // Logout waits for this promise and separately revokes the issued token.
+  if (storeEpoch !== sessionEpoch || sessionMemory?.token !== session.token) {
+    if (sessionMemory === undefined) {
+      try {
+        wx.removeStorageSync(storageKeys.apiSessionToken);
+      } catch {}
+      try {
+        wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
+      } catch {}
+    }
+    return session;
+  }
+  lastSessionCredentialState =
+    persisted.outcome === "encrypted" ? "encrypted" : "memory_only";
+  if (persisted.outcome !== "encrypted") {
     try {
       wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
     } catch {}
   }
+  void reportSessionPersistence(session, persisted);
   return session;
 }
 
 export function clearApiSession(): void {
   sessionEpoch += 1;
+  lastSessionCredentialState = "missing";
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   const retainedEntryId = readLocalEntryId();
@@ -442,7 +660,7 @@ export function getApiSessionToken(): string | null {
   if (sessionMemory === undefined) return null;
   if (!sessionMemory) return null;
   if (!isStoredSessionUsable(sessionMemory.token, sessionMemory.expiresAt)) {
-    clearSessionCredentials();
+    clearSessionCredentialsAsExpired();
     return null;
   }
   return sessionMemory.token || null;
@@ -457,6 +675,7 @@ export function getApiSessionToken(): string | null {
  * states on pages that open before the refresh lands.
  */
 export function clearSessionCredentials(): void {
+  lastSessionCredentialState = "missing";
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
   [
@@ -471,6 +690,21 @@ export function clearSessionCredentials(): void {
       wx.removeStorageSync(key);
     } catch {}
   });
+}
+
+function clearSessionCredentialsAsExpired(): void {
+  clearSessionCredentials();
+  lastSessionCredentialState = "expired";
+}
+
+/** Clears the rejected credential while retaining its storage state for the next login diagnostic. */
+export function clearSessionCredentialsForAuthRetry(): void {
+  const previousState = lastSessionCredentialState;
+  clearSessionCredentials();
+  lastSessionCredentialState =
+    previousState === "encrypted" || previousState === "memory_only"
+      ? previousState
+      : "expired";
 }
 
 interface StoredPendingFollowEntry {
@@ -925,11 +1159,15 @@ function releasePendingRefreshState(
 
 async function revokeSessionToken(token: string): Promise<boolean> {
   const t0 = Date.now();
+  const requestId = createMiniProgramRequestId();
   return new Promise<boolean>((resolve) => {
     wx.request<ApiResponse>({
       url: `${getMiniProgramApiBase()}/session`,
       method: "DELETE",
-      header: { Authorization: `Bearer ${token}` },
+      header: {
+        Authorization: `Bearer ${token}`,
+        "X-Request-Id": requestId,
+      },
       timeout: REQUEST_TIMEOUT_MS,
       success(response) {
         recordApi(
@@ -950,6 +1188,13 @@ async function revokeSessionToken(token: string): Promise<boolean> {
       },
       fail(_error) {
         recordApi("auth:/session", Date.now() - t0, false);
+        recordMiniProgramRealtimeAuthEvent({
+          eventCode: "session_revoke_network_failed",
+          requestId,
+          trigger: "logout_revoke",
+          statusCode: 503,
+          durationMs: Date.now() - t0,
+        });
         resolve(false);
       },
     });
@@ -1032,6 +1277,7 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
   // an in-flight GraphQL request could otherwise 401 mid-DELETE and start a
   // /wechat/login whose rotated server-side session would outlive the logout.
   logoutInFlight = true;
+  cancelPendingDiagnosticDisclosureRefreshes();
   const run = performLogout();
   pendingLogout = run;
   const release = () => {
@@ -1046,15 +1292,17 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
 
 /** Creates or restores the independent Mini Program account for this WeChat identity. */
 async function performWechatSessionRefresh(
+  trigger: MiniProgramLoginTrigger,
   onSessionIssued?: (token: string, expiresAt: string) => void,
 ): Promise<ApiSession> {
   const epoch = sessionEpoch;
-  const code = await loginCode();
+  const loginAttempt = await loginCode(trigger);
   const response = await requestWebAuth("/wechat/login", {
-    code,
+    code: loginAttempt.code,
     deviceId: getDeviceId(),
     contractVersion: 2,
-  });
+    loginContext: loginAttempt.loginContext,
+  }, loginAttempt.requestId, trigger);
   if (response.contractVersion !== 2 || response.authenticated !== true) {
     if (epoch !== sessionEpoch) {
       throw new Error("登录状态已变更，请重试");
@@ -1063,6 +1311,7 @@ async function performWechatSessionRefresh(
     throw new Error("小程序账户登录响应不完整，请稍后重试");
   }
   const session = asSession(response);
+  session.loginTrigger = trigger;
   // The server credential exists even when the local epoch has changed. Keep
   // it attached to the in-flight refresh so logout can revoke that credential
   // after local state has already been cleared.
@@ -1085,6 +1334,48 @@ let pendingRefresh: PendingSessionRefresh | null = null;
 // the logout.
 let logoutInFlight = false;
 
+const pendingDiagnosticDisclosureRefreshRejectors = new Set<
+  (reason?: unknown) => void
+>();
+
+function sessionRefreshCancelledError(): Error {
+  return new Error("登录状态已变更，请重试");
+}
+
+/**
+ * Automatic refreshes must not collect login diagnostics before the local
+ * disclosure has been acknowledged. The cancellation branch prevents a
+ * logout started while the disclosure is visible from waiting forever.
+ */
+function waitForDiagnosticDisclosureBeforeRefresh(
+  startEpoch: number,
+): Promise<void> {
+  if (logoutInFlight || startEpoch !== sessionEpoch) {
+    return Promise.reject(sessionRefreshCancelledError());
+  }
+  let rejectWaiter: (reason?: unknown) => void = () => undefined;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectWaiter = reject;
+  });
+  pendingDiagnosticDisclosureRefreshRejectors.add(rejectWaiter);
+  return Promise.race([requestDiagnosticDisclosure(), cancelled])
+    .then(() => {
+      if (logoutInFlight || startEpoch !== sessionEpoch) {
+        throw sessionRefreshCancelledError();
+      }
+    })
+    .finally(() => {
+      pendingDiagnosticDisclosureRefreshRejectors.delete(rejectWaiter);
+    });
+}
+
+function cancelPendingDiagnosticDisclosureRefreshes(): void {
+  const error = sessionRefreshCancelledError();
+  [...pendingDiagnosticDisclosureRefreshRejectors].forEach((reject) => {
+    reject(error);
+  });
+}
+
 /** Lets session-adjacent flows yield to an in-progress sign-out. */
 export function isLogoutInFlight(): boolean {
   return logoutInFlight;
@@ -1094,7 +1385,9 @@ export function isLogoutInFlight(): boolean {
  * Single-flight session refresh: concurrent callers (e.g. several requests
  * failing with 401 at once) share one wx.login + /wechat/login round trip.
  */
-export function refreshWechatApiSession(): Promise<ApiSession> {
+export function refreshWechatApiSession(
+  trigger: MiniProgramLoginTrigger = "session_missing",
+): Promise<ApiSession> {
   if (pendingRefresh) {
     return pendingRefresh.promise;
   }
@@ -1106,10 +1399,15 @@ export function refreshWechatApiSession(): Promise<ApiSession> {
     issuedToken: null,
     issuedExpiresAt: null,
   };
-  const refresh = performWechatSessionRefresh((issuedToken, expiresAt) => {
-    state.issuedToken = issuedToken;
-    state.issuedExpiresAt = expiresAt;
-  });
+  const startEpoch = sessionEpoch;
+  const startRefresh = () =>
+    performWechatSessionRefresh(trigger, (issuedToken, expiresAt) => {
+      state.issuedToken = issuedToken;
+      state.issuedExpiresAt = expiresAt;
+    });
+  const refresh = isDiagnosticDisclosureAcknowledged()
+    ? startRefresh()
+    : waitForDiagnosticDisclosureBeforeRefresh(startEpoch).then(startRefresh);
   registerPendingRefreshState(state, refresh);
   const release = () => {
     releasePendingRefreshState(state, refresh);
@@ -1160,6 +1458,7 @@ async function requestProfileWithSessionRetry(
   method: MiniProgramApiMethod,
   data?: Record<string, unknown>,
   onSessionAccepted?: (snapshot: SessionSnapshot) => void,
+  refreshTrigger: MiniProgramLoginTrigger = "profile_401",
 ): Promise<MiniProgramProfile> {
   let token = await ensureMiniProgramSessionToken();
   const requestEpoch = sessionEpoch;
@@ -1188,8 +1487,8 @@ async function requestProfileWithSessionRetry(
       onSessionAccepted?.({ epoch: retryEpoch, token });
       return profile;
     }
-    clearSessionCredentials();
-    token = (await refreshWechatApiSession()).token;
+    clearSessionCredentialsForAuthRetry();
+    token = (await refreshWechatApiSession(refreshTrigger)).token;
     const retryEpoch = sessionEpoch;
     const profile = await requestAuthenticatedProfile(
       path,
@@ -1468,6 +1767,7 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
         (acceptedSession) => {
           sessionSnapshot = acceptedSession;
         },
+        "profile_401",
       );
       // A profile response may have been issued before logout, token rotation,
       // or an email confirmation installed a newer session. Never let that
@@ -1594,17 +1894,19 @@ export function confirmMiniProgramEmailLink(
     if (pending) {
       await pending.catch(() => undefined);
     }
-    const wechatCode = await loginCode();
+    const loginAttempt = await loginCode("account_link");
     const response = await requestWebAuth("/email/confirm", {
       email,
       code: emailCode,
-      wechatCode,
+      wechatCode: loginAttempt.code,
       deviceId: getDeviceId(),
-    });
+      loginContext: loginAttempt.loginContext,
+    }, loginAttempt.requestId, "account_link");
     // An explicit link confirmation supersedes any background /wechat/login
     // that started before it — bump the epoch so the older response can never
     // overwrite this freshly confirmed session.
     const session = asSession(response);
+    session.loginTrigger = "account_link";
     state.issuedToken = session.token;
     state.issuedExpiresAt = session.expiresAt;
     if (logoutInFlight || startEpoch !== sessionEpoch) {
