@@ -163,6 +163,32 @@ test("Players prioritize a queued replacement search when resuming", () => {
   );
 });
 
+test("Players resume the saved snapshot without submitting a draft", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  const resumeBlock = onShow.slice(
+    onShow.indexOf("if (resumeSearch)"),
+    onShow.indexOf("if (resumePagination && resumeCursor !== null)"),
+  );
+  assert.match(
+    onShow,
+    /const resumeSearchSnapshot = this\.pendingSearchSnapshot \|\| this\.activeSearchSnapshot \|\| this\.loadedSearchSnapshot/,
+  );
+  assert.match(players, /resumeSearchSnapshot\([\s\S]*preserveDraftKeyword/);
+  assert.match(players, /preserveDraftKeyword: snapshot\.preserveDraftKeyword/);
+  assert.match(players, /keyword: preserveDraftKeyword \?\? keyword/);
+  assert.doesNotMatch(resumeBlock, /startSearch\(this\.data\.keyword/);
+});
+
+test("Players preserve a pagination resume when hidden during deferred start", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  assert.match(
+    onShow,
+    /const resumeRevision = this\.requestRevision[\s\S]*!this\.pageVisible[\s\S]*this\.requestRevision !== resumeRevision[\s\S]*this\.resumePaginationAfterShow = true[\s\S]*this\.resumePaginationCursor = resumeCursor/,
+  );
+});
+
 test("My FPL last-good views survive context and refresh failures", () => {
   const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");

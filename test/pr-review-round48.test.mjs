@@ -10,7 +10,8 @@ test("Price and Players consume resumed pagination only after replacement owners
   const players = source("miniprogram/pages/data/players/players.ts");
   assert.match(price, /const task = this\.loadMorePlayers\(resumePaginationCursor\);[\s\S]*if \(this\.paginationPending && this\.paginationCursor === resumePaginationCursor\)[\s\S]*this\.resumePaginationAfterShow = false/);
   assert.match(players, /const startPagination = \(\) => \{[\s\S]*this\.loadMoreFromCursor\(resumeCursor\)[\s\S]*const task = this\.paginationPromise[\s\S]*startPagination\(\)/);
-  assert.match(players, /const task = this\.startSearch\(this\.data\.keyword, resumeSearchForceRefresh\);[\s\S]*this\.searchPendingForceRefresh === resumeSearchForceRefresh/);
+  assert.match(players, /const resumeSearchSnapshot\s*=\s*this\.pendingSearchSnapshot\s*\|\|\s*this\.activeSearchSnapshot\s*\|\|\s*this\.loadedSearchSnapshot/);
+  assert.match(players, /const task = resumeSearchSnapshot[\s\S]*this\.resumeSearchSnapshot\([\s\S]*resumeSearchForceRefresh[\s\S]*this\.searchPendingForceRefresh === resumeSearchForceRefresh/);
 });
 
 test("My FPL empty-state action uses the lifecycle-owned retry path", () => {

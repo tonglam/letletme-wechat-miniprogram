@@ -831,6 +831,8 @@ Page({
     this.setData({
       entryId: nextEntryId,
       loading: false,
+      tabLoading: false,
+      tabError: "",
       error: "",
       transferError: "",
       emptyState: "",
@@ -1267,6 +1269,7 @@ Page({
           trigger: forceRefresh ? "refresh" : "tab",
         });
     this.setData({ tabLoading: true, tabError: "" });
+    let viewerTabRecoveryAttempted = false;
     try {
       let historyPayload = this.historyPayload;
       let transferPayload = this.transferPayload;
@@ -1327,6 +1330,33 @@ Page({
     } catch (error) {
       if (this.restartForPrincipalChange(entryId)) return;
       if (requestId !== this.tabRequestId) return;
+      if (
+        !viewerTabRecoveryAttempted &&
+        isViewerEntryAuthorizationError(error)
+      ) {
+        viewerTabRecoveryAttempted = true;
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!this.pageVisible || requestId !== this.tabRequestId) return;
+          if (!refreshedEntryId || refreshedEntryId !== entryId) {
+            if (this.restartForPrincipalChange(entryId)) return;
+          } else {
+            const syncError = "球队状态尚未同步，请稍后重试";
+            this.setData({
+              tabError: syncError,
+              ...(tab === "transfer" ? { transferError: syncError } : {}),
+            });
+            return;
+          }
+        } catch {
+          const syncError = "球队状态尚未同步，请稍后重试";
+          this.setData({
+            tabError: syncError,
+            ...(tab === "transfer" ? { transferError: syncError } : {}),
+          });
+          return;
+        }
+      }
       const message =
         error instanceof Error ? error.message : "分页数据加载失败";
       this.setData({

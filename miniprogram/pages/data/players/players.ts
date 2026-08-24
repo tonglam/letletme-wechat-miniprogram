@@ -51,6 +51,7 @@ interface PlayerSearchSnapshot {
   forceRefresh: boolean;
   fingerprint: string;
   trace?: PageRequestTrace;
+  preserveDraftKeyword?: string;
 }
 
 interface SearchWaiter {
@@ -526,6 +527,10 @@ PerformancePage({
     const resumeSearch = resumed && (
       this.resumeSearchAfterShow || Boolean(this.pendingSearchSnapshot)
     );
+    const resumeSearchSnapshot =
+      this.pendingSearchSnapshot ||
+      this.activeSearchSnapshot ||
+      this.loadedSearchSnapshot;
     const resumeSearchForceRefresh = this.resumeSearchForceRefresh;
     if (this.data.loadingMore) {
       this.setData({ loadingMore: false });
@@ -535,7 +540,12 @@ PerformancePage({
         this.resumePaginationAfterShow = false;
         this.resumePaginationCursor = null;
       }
-      const task = this.startSearch(this.data.keyword, resumeSearchForceRefresh);
+      const task = resumeSearchSnapshot
+        ? this.resumeSearchSnapshot(
+            resumeSearchSnapshot,
+            resumeSearchForceRefresh,
+          )
+        : this.startSearch(this.data.activeKeyword, resumeSearchForceRefresh);
       if (
         this.searchPending &&
         this.searchPendingForceRefresh === resumeSearchForceRefresh
@@ -555,7 +565,16 @@ PerformancePage({
       });
     }
     if (resumePagination && resumeCursor !== null) {
+      const resumeRevision = this.requestRevision;
       const startPagination = () => {
+        if (
+          !this.pageVisible ||
+          this.requestRevision !== resumeRevision
+        ) {
+          this.resumePaginationAfterShow = true;
+          this.resumePaginationCursor = resumeCursor;
+          return Promise.resolve();
+        }
         this.resumePaginationAfterShow = false;
         this.resumePaginationCursor = null;
         return this.loadMoreFromCursor(resumeCursor);
@@ -666,6 +685,22 @@ PerformancePage({
     );
   },
 
+  resumeSearchSnapshot(
+    snapshot: PlayerSearchSnapshot,
+    forceRefresh = false,
+  ): Promise<void> {
+    const draftKeyword = this.data.keyword;
+    return this.enqueueSearch(
+      {
+        ...snapshot,
+        forceRefresh: snapshot.forceRefresh || forceRefresh,
+        preserveDraftKeyword:
+          draftKeyword === snapshot.keyword ? undefined : draftKeyword,
+      },
+      true,
+    );
+  },
+
   enqueueSearch(
     snapshot: PlayerSearchSnapshot,
     immediate: boolean,
@@ -680,6 +715,8 @@ PerformancePage({
             ...pending,
             forceRefresh: pending.forceRefresh || snapshot.forceRefresh,
             trace: snapshot.trace || pending.trace,
+            preserveDraftKeyword:
+              snapshot.preserveDraftKeyword ?? pending.preserveDraftKeyword,
           }
         : snapshot;
     this.searchPending = true;
@@ -761,7 +798,7 @@ PerformancePage({
   async executeSearch(snapshot: PlayerSearchSnapshot): Promise<void> {
     this.searchPending = true;
     this.searchPendingForceRefresh = snapshot.forceRefresh;
-    this.searchEditedWhileLoading = false;
+    this.searchEditedWhileLoading = snapshot.preserveDraftKeyword !== undefined;
     this.paginationPending = false;
     this.paginationCursor = null;
     this.resumePaginationAfterShow = false;
@@ -771,6 +808,7 @@ PerformancePage({
     const activeKeyword = snapshot.activeKeyword;
     const keyword = snapshot.keyword;
     const forceRefresh = snapshot.forceRefresh;
+    const preserveDraftKeyword = snapshot.preserveDraftKeyword;
     const trace = capturePageRequestTrace({
       callerSurface: "players-directory",
       trigger: forceRefresh ? "refresh" : keyword ? "search" : "load",
@@ -778,7 +816,7 @@ PerformancePage({
     });
     this.activeSearchSnapshot = snapshot;
     this.setData({
-      keyword,
+      keyword: preserveDraftKeyword ?? keyword,
       activeKeyword,
       filtersLocked: Boolean(activeKeyword),
       loading: true,
