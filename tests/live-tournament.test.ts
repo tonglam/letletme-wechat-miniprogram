@@ -266,12 +266,18 @@ const staleClassicRows = mapTournamentLiveRows([
       source: "FPL_CLASSIC_STANDINGS",
       state: "FRESH",
       revision: "classic:gw1:r4",
-      checkedAt: "2026-08-24T06:01:00.000Z"
+      checkedAt: "2026-08-24T06:01:00.000Z",
+      nextRefreshAt: "2026-08-24T06:05:00.000Z"
     }
   }
 ]);
 assertEqual(staleClassicRows[0]?.livePoints, undefined, "Classic points cannot become live points");
 assertEqual(staleClassicRows[0]?.score, undefined, "Classic score provenance is rejected");
+assertEqual(
+  staleClassicRows[0]?.scoreNextRefreshAt,
+  "2026-08-24T06:05:00.000Z",
+  "rejected tournament scores retain only their retry deadline",
+);
 assertEqual(staleClassicRows[0]?.rank, undefined, "Classic rank cannot become a live rank");
 assertEqual(staleClassicRows[0]?.transferCost, undefined, "rejected transfer cost stays unknown");
 assertEqual(

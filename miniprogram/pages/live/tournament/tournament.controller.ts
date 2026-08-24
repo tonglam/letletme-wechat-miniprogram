@@ -1431,7 +1431,7 @@ PerformancePage({
         const refreshedRows = liveResult.data.map(normalizeRow);
         const scoreNextRefreshAt =
           refreshedRows
-            .map((row) => row.score?.nextRefreshAt)
+            .map((row) => row.scoreNextRefreshAt || row.score?.nextRefreshAt)
             .filter((value): value is string => Boolean(value))
             .sort()[0] || "";
         this.setData({ scoreNextRefreshAt });

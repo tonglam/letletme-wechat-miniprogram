@@ -232,6 +232,8 @@ export interface LiveTournamentRow {
   picks?: LivePlayerRow[];
   searchText?: string;
   score?: LiveManagerScore;
+  /** Retry metadata retained even when an untraceable score payload is rejected. */
+  scoreNextRefreshAt?: string;
 }
 
 export interface LiveTournamentRowsResult {

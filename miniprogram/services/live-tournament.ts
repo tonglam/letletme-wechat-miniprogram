@@ -3,6 +3,7 @@ import {
   officialManagerEventPoints,
   officialManagerNetPoints,
   officialManagerTotalPoints,
+  managerScoreNextRefreshAt,
   traceableOfficialManagerScore,
 } from "./live-manager-score";
 
@@ -197,6 +198,7 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       chip: row.chip || undefined,
       overallRank: officialScore?.overallRank ?? row.overallRank,
       score: officialScore,
+      scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
       picks: (row.pickList || []).map(mapTournamentPick)
     };
     return {
