@@ -804,6 +804,7 @@ test("pending follow replay accepts the session-retried mutation response", asyn
   let loginSuccess;
   let loginRequest;
   let followRequestCount = 0;
+  let profileRequestCount = 0;
   let serverFollowEntryId = 101;
 
   const profile = (entryId) => ({
@@ -836,6 +837,7 @@ test("pending follow replay accepts the session-retried mutation response", asyn
           return;
         }
         if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
           options.success({
             statusCode: 200,
             data: { success: true, profile: profile(serverFollowEntryId) },
@@ -907,6 +909,7 @@ test("pending follow replay accepts the session-retried mutation response", asyn
     await sync;
 
     assert.equal(followRequestCount, 3);
+    assert.equal(profileRequestCount, 1);
     assert.equal(serverFollowEntryId, 202);
     assert.equal(storage.has("pending-follow-entry-v1"), false);
     assert.equal(getStoredMiniProgramProfile()?.followEntryId, 202);

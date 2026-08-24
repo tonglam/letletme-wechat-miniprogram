@@ -508,6 +508,58 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 
+test("entry viewer recovery applies the current event before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, gw: 34, season: "2026/27" }
+  });
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      viewOnly: false,
+      hasData: true,
+      total: 77
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 34 });
+    },
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    loadEntryIdentity() {},
+    setData(update) { Object.assign(this.data, update); },
+    loadData(options) {
+      calls.push(`load:${this.data.entryId}:${this.data.event}:${options.forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(calls, [
+    "context:page-show",
+    "stop",
+    "stop",
+    "display",
+    "sync:34",
+    "load:456:34:true",
+    "display"
+  ]);
+});
+
 test("entry resume clears live data when a new season has no event yet", async () => {
   const calls = [];
   globalThis.getApp = () => ({
@@ -1114,6 +1166,42 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.equal(context.data.maxGw, 34);
   assert.equal(context.data.hasTeamData, false);
   assert.deepEqual(calls, ["context:page-show", "load:true"]);
+});
+
+test("team viewer recovery applies the current gameweek before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, gw: 34, season: "2026-27" }
+  });
+  const calls = [];
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      hasTeamData: true
+    },
+    hasShown: true,
+    loadedSeason: "2025-26",
+    _loadedAt: Date.now(),
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${this.data.entryId}:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(calls, ["context:page-show", "load:456:34:true"]);
 });
 
 test("team first load honors deadline-derived event context freshness", async () => {

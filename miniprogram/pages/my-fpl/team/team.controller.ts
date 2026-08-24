@@ -517,7 +517,6 @@ Page({
       return;
     }
     const entryId = this.data.entryId;
-    if (this.restartForPrincipalChange(entryId)) return;
 
     const nextGw = Number(app.globalData.gw) || 0;
     const nextSeason = app.globalData.season || undefined;
@@ -579,6 +578,12 @@ Page({
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
+    const restartAfterContext = async (): Promise<boolean> => {
+      if (!this.restartForPrincipalChange(entryId, false)) return false;
+      await this.loadData(true, trace);
+      return true;
+    };
+    if (await restartAfterContext()) return;
     // Summary data moves slowly, so team uses a 5-minute warm window
     // (home / live index / leagues stay at 60s). An advancing current GW
     // still reloads immediately via contextChanged.
@@ -821,7 +826,10 @@ Page({
     await app.initAppData(false);
   },
 
-  restartForPrincipalChange(entryId: number | undefined): boolean {
+  restartForPrincipalChange(
+    entryId: number | undefined,
+    loadData = true,
+  ): boolean {
     const nextEntryId = currentMyFplEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
@@ -874,7 +882,7 @@ Page({
       playerDetailOpen: false,
       playerDetail: null,
     });
-    void this.loadData(true);
+    if (loadData) void this.loadData(true);
     return true;
   },
 

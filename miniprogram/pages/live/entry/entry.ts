@@ -443,6 +443,7 @@ Page({
       await waitForAuthoritativeFollow();
       if (!this.pageVisible) return;
     }
+    const previousEntryId = this.data.entryId;
     let showContext = getAppContextSnapshot();
     if (resumed) {
       const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
@@ -470,7 +471,6 @@ Page({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
-      if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason =
         showContext?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
@@ -483,6 +483,18 @@ Page({
         nextEventId > 0 && this.data.emptyState === "preseason";
       const eventContextChanged =
         seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      const restartAfterContext = async (): Promise<boolean> => {
+        if (!this.restartForPrincipalChange(previousEntryId, false)) return false;
+        if (this.data.event > 0) {
+          this.liveRefresh?.sync();
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+        } else {
+          this.liveRefresh?.stop();
+          this.setData(noLiveEventState());
+        }
+        this.syncDisplayState();
+        return true;
+      };
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
@@ -526,6 +538,7 @@ Page({
           ...emptyLiveOverlayState(),
           ...emptyLivePitchState(),
         });
+        if (await restartAfterContext()) return;
         this.liveRefresh?.sync();
         if (nextEventId > 0) {
           await this.loadData({ includeTransfers: true, forceRefresh: true });
@@ -536,6 +549,7 @@ Page({
       if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
+      if (await restartAfterContext()) return;
     }
     if (
       resumed &&
@@ -757,7 +771,10 @@ Page({
     }
   },
 
-  restartForPrincipalChange(entryId: number | undefined): boolean {
+  restartForPrincipalChange(
+    entryId: number | undefined,
+    loadData = true,
+  ): boolean {
     // An explicit non-followed route entry is a stable read-only view. The
     // normal personal surface, however, must track the authoritative follow
     // even when a request's 401 recovery changes it mid-flight.
@@ -808,8 +825,10 @@ Page({
     });
     if (nextEntryId) {
       void this.loadEntryIdentity(nextEntryId);
-      this.liveRefresh?.sync();
-      void this.loadData({ includeTransfers: true, forceRefresh: true });
+      if (loadData) {
+        this.liveRefresh?.sync();
+        void this.loadData({ includeTransfers: true, forceRefresh: true });
+      }
     }
     this.syncDisplayState();
     return true;

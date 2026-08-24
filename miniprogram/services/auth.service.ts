@@ -1307,13 +1307,15 @@ async function resolveEntryConflict(
 
 async function replayPendingEntryChoice(
   sessionSnapshot?: SessionSnapshot,
+  onSessionAccepted?: (snapshot: SessionSnapshot) => void,
 ): Promise<MiniProgramProfile | null> {
   const pending = readPendingEntryChoice();
   if (!pending) return null;
   try {
-    const onSessionAccepted = sessionSnapshot
+    const acceptSession = sessionSnapshot || onSessionAccepted
       ? (acceptedSession: SessionSnapshot) => {
-          sessionSnapshot = acceptedSession;
+          if (sessionSnapshot) sessionSnapshot = acceptedSession;
+          onSessionAccepted?.(acceptedSession);
         }
       : undefined;
     const profile = await requestProfileWithSessionRetry(
@@ -1324,7 +1326,7 @@ async function replayPendingEntryChoice(
         miniEntryId: pending.miniEntryId,
         webEntryId: pending.webEntryId,
       },
-      onSessionAccepted,
+      acceptSession,
     );
     if (sessionSnapshot && !isCurrentSession(sessionSnapshot)) return null;
     clearPendingEntryChoice(pending);
@@ -1346,15 +1348,17 @@ async function replayPendingFollowEntry(
   expectedMutationRevision = accountMutationRevision,
   sessionSnapshot?: SessionSnapshot,
   options: { allowActiveMutation?: boolean } = {},
+  onSessionAccepted?: (snapshot: SessionSnapshot) => void,
 ): Promise<MiniProgramProfile | null> {
   if (accountMutationInFlight > 0 && !options.allowActiveMutation) {
     return null;
   }
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
-  const onSessionAccepted = sessionSnapshot
+  const acceptSession = sessionSnapshot || onSessionAccepted
     ? (acceptedSession: SessionSnapshot) => {
-        sessionSnapshot = acceptedSession;
+        if (sessionSnapshot) sessionSnapshot = acceptedSession;
+        onSessionAccepted?.(acceptedSession);
       }
     : undefined;
   const profile = await (pending === null
@@ -1362,13 +1366,13 @@ async function replayPendingFollowEntry(
         "/follow-entry",
         "DELETE",
         undefined,
-        onSessionAccepted,
+        acceptSession,
       )
     : requestProfileWithSessionRetry(
         "/follow-entry",
         "PUT",
         { entryId: pending },
-        onSessionAccepted,
+        acceptSession,
       ));
   if (
     expectedMutationRevision !== accountMutationRevision ||
@@ -1485,6 +1489,10 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
         (await replayPendingFollowEntry(
           synchronizationRevision,
           sessionSnapshot,
+          {},
+          (acceptedSession) => {
+            sessionSnapshot = acceptedSession;
+          },
         )) ?? profile;
       if (!isCurrentSession(sessionSnapshot)) {
         if (sessionEpoch !== sessionSnapshot.epoch && !getApiSessionToken()) {
@@ -1493,7 +1501,12 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
         continue;
       }
       profile =
-        (await replayPendingEntryChoice(sessionSnapshot).catch(() => null)) ??
+        (await replayPendingEntryChoice(
+          sessionSnapshot,
+          (acceptedSession) => {
+            sessionSnapshot = acceptedSession;
+          },
+        ).catch(() => null)) ??
         profile;
       if (!isCurrentSession(sessionSnapshot)) {
         if (sessionEpoch !== sessionSnapshot.epoch && !getApiSessionToken()) {

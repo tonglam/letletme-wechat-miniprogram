@@ -736,7 +736,7 @@ test("personal responses never cross an authoritative follow change", () => {
   );
   assert.match(
     liveEntry,
-    /restartForPrincipalChange\(entryId[\s\S]*currentFollowEntryId\(\)/,
+    /restartForPrincipalChange\(\s*entryId[\s\S]*currentFollowEntryId\(\)/,
   );
   assert.match(
     liveEntry,
@@ -794,7 +794,11 @@ test("personal recovery avoids duplicate follow writes and restarts live viewers
   );
   assert.match(
     auth,
-    /const onSessionAccepted = sessionSnapshot[\s\S]*sessionSnapshot = acceptedSession[\s\S]*requestProfileWithSessionRetry\([\s\S]*onSessionAccepted/,
+    /const acceptSession = sessionSnapshot \|\| onSessionAccepted[\s\S]*onSessionAccepted\?\.\(acceptedSession\)[\s\S]*requestProfileWithSessionRetry\([\s\S]*acceptSession/,
+  );
+  assert.match(
+    auth,
+    /replayPendingFollowEntry\([\s\S]*\{\},[\s\S]*\(acceptedSession\) => \{[\s\S]*sessionSnapshot = acceptedSession/,
   );
 
   const tournament = source(
@@ -803,6 +807,28 @@ test("personal recovery avoids duplicate follow writes and restarts live viewers
   assert.match(
     tournament,
     /let previousEntryId = 0[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*const principalChanged =[\s\S]*this\.restartForPrincipalChange\(previousEntryId, false\)[\s\S]*if \(principalChanged\)/,
+  );
+});
+
+test("viewer freshness reaches live entry, team and home banners", () => {
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(
+    entry,
+    /const restartAfterContext = async[\s\S]*restartForPrincipalChange\(previousEntryId, false\)[\s\S]*loadData\(\{ includeTransfers: true, forceRefresh: true \}/,
+  );
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
+  assert.match(
+    team,
+    /await waitForAuthoritativeFollow\(\)[\s\S]*const nextGw[\s\S]*const restartAfterContext = async[\s\S]*restartForPrincipalChange\(entryId, false\)/,
+  );
+  const home = source("miniprogram/pages/home/index/index.ts");
+  assert.match(
+    home,
+    /tracker\.mark\("contextReadyAt"\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*await this\.syncAccountLink\(\)/,
+  );
+  assert.match(
+    home,
+    /const app = getApp<IAppOption>\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*await this\.syncAccountLink\(\)/,
   );
 });
 

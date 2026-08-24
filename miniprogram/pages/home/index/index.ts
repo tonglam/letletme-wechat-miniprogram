@@ -239,6 +239,12 @@ Page({
         || tracker !== this._perfTracker
       ) return;
       tracker.mark("contextReadyAt");
+      await waitForAuthoritativeFollow();
+      if (
+        !this._pageVisible
+        || lifecycleRevision !== this._lifecycleRevision
+        || tracker !== this._perfTracker
+      ) return;
       await this.syncAccountLink();
       this.syncAppState();
       if (shouldReloadHome(
@@ -356,6 +362,8 @@ Page({
       : originatingTracker;
     const requestId = ++this._loadRequestId;
     const app = getApp<IAppOption>();
+    await waitForAuthoritativeFollow();
+    if (!this._pageVisible || requestId !== this._loadRequestId) return false;
     await this.syncAccountLink();
     if (!this._pageVisible || requestId !== this._loadRequestId) return false;
     if (!app.globalData.gw) {
