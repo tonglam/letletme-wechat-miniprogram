@@ -1,4 +1,16 @@
-import type { LiveManagerScore, LivePlayerRow, LiveTournamentRow } from "../models/live";
+import type {
+  LiveManagerScore,
+  LiveManagerScoreState,
+  LivePlayerRow,
+  LiveTournamentRow,
+} from "../models/live";
+import {
+  officialManagerEventPoints,
+  officialManagerNetPoints,
+  officialManagerTotalPoints,
+  managerScoreNextRefreshAt,
+  traceableOfficialManagerScore,
+} from "./live-manager-score";
 
 export type TournamentOwnershipScope = "any" | "starter" | "bench";
 export type TournamentCaptainMode = "any" | "captain" | "vice";
@@ -58,6 +70,8 @@ export interface TournamentTeamOption {
 
 export interface TournamentManagerCoverage {
   officialCoverage?: number;
+  traceableEntries?: number;
+  traceableScoreStates?: readonly LiveManagerScoreState[];
   unavailableEntryIds?: readonly number[];
   totalEntries?: number;
 }
@@ -69,39 +83,67 @@ export function mergeUnavailableTournamentEntryIds(
   return [...new Set([...failedEntryIds, ...unavailableEntryIds])];
 }
 
+export function combinedTournamentTraceableEntries(
+  refreshedTraceableEntries: number | undefined,
+  retainedRows: readonly LiveTournamentRow[],
+  totalEntries?: number,
+): number | undefined {
+  const hasRefreshedCount =
+    typeof refreshedTraceableEntries === "number" &&
+    Number.isFinite(refreshedTraceableEntries) &&
+    refreshedTraceableEntries >= 0;
+  const retainedTraceableEntries = retainedRows.filter(
+    (row) => officialManagerEventPoints(row.score) !== undefined,
+  ).length;
+  if (!hasRefreshedCount && retainedTraceableEntries === 0) {
+    return undefined;
+  }
+
+  const combined =
+    (hasRefreshedCount ? Math.floor(refreshedTraceableEntries) : 0) +
+    retainedTraceableEntries;
+  const total =
+    typeof totalEntries === "number" &&
+    Number.isFinite(totalEntries) &&
+    totalEntries > 0
+      ? Math.floor(totalEntries)
+      : combined;
+  return Math.min(total, combined);
+}
+
+export function combinedTournamentTraceableScoreStates(
+  refreshedStates: readonly LiveManagerScoreState[] | undefined,
+  retainedRows: readonly LiveTournamentRow[],
+): LiveManagerScoreState[] | undefined {
+  const retainedStates = retainedRows.flatMap((row) => {
+    const state = traceableOfficialManagerScore(row.score)?.state;
+    return state ? [state] : [];
+  });
+  if (refreshedStates === undefined && retainedStates.length === 0) {
+    return undefined;
+  }
+  return [...new Set([...(refreshedStates ?? []), ...retainedStates])];
+}
+
 export function officialTournamentTotalPoints(
   score?: LiveManagerScore,
 ): number | undefined {
-  return typeof score?.totalPoints === "number" && Number.isFinite(score.totalPoints)
-    ? score.totalPoints
-    : undefined;
-}
-
-function officialTournamentEventPoints(
-  score?: LiveManagerScore,
-): number | undefined {
-  return typeof score?.eventPoints === "number" && Number.isFinite(score.eventPoints)
-    ? score.eventPoints
-    : undefined;
-}
-
-function officialTournamentNetPoints(
-  score?: LiveManagerScore,
-): number | undefined {
-  return typeof score?.netEventPoints === "number" && Number.isFinite(score.netEventPoints)
-    ? score.netEventPoints
-    : undefined;
+  return officialManagerTotalPoints(score);
 }
 
 export function tournamentManagerScoreStatus(
   rows: readonly LiveTournamentRow[],
   coverage: TournamentManagerCoverage = {},
 ): string {
-  const states = rows.map((row) => row.score?.state).filter(Boolean);
+  const traceableScores = rows
+    .map((row) => traceableOfficialManagerScore(row.score))
+    .filter((score): score is LiveManagerScore => score !== undefined);
+  const observedStates = traceableScores
+    .map((score) => score.state)
+    .filter((state): state is LiveManagerScoreState => state !== undefined);
+  const states = coverage.traceableScoreStates ?? observedStates;
   const observedAvailable = rows.filter(
-    (row) =>
-      row.score?.source !== "UNAVAILABLE" &&
-      typeof row.score?.eventPoints === "number",
+    (row) => officialManagerEventPoints(row.score) !== undefined,
   ).length;
   const total =
     typeof coverage.totalEntries === "number" &&
@@ -110,6 +152,14 @@ export function tournamentManagerScoreStatus(
       ? Math.floor(coverage.totalEntries)
       : rows.length;
   const unavailableCount = new Set(coverage.unavailableEntryIds || []).size;
+  const traceableEntryCount = coverage.traceableEntries;
+  const verifiedCoverage =
+    typeof traceableEntryCount === "number" &&
+    Number.isFinite(traceableEntryCount) &&
+    traceableEntryCount >= 0
+      ? Math.min(total, Math.floor(traceableEntryCount))
+      : undefined;
+  const verifiedAvailable = verifiedCoverage ?? observedAvailable;
   const reportedAvailable =
     typeof coverage.officialCoverage === "number" &&
     Number.isFinite(coverage.officialCoverage)
@@ -118,15 +168,18 @@ export function tournamentManagerScoreStatus(
           Math.max(0, Math.round(coverage.officialCoverage * total)),
         )
       : 0;
-  // H2H desks report zero official *net* coverage until the source can prove
-  // the transfer-cost semantics, while each row may already contain an
-  // authoritative gross event score. Never let that metadata zero out rows
-  // that were actually returned with official event points.
-  const available = unavailableCount > 0
-    ? Math.max(0, total - unavailableCount)
-    : Math.max(observedAvailable, reportedAvailable);
   if (states.includes("SETTLING")) return "结算中";
   if (states.includes("STALE")) return "官方数据延迟";
+  if (verifiedAvailable === 0) return "官方分数不可用";
+  const metadataAvailable = unavailableCount > 0
+    ? Math.max(0, total - unavailableCount)
+    : Math.max(observedAvailable, reportedAvailable);
+  // A traceable count is derived from the actual revisioned scores, including
+  // retained last-good rows after a partial refresh. Current failure metadata
+  // must not subtract those still-verifiable scores a second time.
+  const available = verifiedCoverage !== undefined
+    ? verifiedCoverage
+    : Math.min(verifiedAvailable, metadataAvailable);
   if (states.length === 0 || available === 0) return "官方分数不可用";
   if (available < total) {
     return `官方实时：${available}/${total} 支球队已有分数`;
@@ -183,30 +236,27 @@ function searchText(row: LiveTournamentRow): string {
 
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
-    // H2H live responses intentionally keep the legacy flat headline aliases
-    // at zero when FPL has not published a provable net-point semantic. The
-    // nested official score is still authoritative for gross event points.
-    // Promote it here so sorting, sharing, and any consumer before page-level
-    // normalization cannot silently render the compatibility zero.
-    const officialEventPoints = officialTournamentEventPoints(row.score);
-    const officialNetPoints = officialTournamentNetPoints(row.score);
-    const officialTotal = officialTournamentTotalPoints(row.score);
+    const officialScore = traceableOfficialManagerScore(row.score);
+    const officialEventPoints = officialManagerEventPoints(officialScore);
+    const officialNetPoints = officialManagerNetPoints(officialScore);
+    const officialTotal = officialManagerTotalPoints(officialScore);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
-      rank: row.rank ?? row.overallRank,
-      livePoints: officialEventPoints ?? row.livePoints,
-      transferCost: row.transferCost,
-      liveNetPoints: officialNetPoints ?? row.liveNetPoints,
-      liveTotalPoints: officialTotal ?? row.liveTotalPoints,
-      totalPoints: officialTotal ?? row.liveTotalPoints,
+      rank: officialScore ? row.rank : undefined,
+      livePoints: officialEventPoints,
+      transferCost: officialScore?.transferCost,
+      liveNetPoints: officialNetPoints,
+      liveTotalPoints: officialTotal,
+      totalPoints: officialTotal,
       played: row.played,
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
-      overallRank: row.score?.overallRank ?? row.overallRank,
-      score: row.score,
+      overallRank: officialScore?.overallRank ?? undefined,
+      score: officialScore,
+      scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
       picks: (row.pickList || []).map(mapTournamentPick)
     };
     return {
@@ -214,6 +264,32 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       searchText: searchText(mapped)
     };
   });
+}
+
+export function tournamentScoreNextRefreshAt(
+  rows: readonly LiveTournamentRow[],
+): string | undefined {
+  return rows
+    .map((row) => {
+      const retained = row.scoreNextRefreshAt;
+      if (retained && Number.isFinite(Date.parse(retained))) return retained;
+      return managerScoreNextRefreshAt(row.score);
+    })
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+}
+
+/** Keep unavailable score values after every known score in either direction. */
+export function compareKnownTournamentValues(
+  left: number | undefined,
+  right: number | undefined,
+  desc: boolean,
+): number {
+  const leftKnown = typeof left === "number" && Number.isFinite(left);
+  const rightKnown = typeof right === "number" && Number.isFinite(right);
+  if (leftKnown !== rightKnown) return leftKnown ? -1 : 1;
+  if (!leftKnown || !rightKnown || left === right) return 0;
+  return (left - right) * (desc ? -1 : 1);
 }
 
 export function filterTournamentLiveRows(rows: LiveTournamentRow[], keyword: string): LiveTournamentRow[] {

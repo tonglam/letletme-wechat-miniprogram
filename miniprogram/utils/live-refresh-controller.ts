@@ -72,6 +72,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
   let online = options.isOnline ? options.isOnline() : true;
   let probeRequest: Promise<void> | null = null;
   let probeRequestId = 0;
+  let consumedDeadline: string | null = null;
   let disposed = false;
   let unsubscribeNetwork: (() => void) | undefined;
 
@@ -102,6 +103,12 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
   function runProbe(): Promise<void> {
     if (!eligible()) return Promise.resolve();
     if (probeRequest) return probeRequest;
+
+    const nextRefreshAt = options.getNextRefreshAt?.();
+    const deadline = nextRefreshAt ? Date.parse(nextRefreshAt) : Number.NaN;
+    if (nextRefreshAt && Number.isFinite(deadline) && deadline <= Date.now()) {
+      consumedDeadline = nextRefreshAt;
+    }
 
     const requestId = probeRequestId + 1;
     probeRequestId = requestId;
@@ -164,6 +171,13 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
       if (probeRequest === request) {
         probeRequest = null;
         options.onProbeChange?.(false);
+        // A reload can call sync() while this probe is still active. If its
+        // one-shot deadline fires before the request settles, runProbe()
+        // coalesces onto this request and consumes that timer. Re-arm only
+        // after clearing the single-flight guard so polling cannot stall.
+        if (timer === undefined && eligible()) {
+          sync();
+        }
       }
     });
   }
@@ -173,10 +187,15 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
     if (!eligible()) return;
     const nextRefreshAt = options.getNextRefreshAt?.();
     const deadline = nextRefreshAt ? Date.parse(nextRefreshAt) : Number.NaN;
-    const baseDelay = Number.isFinite(deadline)
+    const deadlineConsumed =
+      Boolean(nextRefreshAt) &&
+      nextRefreshAt === consumedDeadline &&
+      Number.isFinite(deadline) &&
+      deadline <= Date.now();
+    const baseDelay = Number.isFinite(deadline) && !deadlineConsumed
       ? Math.max(10, deadline - Date.now())
       : intervalMs;
-    const jitter = Number.isFinite(deadline)
+    const jitter = Number.isFinite(deadline) && !deadlineConsumed
       ? baseDelay * (Math.random() * 0.2 - 0.1)
       : 0;
     const delay = Math.max(10, Math.round(baseDelay + jitter));

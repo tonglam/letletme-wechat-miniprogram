@@ -72,6 +72,55 @@ test("entry preseason is a stable business empty state", () => {
   });
 });
 
+test("entry NO_PICKS keeps polling when an unavailable score retains a retry deadline", () => {
+  const context = {
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      noPicks: true,
+      hasData: false,
+      scoreState: "UNAVAILABLE",
+      scoreNextRefreshAt: new Date(Date.now() + 60_000).toISOString()
+    },
+    pageVisible: true,
+    liveSnapshot: {
+      eventId: 33,
+      revision: "live-retry",
+      state: "SETTLED",
+      publishedAt: null,
+      checkedAt: null
+    }
+  };
+
+  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+});
+
+test("entry NO_PICKS keeps polling when only the snapshot retains a retry deadline", () => {
+  const context = {
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      noPicks: true,
+      hasData: false,
+      scoreState: "UNAVAILABLE",
+      scoreNextRefreshAt: ""
+    },
+    pageVisible: true,
+    liveSnapshot: {
+      eventId: 33,
+      revision: "live-retry",
+      state: "SETTLED",
+      publishedAt: null,
+      checkedAt: null,
+      nextRefreshAt: new Date(Date.now() + 60_000).toISOString()
+    }
+  };
+
+  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+});
+
 test("match offseason is a scheduled empty state, not a request error", () => {
   assert.deepEqual(matchModule.noScheduleState(), {
     loading: false,

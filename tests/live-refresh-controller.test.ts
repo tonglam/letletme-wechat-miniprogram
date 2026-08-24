@@ -80,6 +80,36 @@ async function testScheduledManagerRefreshArmsDeadlineProbe(): Promise<void> {
   controller.dispose();
 }
 
+async function testExpiredManagerDeadlineRearmsAfterReloadSettles(): Promise<void> {
+  let probes = 0;
+  let reloads = 0;
+  let controller!: ReturnType<typeof createLiveRefreshController>;
+  controller = createLiveRefreshController({
+    isEligible: () => true,
+    getAcceptedSnapshot: () => snapshot("aa"),
+    probe: () => {
+      probes += 1;
+      return Promise.resolve(snapshot("aa"));
+    },
+    shouldReloadOnUnchangedProbe: () => true,
+    getNextRefreshAt: () => "2026-08-24T00:00:00.000Z",
+    reload: async () => {
+      reloads += 1;
+      // Reproduce a page applying the same expired server deadline while the
+      // current probe is still in flight.
+      controller.sync();
+      await sleep(25);
+    },
+    intervalMs: 35
+  });
+
+  controller.sync();
+  await sleep(100);
+  assert(probes >= 2, "an expired manager deadline keeps polling after reload settles");
+  assert(reloads >= 2, "the retained deadline receives a bounded follow-up reload");
+  controller.dispose();
+}
+
 async function testChangedRevisionReloadsOnceUnderConcurrency(): Promise<void> {
   const gate = deferred<LiveSnapshotStatus>();
   let reloads = 0;
@@ -282,6 +312,7 @@ async function testProbeSettledSkipsStaleResponse(): Promise<void> {
 async function main(): Promise<void> {
   await testUnchangedRevisionOnlyAccepts();
   await testScheduledManagerRefreshArmsDeadlineProbe();
+  await testExpiredManagerDeadlineRearmsAfterReloadSettles();
   await testChangedRevisionReloadsOnceUnderConcurrency();
   await testProbeErrorKeepsPolling();
   await testIneligibleNeverStartsTimer();

@@ -138,7 +138,7 @@
               <image wx:if="{{item.compared}}" class="row-check-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             </view>
           </view>
-          <text class="col-rank">{{item.rank > 0 ? item.rank : item.visibleRank}}</text>
+          <text class="col-rank">{{item.eventPointsKnown ? (item.rank > 0 ? item.rank : item.visibleRank) : '—'}}</text>
           <view class="col-team">
             <view class="team-line">
               <text class="team-name">{{item.entryName || '-'}}</text>
@@ -153,7 +153,7 @@
           </view>
           <text class="col-num col-played">{{item.playedText || '-'}}</text>
           <text class="col-num col-gw">{{item.displayLive}}</text>
-          <text class="col-num col-hit {{item.transferCost > 0 ? 'hit' : ''}}">{{item.displayHit || '0'}}</text>
+          <text class="col-num col-hit {{item.transferCostKnown && item.transferCost > 0 ? 'hit' : ''}}">{{item.displayHit || '—'}}</text>
           <text class="col-num">{{item.displayNet}}</text>
           <text class="col-num col-total">{{item.displayTotal}}</text>
         </view>
@@ -196,8 +196,8 @@
           <text>{{compareLeft.playedText}}</text>
           <text>{{compareRight.playedText}}</text>
           <text class="cmp-label">扣分</text>
-          <text>{{compareLeft.displayHit || '0'}}</text>
-          <text>{{compareRight.displayHit || '0'}}</text>
+          <text>{{compareLeft.displayHit || '—'}}</text>
+          <text>{{compareRight.displayHit || '—'}}</text>
         </view>
 
         <view class="cmp-lineup">

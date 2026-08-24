@@ -7,6 +7,7 @@ import {
 } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import type {
+  LiveManagerScoreState,
   LiveSnapshotStatus,
   LiveTournamentRow,
 } from "../../../models/live";
@@ -43,9 +44,13 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  compareKnownTournamentValues,
+  combinedTournamentTraceableEntries,
+  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
+  tournamentScoreNextRefreshAt,
   type TournamentCaptainMode,
   type TournamentOwnershipScope,
   type TournamentTeamOption,
@@ -116,6 +121,7 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   eventPointsKnown: boolean;
   totalPointsKnown: boolean;
   netPointsKnown: boolean;
+  transferCostKnown: boolean;
   displayLive: string;
   displayNet: string;
   displayTotal: string;
@@ -289,6 +295,8 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const officialTotalPoints = officialTournamentTotalPoints(row.score);
   const totalPoints = numberValue(officialTotalPoints);
   const totalPointsKnown = officialTotalPoints !== undefined;
+  const transferCostKnown =
+    typeof row.transferCost === "number" && Number.isFinite(row.transferCost);
   const transferCost = numberValue(row.transferCost);
   const played = numberValue(row.played);
   const toPlay = numberValue(row.toPlay);
@@ -301,17 +309,22 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     netPointsKnown,
     eventPointsKnown,
     totalPointsKnown,
+    transferCostKnown,
     livePoints,
     liveNetPoints,
     totalPoints,
     transferCost,
-    overallRank: row.overallRank ?? row.rank,
+    overallRank: row.overallRank,
     visibleRank: 0,
     displayLive: eventPointsKnown ? `${livePoints}` : "—",
     displayNet: netPointsKnown ? `${liveNetPoints}` : "—",
     displayTotal: totalPointsKnown ? `${totalPoints}` : "—",
-    displayHit: transferCost > 0 ? `-${transferCost}` : "0",
-    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCost} · ${played}/${played + toPlay}`,
+    displayHit: transferCostKnown
+      ? transferCost > 0
+        ? `-${transferCost}`
+        : "0"
+      : "—",
+    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
     chipCode,
     displayCaptain: captain && captain !== "无队长" ? `${captain} (C)` : "",
     playedText: `${played}/${played + toPlay}`,
@@ -416,6 +429,38 @@ function sortRows(
         direction
       );
     }
+    const knownValue = (row: DisplayTournamentRow): number | undefined => {
+      if (key === "livePoints") {
+        return row.eventPointsKnown ? row.livePoints : undefined;
+      }
+      if (key === "liveNetPoints") {
+        return row.netPointsKnown ? row.liveNetPoints : undefined;
+      }
+      if (key === "transferCost") {
+        return row.transferCostKnown ? row.transferCost : undefined;
+      }
+      if (key === "totalPoints") {
+        return row.totalPointsKnown ? row.totalPoints : undefined;
+      }
+      return undefined;
+    };
+    if (
+      key === "livePoints" ||
+      key === "liveNetPoints" ||
+      key === "transferCost" ||
+      key === "totalPoints"
+    ) {
+      const scoreComparison = compareKnownTournamentValues(
+        knownValue(a),
+        knownValue(b),
+        desc,
+      );
+      if (scoreComparison !== 0) return scoreComparison;
+      return (
+        numberValue(a.entry, Number.MAX_SAFE_INTEGER) -
+        numberValue(b.entry, Number.MAX_SAFE_INTEGER)
+      );
+    }
     const fallback = key === "overallRank" ? Number.MAX_SAFE_INTEGER : 0;
     const left = numberValue(a[key], fallback);
     const right = numberValue(b[key], fallback);
@@ -517,6 +562,8 @@ function clearTournamentBoard(page: object): void {
     ownershipPlayers?: OwnershipPlayerOption[];
     shareRows?: DisplayTournamentRow[];
     officialCoverage?: number;
+    officialTraceableEntries?: number;
+    officialTraceableScoreStates?: LiveManagerScoreState[];
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
   };
@@ -524,6 +571,8 @@ function clearTournamentBoard(page: object): void {
   board.ownershipPlayers = [];
   board.shareRows = [];
   board.officialCoverage = undefined;
+  board.officialTraceableEntries = undefined;
+  board.officialTraceableScoreStates = undefined;
   board.officialTotalEntries = undefined;
   board.unavailableEntryIds = [];
 }
@@ -654,6 +703,10 @@ PerformancePage({
   failedEntryCount: 0,
   retainedRowCount: 0,
   officialCoverage: undefined as number | undefined,
+  officialTraceableEntries: undefined as number | undefined,
+  officialTraceableScoreStates: undefined as
+    | LiveManagerScoreState[]
+    | undefined,
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   resumeDirectoryAfterShow: false,
@@ -1385,12 +1438,6 @@ PerformancePage({
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);
-        const scoreNextRefreshAt =
-          refreshedRows
-            .map((row) => row.score?.nextRefreshAt)
-            .filter((value): value is string => Boolean(value))
-            .sort()[0] || "";
-        this.setData({ scoreNextRefreshAt });
         const unavailableEntryIds = mergeUnavailableTournamentEntryIds(
           liveResult.failedEntryIds,
           liveResult.unavailableEntryIds,
@@ -1419,8 +1466,22 @@ PerformancePage({
             )
           : [];
         this.retainedRowCount = retainedRows.length;
+        this.officialTraceableEntries = combinedTournamentTraceableEntries(
+          liveResult.traceableEntries,
+          retainedRows,
+          liveResult.totalEntries,
+        );
+        this.officialTraceableScoreStates =
+          combinedTournamentTraceableScoreStates(
+            liveResult.traceableScoreStates,
+            retainedRows,
+          );
+        const nextRows = [...refreshedRows, ...retainedRows];
+        this.setData({
+          scoreNextRefreshAt: tournamentScoreNextRefreshAt(nextRows) || "",
+        });
         this.applyRows(
-          [...refreshedRows, ...retainedRows],
+          nextRows,
           true,
           liveResult.servedStoredAt || Date.now(),
         );
@@ -1618,6 +1679,8 @@ PerformancePage({
     const stats = buildTournamentStats(rows);
     const scoreStatusText = tournamentManagerScoreStatus(rows, {
       officialCoverage: this.officialCoverage,
+      traceableEntries: this.officialTraceableEntries,
+      traceableScoreStates: this.officialTraceableScoreStates,
       unavailableEntryIds: this.unavailableEntryIds,
       totalEntries: this.officialTotalEntries,
     });

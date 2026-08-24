@@ -126,6 +126,7 @@ interface LiveEntryData {
   netPoints: number;
   netPointsKnown: boolean;
   transferCost: number;
+  transferCostKnown: boolean;
   captainText: string;
   chipText: string;
   playedText: string;
@@ -173,6 +174,17 @@ function managerScoreStatusText(score?: LiveManagerScore): string {
   if (score.state === "SETTLING") return "结算中";
   if (score.state === "STALE") return "官方数据延迟";
   return "官方实时";
+}
+
+function hasRefreshDeadline(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function firstRefreshDeadline(...values: unknown[]): string {
+  for (const value of values) {
+    if (hasRefreshDeadline(value)) return value;
+  }
+  return "";
 }
 
 function captainDisplayName(
@@ -234,6 +246,7 @@ Page({
     netPoints: 0,
     netPointsKnown: false,
     transferCost: 0,
+    transferCostKnown: false,
     captainText: "-",
     chipText: "无",
     playedText: "-",
@@ -385,16 +398,21 @@ Page({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(),
-      shouldReloadOnUnchangedProbe: () =>
-        Boolean(
+      shouldReloadOnUnchangedProbe: () => {
+        const nextRefreshAt = firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        );
+        return Boolean(
           this.data.scoreState === "SETTLING" ||
-          (this.data.scoreNextRefreshAt &&
-            Date.parse(this.data.scoreNextRefreshAt) <= Date.now()),
-        ),
+          (nextRefreshAt && Date.parse(nextRefreshAt) <= Date.now()),
+        );
+      },
       getNextRefreshAt: () =>
-        this.data.scoreNextRefreshAt ||
-        this.liveSnapshot?.nextRefreshAt ||
-        null,
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ) || null,
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -514,6 +532,7 @@ Page({
           totalText: "—",
           netPoints: 0,
           transferCost: 0,
+          transferCostKnown: false,
           captainText: "-",
           chipText: "无",
           playedText: "-",
@@ -790,6 +809,7 @@ Page({
       totalText: "—",
       netPoints: 0,
       transferCost: 0,
+      transferCostKnown: false,
       captainText: "-",
       chipText: "无",
       playedText: "-",
@@ -966,10 +986,23 @@ Page({
             result.score?.totalScope === "OVERALL" &&
             typeof result.score.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
+          const transferCostKnown =
+            typeof result.score?.transferCost === "number" &&
+            Number.isFinite(result.score.transferCost);
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
+          const priorSnapshotNextRefreshAt =
+            this.liveSnapshot?.eventId === eventId
+              ? this.liveSnapshot.nextRefreshAt
+              : undefined;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+          const scoreNextRefreshAt = firstRefreshDeadline(
+            result.score?.nextRefreshAt,
+            result.scoreNextRefreshAt,
+            liveResult.snapshot?.nextRefreshAt,
+            priorSnapshotNextRefreshAt,
+          );
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData(
             {
@@ -983,7 +1016,7 @@ Page({
                 result.score?.reconciliation === "SOURCE_SKEW"
                   ? "明细同步中"
                   : "",
-              scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+              scoreNextRefreshAt,
               error: "",
               total,
               livePoints: headlinePoints,
@@ -991,9 +1024,10 @@ Page({
               totalText,
               netPoints,
               netPointsKnown,
-              transferCost: numberValue(
-                result.score?.transferCost ?? result.transferCost,
-              ),
+              transferCost: transferCostKnown
+                ? numberValue(result.score?.transferCost)
+                : 0,
+              transferCostKnown,
               summaryTiles: hasOfficialHeadline
                 ? [
                     { label: "实时积分", value: `${headlinePoints}` },
@@ -1020,7 +1054,11 @@ Page({
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
-          if (hasOfficialHeadline || result.score?.state === "SETTLING") {
+          if (
+            hasOfficialHeadline ||
+            result.score?.state === "SETTLING" ||
+            hasRefreshDeadline(scoreNextRefreshAt)
+          ) {
             this.liveRefresh?.sync();
           } else {
             this.liveRefresh?.stop();
@@ -1053,11 +1091,24 @@ Page({
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
           : 0;
-        const transferCost = numberValue(
-          result.score?.transferCost ?? result.transferCost,
-        );
+        const transferCostKnown =
+          typeof result.score?.transferCost === "number" &&
+          Number.isFinite(result.score.transferCost);
+        const transferCost = transferCostKnown
+          ? numberValue(result.score?.transferCost)
+          : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
+        const priorSnapshotNextRefreshAt =
+          this.liveSnapshot?.eventId === eventId
+            ? this.liveSnapshot.nextRefreshAt
+            : undefined;
         this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+        const scoreNextRefreshAt = firstRefreshDeadline(
+          result.score?.nextRefreshAt,
+          result.scoreNextRefreshAt,
+          liveResult.snapshot?.nextRefreshAt,
+          priorSnapshotNextRefreshAt,
+        );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         this.setData(
           {
@@ -1069,7 +1120,7 @@ Page({
               result.score?.reconciliation === "SOURCE_SKEW"
                 ? "明细同步中"
                 : "",
-            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+            scoreNextRefreshAt,
             error: "",
             total,
             livePoints,
@@ -1078,6 +1129,7 @@ Page({
             netPoints,
             netPointsKnown,
             transferCost,
+            transferCostKnown,
             captainText: captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
@@ -1090,7 +1142,11 @@ Page({
               { label: "实时总分", value: totalText },
               {
                 label: "转会扣分",
-                value: transferCost > 0 ? `-${transferCost}` : "0",
+                value: transferCostKnown
+                  ? transferCost > 0
+                    ? `-${transferCost}`
+                    : "0"
+                  : "—",
               },
             ],
             starters,
@@ -1221,8 +1277,15 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
+    const hasManagerRetry = hasRefreshDeadline(
+      firstRefreshDeadline(
+        this.data.scoreNextRefreshAt,
+        this.liveSnapshot?.nextRefreshAt,
+      ),
+    );
     if (
       this.data.noPicks &&
+      !hasManagerRetry &&
       this.data.scoreState !== "SETTLING" &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
@@ -1243,6 +1306,12 @@ Page({
   revalidateCachedSnapshot(): boolean {
     if (
       this.data.noPicks &&
+      !hasRefreshDeadline(
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ),
+      ) &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
       return false;
@@ -1423,6 +1492,7 @@ Page({
         netPoints: this.data.netPoints,
         totalPoints: this.data.totalText,
         transferCost: this.data.transferCost,
+        transferCostKnown: this.data.transferCostKnown,
         chip: this.data.chipText,
         captainName: this.data.captainText,
         starters: this.data.starters || [],
