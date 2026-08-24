@@ -963,6 +963,7 @@ PerformancePage({
           trigger: forceRefresh ? "refresh" : "tab",
         });
     this.setData({ viewLoading: true, viewError: "" });
+    let viewerEntryRecoveryAttempted = false;
     try {
       // The desk owns finalized-event gating. Keep the shared event helper in
       // the reporting surface so legacy context remains classified consistently
@@ -1024,6 +1025,40 @@ PerformancePage({
       if (!this.isActiveViewRequest(requestId)) return;
     } catch (error) {
       if (!this.isActiveViewRequest(requestId)) return;
+      if (
+        !viewerEntryRecoveryAttempted &&
+        isViewerEntryAuthorizationError(error)
+      ) {
+        viewerEntryRecoveryAttempted = true;
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!this.isActiveViewRequest(requestId)) return;
+          if (!refreshedEntryId) {
+            this.showEntryEmptyState();
+            return;
+          }
+          if (refreshedEntryId !== entryId) {
+            this.loadedSeason = undefined;
+            this.pathLoadedKey = "";
+            this.setData({
+              entryId: refreshedEntryId,
+              tournaments: [],
+              tournamentNames: [],
+              selectedTournament: null,
+              emptyState: "",
+              fromCache: false,
+              viewError: "",
+            });
+            void this.loadLeagues(true, trace);
+            return;
+          }
+          this.setData({ viewError: "球队状态尚未同步，请稍后重试" });
+          return;
+        } catch {
+          this.setData({ viewError: "球队状态尚未同步，请稍后重试" });
+          return;
+        }
+      }
       this.setData({
         viewError: error instanceof Error ? error.message : "赛事数据加载失败",
       });

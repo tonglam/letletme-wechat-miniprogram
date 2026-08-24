@@ -121,6 +121,17 @@ test("My FPL leagues sends every no-team viewer to team selection", async () => 
   assert.match(page, /if \(this\.data\.emptyState === "entry"\) \{\s*goToEntrySearch\(\)/);
 });
 
+test("My FPL league views refresh viewer authority after authorization loss", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url), "utf8");
+  assert.match(page, /let viewerEntryRecoveryAttempted = false/);
+  assert.match(
+    page,
+    /isViewerEntryAuthorizationError\(error\)[\s\S]*?await refreshAuthoritativeFollow\(\)[\s\S]*?showEntryEmptyState\(\)[\s\S]*?void this\.loadLeagues\(true, trace\)/,
+  );
+  assert.match(page, /viewError: "球队状态尚未同步，请稍后重试"/);
+});
+
 test("season path window loads the latest 8 gameweeks first", () => {
   assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
     recentStart: 31,

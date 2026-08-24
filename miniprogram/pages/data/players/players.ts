@@ -678,6 +678,9 @@ PerformancePage({
         : snapshot;
     this.searchPending = true;
     this.searchPendingForceRefresh = this.pendingSearchSnapshot.forceRefresh;
+    if (this.activeSearchPromise || this.paginationPromise) {
+      this.setData({ loading: true });
+    }
 
     if (this.searchDebounceTimer !== undefined) {
       clearTimeout(this.searchDebounceTimer);
@@ -701,6 +704,7 @@ PerformancePage({
       this.searchPending = false;
       this.searchPendingForceRefresh = false;
       this.resolveSearchWaiters();
+      this.setData({ loading: false });
       return;
     }
     this.pendingSearchSnapshot = null;
@@ -711,6 +715,7 @@ PerformancePage({
       this.searchPending = false;
       this.searchPendingForceRefresh = false;
       this.resolveSearchWaiters();
+      this.setData({ loading: false });
       return;
     }
 
@@ -963,6 +968,7 @@ PerformancePage({
         !shouldApplyPlayerResponse(revision, this.requestRevision)
       )
         return;
+      if (append && this.pendingSearchSnapshot) return;
       const responseKeyword = append
         ? this.data.keyword
         : resolveKeywordAfterPlayerLoad(
@@ -1015,7 +1021,10 @@ PerformancePage({
         this.pageVisible &&
         shouldApplyPlayerResponse(revision, this.requestRevision)
       ) {
-        this.setData({ loading: false, loadingMore: false });
+        this.setData({
+          loading: Boolean(this.pendingSearchSnapshot),
+          loadingMore: false,
+        });
       }
     }
   },
