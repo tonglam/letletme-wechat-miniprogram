@@ -9,7 +9,7 @@
       bind:action="onBackToTeams"
     />
   </view>
-  <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" workload="player-stats" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队详情" />
   <block wx:else>
     <view id="perf-primary-content" class="section">

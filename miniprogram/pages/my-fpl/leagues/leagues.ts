@@ -597,8 +597,12 @@ PerformancePage({
   },
 
   showEntryEmptyState() {
+    this.clearEntryScopedViewState();
     this.loadedSeason = undefined;
     this.pathLoadedKey = "";
+    this.loadedEntryId = 0;
+    this.loadedEvent = 0;
+    this.loadedContextRevision = 0;
     this.setData({
       loading: false,
       error: "",
@@ -612,6 +616,30 @@ PerformancePage({
       emptyDescription: "查找球队并设为我的球队后，即可查看你参与的赛事。",
       emptyActionText: "去选择球队",
       fromCache: false,
+    });
+  },
+
+  clearEntryScopedViewState() {
+    this.viewRequestId += 1;
+    this.pathRequestId += 1;
+    this.seasonRows = [];
+    this.gwRows = [];
+    this.pathLoadedKey = "";
+    this.setData({
+      viewLoading: false,
+      viewError: "",
+      hasSeasonData: false,
+      hasGwData: false,
+      boardRows: [],
+      displayedRows: [],
+      boardTotalRows: 0,
+      boardPage: 1,
+      boardPageCount: 1,
+      boardFrom: 0,
+      boardTo: 0,
+      hasPreviousBoardPage: false,
+      hasNextBoardPage: false,
+      ...emptyPathState(),
     });
   },
 

@@ -419,6 +419,7 @@ PerformancePage({
     loading: false,
     loadingMore: false,
     error: "",
+    errorWorkload: "home" as "home" | "player-stats",
     loadMoreError: "",
     keyword: "",
     players: [] as PlayerOption[],
@@ -829,6 +830,7 @@ PerformancePage({
       loading: true,
       loadingMore: false,
       error: "",
+      errorWorkload: "home",
       loadMoreError: "",
     });
     try {
@@ -837,6 +839,7 @@ PerformancePage({
         forceRefresh,
       });
       if (!this.pageVisible || !shouldApplyPlayerResponse(revision, this.requestRevision)) return;
+      this.setData({ errorWorkload: "player-stats" });
       await this.fetchPage(revision, null, false, forceRefresh, trace);
     } catch (error) {
       if (
@@ -1262,7 +1265,15 @@ PerformancePage({
   },
 
   onRetry() {
-    this.startSearch(this.data.keyword, true);
+    const snapshot =
+      this.pendingSearchSnapshot ||
+      this.activeSearchSnapshot ||
+      this.loadedSearchSnapshot;
+    if (snapshot) {
+      void this.resumeSearchSnapshot(snapshot, true);
+      return;
+    }
+    void this.startSearch(this.data.keyword, true);
   },
 
   onRetryLoadMore() {

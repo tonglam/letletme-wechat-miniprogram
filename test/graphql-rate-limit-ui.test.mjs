@@ -61,8 +61,14 @@ test("retry controls use the workload of the operation they retry", () => {
   const home = source("miniprogram/pages/home/index/index.wxml");
   const tournament = source("miniprogram/pages/live/tournament/tournament.wxml");
   const players = source("miniprogram/pages/data/players/players.wxml");
+  const playersController = source("miniprogram/pages/data/players/players.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
   const teamsTemplate = source("miniprogram/pages/data/teams/teams.wxml");
+  const playerDetail = source("miniprogram/pages/data/player-detail/player-detail.ts");
+  const playerDetailTemplate = source("miniprogram/pages/data/player-detail/player-detail.wxml");
+  const teamDetail = source("miniprogram/pages/data/team-detail/team-detail.ts");
+  const teamDetailTemplate = source("miniprogram/pages/data/team-detail/team-detail.wxml");
+  const priceController = source("miniprogram/pages/data/price/price.controller.ts");
 
   assert.match(liveEntry, /app-error-state[\s\S]*workload="gameweek"/);
   assert.match(selections, /app-error-state[\s\S]*workload="interactive"/);
@@ -89,7 +95,7 @@ test("retry controls use the workload of the operation they retry", () => {
   );
   assert.match(
     players,
-    /data-status[\s\S]*error && players\.length[\s\S]*workload="player-stats"[\s\S]*onRetry/,
+    /data-status[\s\S]*error && players\.length[\s\S]*workload="\{\{errorWorkload\}\}"[\s\S]*onRetry/,
   );
   assert.match(
     players,
@@ -98,9 +104,20 @@ test("retry controls use the workload of the operation they retry", () => {
   assert.match(players, /players\.length === 0 && activeKeyword/);
   assert.match(players, /title="没有找到“\{\{activeKeyword\}\}”"/);
   assert.match(players, /hasMore && !error/);
+  assert.match(playersController, /errorWorkload: "home"/);
+  assert.match(playersController, /this\.setData\(\{ errorWorkload: "player-stats" \}\)/);
   assert.match(teams, /errorWorkload: "player-stats"/);
   assert.match(teams, /let contextReady = false/);
   assert.match(teams, /contextReady = true/);
   assert.match(teams, /errorWorkload: contextReady \? "player-stats" : "home"/);
   assert.match(teamsTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(playerDetail, /errorWorkload: "home"/);
+  assert.match(playerDetail, /errorWorkload: "player-stats"/);
+  assert.match(playerDetailTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(teamDetail, /errorWorkload: "home"/);
+  assert.match(teamDetail, /errorWorkload: "player-stats"/);
+  assert.match(teamDetailTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(priceController, /playersErrorWorkload: "home"/);
+  assert.match(priceController, /playersErrorWorkload: "player-stats"/);
+  assert.match(source("miniprogram/pages/data/price/price.wxml"), /perf-primary-player[\s\S]*workload="\{\{playersErrorWorkload\}\}"/);
 });

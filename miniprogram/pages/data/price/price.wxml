@@ -297,7 +297,7 @@
         <view class="selected-price">当前 {{selectedPlayer.priceText || '-'}}</view>
       </view>
 
-      <app-error-state id="perf-primary-player" wx:if="{{playersError && players.length === 0}}" message="{{playersError}}" workload="player-stats" bind:retry="onRetryPlayers" />
+      <app-error-state id="perf-primary-player" wx:if="{{playersError && players.length === 0}}" message="{{playersError}}" workload="{{playersErrorWorkload}}" bind:retry="onRetryPlayers" />
       <app-loading wx:elif="{{playerLoading && players.length === 0}}" text="加载球员列表" />
       <app-empty-state
         id="perf-primary-player"

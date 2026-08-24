@@ -132,6 +132,17 @@ test("My FPL league views refresh viewer authority after authorization loss", as
   assert.match(page, /viewError: "球队状态尚未同步，请稍后重试"/);
 });
 
+test("My FPL entry removal clears retained view data and invalidates requests", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url), "utf8");
+  assert.match(page, /showEntryEmptyState\(\)[\s\S]*this\.clearEntryScopedViewState\(\)/);
+  assert.match(
+    page,
+    /clearEntryScopedViewState\(\)[\s\S]*this\.viewRequestId \+= 1[\s\S]*this\.pathRequestId \+= 1[\s\S]*this\.seasonRows = \[\][\s\S]*this\.gwRows = \[\][\s\S]*\.\.\.emptyPathState\(\)/,
+  );
+  assert.match(page, /this\.loadedEntryId = 0[\s\S]*this\.loadedEvent = 0/);
+});
+
 test("season path window loads the latest 8 gameweeks first", () => {
   assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
     recentStart: 31,

@@ -437,7 +437,7 @@ test("player route keywords survive a failed first load for Retry", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
   assert.match(
     players,
-    /onRetry\(\) \{[\s\S]*this\.startSearch\(this\.data\.keyword, true\)/,
+    /onRetry\(\) \{[\s\S]*const snapshot = this\.pendingSearchSnapshot \|\| this\.activeSearchSnapshot \|\| this\.loadedSearchSnapshot[\s\S]*this\.resumeSearchSnapshot\(snapshot, true\)/,
   );
 });
 

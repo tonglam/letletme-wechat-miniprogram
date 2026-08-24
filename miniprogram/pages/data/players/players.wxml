@@ -116,11 +116,11 @@
     </view>
   </block>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" workload="player-stats" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && players.length === 0}}" text="加载球员" />
   <view id="perf-primary-content" wx:else class="section card">
     <data-status wx:if="{{loading && players.length}}" status="stale" message="正在加载新结果，当前显示上次成功数据" workload="player-stats" />
-    <data-status wx:elif="{{error && players.length}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="player-stats" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:elif="{{error && players.length}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="{{errorWorkload}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view wx:if="{{players.length}}" class="result-summary">
       已加载 {{players.length}} / {{totalCount}} 名球员
     </view>
