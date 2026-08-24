@@ -4,6 +4,7 @@ export type MiniProgramLoginTrigger =
   | "cold_start_restore_failed"
   | "profile_401"
   | "graphql_401"
+  | "account_link"
   | "session_missing";
 
 export type MiniProgramLoginContext = {
@@ -68,10 +69,17 @@ function readPlatform(value: unknown): MiniProgramLoginContext["platform"] {
   return "unknown";
 }
 
-function readDeviceClass(model: unknown): MiniProgramLoginContext["deviceClass"] {
+function readDeviceClass(
+  model: unknown,
+  platform: MiniProgramLoginContext["platform"],
+): MiniProgramLoginContext["deviceClass"] {
   const value = typeof model === "string" ? model : "";
   if (/ipad|tablet/i.test(value)) return "tablet";
+  if (platform === "windows" || platform === "macos" || platform === "linux") {
+    return "desktop";
+  }
   if (value) return "phone";
+  if (platform === "ios" || platform === "android") return "phone";
   return "unknown";
 }
 
@@ -86,7 +94,12 @@ function currentPageRoute(): string | undefined {
 }
 
 function runtimeApi(): {
-  getDeviceInfo?: () => { platform?: unknown; system?: unknown; deviceModel?: unknown };
+  getDeviceInfo?: () => {
+    platform?: unknown;
+    system?: unknown;
+    model?: unknown;
+    deviceModel?: unknown;
+  };
   getAppBaseInfo?: () => { SDKVersion?: unknown; version?: unknown };
   getAccountInfoSync?: () => { miniProgram?: { envVersion?: unknown; version?: unknown } };
   canIUse?: (schema: string) => boolean;
@@ -147,7 +160,7 @@ export function collectMiniProgramLoginContext(
     schemaVersion: 1,
     trigger,
     platform,
-    deviceClass: readDeviceClass(device.deviceModel),
+    deviceClass: readDeviceClass(device.model ?? device.deviceModel, platform),
     osFamily,
     ...(majorVersion(system) ? { osMajor: majorVersion(system) } : {}),
     ...(majorVersion(appBase.version) ? { wechatMajor: majorVersion(appBase.version) } : {}),

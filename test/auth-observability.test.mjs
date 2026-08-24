@@ -18,7 +18,7 @@ test("mini login context keeps only coarse, bounded runtime fields", () => {
       getDeviceInfo: () => ({
         platform: "ios",
         system: "iOS 17.5.1",
-        deviceModel: "iPad Pro 12.9",
+        model: "iPad Pro 12.9",
         brand: "private-brand-must-not-upload",
       }),
       getAppBaseInfo: () => ({ SDKVersion: "3.17.1", version: "8.0.50" }),
@@ -50,6 +50,11 @@ test("mini login context keeps only coarse, bounded runtime fields", () => {
     assert.equal(JSON.stringify(context).includes("private-brand"), false);
     assert.equal(normalizeMiniProgramRequestId("bad id"), undefined);
     assert.equal(normalizeMiniProgramRequestId("wx-valid-request"), "wx-valid-request");
+
+    globalThis.wx = {
+      getDeviceInfo: () => ({ platform: "windows", system: "Windows 11" }),
+    };
+    assert.equal(collectMiniProgramLoginContext("session_missing").deviceClass, "desktop");
   } finally {
     globalThis.wx = previousWx;
     globalThis.getCurrentPages = previousPages;
@@ -64,7 +69,7 @@ test("wx login sends a request id and persistence outcome without changing respo
   try {
     globalThis.wx = {
       getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial", version: "1.0.0" } }),
-      getDeviceInfo: () => ({ platform: "android", system: "Android 14", deviceModel: "phone" }),
+      getDeviceInfo: () => ({ platform: "android", system: "Android 14", model: "phone" }),
       getAppBaseInfo: () => ({ SDKVersion: "3.17.1", version: "8.0.50" }),
       getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
       getStorageSync: (key) => storage.get(key),
@@ -117,6 +122,7 @@ test("wx login sends a request id and persistence outcome without changing respo
     assert.match(loginRequest.header["X-Request-Id"], /^[A-Za-z0-9_-]{8,128}$/);
     assert.equal(loginRequest.data.loginContext.trigger, "cold_start_missing");
     assert.equal(loginRequest.data.loginContext.sdkVersion, "3.17.1");
+    assert.equal(loginRequest.data.loginContext.credentialState, "missing");
     assert.equal(session.token, "memory-token");
     assert.ok(persistenceRequest);
     assert.deepEqual(persistenceRequest.data, {
@@ -138,7 +144,7 @@ test("reports write_failed when encrypted session persistence is unavailable", a
   try {
     globalThis.wx = {
       getAccountInfoSync: () => ({ miniProgram: { envVersion: "release", version: "1.0.0" } }),
-      getDeviceInfo: () => ({ platform: "ios", system: "iOS 17.5", deviceModel: "phone" }),
+      getDeviceInfo: () => ({ platform: "ios", system: "iOS 17.5", model: "phone" }),
       getAppBaseInfo: () => ({ SDKVersion: "3.17.1", version: "8.0.50" }),
       getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
       getStorageSync: (key) => storage.get(key),
