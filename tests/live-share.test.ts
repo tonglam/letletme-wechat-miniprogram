@@ -27,6 +27,7 @@ const entryText = formatLiveEntryShareText({
   netPoints: 62,
   totalPoints: 1856,
   transferCost: 10,
+  transferCostKnown: true,
   chip: "WILDCARD",
   captainName: "Haaland",
   starters: [
@@ -46,6 +47,22 @@ assertIncludes(entryText, "— 替补 —", "bench divider, not a heading");
 if (entryText.includes("## ")) throw new Error("entry share stays one continuous list");
 assertIncludes(entryText, "https://letletme.top/zh-CN/live/points/123456", "entry url");
 
+const pendingTransferCostText = formatLiveEntryShareText({
+  gameweek: 3,
+  livePoints: 72,
+  netPoints: 0,
+  totalPoints: "—",
+  transferCost: 0,
+  transferCostKnown: false,
+  starters: [],
+  bench: []
+});
+assertIncludes(
+  pendingTransferCostText,
+  "转会扣分待确认",
+  "entry share preserves an unknown transfer cost",
+);
+
 const tableText = formatLiveTournamentShareText({
   gameweek: 3,
   tournamentName: "Friends League",
@@ -54,8 +71,9 @@ const tableText = formatLiveTournamentShareText({
   averageText: "62",
   entriesText: "2",
   rows: [
-    { entryName: "Dream Team FC", playerName: "John D", visibleRank: 1, playedText: "11/11", displayLive: "85", displayHit: "0", displayNet: "85", displayTotal: "2100" },
-    { entryName: "WhoamI FC", playerName: "Tong W", visibleRank: 2, playedText: "9/11", displayLive: "72", displayHit: "-10", displayNet: "62", displayTotal: "1856" }
+    { entryName: "Dream Team FC", playerName: "John D", visibleRank: 1, playedText: "11/11", displayLive: "85", displayHit: "0", displayNet: "85", displayTotal: "2100", transferCostKnown: true },
+    { entryName: "WhoamI FC", playerName: "Tong W", visibleRank: 2, playedText: "9/11", displayLive: "72", displayHit: "-10", displayNet: "62", displayTotal: "1856", transferCostKnown: true },
+    { entryName: "Pending FC", playerName: "Pending", visibleRank: 3, displayLive: "—", displayHit: "—", displayTotal: "—", transferCostKnown: false }
   ]
 });
 
@@ -63,6 +81,11 @@ assertIncludes(tableText, "# Friends League · GW3", "tournament title");
 assertIncludes(tableText, "最高 85 · 平均 62 · 参赛 2", "stats");
 assertIncludes(tableText, "1. Dream Team FC · GW 85 · 总 2100", "clean row");
 assertIncludes(tableText, "2. WhoamI FC · GW 72 (−10) · 总 1856", "hit folds into GW");
+assertIncludes(
+  tableText,
+  "3. Pending FC · GW — (转会扣分待确认) · 总 —",
+  "tournament share preserves an unknown transfer cost",
+);
 if (tableText.includes("Tong W ·") || tableText.includes("出场")) {
   throw new Error("tournament rows stay concise: no manager, no played count");
 }

@@ -306,6 +306,42 @@ assertEqual(
   undefined,
   "missing official transfer cost stays unknown",
 );
+const settlingPendingRows = mapTournamentLiveRows([
+  {
+    entry: 307,
+    entryName: "Settling official score",
+    playerName: "Manager",
+    rank: 1,
+    livePoints: 0,
+    transferCost: 0,
+    liveNetPoints: 0,
+    liveTotalPoints: 0,
+    played: 1,
+    toPlay: 10,
+    captainName: "Saka",
+    score: {
+      source: "FPL_EVENT_LIVE",
+      state: "SETTLING",
+      revision: "event-live:gw1:r10:307",
+      checkedAt: "2026-08-24T06:02:00.000Z"
+    }
+  }
+]);
+assertEqual(
+  tournamentManagerScoreStatus(settlingPendingRows),
+  "结算中",
+  "traceable settling state remains visible before event points are published",
+);
+
+const stalePendingRows = settlingPendingRows.map((row) => ({
+  ...row,
+  score: row.score ? { ...row.score, state: "STALE" as const } : undefined,
+}));
+assertEqual(
+  tournamentManagerScoreStatus(stalePendingRows),
+  "官方数据延迟",
+  "traceable stale state remains visible before event points are published",
+);
 
 const h2hRows = mapTournamentLiveRows([
   {

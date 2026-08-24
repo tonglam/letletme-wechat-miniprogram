@@ -1439,6 +1439,7 @@ Page({
         netPoints: this.data.netPoints,
         totalPoints: this.data.totalText,
         transferCost: this.data.transferCost,
+        transferCostKnown: this.data.transferCostKnown,
         chip: this.data.chipText,
         captainName: this.data.captainText,
         starters: this.data.starters || [],

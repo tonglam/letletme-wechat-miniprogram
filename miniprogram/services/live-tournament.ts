@@ -114,13 +114,13 @@ export function tournamentManagerScoreStatus(
           Math.max(0, Math.round(coverage.officialCoverage * total)),
         )
       : 0;
+  if (states.includes("SETTLING")) return "结算中";
+  if (states.includes("STALE")) return "官方数据延迟";
   if (verifiedAvailable === 0) return "官方分数不可用";
   const metadataAvailable = unavailableCount > 0
     ? Math.max(0, total - unavailableCount)
     : Math.max(observedAvailable, reportedAvailable);
   const available = Math.min(verifiedAvailable, metadataAvailable);
-  if (states.includes("SETTLING")) return "结算中";
-  if (states.includes("STALE")) return "官方数据延迟";
   if (states.length === 0 || available === 0) return "官方分数不可用";
   if (available < total) {
     return `官方实时：${available}/${total} 支球队已有分数`;
