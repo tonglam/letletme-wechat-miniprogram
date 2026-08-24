@@ -847,8 +847,10 @@ PerformancePage({
     const resumed = this.hasShown;
     this.hasShown = true;
     if (resumed) {
+      const previousEntryId = Number(this.data.entryId) || 0;
       await waitForAuthoritativeFollow();
       if (!this.pageVisible) return;
+      if (this.restartForPrincipalChange(previousEntryId)) return;
     }
     if (resumed && this.resumeStartupAfterShow) {
       const forceRefresh = this.resumeStartupForceRefresh;

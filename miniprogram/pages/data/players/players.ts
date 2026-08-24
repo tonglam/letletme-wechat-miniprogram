@@ -1108,6 +1108,7 @@ PerformancePage({
       this.activeSearchPromise ||
       this.pendingSearchSnapshot ||
       this.searchDebounceTimer !== undefined ||
+      this.data.error ||
       !this.data.hasMore
     ) {
       return Promise.resolve();

@@ -372,6 +372,7 @@ test("session retry joins a request already running under the refreshed token", 
   const [firstResult, secondResult] = await Promise.all([first, second]);
   assert.equal(firstResult.data.value, "refreshed");
   assert.equal(secondResult.data.value, "refreshed");
+  assert.equal(firstResult.meta.source, "in-flight");
   clearSessionCredentials();
 });
 

@@ -1339,7 +1339,11 @@ async function replayPendingEntryChoice(
 async function replayPendingFollowEntry(
   expectedMutationRevision = accountMutationRevision,
   sessionSnapshot?: SessionSnapshot,
+  options: { allowActiveMutation?: boolean } = {},
 ): Promise<MiniProgramProfile | null> {
+  if (accountMutationInFlight > 0 && !options.allowActiveMutation) {
+    return null;
+  }
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
   const profile =
@@ -1509,7 +1513,9 @@ export async function saveMiniProgramFollowEntry(
   writePendingFollowEntry(normalized);
   applyEffectiveEntry(normalized, "rebind");
   try {
-    const profile = await replayPendingFollowEntry(mutationRevision);
+    const profile = await replayPendingFollowEntry(mutationRevision, undefined, {
+      allowActiveMutation: true,
+    });
     if (profile) scheduleEntryConflictPrompt(profile);
     return true;
   } catch {

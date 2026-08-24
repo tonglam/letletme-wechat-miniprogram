@@ -119,7 +119,7 @@ export interface GraphQLReadResult<T> {
 }
 
 class GraphQLInFlightJoin extends Error {
-  constructor(readonly result: GraphQLReadResult<unknown>) {
+  constructor(readonly request: Promise<GraphQLReadResult<unknown>>) {
     super("joined existing GraphQL request");
     this.name = "GraphQLInFlightJoin";
   }
@@ -593,10 +593,7 @@ function makeRequest<T>(
           if (currentToken && currentToken !== token) {
             const existingRequest = onSessionRetry?.(currentToken);
             if (existingRequest) {
-              existingRequest.then(
-                (result) => reject(new GraphQLInFlightJoin(result)),
-                reject,
-              );
+              reject(new GraphQLInFlightJoin(existingRequest));
               return;
             }
             makeRequest<T>(
@@ -622,9 +619,7 @@ function makeRequest<T>(
             }
             const existingRequest = onSessionRetry?.(freshToken);
             if (existingRequest) {
-              return existingRequest.then((result) => {
-                throw new GraphQLInFlightJoin(result);
-              });
+              throw new GraphQLInFlightJoin(existingRequest);
             }
             return makeRequest<T>(
               query,
@@ -1114,7 +1109,9 @@ export async function graphqlRead<T>(
       };
     } catch (error) {
       if (error instanceof GraphQLInFlightJoin) {
-        return error.result as GraphQLReadResult<T>;
+        return joinInFlight(
+          error.request as Promise<GraphQLReadResult<T>>,
+        );
       }
       if (staleCandidate && isTransientFailure(error)) {
         const transportError =

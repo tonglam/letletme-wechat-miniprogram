@@ -656,6 +656,7 @@ test("tournament resume drops a historical selection after a season rollover", a
       calls.push(`tournaments:${this.data.event}:${forceRefresh}`);
       return Promise.resolve();
     },
+    restartForPrincipalChange() { return false; },
     syncDisplayState() { calls.push("display"); }
   };
 

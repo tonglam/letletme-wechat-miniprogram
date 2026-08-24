@@ -221,7 +221,11 @@ test("GraphQL in-flight cleanup preserves a replacement request", () => {
   );
   assert.match(
     graphql,
-    /const existingRequest = onSessionRetry\?\.\(currentToken\)[\s\S]*new GraphQLInFlightJoin\(result\)/,
+    /const existingRequest = onSessionRetry\?\.\(currentToken\)[\s\S]*reject\(new GraphQLInFlightJoin\(existingRequest\)\)/,
+  );
+  assert.match(
+    graphql,
+    /if \(error instanceof GraphQLInFlightJoin\)[\s\S]*return joinInFlight\([\s\S]*error\.request/,
   );
 });
 
@@ -776,6 +780,33 @@ test("account and entry search refresh viewer authority before snapshots", () =>
     search,
     /syncCurrentEntry\(\)[\s\S]*isCurrentEntry:[\s\S]*this\.data\.hasPreview[\s\S]*this\.data\.previewEntryId === entryId/,
   );
+});
+
+test("personal recovery avoids duplicate follow writes and restarts live viewers", () => {
+  const auth = source("miniprogram/services/auth.service.ts");
+  assert.match(
+    auth,
+    /if \(accountMutationInFlight > 0 && !options\.allowActiveMutation\) \{[\s\S]*return null/,
+  );
+  assert.match(
+    auth,
+    /replayPendingFollowEntry\(mutationRevision, undefined, \{ allowActiveMutation: true, \}/,
+  );
+
+  const tournament = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
+  assert.match(
+    tournament,
+    /const previousEntryId = Number\(this\.data\.entryId\) \|\| 0[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.restartForPrincipalChange\(previousEntryId\)/,
+  );
+});
+
+test("Players block pagination while a replacement search is errored", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const loadMoreStart = players.lastIndexOf("loadMore(): Promise");
+  const loadMore = players.slice(loadMoreStart, players.indexOf("onRetryLoadMore", loadMoreStart));
+  assert.match(loadMore, /this\.data\.error/);
 });
 
 test("all Live surfaces refresh event context before resume polling", () => {
