@@ -311,6 +311,70 @@ test("session retry re-keys the in-flight request for the refreshed token", asyn
   clearSessionCredentials();
 });
 
+test("session retry joins a request already running under the refreshed token", async () => {
+  let graphQLRequests = 0;
+  let firstRequest;
+  let secondRequest;
+  const runtime = installRuntime((request) => {
+    graphQLRequests += 1;
+    if (graphQLRequests === 1) {
+      firstRequest = request;
+      return;
+    }
+    if (graphQLRequests === 2) {
+      secondRequest = request;
+      return;
+    }
+    request.fail({ errMsg: "unexpected duplicate GraphQL request" });
+  });
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "session-a");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  await restoreApiSessionCredentials();
+
+  const query = "query SessionRetryCollision { value }";
+  const options = {
+    authMode: "session",
+    cachePolicy: "reporting",
+    forceRefresh: true,
+  };
+  const first = graphqlRead(query, {}, options);
+  for (let attempt = 0; attempt < 10 && !firstRequest; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(firstRequest, "the old-token request is pending");
+
+  clearSessionCredentials();
+  runtime.storage.set("api-session-token", "session-b");
+  runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+  await restoreApiSessionCredentials();
+  const second = graphqlRead(query, {}, options);
+  for (let attempt = 0; attempt < 10 && !secondRequest; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(secondRequest, "the refreshed-token request is pending");
+
+  firstRequest.success({
+    statusCode: 401,
+    data: { errors: [{ extensions: { code: "UNAUTHENTICATED" } }] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    graphQLRequests,
+    2,
+    "the old-token retry joins the existing refreshed-token request",
+  );
+
+  secondRequest.success({
+    statusCode: 200,
+    data: { data: { value: "refreshed" } },
+  });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.data.value, "refreshed");
+  assert.equal(secondResult.data.value, "refreshed");
+  clearSessionCredentials();
+});
+
 test("application error text containing 429 never serves stale data", async () => {
   const runtime = installRuntime(success({ value: "last-good" }));
   const query = "query BehaviorApplicationText429 { value }";

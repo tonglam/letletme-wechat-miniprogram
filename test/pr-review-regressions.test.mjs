@@ -219,6 +219,10 @@ test("GraphQL in-flight cleanup preserves a replacement request", () => {
     graphql,
     /registerSessionRetry[\s\S]*requestIdentity\(query, variables, policy, retryToken\)/,
   );
+  assert.match(
+    graphql,
+    /const existingRequest = onSessionRetry\?\.\(currentToken\)[\s\S]*new GraphQLInFlightJoin\(result\)/,
+  );
 });
 
 test("Players prioritize a queued replacement search when resuming", () => {
@@ -767,6 +771,10 @@ test("account and entry search refresh viewer authority before snapshots", () =>
   assert.match(
     search,
     /async onShow\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*if \(!this\.pageVisible\) return[\s\S]*this\.syncCurrentEntry\(\)/,
+  );
+  assert.match(
+    search,
+    /syncCurrentEntry\(\)[\s\S]*isCurrentEntry:[\s\S]*this\.data\.hasPreview[\s\S]*this\.data\.previewEntryId === entryId/,
   );
 });
 

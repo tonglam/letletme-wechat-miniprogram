@@ -118,6 +118,13 @@ export interface GraphQLReadResult<T> {
   meta: GraphQLReadMeta;
 }
 
+class GraphQLInFlightJoin extends Error {
+  constructor(readonly result: GraphQLReadResult<unknown>) {
+    super("joined existing GraphQL request");
+    this.name = "GraphQLInFlightJoin";
+  }
+}
+
 function resolvePageRequestTrace(
   explicitTrace?: PageRequestTrace | null,
 ): PageRequestTrace | undefined {
@@ -531,7 +538,9 @@ function makeRequest<T>(
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
-  onSessionRetry?: (token: string) => void,
+  onSessionRetry?: (
+    token: string,
+  ) => Promise<GraphQLReadResult<unknown>> | undefined,
 ): Promise<{
   body: GraphQLResponse<T>;
   token: string | null;
@@ -582,7 +591,14 @@ function makeRequest<T>(
 
           const currentToken = getApiSessionToken();
           if (currentToken && currentToken !== token) {
-            onSessionRetry?.(currentToken);
+            const existingRequest = onSessionRetry?.(currentToken);
+            if (existingRequest) {
+              existingRequest.then(
+                (result) => reject(new GraphQLInFlightJoin(result)),
+                reject,
+              );
+              return;
+            }
             makeRequest<T>(
               query,
               variables,
@@ -604,7 +620,12 @@ function makeRequest<T>(
             if (!freshToken) {
               throw new Error("登录状态刷新失败，请重新登录");
             }
-            onSessionRetry?.(freshToken);
+            const existingRequest = onSessionRetry?.(freshToken);
+            if (existingRequest) {
+              return existingRequest.then((result) => {
+                throw new GraphQLInFlightJoin(result);
+              });
+            }
             return makeRequest<T>(
               query,
               variables,
@@ -985,18 +1006,21 @@ export async function graphqlRead<T>(
   let inFlightRequest: Promise<GraphQLReadResult<unknown>> | null = null;
   const inFlightKeys = new Set<string>();
   const pendingRetryKeys = new Set<string>();
-  const registerInFlightKey = (requestKey: string) => {
+  const registerInFlightKey = (
+    requestKey: string,
+  ): Promise<GraphQLReadResult<unknown>> | undefined => {
+    const existing = inFlightRequests.get(requestKey);
+    if (existing && existing !== inFlightRequest) return existing;
     if (!inFlightRequest) {
       pendingRetryKeys.add(requestKey);
-      return;
+      return undefined;
     }
-    const existing = inFlightRequests.get(requestKey);
-    if (existing && existing !== inFlightRequest) return;
     inFlightRequests.set(requestKey, inFlightRequest);
     inFlightKeys.add(requestKey);
+    return undefined;
   };
   const registerSessionRetry = (retryToken: string) => {
-    registerInFlightKey(
+    return registerInFlightKey(
       requestIdentity(query, variables, policy, retryToken).requestKey,
     );
   };
@@ -1089,6 +1113,9 @@ export async function graphqlRead<T>(
         },
       };
     } catch (error) {
+      if (error instanceof GraphQLInFlightJoin) {
+        return error.result as GraphQLReadResult<T>;
+      }
       if (staleCandidate && isTransientFailure(error)) {
         const transportError =
           error instanceof GraphQLTransportError ? error : undefined;

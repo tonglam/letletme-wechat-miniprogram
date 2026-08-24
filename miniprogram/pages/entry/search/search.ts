@@ -93,7 +93,12 @@ PerformancePage({
 
   syncCurrentEntry() {
     const entryId = Number(getApp<IAppOption>().globalData.entryId) || 0;
-    this.setData({ hasEntry: entryId > 0, currentEntryId: entryId });
+    this.setData({
+      hasEntry: entryId > 0,
+      currentEntryId: entryId,
+      isCurrentEntry:
+        this.data.hasPreview && this.data.previewEntryId === entryId
+    });
   },
 
   onManualEntryInput(event: WechatMiniprogram.Input) {
