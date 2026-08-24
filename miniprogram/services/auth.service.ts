@@ -293,6 +293,18 @@ let accountMutationInFlight = 0;
 // afterwards.
 let sessionEpoch = 0;
 
+interface SessionSnapshot {
+  epoch: number;
+  token: string;
+}
+
+function isCurrentSession(snapshot: SessionSnapshot): boolean {
+  return (
+    sessionEpoch === snapshot.epoch &&
+    getApiSessionToken() === snapshot.token
+  );
+}
+
 function supportsEncryptedSessionStorage(): boolean {
   try {
     const api = wx as unknown as { canIUse?: (schema: string) => boolean };
@@ -1149,6 +1161,7 @@ async function requestProfileWithSessionRetry(
   data?: Record<string, unknown>,
 ): Promise<MiniProgramProfile> {
   let token = await ensureMiniProgramSessionToken();
+  const requestEpoch = sessionEpoch;
   try {
     return await requestAuthenticatedProfile(path, method, data, token);
   } catch (error) {
@@ -1157,6 +1170,12 @@ async function requestProfileWithSessionRetry(
       error.statusCode !== 401
     ) {
       throw error;
+    }
+    // Do not clear a newer session because a request issued with an older
+    // token finally received 401. The caller will use the current credential.
+    if (sessionEpoch !== requestEpoch || getApiSessionToken() !== token) {
+      token = await ensureMiniProgramSessionToken();
+      return requestAuthenticatedProfile(path, method, data, token);
     }
     clearSessionCredentials();
     token = (await refreshWechatApiSession()).token;
@@ -1267,7 +1286,9 @@ async function resolveEntryConflict(
   }
 }
 
-async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
+async function replayPendingEntryChoice(
+  sessionSnapshot?: SessionSnapshot,
+): Promise<MiniProgramProfile | null> {
   const pending = readPendingEntryChoice();
   if (!pending) return null;
   try {
@@ -1280,9 +1301,11 @@ async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
         webEntryId: pending.webEntryId,
       },
     );
+    if (sessionSnapshot && !isCurrentSession(sessionSnapshot)) return null;
     clearPendingEntryChoice(pending);
     return storeReceivedProfile(profile, "rebind");
   } catch (error) {
+    if (sessionSnapshot && !isCurrentSession(sessionSnapshot)) return null;
     if (
       error instanceof MiniProgramApiResponseError &&
       error.statusCode === 409
@@ -1296,6 +1319,7 @@ async function replayPendingEntryChoice(): Promise<MiniProgramProfile | null> {
 
 async function replayPendingFollowEntry(
   expectedMutationRevision = accountMutationRevision,
+  sessionSnapshot?: SessionSnapshot,
 ): Promise<MiniProgramProfile | null> {
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
@@ -1305,7 +1329,12 @@ async function replayPendingFollowEntry(
       : await requestProfileWithSessionRetry("/follow-entry", "PUT", {
           entryId: pending,
         });
-  if (expectedMutationRevision !== accountMutationRevision) return null;
+  if (
+    expectedMutationRevision !== accountMutationRevision ||
+    (sessionSnapshot && !isCurrentSession(sessionSnapshot))
+  ) {
+    return null;
+  }
   clearPendingFollowEntry(pending);
   return storeReceivedProfile(profile, "rebind");
 }
@@ -1374,24 +1403,43 @@ export async function ensureMiniProgramAccountFresh(
 export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
   if (pendingAccountSynchronization) return pendingAccountSynchronization;
   const run = (async () => {
-    const synchronizationRevision = accountMutationRevision;
-    const mutationInFlight = accountMutationInFlight > 0;
-    const pendingFollowAtStart = readPendingFollowEntry() !== undefined;
-    const serverProfile = await requestProfileWithSessionRetry(
-      "/profile",
-      "GET",
-    );
-    let profile =
-      synchronizationRevision === accountMutationRevision &&
-      !mutationInFlight &&
-      !pendingFollowAtStart
-        ? storeReceivedProfile(serverProfile, "restore")
-        : (getStoredMiniProgramProfile() ?? serverProfile);
-    profile =
-      (await replayPendingFollowEntry(synchronizationRevision)) ?? profile;
-    profile = (await replayPendingEntryChoice().catch(() => null)) ?? profile;
-    scheduleEntryConflictPrompt(profile);
-    return profile;
+    for (;;) {
+      const token = await ensureMiniProgramSessionToken();
+      const sessionSnapshot: SessionSnapshot = {
+        epoch: sessionEpoch,
+        token,
+      };
+      const synchronizationRevision = accountMutationRevision;
+      const mutationInFlight = accountMutationInFlight > 0;
+      const pendingFollowAtStart = readPendingFollowEntry() !== undefined;
+      const serverProfile = await requestProfileWithSessionRetry(
+        "/profile",
+        "GET",
+      );
+      // A profile response may have been issued before logout, token rotation,
+      // or an email confirmation installed a newer session. Never let that
+      // response overwrite the newer viewer; restart the sync under the
+      // current credential instead.
+      if (!isCurrentSession(sessionSnapshot)) continue;
+      let profile =
+        synchronizationRevision === accountMutationRevision &&
+        !mutationInFlight &&
+        !pendingFollowAtStart
+          ? storeReceivedProfile(serverProfile, "restore")
+          : (getStoredMiniProgramProfile() ?? serverProfile);
+      profile =
+        (await replayPendingFollowEntry(
+          synchronizationRevision,
+          sessionSnapshot,
+        )) ?? profile;
+      if (!isCurrentSession(sessionSnapshot)) continue;
+      profile =
+        (await replayPendingEntryChoice(sessionSnapshot).catch(() => null)) ??
+        profile;
+      if (!isCurrentSession(sessionSnapshot)) continue;
+      scheduleEntryConflictPrompt(profile);
+      return profile;
+    }
   })();
   pendingAccountSynchronization = run;
   const release = () => {

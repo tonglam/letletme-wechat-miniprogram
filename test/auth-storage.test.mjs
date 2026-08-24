@@ -563,6 +563,130 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
   }
 });
 
+test("profile sync discards a response from a superseded session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let emailConfirmRequest;
+  let deferredProfileRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId, webAccountLinked = false) => ({
+    id,
+    email: webAccountLinked ? "b@example.com" : null,
+    webAccountLinked,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/email/confirm")) {
+          emailConfirmRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            deferredProfileRequest = options;
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("account-b", 202, true),
+            },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "session-a-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const staleSync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(deferredProfileRequest, "the session-A profile request is pending");
+
+    const confirmation = confirmMiniProgramEmailLink(
+      "b@example.com",
+      "654321",
+    );
+    loginSuccess({ code: "session-b-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(emailConfirmRequest, "the session-B confirmation request started");
+    emailConfirmRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: true,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-b", 202, true),
+      },
+    });
+    await confirmation;
+
+    deferredProfileRequest.success({
+      statusCode: 200,
+      data: { success: true, profile: profile("account-a", 101) },
+    });
+    await staleSync;
+
+    assert.equal(profileRequestCount, 2, "sync restarts once under session B");
+    assert.equal(getApiSessionToken(), "session-b");
+    assert.equal(getStoredMiniProgramProfile()?.id, "account-b");
+    assert.equal(currentMyFplEntryId(), 202);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
 test("sign-out clears account caches without deleting public GraphQL data", () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;

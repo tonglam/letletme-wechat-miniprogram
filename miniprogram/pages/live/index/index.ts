@@ -66,11 +66,16 @@ PerformancePage({
     return this.loadContext("page-load");
   },
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return undefined;
+    const lifecycleRevision = this.lifecycleRevision;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) {
+      return undefined;
+    }
     const snapshot = getAppContextSnapshot();
     const currentEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
     if (!shouldReloadLiveIndex(
