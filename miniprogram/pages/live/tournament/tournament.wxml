@@ -20,7 +20,7 @@
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{tournamentListError && !hasData && !emptyState}}" message="{{tournamentListError}}" workload="interactive" bind:retry="onRetry" />
-  <app-error-state id="perf-primary-content" wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" workload="gameweek" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:elif="{{error && !hasData && !emptyState}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时赛事" />
   <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
     <app-empty-state
@@ -47,7 +47,7 @@
       wx:elif="{{error}}"
       status="stale"
       message="{{error}}{{errorSuffix ? '，' + errorSuffix : ''}}"
-      workload="gameweek"
+      workload="{{errorWorkload}}"
       transient="{{true}}"
       showRetry="{{true}}"
       bind:retry="onRetry"

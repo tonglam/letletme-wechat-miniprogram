@@ -13,7 +13,7 @@ PerformancePage({
   data: {
     loading: false,
     error: "",
-    errorWorkload: "home" as "home" | "player-stats",
+    errorWorkload: "home" as "home" | "interactive",
     emptyState: false,
     code: "",
     season: "",
@@ -102,7 +102,7 @@ PerformancePage({
         if (!season) throw error;
       }
       if (!isActiveRequest()) return;
-      this.setData({ season, errorWorkload: "player-stats" });
+      this.setData({ season, errorWorkload: "interactive" });
       const player = await getPlayerInfoByCode(this.data.code, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
       this.setData({ player, metrics: buildPlayerMetrics(player) });

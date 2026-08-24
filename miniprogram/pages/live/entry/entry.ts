@@ -71,6 +71,7 @@ export function noLiveEventState() {
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as const,
     transfersError: "",
     emptyState: "preseason" as const,
     event: 0,
@@ -106,6 +107,7 @@ interface LiveEntryData {
   hasData: boolean;
   noPicks: boolean;
   error: string;
+  errorWorkload: "home" | "gameweek";
   transfersError: string;
   emptyState: LiveEntryEmptyState;
   displayState: LiveDisplayState;
@@ -214,6 +216,7 @@ Page({
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as "home" | "gameweek",
     transfersError: "",
     emptyState: "",
     displayState: "fresh",
@@ -683,6 +686,7 @@ Page({
         loading: false,
         refreshing: false,
         error: message,
+        errorWorkload: "home",
         ...(this.data.emptyState === "preseason"
           ? { emptyState: "" as const }
           : {}),
@@ -904,10 +908,11 @@ Page({
         : this.perfTracker;
     this.setData(
       background
-        ? { refreshing: true, error: "" }
+        ? { refreshing: true, error: "", errorWorkload: "gameweek" as const }
         : {
             loading: true,
             error: "",
+            errorWorkload: "gameweek" as const,
             emptyState: "",
             noPicks: false,
           },

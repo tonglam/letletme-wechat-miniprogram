@@ -16,6 +16,20 @@ import {
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 
+type FixturesErrorWorkload = "home" | "fixtures" | "player-stats";
+
+function workloadForFixturesError(
+  error: unknown,
+  season?: string,
+): FixturesErrorWorkload {
+  const workload =
+    error && typeof error === "object"
+      ? (error as { rateLimitWorkload?: unknown }).rateLimitWorkload
+      : undefined;
+  if (workload === "player-stats") return "player-stats";
+  return season ? "fixtures" : "home";
+}
+
 const FALLBACK_MAX_EVENT = 38;
 
 export interface FixtureRunCardCell {
@@ -147,6 +161,7 @@ PerformancePage({
   data: {
     loading: true,
     error: "",
+    errorWorkload: "home" as FixturesErrorWorkload,
     startEvent: 1,
     maxEvent: FALLBACK_MAX_EVENT,
     horizon: 5 as 3 | 5 | 8,
@@ -283,7 +298,11 @@ PerformancePage({
       this.fixtures = [];
       this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
-    this.setData({ loading: !hadLastGood, error: "" });
+    this.setData({
+      loading: !hadLastGood,
+      error: "",
+      errorWorkload: season ? "fixtures" : "home",
+    });
     try {
       const [fixtures, teams] = await Promise.all([
         getFixtureWindow(startEvent, horizon, season, forceRefresh, trace),
@@ -311,6 +330,7 @@ PerformancePage({
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,
+        errorWorkload: workloadForFixturesError(error, season),
         error: hadLastGood
           ? "刷新失败，当前显示上次成功结果"
           : error instanceof Error ? error.message : "赛程加载失败"

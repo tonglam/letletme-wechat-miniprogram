@@ -671,6 +671,7 @@ PerformancePage({
       this.loadedSeason && season && this.loadedSeason !== season,
     );
     if (principalChanged || seasonChanged) {
+      this.clearEntryScopedViewState();
       this.loadedSeason = undefined;
       this.pathLoadedKey = "";
       this.setData({

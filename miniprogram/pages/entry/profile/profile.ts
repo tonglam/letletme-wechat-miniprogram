@@ -1,6 +1,7 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import type { EntryInfo } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
 import {
@@ -60,6 +61,8 @@ PerformancePage({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || ownerRevision !== this.lifecycleRevision) return;
+    if (!this.routeEntry) await waitForAuthoritativeFollow();
     if (!this.pageVisible || ownerRevision !== this.lifecycleRevision) return;
     const entryId = Number(this.routeEntry || app.globalData.entryId);
     this.setData({ entryId: Number.isFinite(entryId) ? entryId : 0 });

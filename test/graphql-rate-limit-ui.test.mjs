@@ -58,8 +58,15 @@ test("retry controls use the workload of the operation they retry", () => {
   const selections = source("miniprogram/pages/data/selections/selections.wxml");
   const price = source("miniprogram/pages/data/price/price.wxml");
   const liveMatch = source("miniprogram/pages/live/match/match.wxml");
+  const liveEntryController = source("miniprogram/pages/live/entry/entry.ts");
+  const liveMatchController = source("miniprogram/pages/live/match/match.ts");
   const home = source("miniprogram/pages/home/index/index.wxml");
   const tournament = source("miniprogram/pages/live/tournament/tournament.wxml");
+  const tournamentController = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.wxml");
+  const fixturesController = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  const team = source("miniprogram/pages/my-fpl/team/team.wxml");
+  const teamController = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   const players = source("miniprogram/pages/data/players/players.wxml");
   const playersController = source("miniprogram/pages/data/players/players.ts");
   const teams = source("miniprogram/pages/data/teams/teams.ts");
@@ -70,7 +77,10 @@ test("retry controls use the workload of the operation they retry", () => {
   const teamDetailTemplate = source("miniprogram/pages/data/team-detail/team-detail.wxml");
   const priceController = source("miniprogram/pages/data/price/price.controller.ts");
 
-  assert.match(liveEntry, /app-error-state[\s\S]*workload="gameweek"/);
+  assert.match(liveEntry, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(liveEntry, /data-status[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(liveEntryController, /showContextError[\s\S]*errorWorkload: "home"/);
+  assert.match(liveEntryController, /errorWorkload: "gameweek"/);
   assert.match(selections, /app-error-state[\s\S]*workload="interactive"/);
   assert.match(
     price,
@@ -82,8 +92,11 @@ test("retry controls use the workload of the operation they retry", () => {
   );
   assert.match(
     liveMatch,
-    /wx:elif="\{\{error\}\}"[\s\S]*workload="gameweek"[\s\S]*onRetry/,
+    /wx:elif="\{\{error\}\}"[\s\S]*workload="\{\{errorWorkload\}\}"[\s\S]*onRetry/,
   );
+  assert.match(liveMatchController, /showContextError[\s\S]*errorWorkload: "home"/);
+  assert.match(liveMatchController, /setData\(\{ errorWorkload: "fixtures" \}\)/);
+  assert.match(liveMatchController, /setData\(\{ errorWorkload: "gameweek" \}\)/);
   assert.match(home, /gameweekStatsError[\s\S]*workload="market"[\s\S]*onRetry/);
   assert.match(
     tournament,
@@ -91,8 +104,18 @@ test("retry controls use the workload of the operation they retry", () => {
   );
   assert.match(
     tournament,
-    /wx:elif="\{\{error\}\}"[\s\S]*workload="gameweek"[\s\S]*onRetry/,
+    /wx:elif="\{\{error\}\}"[\s\S]*workload="\{\{errorWorkload\}\}"[\s\S]*onRetry/,
   );
+  assert.match(tournamentController, /showContextError[\s\S]*errorWorkload: "home"/);
+  assert.match(tournamentController, /errorWorkload: "gameweek"/);
+  assert.match(fixtures, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(fixtures, /data-status[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(fixturesController, /errorWorkload: season \? "fixtures" : "home"/);
+  assert.match(fixturesController, /workloadForFixturesError/);
+  assert.match(team, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(team, /data-status[\s\S]*workload="\{\{errorWorkload\}\}"/);
+  assert.match(teamController, /showContextError[\s\S]*errorWorkload: "home"/);
+  assert.match(teamController, /errorWorkload: "interactive"/);
   assert.match(
     players,
     /data-status[\s\S]*error && players\.length[\s\S]*workload="\{\{errorWorkload\}\}"[\s\S]*onRetry/,
@@ -112,7 +135,7 @@ test("retry controls use the workload of the operation they retry", () => {
   assert.match(teams, /errorWorkload: contextReady \? "player-stats" : "home"/);
   assert.match(teamsTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
   assert.match(playerDetail, /errorWorkload: "home"/);
-  assert.match(playerDetail, /errorWorkload: "player-stats"/);
+  assert.match(playerDetail, /errorWorkload: "interactive"/);
   assert.match(playerDetailTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
   assert.match(teamDetail, /errorWorkload: "home"/);
   assert.match(teamDetail, /errorWorkload: "player-stats"/);

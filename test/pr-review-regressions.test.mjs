@@ -45,7 +45,13 @@ test("personal list pages wait for cold-start auth before reading the follow", a
   await waiting;
   assert.equal(settled, true);
 
-  for (const path of ["miniprogram/pages/my-fpl/leagues/leagues.ts"]) {
+  for (const path of [
+    "miniprogram/pages/my-fpl/leagues/leagues.ts",
+    "miniprogram/pages/entry/profile/profile.ts",
+    "miniprogram/pages/data/selections/selections.ts",
+    "miniprogram/pages/summary/tournament/tournament.ts",
+    "miniprogram/pages/live/index/index.ts",
+  ]) {
     assert.match(source(path), /await waitForAuthoritativeFollow\(\)/, path);
   }
 });

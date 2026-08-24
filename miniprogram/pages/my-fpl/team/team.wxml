@@ -27,7 +27,7 @@
     <text class="phase-banner-text">本轮结果结算处理中，最终结果以官方确认为准</text>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData && !supportAvailable}}" message="{{error}}" workload="interactive" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:if="{{error && !hasTeamData && !supportAvailable}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasTeamData && !supportAvailable}}" text="加载球队数据" />
   <view id="perf-primary-content" wx:elif="{{emptyState && !supportAvailable}}" class="section">
     <app-empty-state
@@ -41,7 +41,7 @@
   </view>
 
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}} · 当前显示上次成功结果" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" wx:if="{{emptyState === 'event' && !hasTeamData}}" class="section">
       <app-empty-state
         eyebrow="{{emptyEyebrow}}"

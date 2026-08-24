@@ -221,6 +221,7 @@ interface TeamStatsViewModel {
 interface EntrySummaryData {
   loading: boolean;
   error: string;
+  errorWorkload: "home" | "interactive";
   transferError: string;
   tabLoading: boolean;
   tabError: string;
@@ -303,6 +304,7 @@ Page({
   data: {
     loading: false,
     error: "",
+    errorWorkload: "home" as "home" | "interactive",
     transferError: "",
     tabLoading: false,
     tabError: "",
@@ -423,6 +425,7 @@ Page({
       {
         loading: false,
         error: message,
+        errorWorkload: "home",
         emptyState: "",
         hasTeamData: false,
         supportAvailable: false,
@@ -441,7 +444,7 @@ Page({
       trigger: reason === "page-show" ? "show" : "refresh",
       forceReason: "context-missing",
     });
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", errorWorkload: "home" });
     try {
       await this.ensureContext(reason, true);
       if (!this.pageVisible || this.perfTracker !== tracker) return;
@@ -903,6 +906,7 @@ Page({
     this.setData({
       loading: true,
       error: "",
+      errorWorkload: "interactive",
       transferError: "",
       emptyState: "",
       emptyEyebrow: "",

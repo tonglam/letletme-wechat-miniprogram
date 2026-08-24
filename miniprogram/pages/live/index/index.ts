@@ -3,6 +3,7 @@ import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { getEntryInfo } from "../../../services/entry.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 
 /** Live index warm-show skip window (aligned with home/leagues at 60s; team is 5 min). */
 export const LIVE_INDEX_REVALIDATE_MS = 60 * 1000;
@@ -101,6 +102,8 @@ PerformancePage({
     } catch {
       // Keep the landing page usable with the last normalized app state.
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     const entryId = app.globalData.entryId ?? 0;

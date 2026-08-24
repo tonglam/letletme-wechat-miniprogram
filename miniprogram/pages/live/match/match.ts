@@ -581,6 +581,7 @@ export function noScheduleState() {
     loading: false,
     refreshing: false,
     error: "",
+    errorWorkload: "home" as const,
     hasData: false,
     scheduleEmpty: true,
     matches: [] as LiveMatch[],
@@ -704,6 +705,7 @@ Page({
     refreshing: false,
     hasData: false,
     error: "",
+    errorWorkload: "home" as "home" | "fixtures" | "gameweek",
     fixtureStaleMessage: "",
     scheduleEmpty: false,
     displayState: "fresh" as LiveDisplayState,
@@ -1020,6 +1022,7 @@ Page({
         loading: false,
         refreshing: false,
         error: message,
+        errorWorkload: "home",
         scheduleEmpty: false,
       },
       () => {
@@ -1267,8 +1270,13 @@ Page({
     const navigationTracker = tracksNavigation ? this.perfTracker : undefined;
     this.setData(
       preserveData
-        ? { refreshing: true, error: "" }
-        : { loading: true, error: "", scheduleEmpty: false },
+        ? { refreshing: true, error: "", errorWorkload: "home" as const }
+        : {
+            loading: true,
+            error: "",
+            errorWorkload: "home" as const,
+            scheduleEmpty: false,
+          },
     );
 
     const request = (async () => {
@@ -1312,6 +1320,7 @@ Page({
                   contextRevision: context.contextRevision,
                 }
               : undefined;
+        this.setData({ errorWorkload: "fixtures" });
         navigationTracker?.mark("primaryRequestStartAt");
         const coreRead = await readCoreEventFixtureSchedule(
           targetEvent,
@@ -1363,6 +1372,7 @@ Page({
           // Arm revision recovery before the overlay request so a failed first
           // Live acquisition after kickoff still recovers automatically.
           this.liveRefresh?.sync();
+          this.setData({ errorWorkload: "gameweek" });
           const liveResult = await getLiveMatchByStatusSnapshot(
             "all",
             options.forceRefresh === true,

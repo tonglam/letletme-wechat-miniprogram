@@ -7,6 +7,7 @@ import {
   type TournamentEventResult
 } from "../../../services/tournament.service";
 import { getApiSessionToken } from "../../../services/auth.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
 import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
@@ -137,6 +138,8 @@ PerformancePage({
       this.setData({ loading: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({

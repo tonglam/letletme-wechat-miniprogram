@@ -4,6 +4,7 @@ import {
   getTournamentSelectionStats
 } from "../../../services/tournament.service";
 import { getApiSessionToken } from "../../../services/auth.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import type { TournamentOption, TournamentSelectionPlayer, TournamentSelectionStats } from "../../../models/tournament";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
@@ -147,6 +148,8 @@ PerformancePage({
       this.setData({ loadingTournaments: true });
       try { await app.authReady; } catch {}
     }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const currentGw = Math.max(1, Number(app.globalData.gw) || 1);
     this.setData({

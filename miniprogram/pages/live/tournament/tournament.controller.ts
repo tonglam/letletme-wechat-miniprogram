@@ -89,6 +89,7 @@ export function noLiveEventState() {
     refreshing: false,
     hasData: false,
     error: "",
+    errorWorkload: "home" as const,
     errorSuffix: "",
     tournamentListError: "",
     tournamentListErrorSuffix: "",
@@ -536,6 +537,7 @@ PerformancePage({
     displayState: "fresh",
     retainedRowCount: 0,
     error: "",
+    errorWorkload: "home" as "home" | "gameweek",
     errorSuffix: "",
     tournamentListError: "",
     tournamentListErrorSuffix: "",
@@ -831,6 +833,7 @@ PerformancePage({
       loading: false,
       refreshing: false,
       error: message,
+      errorWorkload: "home",
       errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
       ...(this.data.emptyState === "preseason"
         ? {
@@ -1360,8 +1363,18 @@ PerformancePage({
     }
     this.setData(
       preserveData
-        ? { refreshing: true, error: "", errorSuffix: "" }
-        : { loading: true, error: "", errorSuffix: "" },
+        ? {
+            refreshing: true,
+            error: "",
+            errorWorkload: "gameweek" as const,
+            errorSuffix: "",
+          }
+        : {
+            loading: true,
+            error: "",
+            errorWorkload: "gameweek" as const,
+            errorSuffix: "",
+          },
     );
 
     const request = (async () => {

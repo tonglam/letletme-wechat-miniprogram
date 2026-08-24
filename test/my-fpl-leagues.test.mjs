@@ -138,6 +138,10 @@ test("My FPL entry removal clears retained view data and invalidates requests", 
   assert.match(page, /showEntryEmptyState\(\)[\s\S]*this\.clearEntryScopedViewState\(\)/);
   assert.match(
     page,
+    /if \(principalChanged \|\| seasonChanged\) \{\s*this\.clearEntryScopedViewState\(\)/,
+  );
+  assert.match(
+    page,
     /clearEntryScopedViewState\(\)[\s\S]*this\.viewRequestId \+= 1[\s\S]*this\.pathRequestId \+= 1[\s\S]*this\.seasonRows = \[\][\s\S]*this\.gwRows = \[\][\s\S]*\.\.\.emptyPathState\(\)/,
   );
   assert.match(page, /this\.loadedEntryId = 0[\s\S]*this\.loadedEvent = 0/);
