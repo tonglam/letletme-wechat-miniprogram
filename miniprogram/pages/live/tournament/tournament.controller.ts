@@ -47,6 +47,7 @@ import {
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
+  tournamentScoreNextRefreshAt,
   type TournamentCaptainMode,
   type TournamentOwnershipScope,
   type TournamentTeamOption,
@@ -1429,12 +1430,6 @@ PerformancePage({
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         const refreshedRows = liveResult.data.map(normalizeRow);
-        const scoreNextRefreshAt =
-          refreshedRows
-            .map((row) => row.scoreNextRefreshAt || row.score?.nextRefreshAt)
-            .filter((value): value is string => Boolean(value))
-            .sort()[0] || "";
-        this.setData({ scoreNextRefreshAt });
         const unavailableEntryIds = mergeUnavailableTournamentEntryIds(
           liveResult.failedEntryIds,
           liveResult.unavailableEntryIds,
@@ -1464,8 +1459,12 @@ PerformancePage({
             )
           : [];
         this.retainedRowCount = retainedRows.length;
+        const nextRows = [...refreshedRows, ...retainedRows];
+        this.setData({
+          scoreNextRefreshAt: tournamentScoreNextRefreshAt(nextRows) || "",
+        });
         this.applyRows(
-          [...refreshedRows, ...retainedRows],
+          nextRows,
           true,
           liveResult.servedStoredAt || Date.now(),
         );

@@ -208,6 +208,19 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
   });
 }
 
+export function tournamentScoreNextRefreshAt(
+  rows: readonly LiveTournamentRow[],
+): string | undefined {
+  return rows
+    .map((row) => {
+      const retained = row.scoreNextRefreshAt;
+      if (retained && Number.isFinite(Date.parse(retained))) return retained;
+      return managerScoreNextRefreshAt(row.score);
+    })
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+}
+
 /** Keep unavailable score values after every known score in either direction. */
 export function compareKnownTournamentValues(
   left: number | undefined,

@@ -6,7 +6,8 @@ import {
   mapTournamentLiveRows,
   compareKnownTournamentValues,
   mergeUnavailableTournamentEntryIds,
-  tournamentManagerScoreStatus
+  tournamentManagerScoreStatus,
+  tournamentScoreNextRefreshAt,
 } from "../miniprogram/services/live-tournament";
 import { managerScoreNextRefreshAt } from "../miniprogram/services/live-manager-score";
 
@@ -215,6 +216,17 @@ assertEqual(
   managerScoreNextRefreshAt({ nextRefreshAt: "not-a-date" }),
   undefined,
   "invalid retry metadata is rejected",
+);
+assertEqual(
+  tournamentScoreNextRefreshAt([
+    { entry: 1 },
+    {
+      entry: 2,
+      scoreNextRefreshAt: "2026-08-24T06:07:00.000Z",
+    },
+  ]),
+  "2026-08-24T06:07:00.000Z",
+  "a retained failed row keeps the tournament recovery deadline",
 );
 assertEqual(
   tournamentManagerScoreStatus(eventLiveRows, {
