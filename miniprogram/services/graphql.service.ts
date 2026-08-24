@@ -1,6 +1,6 @@
 import { getGraphQLEndpoint, REQUEST_TIMEOUT_MS } from "../config/env";
 import {
-  clearSessionCredentials,
+  clearSessionCredentialsForAuthRetry,
   getApiSessionToken,
   getMiniProgramDeviceId,
   getPendingSessionRefresh,
@@ -644,7 +644,7 @@ function makeRequest<T>(
             return;
           }
 
-          clearSessionCredentials();
+          clearSessionCredentialsForAuthRetry();
           refreshWechatApiSession("graphql_401")
             .catch(rethrowSessionRefreshFailure)
             .then(retryWithRefreshedSession)

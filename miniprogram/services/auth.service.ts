@@ -671,6 +671,16 @@ export function clearSessionCredentials(): void {
   });
 }
 
+/** Clears the rejected credential while retaining its storage state for the next login diagnostic. */
+export function clearSessionCredentialsForAuthRetry(): void {
+  const previousState = lastSessionCredentialState;
+  clearSessionCredentials();
+  lastSessionCredentialState =
+    previousState === "encrypted" || previousState === "memory_only"
+      ? previousState
+      : "expired";
+}
+
 interface StoredPendingFollowEntry {
   version: 1;
   entryId: number | null;
@@ -1403,7 +1413,7 @@ async function requestProfileWithSessionRetry(
       onSessionAccepted?.({ epoch: retryEpoch, token });
       return profile;
     }
-    clearSessionCredentials();
+    clearSessionCredentialsForAuthRetry();
     token = (await refreshWechatApiSession(refreshTrigger)).token;
     const retryEpoch = sessionEpoch;
     const profile = await requestAuthenticatedProfile(
