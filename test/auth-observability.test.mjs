@@ -141,6 +141,7 @@ test("wx login sends a request id and persistence outcome without changing respo
         throw new Error(`unexpected request ${options.url}`);
       },
     };
+    acknowledgeDiagnosticDisclosure();
     clearSessionCredentials();
     const refresh = refreshWechatApiSession("cold_start_missing");
     loginSuccess({ code: "wechat-login-code" });
@@ -221,6 +222,7 @@ test("reports write_failed when encrypted session persistence is unavailable", a
         throw new Error(`unexpected request ${options.url}`);
       },
     };
+    acknowledgeDiagnosticDisclosure();
     clearSessionCredentials();
     const refresh = refreshWechatApiSession("cold_start_missing");
     loginSuccess({ code: "wechat-login-code" });

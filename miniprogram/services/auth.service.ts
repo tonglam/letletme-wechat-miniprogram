@@ -6,6 +6,10 @@ import {
   authApiErrorMessage,
   networkErrorMessage,
 } from "../utils/request-error";
+import {
+  isDiagnosticDisclosureAcknowledged,
+  requestDiagnosticDisclosure,
+} from "../utils/privacy";
 import { commitEntryBindingState as commitEntryBinding } from "./app-context-state";
 import { isStoredSessionUsable } from "./auth-session";
 import { clearGraphQLMemoryCache } from "./graphql-session-hooks";
@@ -581,6 +585,7 @@ async function reportSessionPersistence(
 }
 
 async function storeApiSession(session: ApiSession): Promise<ApiSession> {
+  const storeEpoch = sessionEpoch;
   const previousToken = sessionMemory?.token;
   const previousProfile = getStoredMiniProgramProfile();
   const bindingReason =
@@ -600,6 +605,21 @@ async function storeApiSession(session: ApiSession): Promise<ApiSession> {
   wx.setStorageSync(storageKeys.apiSessionExpiresAt, session.expiresAt);
   storeReceivedProfile(session.profile, bindingReason);
   const persisted = await persistEncryptedSessionToken(session.token);
+  // Logout (or a competing credential clear) may have completed while the
+  // encrypted write was pending. Do not let that stale continuation restore a
+  // credential or overwrite the diagnostic state selected by the newer epoch.
+  // Logout waits for this promise and separately revokes the issued token.
+  if (storeEpoch !== sessionEpoch || sessionMemory?.token !== session.token) {
+    if (sessionMemory === undefined) {
+      try {
+        wx.removeStorageSync(storageKeys.apiSessionToken);
+      } catch {}
+      try {
+        wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
+      } catch {}
+    }
+    return session;
+  }
   lastSessionCredentialState =
     persisted.outcome === "encrypted" ? "encrypted" : "memory_only";
   if (persisted.outcome !== "encrypted") {
@@ -1257,6 +1277,7 @@ export function logoutMiniProgramSession(): Promise<LogoutResult> {
   // an in-flight GraphQL request could otherwise 401 mid-DELETE and start a
   // /wechat/login whose rotated server-side session would outlive the logout.
   logoutInFlight = true;
+  cancelPendingDiagnosticDisclosureRefreshes();
   const run = performLogout();
   pendingLogout = run;
   const release = () => {
@@ -1313,6 +1334,48 @@ let pendingRefresh: PendingSessionRefresh | null = null;
 // the logout.
 let logoutInFlight = false;
 
+const pendingDiagnosticDisclosureRefreshRejectors = new Set<
+  (reason?: unknown) => void
+>();
+
+function sessionRefreshCancelledError(): Error {
+  return new Error("登录状态已变更，请重试");
+}
+
+/**
+ * Automatic refreshes must not collect login diagnostics before the local
+ * disclosure has been acknowledged. The cancellation branch prevents a
+ * logout started while the disclosure is visible from waiting forever.
+ */
+function waitForDiagnosticDisclosureBeforeRefresh(
+  startEpoch: number,
+): Promise<void> {
+  if (logoutInFlight || startEpoch !== sessionEpoch) {
+    return Promise.reject(sessionRefreshCancelledError());
+  }
+  let rejectWaiter: (reason?: unknown) => void = () => undefined;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectWaiter = reject;
+  });
+  pendingDiagnosticDisclosureRefreshRejectors.add(rejectWaiter);
+  return Promise.race([requestDiagnosticDisclosure(), cancelled])
+    .then(() => {
+      if (logoutInFlight || startEpoch !== sessionEpoch) {
+        throw sessionRefreshCancelledError();
+      }
+    })
+    .finally(() => {
+      pendingDiagnosticDisclosureRefreshRejectors.delete(rejectWaiter);
+    });
+}
+
+function cancelPendingDiagnosticDisclosureRefreshes(): void {
+  const error = sessionRefreshCancelledError();
+  [...pendingDiagnosticDisclosureRefreshRejectors].forEach((reject) => {
+    reject(error);
+  });
+}
+
 /** Lets session-adjacent flows yield to an in-progress sign-out. */
 export function isLogoutInFlight(): boolean {
   return logoutInFlight;
@@ -1336,10 +1399,15 @@ export function refreshWechatApiSession(
     issuedToken: null,
     issuedExpiresAt: null,
   };
-  const refresh = performWechatSessionRefresh(trigger, (issuedToken, expiresAt) => {
-    state.issuedToken = issuedToken;
-    state.issuedExpiresAt = expiresAt;
-  });
+  const startEpoch = sessionEpoch;
+  const startRefresh = () =>
+    performWechatSessionRefresh(trigger, (issuedToken, expiresAt) => {
+      state.issuedToken = issuedToken;
+      state.issuedExpiresAt = expiresAt;
+    });
+  const refresh = isDiagnosticDisclosureAcknowledged()
+    ? startRefresh()
+    : waitForDiagnosticDisclosureBeforeRefresh(startEpoch).then(startRefresh);
   registerPendingRefreshState(state, refresh);
   const release = () => {
     releasePendingRefreshState(state, refresh);

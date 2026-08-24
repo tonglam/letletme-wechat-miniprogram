@@ -12,6 +12,7 @@ import {
   clearSessionCredentials,
   restoreApiSessionCredentials
 } from "../miniprogram/services/auth.service.ts";
+import { acknowledgeDiagnosticDisclosure } from "../miniprogram/utils/privacy.ts";
 
 function installRuntime(handler) {
   const storage = new Map();
@@ -37,6 +38,8 @@ function installRuntime(handler) {
       requestHandler(options);
     }
   };
+  acknowledgeDiagnosticDisclosure();
+  storage.delete("auth-diagnostic-disclosure-v1");
   return {
     requests,
     storage,

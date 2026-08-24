@@ -113,6 +113,10 @@ function hasDiagnosticDisclosure(): boolean {
   return diagnosticDisclosureAcknowledged;
 }
 
+export function isDiagnosticDisclosureAcknowledged(): boolean {
+  return hasDiagnosticDisclosure();
+}
+
 /**
  * Holds the cold-start login until the one-time diagnostics notice is shown
  * by the mounted privacy-dialog component and acknowledged by the user.
