@@ -244,7 +244,7 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
-      rank: officialScore ? row.rank ?? row.overallRank : undefined,
+      rank: officialScore ? row.rank : undefined,
       livePoints: officialEventPoints,
       transferCost: officialScore?.transferCost,
       liveNetPoints: officialNetPoints,
@@ -254,9 +254,7 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
-      overallRank: officialScore
-        ? officialScore.overallRank ?? row.overallRank
-        : undefined,
+      overallRank: officialScore?.overallRank ?? undefined,
       score: officialScore,
       scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
       picks: (row.pickList || []).map(mapTournamentPick)

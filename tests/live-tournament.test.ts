@@ -200,6 +200,42 @@ assertEqual(eventLiveRows[0]?.livePoints, 6, "event/live points replace legacy h
 assertEqual(eventLiveRows[0]?.totalPoints, 101, "event/live overall total remains visible");
 assertEqual(eventLiveRows[0]?.overallRank, 123, "official overall rank wins");
 assertEqual(tournamentManagerScoreStatus(eventLiveRows), "官方实时", "event/live rows are available");
+const eventLiveWithoutRanks = mapTournamentLiveRows([
+  {
+    entry: 304,
+    entryName: "Official without ranks",
+    playerName: "Manager",
+    overallRank: 999,
+    livePoints: 6,
+    transferCost: 0,
+    liveNetPoints: 6,
+    liveTotalPoints: 101,
+    played: 3,
+    toPlay: 8,
+    captainName: "Saka",
+    score: {
+      eventPoints: 6,
+      netEventPoints: 6,
+      totalPoints: 101,
+      totalScope: "OVERALL",
+      transferCost: 0,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r9:304",
+      checkedAt: "2026-08-24T06:01:00.000Z",
+    },
+  },
+]);
+assertEqual(
+  eventLiveWithoutRanks[0]?.rank,
+  undefined,
+  "a missing live tournament rank cannot fall back to a standings rank",
+);
+assertEqual(
+  eventLiveWithoutRanks[0]?.overallRank,
+  undefined,
+  "a missing official overall rank cannot fall back to a flat standings rank",
+);
 assertEqual(
   mergeUnavailableTournamentEntryIds([2, 3], [3, 4]).join(","),
   "2,3,4",
