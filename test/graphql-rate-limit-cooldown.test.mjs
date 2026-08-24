@@ -245,6 +245,26 @@ test("a corrupted workload cooldown stays anchored when storage writes fail", ()
   assert.equal(fresh.remainingSeconds, 1);
 });
 
+test("a longer global cooldown wins over a shorter workload cooldown", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  runtime.storage.set("graphql-cooldown-until", now + 60_000);
+  runtime.storage.set(
+    "graphql-cooldown-workloads-v1:player-stats",
+    now + 20_000,
+  );
+
+  const state = getGraphQLCooldownState(now, "player-stats");
+  assert.equal(state.active, true);
+  assert.equal(state.cooldownUntil, now + 60_000);
+  assert.equal(
+    state.workload,
+    undefined,
+    "a global cooldown must remain global when it is the effective deadline",
+  );
+  assert.equal(state.remainingSeconds, 60);
+});
+
 test("legacy FORBIDDEN application errors are limited to the viewer-entry recovery predicate", () => {
   assert.equal(
     isViewerEntryAuthorizationError(

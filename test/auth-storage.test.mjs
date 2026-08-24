@@ -9,6 +9,7 @@ import {
   getApiSessionToken,
   getLinkedAccountSnapshot,
   getStoredMiniProgramProfile,
+  isMiniProgramProfileFresh,
   logoutMiniProgramSession,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
@@ -534,6 +535,13 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
       "a checked profile younger than 60 seconds is reused",
     );
     assert.equal(currentMyFplEntryId(), 101);
+
+    storage.set("api-profile-checked-at", now + 30_000);
+    assert.equal(
+      isMiniProgramProfileFresh(60_000, now),
+      false,
+      "a profile checked in the future is treated as stale rather than fresh",
+    );
 
     storage.set("api-profile-checked-at", now - 61_000);
     const [first, second] = await Promise.all([

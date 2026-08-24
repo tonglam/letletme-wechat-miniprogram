@@ -119,6 +119,7 @@
   <app-error-state id="perf-primary-content" wx:if="{{error && players.length === 0}}" message="{{error}}" workload="player-stats" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && players.length === 0}}" text="加载球员" />
   <view id="perf-primary-content" wx:else class="section card">
+    <data-status wx:if="{{error && players.length}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="player-stats" showRetry="{{true}}" bind:retry="onRetry" />
     <view wx:if="{{players.length}}" class="result-summary">
       已加载 {{players.length}} / {{totalCount}} 名球员
     </view>
@@ -145,7 +146,7 @@
       <view class="inline-error-retry" hover-class="hover-dim" bindtap="onRetryLoadMore">重试加载更多</view>
     </view>
     <app-loading wx:elif="{{loadingMore}}" text="加载更多球员" />
-    <view wx:elif="{{hasMore}}" class="load-more" bindtap="loadMore" hover-class="hover-dim"><text class="action">加载更多</text></view>
+    <view wx:elif="{{hasMore && !error}}" class="load-more" bindtap="loadMore" hover-class="hover-dim"><text class="action">加载更多</text></view>
     <view wx:elif="{{players.length}}" class="list-end">已加载全部结果</view>
   </view>
   <bottomNavBar />

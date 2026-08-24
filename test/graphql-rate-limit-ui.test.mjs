@@ -52,3 +52,27 @@ test("Market stale state exposes a cooldown-aware retry action", () => {
     /onRetryDaily\(\)[\s\S]*loadDailyChanges\(true, false\)/,
   );
 });
+
+test("retry controls use the workload of the operation they retry", () => {
+  const liveEntry = source("miniprogram/pages/live/entry/entry.wxml");
+  const selections = source("miniprogram/pages/data/selections/selections.wxml");
+  const price = source("miniprogram/pages/data/price/price.wxml");
+  const liveMatch = source("miniprogram/pages/live/match/match.wxml");
+  const players = source("miniprogram/pages/data/players/players.wxml");
+
+  assert.match(liveEntry, /app-error-state[\s\S]*workload="gameweek"/);
+  assert.match(selections, /app-error-state[\s\S]*workload="interactive"/);
+  assert.match(
+    price,
+    /historyError[\s\S]*workload="gameweek"[\s\S]*onRetryHistory/,
+  );
+  assert.match(
+    liveMatch,
+    /fixtureStaleMessage[\s\S]*workload="fixtures"[\s\S]*onRetry/,
+  );
+  assert.match(
+    players,
+    /data-status[\s\S]*error && players\.length[\s\S]*workload="player-stats"[\s\S]*onRetry/,
+  );
+  assert.match(players, /hasMore && !error/);
+});

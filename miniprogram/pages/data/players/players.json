@@ -4,6 +4,7 @@
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
+    "data-status": "../../../components/data-status/data-status",
     "filter-bar": "../../../components/filter-bar/filter-bar",
     "player-row": "../../../components/player-row/player-row"
   },

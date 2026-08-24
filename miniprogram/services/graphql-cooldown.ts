@@ -222,17 +222,7 @@ export function getGraphQLCooldownState(
   workload?: GraphQLWorkload,
 ): GraphQLCooldownState {
   ensureCooldownRuntime();
-  if (workload) {
-    const workloadUntil = readWorkloadCooldown(workload, now);
-    if (workloadUntil > now) {
-      return {
-        active: true,
-        cooldownUntil: workloadUntil,
-        remainingSeconds: clampRetryAfterSeconds((workloadUntil - now) / 1000),
-        workload,
-      };
-    }
-  }
+  const workloadUntil = workload ? readWorkloadCooldown(workload, now) : 0;
   let stored = 0;
   let storageReadSucceeded = false;
   try {
@@ -263,31 +253,38 @@ export function getGraphQLCooldownState(
     corruptedStoredCooldownValue = null;
     corruptedStoredCooldownUntil = 0;
   }
-  const effectiveUntil = Math.max(cooldownUntilMemory, normalizedStored);
+  const globalEffectiveUntil = Math.max(cooldownUntilMemory, normalizedStored);
 
-  if (!Number.isFinite(effectiveUntil) || effectiveUntil <= now) {
+  let globalUntil = 0;
+  if (!Number.isFinite(globalEffectiveUntil) || globalEffectiveUntil <= now) {
     cooldownUntilMemory = 0;
     if (stored) {
       try {
         wx.removeStorageSync(storageKeys.graphqlCooldownUntil);
       } catch {}
     }
-    return { active: false, remainingSeconds: 0 };
+  } else {
+    // A corrupted or manually edited value must never lock the client for more
+    // than the protocol's documented 120-second ceiling.
+    globalUntil = Math.min(globalEffectiveUntil, maximumUntil);
+    cooldownUntilMemory = globalUntil;
+    if (globalUntil !== safeStored) {
+      try {
+        wx.setStorageSync(storageKeys.graphqlCooldownUntil, globalUntil);
+      } catch {}
+    }
   }
 
-  // A corrupted or manually edited value must never lock the client for more
-  // than the protocol's documented 120-second ceiling.
-  const cooldownUntil = Math.min(effectiveUntil, maximumUntil);
-  cooldownUntilMemory = cooldownUntil;
-  if (cooldownUntil !== safeStored) {
-    try {
-      wx.setStorageSync(storageKeys.graphqlCooldownUntil, cooldownUntil);
-    } catch {}
-  }
+  const cooldownUntil = Math.max(workloadUntil, globalUntil);
+  if (cooldownUntil <= now) return { active: false, remainingSeconds: 0 };
+
+  const activeWorkload =
+    workload && workloadUntil >= globalUntil ? workload : undefined;
   return {
     active: true,
     cooldownUntil,
     remainingSeconds: clampRetryAfterSeconds((cooldownUntil - now) / 1000),
+    ...(activeWorkload ? { workload: activeWorkload } : {}),
   };
 }
 

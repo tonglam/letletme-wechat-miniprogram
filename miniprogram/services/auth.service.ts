@@ -1336,7 +1336,8 @@ export function isMiniProgramProfileFresh(
 ): boolean {
   const profile = getStoredMiniProgramProfile();
   const checkedAt = getMiniProgramProfileCheckedAt();
-  const age = checkedAt === null ? Infinity : Math.max(0, now - checkedAt);
+  const age =
+    checkedAt === null || checkedAt > now ? Infinity : now - checkedAt;
   return Boolean(profile) && age < Math.max(0, maxAgeMs);
 }
 

@@ -340,7 +340,7 @@
       </view>
 
       <view wx:if="{{!selectedPlayer}}" class="history-placeholder">选择一个球员后显示历史身价变化。</view>
-      <app-error-state wx:elif="{{historyError}}" message="{{historyError}}" workload="interactive" bind:retry="onRetryHistory" />
+      <app-error-state wx:elif="{{historyError}}" message="{{historyError}}" workload="gameweek" bind:retry="onRetryHistory" />
       <app-loading wx:elif="{{historyLoading}}" text="加载球员身价历史" />
       <app-empty-state wx:elif="{{historyRows.length === 0}}" title="还没有身价变化记录" description="该球员首次调价后会开始显示历史" />
       <view wx:else>

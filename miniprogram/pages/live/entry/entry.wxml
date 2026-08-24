@@ -11,7 +11,7 @@
   </view>
 
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">
-    <app-error-state message="{{error}}" workload="interactive" bind:retry="onRetry" />
+    <app-error-state message="{{error}}" workload="gameweek" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时积分" />
   <view wx:elif="{{emptyState === 'entry'}}" id="perf-primary-content" class="section">
@@ -66,7 +66,7 @@
     />
   </view>
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="gameweek" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" class="section live-summary">
       <view class="score-card scoreboard">
         <view class="score-top">
