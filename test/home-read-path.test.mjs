@@ -51,6 +51,13 @@ describe("home public read path", () => {
     );
   });
 
+  it("clears retained leagues when the authoritative viewer changes", () => {
+    assert.match(
+      home,
+      /const previousEntryId = Number\([\s\S]*?const nextEntryId = Number\([\s\S]*?\.\.\.\(previousEntryId !== nextEntryId \? \{ leagues: \[\] \} : \{\}\)/,
+    );
+  });
+
   it("keeps secondary work pending until personal viewer data settles", () => {
     const personalTask = home.indexOf("const personalTask =");
     const publicSettled = home.indexOf(

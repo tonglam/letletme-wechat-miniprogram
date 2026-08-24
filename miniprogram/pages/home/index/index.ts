@@ -627,7 +627,15 @@ Page({
         const entry = await getEntryInfo(entryId, forceRefresh, entryTrace);
         if (!isActiveSecondary()) return;
         loadedEntry = entry;
-        this.setData({ entry, entryError: "" });
+        const previousEntryId = Number(
+          this.data.entry.entryId ?? this.data.entry.entry ?? 0,
+        );
+        const nextEntryId = Number(entry.entryId ?? entry.entry ?? 0);
+        this.setData({
+          entry,
+          entryError: "",
+          ...(previousEntryId !== nextEntryId ? { leagues: [] } : {}),
+        });
       } catch (error) {
         if (isActiveSecondary()) {
           this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });

@@ -180,6 +180,22 @@ test("Players resume the saved snapshot without submitting a draft", () => {
   assert.doesNotMatch(resumeBlock, /startSearch\(this\.data\.keyword/);
 });
 
+test("Players pull-to-refresh reloads the submitted snapshot without committing a draft", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const refreshBlock = players.slice(
+    players.indexOf("onPullDownRefresh()"),
+    players.indexOf("onReachBottom()"),
+  );
+  assert.match(
+    refreshBlock,
+    /const snapshot = this\.pendingSearchSnapshot \|\| this\.activeSearchSnapshot \|\| this\.loadedSearchSnapshot/,
+  );
+  assert.match(
+    refreshBlock,
+    /const task = snapshot \? this\.resumeSearchSnapshot\(snapshot, true\) : this\.startSearch\(this\.data\.keyword, true\)/,
+  );
+});
+
 test("Players preserve a pagination resume when hidden during deferred start", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
   const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));

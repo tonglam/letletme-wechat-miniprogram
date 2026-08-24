@@ -637,7 +637,14 @@ PerformancePage({
   },
 
   onPullDownRefresh() {
-    return this.startSearch(this.data.keyword, true).finally(() =>
+    const snapshot =
+      this.pendingSearchSnapshot ||
+      this.activeSearchSnapshot ||
+      this.loadedSearchSnapshot;
+    const task = snapshot
+      ? this.resumeSearchSnapshot(snapshot, true)
+      : this.startSearch(this.data.keyword, true);
+    return task.finally(() =>
       wx.stopPullDownRefresh(),
     );
   },

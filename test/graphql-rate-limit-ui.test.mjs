@@ -61,6 +61,8 @@ test("retry controls use the workload of the operation they retry", () => {
   const home = source("miniprogram/pages/home/index/index.wxml");
   const tournament = source("miniprogram/pages/live/tournament/tournament.wxml");
   const players = source("miniprogram/pages/data/players/players.wxml");
+  const teams = source("miniprogram/pages/data/teams/teams.ts");
+  const teamsTemplate = source("miniprogram/pages/data/teams/teams.wxml");
 
   assert.match(liveEntry, /app-error-state[\s\S]*workload="gameweek"/);
   assert.match(selections, /app-error-state[\s\S]*workload="interactive"/);
@@ -96,4 +98,9 @@ test("retry controls use the workload of the operation they retry", () => {
   assert.match(players, /players\.length === 0 && activeKeyword/);
   assert.match(players, /title="没有找到“\{\{activeKeyword\}\}”"/);
   assert.match(players, /hasMore && !error/);
+  assert.match(teams, /errorWorkload: "player-stats"/);
+  assert.match(teams, /let contextReady = false/);
+  assert.match(teams, /contextReady = true/);
+  assert.match(teams, /errorWorkload: contextReady \? "player-stats" : "home"/);
+  assert.match(teamsTemplate, /app-error-state[\s\S]*workload="\{\{errorWorkload\}\}"/);
 });
