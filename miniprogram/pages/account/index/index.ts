@@ -1,6 +1,7 @@
 import { routes } from "../../../config/routes";
 import { awaitLinkedAccountSnapshot } from "../../../services/auth.service";
 import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { PerformancePage } from "../../../utils/performance-page";
 
@@ -12,14 +13,16 @@ PerformancePage({
     accountEmail: ""
   },
 
-  onLoad() {
+  async onLoad() {
+    await waitForAuthoritativeFollow();
     this.syncEntry();
     return this.syncAccount();
   },
 
-  onShow() {
+  async onShow() {
     // A rebind on entry/search (or an email link sync) lands back here via the
     // tab, so refresh the status row every time the page surfaces.
+    await waitForAuthoritativeFollow();
     this.syncEntry();
     return this.syncAccount();
   },

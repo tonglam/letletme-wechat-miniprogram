@@ -1422,7 +1422,11 @@ export async function ensureMiniProgramAccountFresh(
 export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
   if (pendingAccountSynchronization) return pendingAccountSynchronization;
   const run = (async () => {
+    const synchronizationStartEpoch = sessionEpoch;
     for (;;) {
+      if (sessionEpoch !== synchronizationStartEpoch && !getApiSessionToken()) {
+        throw new Error("登录状态已变更，请重新进入小程序");
+      }
       const token = await ensureMiniProgramSessionToken();
       let sessionSnapshot: SessionSnapshot = {
         epoch: sessionEpoch,
@@ -1443,7 +1447,12 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
       // or an email confirmation installed a newer session. Never let that
       // response overwrite the newer viewer; restart the sync under the
       // current credential instead.
-      if (!isCurrentSession(sessionSnapshot)) continue;
+      if (!isCurrentSession(sessionSnapshot)) {
+        if (sessionEpoch !== sessionSnapshot.epoch && !getApiSessionToken()) {
+          throw new Error("登录状态已变更，请重新进入小程序");
+        }
+        continue;
+      }
       let profile =
         synchronizationRevision === accountMutationRevision &&
         !mutationInFlight &&
@@ -1455,11 +1464,21 @@ export function synchronizeMiniProgramAccount(): Promise<MiniProgramProfile> {
           synchronizationRevision,
           sessionSnapshot,
         )) ?? profile;
-      if (!isCurrentSession(sessionSnapshot)) continue;
+      if (!isCurrentSession(sessionSnapshot)) {
+        if (sessionEpoch !== sessionSnapshot.epoch && !getApiSessionToken()) {
+          throw new Error("登录状态已变更，请重新进入小程序");
+        }
+        continue;
+      }
       profile =
         (await replayPendingEntryChoice(sessionSnapshot).catch(() => null)) ??
         profile;
-      if (!isCurrentSession(sessionSnapshot)) continue;
+      if (!isCurrentSession(sessionSnapshot)) {
+        if (sessionEpoch !== sessionSnapshot.epoch && !getApiSessionToken()) {
+          throw new Error("登录状态已变更，请重新进入小程序");
+        }
+        continue;
+      }
       scheduleEntryConflictPrompt(profile);
       return profile;
     }

@@ -210,10 +210,14 @@ test("viewer changes clear entry-scoped selection state before reinitializing", 
 
 test("GraphQL in-flight cleanup preserves a replacement request", () => {
   const graphql = source("miniprogram/services/graphql.service.ts");
-  assert.match(graphql, /const inFlightRequest = networkRequest/);
+  assert.match(graphql, /inFlightRequest = networkRequest as Promise/);
   assert.match(
     graphql,
-    /inFlightRequests\.get\(identity\.requestKey\) === inFlightRequest[\s\S]*inFlightRequests\.delete\(identity\.requestKey\)/,
+    /for \(const requestKey of inFlightKeys\)[\s\S]*inFlightRequests\.get\(requestKey\) === inFlightRequest[\s\S]*inFlightRequests\.delete\(requestKey\)/,
+  );
+  assert.match(
+    graphql,
+    /registerSessionRetry[\s\S]*requestIdentity\(query, variables, policy, retryToken\)/,
   );
 });
 
@@ -746,6 +750,23 @@ test("league authorization recovery clears retained view state", () => {
   assert.match(
     leagues,
     /if \(refreshedEntryId !== entryId\) \{[\s\S]*this\.clearEntryScopedViewState\(\)[\s\S]*this\.loadedEntryId = 0/,
+  );
+});
+
+test("account and entry search refresh viewer authority before snapshots", () => {
+  const account = source("miniprogram/pages/account/index/index.ts");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  assert.match(
+    account,
+    /async onLoad\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.syncEntry\(\)/,
+  );
+  assert.match(
+    account,
+    /async onShow\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.syncEntry\(\)/,
+  );
+  assert.match(
+    search,
+    /async onShow\(\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*if \(!this\.pageVisible\) return[\s\S]*this\.syncCurrentEntry\(\)/,
   );
 });
 

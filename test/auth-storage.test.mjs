@@ -796,6 +796,129 @@ test("profile sync reuses the response from a same-session 401 retry", async () 
   }
 });
 
+test("profile sync stops after logout instead of restoring a session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let loginCount = 0;
+  let deferredProfileRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId) => ({
+    id,
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginCount += 1;
+        if (loginCount === 1) {
+          loginSuccess = success;
+          return;
+        }
+        success({ code: "unexpected-relogin" });
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          if (loginCount > 1) {
+            options.success({
+              statusCode: 200,
+              data: {
+                success: true,
+                contractVersion: 2,
+                authenticated: true,
+                webAccountLinked: false,
+                token: "unexpected-session",
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                profile: profile("unexpected-account", 202),
+              },
+            });
+          }
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            deferredProfileRequest = options;
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("unexpected-account", 202),
+            },
+          });
+          return;
+        }
+        if (options.url.endsWith("/session") && options.method === "DELETE") {
+          options.success({ statusCode: 204, data: { success: true } });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const staleSync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(deferredProfileRequest);
+
+    await logoutMiniProgramSession();
+    deferredProfileRequest.success({
+      statusCode: 200,
+      data: { success: true, profile: profile("account-a", 101) },
+    });
+    await assert.rejects(staleSync, /登录状态已变更/);
+
+    assert.equal(loginCount, 1, "logout does not trigger a replacement login");
+    assert.equal(profileRequestCount, 1);
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getStoredMiniProgramProfile(), null);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
 test("sign-out clears account caches without deleting public GraphQL data", () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
