@@ -58,6 +58,8 @@ test("retry controls use the workload of the operation they retry", () => {
   const selections = source("miniprogram/pages/data/selections/selections.wxml");
   const price = source("miniprogram/pages/data/price/price.wxml");
   const liveMatch = source("miniprogram/pages/live/match/match.wxml");
+  const home = source("miniprogram/pages/home/index/index.wxml");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.wxml");
   const players = source("miniprogram/pages/data/players/players.wxml");
 
   assert.match(liveEntry, /app-error-state[\s\S]*workload="gameweek"/);
@@ -72,6 +74,15 @@ test("retry controls use the workload of the operation they retry", () => {
   );
   assert.match(
     liveMatch,
+    /wx:elif="\{\{error\}\}"[\s\S]*workload="gameweek"[\s\S]*onRetry/,
+  );
+  assert.match(home, /gameweekStatsError[\s\S]*workload="market"[\s\S]*onRetry/);
+  assert.match(
+    tournament,
+    /tournamentListError[\s\S]*workload="interactive"[\s\S]*onRetry/,
+  );
+  assert.match(
+    tournament,
     /wx:elif="\{\{error\}\}"[\s\S]*workload="gameweek"[\s\S]*onRetry/,
   );
   assert.match(

@@ -143,7 +143,7 @@
       <view class="gw-stats-head">
         <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
       </view>
-      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="gameweek" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
         <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">

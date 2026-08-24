@@ -112,6 +112,12 @@ test("player directory completion preserves edits made during the request", () =
   assert.match(players, /resolveKeywordAfterPlayerLoad\(/);
   assert.match(
     players,
+    /const responseKeyword = append \? this\.data\.keyword : resolveKeywordAfterPlayerLoad\(/,
+  );
+  assert.match(players, /activeKeyword: snapshot\.activeKeyword/);
+  assert.doesNotMatch(players, /keyword\.trim\(\) !== snapshot\.activeKeyword\.trim\(\)/);
+  assert.match(
+    players,
     /if \(this\.data\.loading\) this\.searchEditedWhileLoading = true/,
   );
 });

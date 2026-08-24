@@ -963,17 +963,14 @@ PerformancePage({
         !shouldApplyPlayerResponse(revision, this.requestRevision)
       )
         return;
+      const responseKeyword = append
+        ? this.data.keyword
+        : resolveKeywordAfterPlayerLoad(
+            snapshot.activeKeyword,
+            this.data.keyword,
+            this.searchEditedWhileLoading,
+          );
       if (!append) {
-        const keyword = resolveKeywordAfterPlayerLoad(
-          snapshot.activeKeyword,
-          this.data.keyword,
-          this.searchEditedWhileLoading,
-        );
-        if (keyword.trim() !== snapshot.activeKeyword.trim()) {
-          this.searchEditedWhileLoading = false;
-          this.setData({ keyword });
-          return;
-        }
         this.searchEditedWhileLoading = false;
       }
 
@@ -987,6 +984,8 @@ PerformancePage({
         snapshot.sortDir,
       );
       this.setData({
+        keyword: responseKeyword,
+        activeKeyword: snapshot.activeKeyword,
         players,
         nextCursor: page.nextCursor,
         totalCount: page.totalCount,
