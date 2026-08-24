@@ -6,7 +6,6 @@ import {
   getLivePointsByEntrySnapshot,
   getLiveSnapshot,
 } from "../../../services/live.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import type {
   LiveManagerScore,
   LivePlayerRow,
@@ -34,7 +33,10 @@ import {
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { miniLogger } from "../../../utils/logger";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
   buildPlayerLiveDetail,
@@ -341,15 +343,7 @@ Page({
     }
     tracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
-    if (!this.hasRouteEntry && !getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked to a different entry
-      // since, so wait for the refreshed profile to re-assert it (the login
-      // may not even have started while the privacy callback is pending).
-      try {
-        await app.authReady;
-      } catch {}
-    }
+    if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
     const currentGw = currentLiveEventId(context);
@@ -445,6 +439,10 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed && !this.hasRouteEntry) {
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
     let showContext = getAppContextSnapshot();
     if (resumed) {
       const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
@@ -649,6 +647,8 @@ Page({
     this.forcedRefreshPending = true;
     this.refreshContextPending = true;
     try {
+      if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
         context = await this.ensureContext("pull-refresh", true);

@@ -177,6 +177,46 @@ test("player directory coalesces latest filters and serializes pagination", () =
   );
 });
 
+test("deduped player searches restore the last successful snapshot", () => {
+  const players = source("miniprogram/pages/data/players/players.ts");
+  assert.match(
+    players,
+    /const loadedSnapshot = this\.loadedSearchSnapshot[\s\S]*this\.activeSearchSnapshot = loadedSnapshot[\s\S]*error: ""[\s\S]*activeKeyword: loadedSnapshot\.activeKeyword/,
+  );
+});
+
+test("direct personal Live reads refresh viewer authority before entry snapshots", () => {
+  for (const path of [
+    "miniprogram/pages/live/entry/entry.ts",
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  ]) {
+    const page = source(path);
+    assert.match(page, /waitForAuthoritativeFollow\(\)/, path);
+    assert.match(page, /await waitForAuthoritativeFollow\(\)[\s\S]*entryId/, path);
+  }
+});
+
+test("viewer changes clear entry-scoped selection state before reinitializing", () => {
+  const selections = source("miniprogram/pages/data/selections/selections.ts");
+  assert.match(
+    selections,
+    /clearEntryScopedState\(\)[\s\S]*await this\.initializePage\(showTrace\)/,
+  );
+  assert.match(
+    selections,
+    /clearEntryScopedState\(\)[\s\S]*selectedTournamentName: ""[\s\S]*headerSubtitle: ""[\s\S]*selectedRows: \[\]/,
+  );
+});
+
+test("GraphQL in-flight cleanup preserves a replacement request", () => {
+  const graphql = source("miniprogram/services/graphql.service.ts");
+  assert.match(graphql, /const inFlightRequest = networkRequest/);
+  assert.match(
+    graphql,
+    /inFlightRequests\.get\(identity\.requestKey\) === inFlightRequest[\s\S]*inFlightRequests\.delete\(identity\.requestKey\)/,
+  );
+});
+
 test("Players prioritize a queued replacement search when resuming", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
   const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));

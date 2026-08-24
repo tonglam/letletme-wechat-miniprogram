@@ -763,10 +763,27 @@ PerformancePage({
       !snapshot.forceRefresh &&
       snapshot.fingerprint === this.lastSearchFingerprint
     ) {
+      const loadedSnapshot = this.loadedSearchSnapshot;
+      if (loadedSnapshot) {
+        this.activeSearchSnapshot = loadedSnapshot;
+        this.searchEditedWhileLoading = false;
+        this.setData({
+          loading: false,
+          error: "",
+          loadMoreError: "",
+          keyword: loadedSnapshot.keyword,
+          activeKeyword: loadedSnapshot.activeKeyword,
+          filtersLocked: Boolean(loadedSnapshot.activeKeyword),
+          sortField: loadedSnapshot.sortField,
+          sortDir: loadedSnapshot.sortDir,
+          sortBy: loadedSnapshot.sortBy,
+        });
+      } else {
+        this.setData({ loading: false });
+      }
       this.searchPending = false;
       this.searchPendingForceRefresh = false;
       this.resolveSearchWaiters();
-      this.setData({ loading: false });
       return;
     }
 

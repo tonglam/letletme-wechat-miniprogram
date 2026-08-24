@@ -5,7 +5,6 @@ import {
   getLiveSnapshot,
   searchLivePointsByTournamentSnapshot,
 } from "../../../services/live.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import type {
   LiveSnapshotStatus,
   LiveTournamentRow,
@@ -13,7 +12,10 @@ import type {
 import type { TournamentOption } from "../../../models/tournament";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch } from "../../../utils/navigation";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import {
   shouldRevalidateCachedLiveSnapshot,
   shouldPollLiveSnapshot,
@@ -717,15 +719,7 @@ PerformancePage({
     )
       return;
     this.loadedSeason = context.season || undefined;
-    if (!getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked to a different entry
-      // since, so wait for the refreshed profile to re-assert it (the login
-      // may not even have started while the privacy callback is pending).
-      try {
-        await app.authReady;
-      } catch {}
-    }
+    await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.startupGeneration !== startupGeneration)
       return;
     const liveWindow = await getLiveSnapshot().catch(() => null);
@@ -852,6 +846,10 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed) {
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
     if (resumed && this.resumeStartupAfterShow) {
       const forceRefresh = this.resumeStartupForceRefresh;
       this.resumeStartupAfterShow = false;
@@ -1050,6 +1048,8 @@ PerformancePage({
   },
 
   async retryWithContext() {
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     if (this.data.event === 0) {
       const app = getApp<IAppOption>();
       const recoveryGeneration = ++this.startupGeneration;
@@ -1132,6 +1132,8 @@ PerformancePage({
     forceRefresh = false,
     originatingTrace?: PageRequestTrace,
   ) {
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     const trace =
       originatingTrace ||
       capturePageRequestTrace({

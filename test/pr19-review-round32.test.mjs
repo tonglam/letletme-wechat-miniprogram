@@ -21,7 +21,7 @@ test("Live Tournament hide-show replays context, authority, and directory startu
   const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(
     page,
-    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason, forceRefresh\)[\s\S]*await app\.authReady[\s\S]*entryId: app\.globalData\.entryId[\s\S]*this\.initLiveRefresh\(\)[\s\S]*await this\.loadTournaments\(forceRefresh, trace\)/
+    /async initializeFromContext\([\s\S]*await this\.ensureContext\(reason, forceRefresh\)[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*entryId: app\.globalData\.entryId[\s\S]*this\.initLiveRefresh\(\)[\s\S]*await this\.loadTournaments\(forceRefresh, trace\)/
   );
   assert.match(
     page,

@@ -165,6 +165,7 @@ PerformancePage({
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const nextEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
     if (nextEntryId !== this.data.entryId) {
+      this.clearEntryScopedState();
       this.resumeOnShow = false;
       this.resumeStage = null;
       this.resumeForceRefresh = false;
@@ -194,6 +195,42 @@ PerformancePage({
       return;
     }
     await this.initializePage(trace);
+  },
+
+  clearEntryScopedState() {
+    this.directoryRequestId += 1;
+    this.summaryRequestId += 1;
+    this.activeLoadStage = null;
+    this.activeLoadForceRefresh = false;
+    try {
+      wx.removeStorageSync(storageKeys.selectedSummaryTournamentId);
+      wx.removeStorageSync(storageKeys.selectedSummaryTournamentName);
+    } catch {}
+    this.setData({
+      entryId: 0,
+      loading: true,
+      error: "",
+      emptyState: "",
+      emptyEyebrow: "",
+      emptyTitle: "",
+      emptyDescription: "",
+      emptyActionText: "",
+      tournaments: [],
+      tournamentNames: [],
+      selectedTournamentIndex: 0,
+      selectedTournamentName: "",
+      headerSubtitle: "",
+      overviewStats: [],
+      tournamentStats: [],
+      entryMetricStats: [],
+      rankingRows: [],
+      allRankingRows: [],
+      displayedRankingCount: 30,
+      hasMoreRankings: false,
+      hasOverview: false,
+      hasRankings: false,
+      hasMetrics: false
+    });
   },
 
   onHide() {

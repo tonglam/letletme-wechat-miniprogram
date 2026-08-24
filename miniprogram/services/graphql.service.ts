@@ -1153,14 +1153,14 @@ export async function graphqlRead<T>(
     }
   })();
 
-  inFlightRequests.set(
-    identity.requestKey,
-    networkRequest as Promise<GraphQLReadResult<unknown>>,
-  );
-  void networkRequest.then(
-    () => inFlightRequests.delete(identity.requestKey),
-    () => inFlightRequests.delete(identity.requestKey),
-  );
+  const inFlightRequest = networkRequest as Promise<GraphQLReadResult<unknown>>;
+  inFlightRequests.set(identity.requestKey, inFlightRequest);
+  const clearSettledInFlight = () => {
+    if (inFlightRequests.get(identity.requestKey) === inFlightRequest) {
+      inFlightRequests.delete(identity.requestKey);
+    }
+  };
+  void networkRequest.then(clearSettledInFlight, clearSettledInFlight);
   return networkRequest;
 }
 
