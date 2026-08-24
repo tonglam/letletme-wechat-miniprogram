@@ -254,7 +254,9 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
-      overallRank: officialScore?.overallRank ?? row.overallRank,
+      overallRank: officialScore
+        ? officialScore.overallRank ?? row.overallRank
+        : undefined,
       score: officialScore,
       scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
       picks: (row.pickList || []).map(mapTournamentPick)

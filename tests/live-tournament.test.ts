@@ -331,6 +331,11 @@ assertEqual(
   "rejected tournament scores retain only their retry deadline",
 );
 assertEqual(staleClassicRows[0]?.rank, undefined, "Classic rank cannot become a live rank");
+assertEqual(
+  staleClassicRows[0]?.overallRank,
+  undefined,
+  "Classic overall rank cannot become a live rank",
+);
 assertEqual(staleClassicRows[0]?.transferCost, undefined, "rejected transfer cost stays unknown");
 assertEqual(
   combinedTournamentTraceableEntries(97, staleClassicRows, 98),
