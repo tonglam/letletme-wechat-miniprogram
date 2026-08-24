@@ -792,13 +792,17 @@ test("personal recovery avoids duplicate follow writes and restarts live viewers
     auth,
     /replayPendingFollowEntry\(mutationRevision, undefined, \{ allowActiveMutation: true, \}/,
   );
+  assert.match(
+    auth,
+    /const onSessionAccepted = sessionSnapshot[\s\S]*sessionSnapshot = acceptedSession[\s\S]*requestProfileWithSessionRetry\([\s\S]*onSessionAccepted/,
+  );
 
   const tournament = source(
     "miniprogram/pages/live/tournament/tournament.controller.ts",
   );
   assert.match(
     tournament,
-    /const previousEntryId = Number\(this\.data\.entryId\) \|\| 0[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.restartForPrincipalChange\(previousEntryId\)/,
+    /let previousEntryId = 0[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*const principalChanged =[\s\S]*this\.restartForPrincipalChange\(previousEntryId, false\)[\s\S]*if \(principalChanged\)/,
   );
 });
 

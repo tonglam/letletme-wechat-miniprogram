@@ -677,6 +677,58 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
 });
 
+test("tournament viewer recovery revalidates the event before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, season: "2026/27", gw: 34 }
+  });
+  const calls = [];
+  const context = {
+    ...tournamentPage,
+    data: {
+      ...tournamentPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      hasData: true,
+      selectedTournament: { id: 7, name: "Old league", participantCount: 10 },
+      displayedRows: [{ entry: 1 }]
+    },
+    rows: [{ entry: 1 }],
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 34 });
+    },
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) {
+      calls.push(`tournaments:${this.data.entryId}:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(context.rows, []);
+  assert.deepEqual(calls, [
+    "context:page-show",
+    "stop",
+    "stop",
+    "sync:34",
+    "tournaments:456:34:true",
+    "display"
+  ]);
+});
+
 test("tournament rollover to a season without a live event commits preseason", async () => {
   globalThis.getApp = () => ({ globalData: { season: "2026/27", gw: 0 } });
   const calls = [];

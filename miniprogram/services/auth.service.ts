@@ -1311,6 +1311,11 @@ async function replayPendingEntryChoice(
   const pending = readPendingEntryChoice();
   if (!pending) return null;
   try {
+    const onSessionAccepted = sessionSnapshot
+      ? (acceptedSession: SessionSnapshot) => {
+          sessionSnapshot = acceptedSession;
+        }
+      : undefined;
     const profile = await requestProfileWithSessionRetry(
       "/entry-choice",
       "PUT",
@@ -1319,6 +1324,7 @@ async function replayPendingEntryChoice(
         miniEntryId: pending.miniEntryId,
         webEntryId: pending.webEntryId,
       },
+      onSessionAccepted,
     );
     if (sessionSnapshot && !isCurrentSession(sessionSnapshot)) return null;
     clearPendingEntryChoice(pending);
@@ -1346,12 +1352,24 @@ async function replayPendingFollowEntry(
   }
   const pending = readPendingFollowEntry();
   if (pending === undefined) return null;
-  const profile =
-    pending === null
-      ? await requestProfileWithSessionRetry("/follow-entry", "DELETE")
-      : await requestProfileWithSessionRetry("/follow-entry", "PUT", {
-          entryId: pending,
-        });
+  const onSessionAccepted = sessionSnapshot
+    ? (acceptedSession: SessionSnapshot) => {
+        sessionSnapshot = acceptedSession;
+      }
+    : undefined;
+  const profile = await (pending === null
+    ? requestProfileWithSessionRetry(
+        "/follow-entry",
+        "DELETE",
+        undefined,
+        onSessionAccepted,
+      )
+    : requestProfileWithSessionRetry(
+        "/follow-entry",
+        "PUT",
+        { entryId: pending },
+        onSessionAccepted,
+      ));
   if (
     expectedMutationRevision !== accountMutationRevision ||
     (sessionSnapshot && !isCurrentSession(sessionSnapshot))

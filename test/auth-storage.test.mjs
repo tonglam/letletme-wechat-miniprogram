@@ -796,6 +796,128 @@ test("profile sync reuses the response from a same-session 401 retry", async () 
   }
 });
 
+test("pending follow replay accepts the session-retried mutation response", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let followRequestCount = 0;
+  let serverFollowEntryId = 101;
+
+  const profile = (entryId) => ({
+    id: "account",
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: entryId ? "MINI" : null,
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile(serverFollowEntryId) },
+          });
+          return;
+        }
+        if (options.url.endsWith("/follow-entry")) {
+          followRequestCount += 1;
+          if (followRequestCount === 1) {
+            options.fail({ errMsg: "offline" });
+            return;
+          }
+          if (followRequestCount === 2) {
+            options.success({
+              statusCode: 401,
+              data: { success: false, error: "session expired" },
+            });
+            return;
+          }
+          serverFollowEntryId = options.data.entryId;
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile(serverFollowEntryId) },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile(101),
+      },
+    });
+    await initialRefresh;
+
+    assert.equal(await saveMiniProgramFollowEntry(202), false);
+    assert.equal(storage.has("pending-follow-entry-v1"), true);
+
+    const sync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    loginSuccess({ code: "retry-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile(101),
+      },
+    });
+    await sync;
+
+    assert.equal(followRequestCount, 3);
+    assert.equal(serverFollowEntryId, 202);
+    assert.equal(storage.has("pending-follow-entry-v1"), false);
+    assert.equal(getStoredMiniProgramProfile()?.followEntryId, 202);
+    assert.equal(getApiSessionToken(), "session-b");
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
 test("profile sync stops after logout instead of restoring a session", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;

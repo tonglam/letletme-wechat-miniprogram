@@ -846,11 +846,11 @@ PerformancePage({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    let previousEntryId = 0;
     if (resumed) {
-      const previousEntryId = Number(this.data.entryId) || 0;
+      previousEntryId = Number(this.data.entryId) || 0;
       await waitForAuthoritativeFollow();
       if (!this.pageVisible) return;
-      if (this.restartForPrincipalChange(previousEntryId)) return;
     }
     if (resumed && this.resumeStartupAfterShow) {
       const forceRefresh = this.resumeStartupForceRefresh;
@@ -872,6 +872,8 @@ PerformancePage({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
+      const principalChanged =
+        this.restartForPrincipalChange(previousEntryId, false);
       const nextSeason = context?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
         this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
@@ -971,6 +973,10 @@ PerformancePage({
       }
       if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
+      }
+      if (principalChanged) {
+        await this.loadTournaments(true);
+        return;
       }
     }
     if (resumed && this.resumeDirectoryAfterShow) {
@@ -1094,7 +1100,7 @@ PerformancePage({
     clearTournamentBoard(this);
   },
 
-  restartForPrincipalChange(entryId: number): boolean {
+  restartForPrincipalChange(entryId: number, loadDirectory = true): boolean {
     const nextEntryId = currentFollowEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
@@ -1126,7 +1132,7 @@ PerformancePage({
       scoreNextRefreshAt: "",
       ...emptyCompareState(),
     });
-    void this.loadTournaments(true);
+    if (loadDirectory) void this.loadTournaments(true);
     return true;
   },
 
