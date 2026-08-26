@@ -100,5 +100,7 @@ test("every live match card exposes image share beside text share", () => {
   // share call for ineligible categories, so it must stay out.
   assert.doesNotMatch(presenter, /needShowEntrance:/);
   assert.match(presenter, /fail: \(err\)/);
+  // Dismissing the share panel is a cancel, not a failure — no album fallback.
+  assert.match(presenter, /\/cancel\/\.test\(err\.errMsg/);
   assert.match(presenter, /saveToAlbum\(path\)/);
 });
