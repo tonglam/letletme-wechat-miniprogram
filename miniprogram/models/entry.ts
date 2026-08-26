@@ -43,6 +43,11 @@ export interface EntryTransfer {
   time?: string;
 }
 
+export interface EntryLeagueMovement {
+  direction?: "UP" | "DOWN" | "FLAT" | "UNKNOWN" | string;
+  places?: number | null;
+}
+
 export interface EntryLeague {
   id?: number | string;
   name: string;
@@ -51,6 +56,7 @@ export interface EntryLeague {
   type?: "CLASSIC" | "H2H" | string;
   shortName?: string | null;
   tournamentId?: number;
+  movement?: EntryLeagueMovement | null;
   h2hMatchup?: HomeH2HMatchup | null;
 }
 

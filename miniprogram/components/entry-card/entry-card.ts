@@ -35,11 +35,14 @@ interface LeagueRow {
   shortName?: string | null;
   type?: string | null;
   tournamentId?: number;
+  movement?: { direction?: string; places?: number | null } | null;
   h2hMatchup?: HomeH2HMatchup | null;
 }
 
 interface LeagueDisplayRow extends LeagueRow {
   rankText: string;
+  movementText: string;
+  movementClass: string;
   h2h: HomeH2HDisplay | null;
 }
 
@@ -75,6 +78,21 @@ function formatCurrency(value?: number): string {
   return typeof value === "number" ? `£${(value / 10).toFixed(1)}m` : "-";
 }
 
+/** Web PersonalLeagueRankList parity: ↑N / ↓N movement next to the rank. */
+function formatMovement(
+  movement?: { direction?: string; places?: number | null } | null
+): { movementText: string; movementClass: string } {
+  const places = Number(movement?.places) || 0;
+  const direction = String(movement?.direction || "").toUpperCase();
+  if (direction === "UP" && places > 0) {
+    return { movementText: `↑${places}`, movementClass: "movement-up" };
+  }
+  if (direction === "DOWN" && places > 0) {
+    return { movementText: `↓${places}`, movementClass: "movement-down" };
+  }
+  return { movementText: "", movementClass: "" };
+}
+
 function buildPanel(
   key: "classic" | "h2h",
   title: string,
@@ -90,6 +108,7 @@ function buildPanel(
     return {
       ...league,
       rankText: typeof rank === "number" ? `#${rank}` : "",
+      ...formatMovement(league.movement),
       h2h: key === "h2h" && league.h2hMatchup
         ? formatHomeH2HMatchup(league.h2hMatchup)
         : null
@@ -172,7 +191,8 @@ Component({
         statRows: [
           { label: "总分", value: formatNumber(entry?.totalPoints) },
           { label: "总排名", value: formatRank(entry?.overallRank) },
-          { label: "身价", value: formatCurrency(entry?.teamValue) }
+          { label: "身价", value: formatCurrency(entry?.teamValue) },
+          { label: "银行", value: formatCurrency(entry?.bank) }
         ]
       });
     },

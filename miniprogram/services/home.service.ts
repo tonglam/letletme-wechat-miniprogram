@@ -24,6 +24,10 @@ export const MINI_HOME_PERSONAL_LEAGUES_QUERY = `
         name
         leagueType
         rank
+        movement {
+          direction
+          places
+        }
         tournamentId
         h2hMatchup {
           officialMatchId
@@ -63,6 +67,7 @@ interface MiniHomePersonalLeaguesResponse {
       name: string;
       leagueType: "CLASSIC" | "H2H";
       rank?: number | null;
+      movement?: { direction?: string; places?: number | null } | null;
       tournamentId?: number | null;
       h2hMatchup?: HomeH2HMatchup | null;
     }>;
@@ -207,6 +212,7 @@ export async function getMiniHomePersonalLeagues(
       officialKind: "INVITATIONAL",
       type: league.leagueType,
       tournamentId: league.tournamentId ?? undefined,
+      movement: league.movement ?? null,
       h2hMatchup: league.h2hMatchup ?? null,
     })),
   };
