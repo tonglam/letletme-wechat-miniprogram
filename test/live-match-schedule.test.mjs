@@ -96,5 +96,9 @@ test("every live match card exposes image share beside text share", () => {
   assert.match(page, /presentLiveMatchShareImage\(path\)/);
   assert.match(page, /queryLiveMatchShareCanvas\(this\)/);
   assert.match(template, /id="live-match-share-canvas"/);
-  assert.match(presenter, /needShowEntrance: true/);
+  // needShowEntrance is category-whitelisted; passing it fails the whole
+  // share call for ineligible categories, so it must stay out.
+  assert.doesNotMatch(presenter, /needShowEntrance:/);
+  assert.match(presenter, /fail: \(err\)/);
+  assert.match(presenter, /saveToAlbum\(path\)/);
 });
