@@ -13,6 +13,7 @@ import {
   getPriceChangeBoard,
   getPriceChangePersonalContext,
   PRICE_CHANGE_PERSONAL_QUERY,
+  readLastGoodPriceChangeBoard,
 } from "../miniprogram/services/price-change.service.ts";
 import { storageKeys } from "../miniprogram/config/storage-keys.ts";
 import { setKnownNetworkStatusForTest } from "../miniprogram/utils/network-status.ts";
@@ -36,7 +37,7 @@ function installWx(storage, handleRequest) {
   globalThis.getApp = () => ({ globalData: {} });
 }
 
-test("price board falls back to its 24-hour last-good snapshot when GraphQL throws", async () => {
+test("price board falls back to its 60-minute last-good snapshot when GraphQL throws", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const now = Date.now();
@@ -71,6 +72,34 @@ test("price board falls back to its 24-hour last-good snapshot when GraphQL thro
     clearGraphQLMemoryCache();
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
+  }
+});
+
+test("last-good price data expires at exactly 60 minutes", () => {
+  const previousWx = globalThis.wx;
+  const now = Date.now();
+  const board = {
+    status: "READY",
+    source: "FPL_BOOTSTRAP",
+    deadline: null,
+    nextDeadlines: [],
+    fetchedAt: new Date(now - 60_000).toISOString(),
+    staleAt: null,
+    revision: "exact-hour",
+    expectedPlayerCount: 1,
+    observedPlayerCount: 1,
+    players: [{ playerId: 1 }],
+  };
+  const storage = new Map([
+    [storageKeys.lastPriceChangeBoard, { savedAt: now - 60 * 60 * 1000, board }],
+  ]);
+
+  try {
+    installWx(storage, () => undefined);
+    assert.equal(readLastGoodPriceChangeBoard(now), null);
+    assert.equal(storage.has(storageKeys.lastPriceChangeBoard), false);
+  } finally {
+    globalThis.wx = previousWx;
   }
 });
 

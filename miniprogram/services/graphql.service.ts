@@ -9,6 +9,7 @@ import {
   WechatSessionTransportError,
 } from "./auth.service";
 import { recordApi, recordPageOperation } from "../utils/perf";
+import { recordClientAuthResult } from "./client-telemetry.service";
 import type { ApiRecordSource } from "../utils/perf";
 import {
   graphQLErrorMessage,
@@ -387,6 +388,8 @@ function recordRequest(
     contextRevision: trace?.contextRevision,
     cacheVariantHash: trace?.cacheVariantHash || cacheVariantHash,
     requestId,
+    statusCode: details?.status,
+    code: details?.code,
   });
   if (requestId || !ok) {
     recordBugReportDiagnostic({
@@ -582,6 +585,7 @@ function makeRequest<T>(
         const body = response.data;
         const unauthorized =
           response.statusCode === 401 || isUnauthenticated(body);
+        if (unauthorized) recordClientAuthResult("auth_error");
 
         if (authMode === "session" && unauthorized && retryOnUnauthorized) {
           if (isLogoutInFlight()) {

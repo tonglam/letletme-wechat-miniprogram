@@ -2,6 +2,8 @@ const STORAGE_KEY = "perf:v1";
 const MAX_API_RECORDS = 300;
 const MAX_RECORDS = 100;
 
+import { enqueueClientTelemetry } from "../services/client-telemetry.service";
+
 export type ApiRecordSource =
   | "network"
   | "memory"
@@ -37,6 +39,8 @@ export interface ApiRecordDetails {
   contextRevision?: number;
   cacheVariantHash?: string;
   requestId?: string;
+  statusCode?: number;
+  code?: string;
 }
 
 export interface PagePerformanceRecord {
@@ -148,6 +152,7 @@ let _cache: StoredPerf | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushInFlight: Promise<void> | null = null;
 let flushQueued = false;
+const reportedPageReady = new Set<string>();
 // A clear can happen while a native setStorage call is still in flight. The
 // generation lets that completed write identify itself as stale and remove
 // its value after the native callback, so an old snapshot cannot resurrect
@@ -259,6 +264,22 @@ export function recordApi(
     requestId: details.requestId,
     ts: Date.now()
   });
+  const authRequest = name.startsWith("auth:");
+  const result = !ok
+    ? details.statusCode === 401 || details.code === "UNAUTHENTICATED"
+      ? "auth_error"
+      : details.statusCode === 408 || details.statusCode === 504 || details.code === "TIMEOUT"
+        ? "timeout"
+        : "error"
+    : details.source === "stale"
+      ? "stale"
+      : "ok";
+  enqueueClientTelemetry({
+    surface: authRequest ? "auth" : surfaceForTelemetry(details.callerSurface, name),
+    metric: authRequest ? "auth_result" : "api_duration_ms",
+    result,
+    ...(authRequest ? {} : { value: Math.max(0, duration) }),
+  });
   flush();
 }
 
@@ -284,6 +305,16 @@ export function recordPagePerformance(record: Omit<PagePerformanceRecord, "ts">)
       data.pagePerformance.splice(0, data.pagePerformance.length - MAX_RECORDS + 1);
     }
     data.pagePerformance.push({ ...record, ts: Date.now() });
+  }
+  const completion = record.completeAt ?? record.softFailureAt;
+  if (completion !== undefined && !reportedPageReady.has(record.navigationId)) {
+    reportedPageReady.add(record.navigationId);
+    enqueueClientTelemetry({
+      surface: surfaceForTelemetry(record.route),
+      metric: "route_ready_ms",
+      result: record.completeAt === undefined ? "error" : "ok",
+      value: Math.max(0, completion - record.routeStartedAt),
+    });
   }
   flush();
 }
@@ -392,7 +423,21 @@ export function clearPerf(): void {
     exploreVisits: [],
     pagePerformance: []
   };
+  reportedPageReady.clear();
   try {
     wx.removeStorage({ key: STORAGE_KEY });
   } catch {}
+}
+
+function surfaceForTelemetry(callerSurface: string | undefined, fallback = ""): "home" | "live_matches" | "live_match" | "live_entry" | "price_changes" | "my_fpl" | "player_stats" | "fixtures" | "auth" | "other" {
+  const value = `${callerSurface ?? fallback}`.toLowerCase();
+  if (value.includes("price")) return "price_changes";
+  if (value.includes("player")) return "player_stats";
+  if (value.includes("fixture")) return "fixtures";
+  if (value.includes("my-fpl") || value.includes("my_fpl") || value.includes("entry-profile")) return "my_fpl";
+  if (value.includes("live") && value.includes("match")) return "live_match";
+  if (value.includes("live") && value.includes("entry")) return "live_entry";
+  if (value.includes("live")) return "live_matches";
+  if (value.includes("home")) return "home";
+  return "other";
 }

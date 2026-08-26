@@ -26,6 +26,7 @@ export const storageKeys = {
   pendingBugReportDraft: "pending-bug-report-draft",
   diagnosticDisclosure: "auth-diagnostic-disclosure-v1",
   lastPriceChangeBoard: "price-change-board:last-good:v1",
+  clientTelemetryQueue: "client-telemetry:queue:v1",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",
   lastTeamId: "stat-team",
