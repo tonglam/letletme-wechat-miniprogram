@@ -22,14 +22,18 @@ test("route season satisfies the season-scoped Team cache guard", () => {
 
 test("Home retries failed deadline context recovery without a request storm", () => {
   const home = source("miniprogram/pages/home/index/index.ts");
-  assert.match(home, /const HOME_DEADLINE_RETRY_MS = 60 \* 1000/);
+  // Post-deadline retries follow the web exponential backoff ladder
+  // (30s → 60s → 120s → 240s → 300s ceiling) instead of a fixed interval.
+  assert.match(home, /const DEADLINE_RETRY_BASE_MS = 30 \* 1000/);
+  assert.match(home, /const DEADLINE_RETRY_MAX_MS = 5 \* 60 \* 1000/);
+  assert.match(home, /export function deadlineRetryDelayMs\(completedAttempts/);
   assert.match(
     home,
     /async refreshHome\(deadlineTriggered = false\)[\s\S]*catch \(error\)[\s\S]*if \(deadlineTriggered\)[\s\S]*scheduleDeadlineRetry\(\)/
   );
   assert.match(
     home,
-    /scheduleDeadlineRetry\(\)[\s\S]*setTimeout\([\s\S]*refreshHome\(true\)[\s\S]*HOME_DEADLINE_RETRY_MS/
+    /scheduleDeadlineRetry\(\)[\s\S]*?deadlineRetryDelayMs\(this\._deadlineRetryAttempts\)[\s\S]*?setTimeout/
   );
   assert.match(home, /updateCountdown\(\)[\s\S]*void this\.refreshHome\(true\)/);
 });

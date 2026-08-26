@@ -75,6 +75,34 @@
   margin-top: 28rpx;
 }
 
+.deadline-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+  margin-top: 28rpx;
+  min-height: 104rpx;
+  border: 1rpx solid var(--danger-a30);
+  border-radius: 12rpx;
+  background: var(--danger-tint);
+}
+
+.deadline-live-tag {
+  padding: 4rpx 14rpx;
+  border-radius: 8rpx;
+  background: var(--danger);
+  color: var(--chalk);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.deadline-live-text {
+  color: var(--danger);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
 .countdown-item {
   display: flex;
   flex-direction: column;

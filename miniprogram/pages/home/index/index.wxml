@@ -36,7 +36,11 @@
         </view>
         <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
       </view>
-      <view wx:if="{{utcDeadline}}" class="countdown">
+      <view wx:if="{{deadlinePassed}}" class="deadline-live">
+        <text class="deadline-live-tag">LIVE</text>
+        <text class="deadline-live-text">GW{{nextGw}} 进行中 · 等待官方数据更新</text>
+      </view>
+      <view wx:elif="{{utcDeadline}}" class="countdown">
         <view class="countdown-item">
           <text class="countdown-value">{{countdown.days}}</text>
           <text class="countdown-label">天</text>

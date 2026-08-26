@@ -139,4 +139,10 @@ describe("home public read path", () => {
     assert.match(home, /key === "highestScore"[\s\S]*?goToLiveEntry/);
     assert.match(home, /onOpenGameweekStats[\s\S]*?routes\.summaryGameweek/);
   });
+
+  it("shows a LIVE strip once the deadline passes and resets backoff on a fresh deadline", () => {
+    assert.match(home, /deadlinePassed: Boolean\(utcDeadline\) && getDeadlineDiffMs\(utcDeadline\) <= 0/);
+    assert.match(home, /patch\.deadlinePassed = passed/);
+    assert.match(home, /this\._deadlineRetryAttempts = 0/);
+  });
 });

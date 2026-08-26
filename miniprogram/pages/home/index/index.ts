@@ -82,6 +82,7 @@ interface HomeData {
   minFixtureGw: number;
   deadline: string;
   utcDeadline: string;
+  deadlinePassed: boolean;
   countdown: CountdownParts;
   noticeText: string;
   noticeClosed: boolean;
@@ -114,12 +115,23 @@ interface HomeStatRow {
 
 /** Home warm-show skip window. Live index and leagues use the same 60s; team uses 5 min. */
 const HOME_REVALIDATE_MS = 60 * 1000;
-const HOME_DEADLINE_RETRY_MS = 60 * 1000;
+/** Web parity: post-deadline refresh retries back off 30s → 60s → … → 300s. */
+const DEADLINE_RETRY_BASE_MS = 30 * 1000;
+const DEADLINE_RETRY_MAX_MS = 5 * 60 * 1000;
 /** Live fixture poll cadence — mirrors the web home fixtures desk (30s). */
 const FIXTURE_LIVE_REFRESH_MS = 30 * 1000;
 /** Web parity: the fixture stepper can browse every gameweek, not just future ones. */
 const MIN_FIXTURE_GW = 1;
 export const NOTICE_AUTO_CLOSE_MS = 5 * 1000;
+
+/** Exponential post-deadline retry with a five-minute ceiling (doubles every two attempts). */
+export function deadlineRetryDelayMs(completedAttempts: number): number {
+  const safeAttempts = Number.isFinite(completedAttempts)
+    ? Math.max(1, Math.trunc(completedAttempts))
+    : 1;
+  const exponent = Math.min(Math.floor((safeAttempts - 1) / 2), 4);
+  return Math.min(DEADLINE_RETRY_BASE_MS * 2 ** exponent, DEADLINE_RETRY_MAX_MS);
+}
 
 export function shouldReloadHome(
   lastLoadAt: number,
@@ -210,6 +222,7 @@ Page({
     minFixtureGw: 0,
     deadline: "",
     utcDeadline: "",
+    deadlinePassed: false,
     countdown: formatCountdown(0),
     noticeText: "",
     noticeClosed: false,
@@ -241,6 +254,7 @@ Page({
   _hasShown: false,
   _lifecycleRevision: 0,
   _dreamTeamLoadedEvent: 0,
+  _deadlineRetryAttempts: 0,
 
   onLoad() {
     this._pageVisible = true;
@@ -599,6 +613,7 @@ Page({
       if (deadlineTriggered && refreshedDeadlineExpired) {
         this.scheduleDeadlineRetry();
       } else {
+        this._deadlineRetryAttempts = 0;
         this.startCountdown();
       }
       if (!deadlineTriggered && fixtureFresh === true) {
@@ -858,6 +873,15 @@ Page({
 
   syncAppState(extra: Partial<HomeData> = {}): Promise<void> {
     const app = getApp<IAppOption>();
+    const utcDeadline = app.globalData.utcDeadline;
+    // A freshly advanced deadline resets the post-deadline backoff ladder.
+    if (
+      utcDeadline
+      && utcDeadline !== this.data.utcDeadline
+      && getDeadlineDiffMs(utcDeadline) > 0
+    ) {
+      this._deadlineRetryAttempts = 0;
+    }
     return setDataAsync(this, {
       gw: app.globalData.gw,
       currentGw: app.globalData.currentGw,
@@ -865,8 +889,9 @@ Page({
       minFixtureGw: MIN_FIXTURE_GW,
       selectedFixtureGw: clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, MIN_FIXTURE_GW),
       deadline: app.globalData.deadline,
-      utcDeadline: app.globalData.utcDeadline,
-      countdown: formatCountdown(getDeadlineDiffMs(app.globalData.utcDeadline)),
+      utcDeadline,
+      deadlinePassed: Boolean(utcDeadline) && getDeadlineDiffMs(utcDeadline) <= 0,
+      countdown: formatCountdown(getDeadlineDiffMs(utcDeadline)),
       ...extra
     });
   },
@@ -895,20 +920,30 @@ Page({
 
   scheduleDeadlineRetry() {
     this.stopCountdown();
+    this._deadlineRetryAttempts += 1;
+    const delay = deadlineRetryDelayMs(this._deadlineRetryAttempts);
     this.countdownTimer = setTimeout(() => {
       this.countdownTimer = undefined;
       if (!this._pageVisible) return;
       void this.refreshHome(true);
-    }, HOME_DEADLINE_RETRY_MS) as unknown as number;
+    }, delay) as unknown as number;
   },
 
   updateCountdown(): boolean {
     const ms = getDeadlineDiffMs(this.data.utcDeadline);
     const countdown = formatCountdown(ms);
+    const passed = Boolean(this.data.utcDeadline) && ms <= 0;
+    const patch: Partial<HomeData> = {};
     if (countdown !== this.data.countdown) {
-      this.setData({ countdown });
+      patch.countdown = countdown;
     }
-    if (this.data.utcDeadline && ms <= 0) {
+    if (passed !== this.data.deadlinePassed) {
+      patch.deadlinePassed = passed;
+    }
+    if (Object.keys(patch).length > 0) {
+      this.setData(patch);
+    }
+    if (passed) {
       this.stopCountdown();
       void this.refreshHome(true);
       return true;
