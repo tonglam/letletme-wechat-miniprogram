@@ -5,6 +5,7 @@ import type { EntryInfo, EntrySearchResult } from "../../../models/entry";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 
 /** Same contract as the web bind-entry form: a pasted FPL URL yields its ID. */
 function extractEntryId(raw: string): string {
@@ -68,8 +69,10 @@ PerformancePage({
   redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   pageVisible: true,
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     this.syncCurrentEntry();
   },
 
@@ -90,7 +93,12 @@ PerformancePage({
 
   syncCurrentEntry() {
     const entryId = Number(getApp<IAppOption>().globalData.entryId) || 0;
-    this.setData({ hasEntry: entryId > 0, currentEntryId: entryId });
+    this.setData({
+      hasEntry: entryId > 0,
+      currentEntryId: entryId,
+      isCurrentEntry:
+        this.data.hasPreview && this.data.previewEntryId === entryId
+    });
   },
 
   onManualEntryInput(event: WechatMiniprogram.Input) {

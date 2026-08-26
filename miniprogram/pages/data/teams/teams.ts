@@ -12,6 +12,7 @@ PerformancePage({
   data: {
     loading: false,
     error: "",
+    errorWorkload: "player-stats" as "home" | "player-stats",
     teams: [] as TeamOption[]
   },
 
@@ -65,19 +66,24 @@ PerformancePage({
       callerSurface: "data-teams",
       trigger: forceRefresh ? "refresh" : "load"
     });
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", errorWorkload: "player-stats" });
+    let contextReady = false;
     try {
       const context = await ensureAppContext({
         reason: forceRefresh ? "pull-refresh" : "page-load",
         forceRefresh
       });
       if (!isActiveLifecycle()) return;
+      contextReady = true;
       const teams = await getTeamList(context.season, forceRefresh, trace);
       if (!isActiveLifecycle()) return;
-      this.setData({ teams });
+      this.setData({ teams, errorWorkload: "player-stats" });
     } catch (error) {
       if (!isActiveLifecycle()) return;
-      this.setData({ error: error instanceof Error ? error.message : "球队列表加载失败" });
+      this.setData({
+        error: error instanceof Error ? error.message : "球队列表加载失败",
+        errorWorkload: contextReady ? "player-stats" : "home",
+      });
     } finally {
       if (isActiveLifecycle()) {
         this.setData({ loading: false });

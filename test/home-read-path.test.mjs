@@ -40,6 +40,39 @@ describe("home public read path", () => {
     );
   });
 
+  it("refreshes the viewer before reading personal home data", () => {
+    assert.match(
+      home,
+      /loadSecondaryData\([\s\S]*?await waitForAuthoritativeFollow\(\);[\s\S]*?const entryId = app\.globalData\.entryId/,
+    );
+    assert.match(
+      home,
+      /const entryId = app\.globalData\.entryId;[\s\S]*?if \(!entryId\) \{[\s\S]*?entry: \{\},[\s\S]*?leagues: \[\],[\s\S]*?entryError: ""[\s\S]*?return;/,
+    );
+  });
+
+  it("clears retained leagues when the authoritative viewer changes", () => {
+    assert.match(
+      home,
+      /const previousEntryId = Number\([\s\S]*?const nextEntryId = Number\([\s\S]*?\.\.\.\(previousEntryId !== nextEntryId \? \{ leagues: \[\] \} : \{\}\)/,
+    );
+  });
+
+  it("keeps secondary work pending until personal viewer data settles", () => {
+    const personalTask = home.indexOf("const personalTask =");
+    const publicSettled = home.indexOf(
+      "const [marketResult, supplement] = await Promise.all",
+    );
+    const pendingCleared = home.indexOf("this._secondaryPending = false");
+    assert.ok(personalTask >= 0);
+    assert.ok(publicSettled > personalTask);
+    assert.ok(pendingCleared > publicSettled);
+    assert.match(
+      home,
+      /const personalTask = \(async \(\): Promise<void> =>[\s\S]*?await personalTask;[\s\S]*?this\._secondaryPending = false/,
+    );
+  });
+
   it("refreshes event context only when missing or expired", () => {
     assert.match(home, /contextMissing \|\| deadlineExpired/);
     assert.doesNotMatch(home, /refreshEventAndDeadline/);

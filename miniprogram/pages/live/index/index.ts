@@ -3,6 +3,7 @@ import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { getEntryInfo } from "../../../services/entry.service";
+import { waitForAuthoritativeFollow } from "../../../utils/follow";
 
 /** Live index warm-show skip window (aligned with home/leagues at 60s; team is 5 min). */
 export const LIVE_INDEX_REVALIDATE_MS = 60 * 1000;
@@ -65,11 +66,16 @@ PerformancePage({
     return this.loadContext("page-load");
   },
 
-  onShow() {
+  async onShow() {
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
     if (!resumed) return undefined;
+    const lifecycleRevision = this.lifecycleRevision;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) {
+      return undefined;
+    }
     const snapshot = getAppContextSnapshot();
     const currentEntryId = getApp<IAppOption>().globalData.entryId ?? 0;
     if (!shouldReloadLiveIndex(
@@ -102,9 +108,12 @@ PerformancePage({
       // Keep the landing page usable with the last normalized app state.
     }
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
     const app = getApp<IAppOption>();
     const entryId = app.globalData.entryId ?? 0;
-    let entryName = this.data.entryName || "";
+    const entryChanged = this.data.entryId !== entryId;
+    let entryName = entryChanged ? "" : this.data.entryName || "";
     if (entryId && !entryName) {
       try {
         const entry = await getEntryInfo(entryId);

@@ -15,7 +15,7 @@ test("Live Tournament captures the cold trace before auth and stops hidden conti
   const page = source("miniprogram/pages/live/tournament/tournament.controller.ts");
 
   assert.match(page, /async onLoad\(\) \{\s+this\.pageVisible = true;\s+const trace = capturePageRequestTrace[\s\S]*initializeFromContext\("page-load", trace\)/);
-  assert.match(page, /async initializeFromContext[\s\S]*const startupGeneration = \+\+this\.startupGeneration[\s\S]*await app\.authReady; \} catch \{\}[\s\S]*this\.startupGeneration !== startupGeneration/);
+  assert.match(page, /async initializeFromContext[\s\S]*const startupGeneration = \+\+this\.startupGeneration[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*this\.startupGeneration !== startupGeneration/);
   assert.match(page, /await this\.loadTournaments\(forceRefresh, trace\)/);
 });
 

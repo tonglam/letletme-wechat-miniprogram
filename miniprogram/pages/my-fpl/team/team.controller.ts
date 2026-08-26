@@ -8,23 +8,26 @@ import {
   type EntryHistoryItem,
   type EntryHistoryPayload,
   type EntrySeasonHistoryItem,
-  type EntryTransferMove
+  type EntryTransferMove,
 } from "../../../services/summary.service";
 import {
   goToEntrySearch,
   goToLiveEntry,
-  setPageTitle
+  setPageTitle,
 } from "../../../utils/navigation";
 import {
   buildPlayerLiveDetail,
-  type PlayerLiveDetailView
+  type PlayerLiveDetailView,
 } from "../../live/entry/player-detail";
 import type { LivePlayerRow } from "../../../models/live";
-import { formatCompactNumber, formatPoints } from "../../../utils/summary-format";
+import {
+  formatCompactNumber,
+  formatPoints,
+} from "../../../utils/summary-format";
 import {
   buildSquadPitchView,
   type SquadPitchHeader,
-  type SquadPitchPlayer
+  type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { resetShareImageCache } from "../../../utils/squad-pitch-canvas";
 import { presentImage } from "../../../utils/album-presenter";
@@ -37,29 +40,31 @@ import {
   toPastSeasonChartPoints,
   type PastSeasonChartPoint,
   type SeasonChartMode,
-  type SeasonChartPoint
+  type SeasonChartPoint,
 } from "../../../utils/season-chart";
 import type { MiniChartPoint, MiniChartType } from "../../../utils/mini-chart";
 import { getCurrentSnapshotState } from "../../../services/my-fpl.service";
 import type { LiveSnapshotState } from "../../../models/live";
 import {
   currentMyFplEntryId,
-  waitForAuthoritativeFollow
+  refreshAuthoritativeFollow,
+  waitForAuthoritativeFollow,
 } from "../../../utils/follow";
 import { canReadEventReporting } from "../../../utils/event-context";
 import {
   ensureAppContext,
   getAppContextSnapshot,
-  shouldRefreshAppContext
+  shouldRefreshAppContext,
 } from "../../../services/app-context.service";
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import {
   capturePageRequestTrace,
-  type PageRequestTrace
+  isViewerEntryAuthorizationError,
+  type PageRequestTrace,
 } from "../../../services/graphql.service";
 
 export function phaseBannerFromSnapshot(
-  snapshotState: LiveSnapshotState | undefined
+  snapshotState: LiveSnapshotState | undefined,
 ): "" | "live" | "settling" {
   // The current snapshot contract has no explicit SETTLING state. Without a
   // successful probe (or a deadline passed into this page), absence is
@@ -145,9 +150,11 @@ export function retainTransferRowsAfterFailure(
   freshRows: TransferRow[],
   previousRows: TransferRow[],
   transferFailed: boolean,
-  sameSeason: boolean
+  sameSeason: boolean,
 ): TransferRow[] {
-  return transferFailed && sameSeason && previousRows.length > 0 ? previousRows : freshRows;
+  return transferFailed && sameSeason && previousRows.length > 0
+    ? previousRows
+    : freshRows;
 }
 
 /** One row per chip family — web TeamChipsTab inventory: used/remaining per half. */
@@ -214,6 +221,7 @@ interface TeamStatsViewModel {
 interface EntrySummaryData {
   loading: boolean;
   error: string;
+  errorWorkload: "home" | "interactive";
   transferError: string;
   tabLoading: boolean;
   tabError: string;
@@ -296,6 +304,7 @@ Page({
   data: {
     loading: false,
     error: "",
+    errorWorkload: "home" as "home" | "interactive",
     transferError: "",
     tabLoading: false,
     tabError: "",
@@ -352,15 +361,22 @@ Page({
     pitchBenchBoost: false,
     shareImagePath: "",
     shareBusy: false,
-    ...emptySeasonChartState()
+    ...emptySeasonChartState(),
   } as EntrySummaryData,
 
   async onLoad() {
     this.pageVisible = true;
-    this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "cold-launch");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/my-fpl/team/team",
+      "cold-launch",
+    );
     const tracker = this.perfTracker;
     this.startupPending = true;
-    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "load" });
+    const trace = capturePageRequestTrace({
+      callerSurface: "my-fpl-team-primary",
+      trigger: "load",
+    });
     try {
       await this.ensureContext("page-load");
     } catch (error) {
@@ -378,7 +394,7 @@ Page({
   async initializeFromContext(
     forceRefresh: boolean,
     trace?: PageRequestTrace,
-    tracker?: PagePerformanceTracker
+    tracker?: PagePerformanceTracker,
   ) {
     const app = getApp<IAppOption>();
     const owningTracker = tracker ?? this.perfTracker;
@@ -394,7 +410,7 @@ Page({
     this.setData({
       entryId: currentMyFplEntryId() ?? 0,
       event: currentGw,
-      maxGw: currentGw
+      maxGw: currentGw,
     });
     // First paint honors the reporting policy; explicit refresh and context
     // changes still bypass it below.
@@ -403,16 +419,21 @@ Page({
 
   showContextError(error: unknown) {
     this.contextUnavailable = true;
-    const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
-    this.setData({
-      loading: false,
-      error: message,
-      emptyState: "",
-      hasTeamData: false,
-      supportAvailable: false
-    }, () => {
-      this.markPrimaryCommit(this.perfTracker);
-    });
+    const message =
+      error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    this.setData(
+      {
+        loading: false,
+        error: message,
+        errorWorkload: "home",
+        emptyState: "",
+        hasTeamData: false,
+        supportAvailable: false,
+      },
+      () => {
+        this.markPrimaryCommit(this.perfTracker);
+      },
+    );
   },
 
   async recoverContext(reason: "page-show" | "pull-refresh") {
@@ -421,9 +442,9 @@ Page({
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
       trigger: reason === "page-show" ? "show" : "refresh",
-      forceReason: "context-missing"
+      forceReason: "context-missing",
     });
-    this.setData({ loading: true, error: "" });
+    this.setData({ loading: true, error: "", errorWorkload: "home" });
     try {
       await this.ensureContext(reason, true);
       if (!this.pageVisible || this.perfTracker !== tracker) return;
@@ -431,9 +452,11 @@ Page({
       tracker?.mark("contextReadyAt");
       await this.initializeFromContext(true, trace, tracker);
     } catch (error) {
-      if (this.pageVisible && this.perfTracker === tracker) this.showContextError(error);
+      if (this.pageVisible && this.perfTracker === tracker)
+        this.showContextError(error);
     } finally {
-      if (this.pageVisible && this.perfTracker === tracker) this.contextRecoveryPending = false;
+      if (this.pageVisible && this.perfTracker === tracker)
+        this.contextRecoveryPending = false;
     }
   },
 
@@ -450,7 +473,7 @@ Page({
     this.perfTracker = new PagePerformanceTracker(
       this,
       "pages/my-fpl/team/team",
-      resumeForcedRefresh ? "refresh" : "warm-enter"
+      resumeForcedRefresh ? "refresh" : "warm-enter",
     );
     if (this.resumeContextRecovery) {
       this.resumeContextRecovery = false;
@@ -461,7 +484,7 @@ Page({
     }
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-team-primary",
-      trigger: resumeForcedRefresh ? "refresh" : "show"
+      trigger: resumeForcedRefresh ? "refresh" : "show",
     });
     if (resumeForcedRefresh) {
       await this.runForcedRefresh(this.perfTracker, trace);
@@ -485,6 +508,8 @@ Page({
       // A resident page may continue using its retained context.
     }
     if (!this.pageVisible) return;
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible) return;
     if (this.resumeStartupAfterShow) {
       this.resumeStartupAfterShow = false;
       this.startupPending = true;
@@ -492,11 +517,12 @@ Page({
       return;
     }
     const entryId = this.data.entryId;
-    if (this.restartForPrincipalChange(entryId)) return;
 
     const nextGw = Number(app.globalData.gw) || 0;
     const nextSeason = app.globalData.season || undefined;
-    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    const seasonChanged = Boolean(
+      this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
+    );
     if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
     const eventChanged = nextGw > 0 && nextGw !== this.data.maxGw;
@@ -511,51 +537,58 @@ Page({
         hasTeamData: false,
         playerDetailOpen: false,
         playerDetail: null,
-        ...(seasonChanged ? {
-          error: "",
-          transferError: "",
-          tabLoading: false,
-          tabError: "",
-          headerTitle: "球队数据",
-          headerSubtitle: "",
-          heroScore: "",
-          heroScoreSub: "",
-          totalTransfersText: "",
-          overviewStats: [],
-          eventStats: [],
-          squadRows: [],
-          starterRows: [],
-          benchRows: [],
-          transferRows: [],
-          transferFilter: "with",
-          transferSummary: [],
-          visibleTransferRows: [],
-          transferFilterNote: "",
-          transferPageSize: TRANSFER_PAGE_SIZE,
-          transferHasMore: false,
-          chipInventoryRows: [],
-          chipLogRows: [],
-          historyRows: [],
-          pagedHistoryRows: [],
-          historyPageSize: HISTORY_PAGE_SIZE,
-          historyHasMore: false,
-          seasonHistoryRows: [],
-          ...emptyPitchState(),
-          hasSquad: false,
-          hasTransfers: false,
-          hasChips: false,
-          hasHistory: false
-        } : {})
+        ...(seasonChanged
+          ? {
+              error: "",
+              transferError: "",
+              tabLoading: false,
+              tabError: "",
+              headerTitle: "球队数据",
+              headerSubtitle: "",
+              heroScore: "",
+              heroScoreSub: "",
+              totalTransfersText: "",
+              overviewStats: [],
+              eventStats: [],
+              squadRows: [],
+              starterRows: [],
+              benchRows: [],
+              transferRows: [],
+              transferFilter: "with",
+              transferSummary: [],
+              visibleTransferRows: [],
+              transferFilterNote: "",
+              transferPageSize: TRANSFER_PAGE_SIZE,
+              transferHasMore: false,
+              chipInventoryRows: [],
+              chipLogRows: [],
+              historyRows: [],
+              pagedHistoryRows: [],
+              historyPageSize: HISTORY_PAGE_SIZE,
+              historyHasMore: false,
+              seasonHistoryRows: [],
+              ...emptyPitchState(),
+              hasSquad: false,
+              hasTransfers: false,
+              hasChips: false,
+              hasHistory: false,
+            }
+          : {}),
       });
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
+    const restartAfterContext = async (): Promise<boolean> => {
+      if (!this.restartForPrincipalChange(entryId, false)) return false;
+      await this.loadData(true, trace);
+      return true;
+    };
+    if (await restartAfterContext()) return;
     // Summary data moves slowly, so team uses a 5-minute warm window
     // (home / live index / leagues stay at 60s). An advancing current GW
     // still reloads immediately via contextChanged.
-    const primaryMissing = !this.data.hasTeamData
-      && !this.data.emptyState
-      && !this.data.error;
+    const primaryMissing =
+      !this.data.hasTeamData && !this.data.emptyState && !this.data.error;
     const resumeTab = this.resumeTab;
     const resumeTabForceRefresh = this.resumeTabForceRefresh;
     const clearResumeTab = () => {
@@ -564,9 +597,10 @@ Page({
         this.resumeTabForceRefresh = false;
       }
     };
-    const primaryReloaded = contextChanged
-      || primaryMissing
-      || Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
+    const primaryReloaded =
+      contextChanged ||
+      primaryMissing ||
+      Boolean(this._loadedAt && Date.now() - this._loadedAt >= 5 * 60 * 1000);
     if (primaryReloaded) {
       await this.loadData(contextChanged || resumeTabForceRefresh, trace);
       if (this.tabForceRefreshPending || this.data.tabLoading) clearResumeTab();
@@ -602,7 +636,10 @@ Page({
   resumeRefreshAfterShow: false,
   perfTracker: undefined as PagePerformanceTracker | undefined,
 
-  ensureContext(reason: "page-load" | "page-show" | "pull-refresh", forceRefresh = false) {
+  ensureContext(
+    reason: "page-load" | "page-show" | "pull-refresh",
+    forceRefresh = false,
+  ) {
     return ensureAppContext({ reason, forceRefresh });
   },
 
@@ -626,9 +663,16 @@ Page({
 
   async onPullDownRefresh() {
     this.perfTracker?.disconnect();
-    this.perfTracker = new PagePerformanceTracker(this, "pages/my-fpl/team/team", "refresh");
+    this.perfTracker = new PagePerformanceTracker(
+      this,
+      "pages/my-fpl/team/team",
+      "refresh",
+    );
     const tracker = this.perfTracker;
-    const trace = capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh" });
+    const trace = capturePageRequestTrace({
+      callerSurface: "my-fpl-team-primary",
+      trigger: "refresh",
+    });
     try {
       await this.runForcedRefresh(tracker, trace);
     } finally {
@@ -636,11 +680,15 @@ Page({
     }
   },
 
-  async runForcedRefresh(tracker: PagePerformanceTracker, trace?: PageRequestTrace) {
+  async runForcedRefresh(
+    tracker: PagePerformanceTracker,
+    trace?: PageRequestTrace,
+  ) {
     this.refreshPending = true;
     if (this.contextUnavailable || this.data.maxGw <= 0) {
       await this.recoverContext("pull-refresh");
-      if (this.pageVisible && this.perfTracker === tracker) this.refreshPending = false;
+      if (this.pageVisible && this.perfTracker === tracker)
+        this.refreshPending = false;
       return;
     }
     const app = getApp<IAppOption>();
@@ -660,6 +708,8 @@ Page({
       }
       // A resident page may still refresh retained reporting data.
     }
+    await waitForAuthoritativeFollow();
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
     const entryId = this.data.entryId;
     if (this.restartForPrincipalChange(entryId)) {
       this.refreshPending = false;
@@ -667,7 +717,9 @@ Page({
     }
     const nextGw = Number(app.globalData.gw) || 0;
     const nextSeason = app.globalData.season || undefined;
-    const seasonChanged = Boolean(this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason);
+    const seasonChanged = Boolean(
+      this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
+    );
     if (nextSeason) this.loadedSeason = nextSeason;
     const wasCurrentEvent = this.data.event === this.data.maxGw;
     const eventChanged = nextGw > 0 && nextGw !== this.data.maxGw;
@@ -682,54 +734,55 @@ Page({
         hasTeamData: false,
         playerDetailOpen: false,
         playerDetail: null,
-        ...(seasonChanged ? {
-          error: "",
-          transferError: "",
-          tabLoading: false,
-          tabError: "",
-          headerTitle: "球队数据",
-          headerSubtitle: "",
-          heroScore: "",
-          heroScoreSub: "",
-          totalTransfersText: "",
-          overviewStats: [],
-          eventStats: [],
-          squadRows: [],
-          starterRows: [],
-          benchRows: [],
-          transferRows: [],
-          transferFilter: "with",
-          transferSummary: [],
-          visibleTransferRows: [],
-          transferFilterNote: "",
-          transferPageSize: TRANSFER_PAGE_SIZE,
-          transferHasMore: false,
-          chipInventoryRows: [],
-          chipLogRows: [],
-          historyRows: [],
-          pagedHistoryRows: [],
-          historyPageSize: HISTORY_PAGE_SIZE,
-          historyHasMore: false,
-          seasonHistoryRows: [],
-          ...emptyPitchState(),
-          hasSquad: false,
-          hasTransfers: false,
-          hasChips: false,
-          hasHistory: false
-        } : {})
+        ...(seasonChanged
+          ? {
+              error: "",
+              transferError: "",
+              tabLoading: false,
+              tabError: "",
+              headerTitle: "球队数据",
+              headerSubtitle: "",
+              heroScore: "",
+              heroScoreSub: "",
+              totalTransfersText: "",
+              overviewStats: [],
+              eventStats: [],
+              squadRows: [],
+              starterRows: [],
+              benchRows: [],
+              transferRows: [],
+              transferFilter: "with",
+              transferSummary: [],
+              visibleTransferRows: [],
+              transferFilterNote: "",
+              transferPageSize: TRANSFER_PAGE_SIZE,
+              transferHasMore: false,
+              chipInventoryRows: [],
+              chipLogRows: [],
+              historyRows: [],
+              pagedHistoryRows: [],
+              historyPageSize: HISTORY_PAGE_SIZE,
+              historyHasMore: false,
+              seasonHistoryRows: [],
+              ...emptyPitchState(),
+              hasSquad: false,
+              hasTransfers: false,
+              hasChips: false,
+              hasHistory: false,
+            }
+          : {}),
       });
     } else if (eventChanged) {
       this.setData({ maxGw: nextGw });
     }
     await this.loadData(true, trace, true);
-    if (this.pageVisible && this.perfTracker === tracker) this.refreshPending = false;
+    if (this.pageVisible && this.perfTracker === tracker)
+      this.refreshPending = false;
   },
 
   onHide() {
     this.resumeContextRecovery = this.resumeContextRecovery || this.contextRecoveryPending;
-    const activeTab = this.data.tabLoading && this.data.activeTab !== "squad"
-      ? this.data.activeTab
-      : null;
+    const activeTab = this.data.tabLoading && this.data.activeTab !== "squad" ? this.data.activeTab : null;
     if (activeTab) this.resumeTab = activeTab;
     this.resumeTabForceRefresh = this.resumeTab
       ? this.resumeTabForceRefresh || this.tabForceRefreshPending
@@ -738,7 +791,8 @@ Page({
     this.resumeRefreshAfterShow = this.refreshPending;
     if (this.resumeRefreshAfterShow) this.resumeStartupAfterShow = false;
     if (this.data.loading) {
-      this.resumeRefreshAfterShow = this.resumeRefreshAfterShow || this.data.hasTeamData;
+      this.resumeRefreshAfterShow =
+        this.resumeRefreshAfterShow || this.data.hasTeamData;
       this.setData({ loading: false });
     }
     this.pageVisible = false;
@@ -772,7 +826,10 @@ Page({
     await app.initAppData(false);
   },
 
-  restartForPrincipalChange(entryId: number | undefined): boolean {
+  restartForPrincipalChange(
+    entryId: number | undefined,
+    loadData = true,
+  ): boolean {
     const nextEntryId = currentMyFplEntryId() ?? 0;
     if (nextEntryId === entryId) return false;
 
@@ -785,6 +842,8 @@ Page({
     this.setData({
       entryId: nextEntryId,
       loading: false,
+      tabLoading: false,
+      tabError: "",
       error: "",
       transferError: "",
       emptyState: "",
@@ -821,63 +880,74 @@ Page({
       supportAvailable: false,
       phaseBanner: "",
       playerDetailOpen: false,
-      playerDetail: null
+      playerDetail: null,
     });
-    void this.loadData(true);
+    if (loadData) void this.loadData(true);
     return true;
   },
 
   async loadData(
     forceRefresh = false,
     originatingTrace?: PageRequestTrace,
-    awaitActiveTab = false
+    awaitActiveTab = false,
   ) {
     const requestId = ++this.loadRequestId;
     const tracker = this.perfTracker;
-    const trace = originatingTrace || capturePageRequestTrace({
-      callerSurface: "my-fpl-team-primary",
-      trigger: forceRefresh ? "refresh" : "load"
-    });
+    const trace = originatingTrace || capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: forceRefresh ? "refresh" : "load" });
     if (!this.data.entryId) {
-      this.setData({
-        loading: false,
-        error: "",
-        emptyState: "entry",
-        emptyEyebrow: "需要球队",
-        emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
-        emptyActionText: "去选择球队"
-      }, () => {
-        this.markPrimaryCommit(tracker);
-      });
+      this.setData(
+        {
+          loading: false,
+          error: "",
+          emptyState: "entry",
+          emptyEyebrow: "需要球队",
+          emptyTitle: "先选择我的球队",
+          emptyDescription: "查找球队并设为我的球队后，即可生成每轮总结。",
+          emptyActionText: "去选择球队",
+        }, () => {
+          this.markPrimaryCommit(tracker);
+        },
+      );
       return;
     }
 
     this.setData({
       loading: true,
       error: "",
+      errorWorkload: "interactive",
       transferError: "",
       emptyState: "",
       emptyEyebrow: "",
       emptyTitle: "",
       emptyDescription: "",
-      emptyActionText: ""
+      emptyActionText: "",
     });
     const entryId = this.data.entryId;
+    let viewerEntryRecoveryAttempted = false;
     const requestSeason = getApp<IAppOption>().globalData.season || undefined;
     try {
-      const authoritativeEvent = Number(getApp<IAppOption>().globalData.gw) || 0;
-      const selectedEvent = authoritativeEvent > 0
-        ? clampEvent(this.data.event, authoritativeEvent)
-        : 0;
+      const authoritativeEvent =
+        Number(getApp<IAppOption>().globalData.gw) || 0;
+      const selectedEvent =
+        authoritativeEvent > 0
+          ? clampEvent(this.data.event, authoritativeEvent)
+          : 0;
       if (selectedEvent !== this.data.event) {
-        this.setData({ event: selectedEvent, maxGw: authoritativeEvent, hasTeamData: false });
+        this.setData({
+          event: selectedEvent,
+          maxGw: authoritativeEvent,
+          hasTeamData: false,
+        });
       }
       this.perfTracker?.mark("primaryRequestStartAt");
-      const eventResult = selectedEvent > 0
-        && canReadEventReporting(selectedEvent, getApp<IAppOption>().globalData.currentGw)
-        ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh, trace)
-        : undefined;
+      const eventResult =
+        selectedEvent > 0 &&
+        canReadEventReporting(
+          selectedEvent,
+          getApp<IAppOption>().globalData.currentGw,
+        )
+          ? await getEntryTeamStatsEventResult(entryId, selectedEvent, forceRefresh, trace)
+          : undefined;
       if (!this.pageVisible || requestId !== this.loadRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       this.perfTracker?.mark("primaryResponseAt");
@@ -885,36 +955,44 @@ Page({
       if (!eventResult) {
         this.loadedDataSeason = undefined;
         this._loadedAt = Date.now();
-        this.setData({
-          event: selectedEvent,
-          maxGw: authoritativeEvent,
-          error: "",
-          transferError: "",
-          headerTitle: "球队数据",
-          headerSubtitle: "",
-          heroScore: "",
-          heroScoreSub: "",
-          totalTransfersText: "",
-          overviewStats: [],
-          eventStats: [],
-          squadRows: [],
-          starterRows: [],
-          benchRows: [],
-          ...emptyPitchState(),
-          hasSquad: false,
-          hasTeamData: false,
-          supportAvailable: true,
-          phaseBanner: "",
-          emptyState: "event",
-          emptyEyebrow: "本轮待就绪",
-          emptyTitle: `GW${selectedEvent} 球队总结还没生成`,
-          emptyDescription: "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
-          emptyActionText: "重新加载"
-        }, () => {
-          this.markPrimaryCommit(tracker);
-        });
+        this.setData(
+          {
+            event: selectedEvent,
+            maxGw: authoritativeEvent,
+            error: "",
+            transferError: "",
+            headerTitle: "球队数据",
+            headerSubtitle: "",
+            heroScore: "",
+            heroScoreSub: "",
+            totalTransfersText: "",
+            overviewStats: [],
+            eventStats: [],
+            squadRows: [],
+            starterRows: [],
+            benchRows: [],
+            ...emptyPitchState(),
+            hasSquad: false,
+            hasTeamData: false,
+            supportAvailable: true,
+            phaseBanner: "",
+            emptyState: "event",
+            emptyEyebrow: "本轮待就绪",
+            emptyTitle: `GW${selectedEvent} 球队总结还没生成`,
+            emptyDescription:
+              "比赛周开始或球队数据完成同步后，这里会显示阵容、转会和得分。",
+            emptyActionText: "重新加载",
+          },
+          () => {
+            this.markPrimaryCommit(tracker);
+          },
+        );
         if (this.data.activeTab !== "squad") {
-          const tabTask = this.loadTab(this.data.activeTab, forceRefresh, trace);
+          const tabTask = this.loadTab(
+            this.data.activeTab,
+            forceRefresh,
+            trace,
+          );
           if (awaitActiveTab) await tabTask;
           else void tabTask;
         }
@@ -925,29 +1003,32 @@ Page({
         eventResult,
         { results: [], history: [] },
         [],
-        requestSeason
+        requestSeason,
       );
       setPageTitle(primary.headerTitle || "我的球队");
-      this.setData({
-        headerTitle: primary.headerTitle,
-        headerSubtitle: primary.headerSubtitle,
-        heroScore: primary.heroScore,
-        heroScoreSub: primary.heroScoreSub,
-        totalTransfersText: primary.totalTransfersText,
-        overviewStats: primary.overviewStats,
-        eventStats: primary.eventStats,
-        ...squadListState(primary.squadRows),
-        ...pitchStateFromEventResult(eventResult),
-        chipInventoryRows: primary.chipInventoryRows,
-        chipLogRows: primary.chipLogRows,
-        event: selectedEvent,
-        maxGw: authoritativeEvent,
-        emptyState: "",
-        hasTeamData: true,
-        supportAvailable: true
-      }, () => {
-        this.markPrimaryCommit(tracker);
-      });
+      this.setData(
+        {
+          headerTitle: primary.headerTitle,
+          headerSubtitle: primary.headerSubtitle,
+          heroScore: primary.heroScore,
+          heroScoreSub: primary.heroScoreSub,
+          totalTransfersText: primary.totalTransfersText,
+          overviewStats: primary.overviewStats,
+          eventStats: primary.eventStats,
+          ...squadListState(primary.squadRows),
+          ...pitchStateFromEventResult(eventResult),
+          chipInventoryRows: primary.chipInventoryRows,
+          chipLogRows: primary.chipLogRows,
+          event: selectedEvent,
+          maxGw: authoritativeEvent,
+          emptyState: "",
+          hasTeamData: true,
+          supportAvailable: true,
+        },
+        () => {
+          this.markPrimaryCommit(tracker);
+        },
+      );
       this.loadedDataSeason = requestSeason;
       this._loadedAt = Date.now();
       if (this.data.activeTab !== "squad") {
@@ -957,12 +1038,34 @@ Page({
       }
     } catch (error) {
       if (this.pageVisible && requestId === this.loadRequestId) {
+        if (
+          !viewerEntryRecoveryAttempted &&
+          isViewerEntryAuthorizationError(error)
+        ) {
+          viewerEntryRecoveryAttempted = true;
+          try {
+            const refreshedEntryId = await refreshAuthoritativeFollow();
+            if (!this.pageVisible || requestId !== this.loadRequestId) return;
+            if (!refreshedEntryId || refreshedEntryId !== entryId) {
+              if (this.restartForPrincipalChange(entryId)) return;
+            } else {
+              this.setData({ error: "球队状态尚未同步，请稍后重试" });
+              return;
+            }
+          } catch {
+            this.setData({ error: "球队状态尚未同步，请稍后重试" });
+            return;
+          }
+        }
         if (this.restartForPrincipalChange(entryId)) return;
-        this.setData({
-          error: error instanceof Error ? error.message : "球队数据加载失败"
-        }, () => {
-          this.markPrimaryCommit(tracker);
-        });
+        this.setData(
+          {
+            error: error instanceof Error ? error.message : "球队数据加载失败",
+          },
+          () => {
+            this.markPrimaryCommit(tracker);
+          },
+        );
       }
     } finally {
       if (this.pageVisible && requestId === this.loadRequestId) {
@@ -989,9 +1092,9 @@ Page({
     }
     const snapshotState = await getCurrentSnapshotState(currentGw);
     if (
-      requestId !== this.phaseBannerRequestId
-      || this.data.event !== selectedEvent
-      || Number(getApp<IAppOption>().globalData.gw) !== currentGw
+      requestId !== this.phaseBannerRequestId ||
+      this.data.event !== selectedEvent ||
+      Number(getApp<IAppOption>().globalData.gw) !== currentGw
     ) {
       return;
     }
@@ -1029,24 +1132,28 @@ Page({
       hasTeamData: false,
       supportAvailable: false,
       playerDetailOpen: false,
-      playerDetail: null
+      playerDetail: null,
     });
     this.loadData(true);
   },
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
-    const tab = String(event.currentTarget.dataset.tab || "squad") as EntrySummaryTab;
+    const tab = String(
+      event.currentTarget.dataset.tab || "squad",
+    ) as EntrySummaryTab;
     this.setActiveTab(tab);
     void this.loadTab(tab, false);
   },
 
   onTransferFilterTap(event: WechatMiniprogram.TouchEvent) {
-    const filter = String(event.currentTarget.dataset.filter || "with") as TransferFilter;
+    const filter = String(
+      event.currentTarget.dataset.filter || "with",
+    ) as TransferFilter;
     if (filter === this.data.transferFilter) return;
     this.setData({
       transferFilter: filter,
       transferPageSize: TRANSFER_PAGE_SIZE,
-      ...buildTransferView(this.data.transferRows, filter, TRANSFER_PAGE_SIZE)
+      ...buildTransferView(this.data.transferRows, filter, TRANSFER_PAGE_SIZE),
     });
   },
 
@@ -1054,7 +1161,11 @@ Page({
     const transferPageSize = this.data.transferPageSize + TRANSFER_PAGE_SIZE;
     this.setData({
       transferPageSize,
-      ...buildTransferView(this.data.transferRows, this.data.transferFilter, transferPageSize)
+      ...buildTransferView(
+        this.data.transferRows,
+        this.data.transferFilter,
+        transferPageSize,
+      ),
     });
   },
 
@@ -1063,7 +1174,7 @@ Page({
     this.setData({
       historyPageSize,
       pagedHistoryRows: this.data.historyRows.slice(0, historyPageSize),
-      historyHasMore: this.data.historyRows.length > historyPageSize
+      historyHasMore: this.data.historyRows.length > historyPageSize,
     });
   },
 
@@ -1073,11 +1184,15 @@ Page({
     const target = this.data.transferRows.find((row) => row.id === id);
     if (!target || !target.collapsible) return;
     const transferRows = this.data.transferRows.map((row) =>
-      row.id === id ? { ...row, collapsed: !row.collapsed } : row
+      row.id === id ? { ...row, collapsed: !row.collapsed } : row,
     );
     this.setData({
       transferRows,
-      ...buildTransferView(transferRows, this.data.transferFilter, this.data.transferPageSize)
+      ...buildTransferView(
+        transferRows,
+        this.data.transferFilter,
+        this.data.transferPageSize,
+      ),
     });
   },
 
@@ -1087,7 +1202,7 @@ Page({
     this.setData({
       playerDetailOpen: true,
       // SquadRow.points is display text; buildPlayerLiveDetail re-parses it.
-      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow)
+      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow),
     });
   },
 
@@ -1098,20 +1213,22 @@ Page({
       this.data.squadRows,
       playerId,
       this.data.pitchPlayers,
-      this.data.pitchBench
+      this.data.pitchBench,
     );
     if (!player) return;
     this.setData({
       playerDetailOpen: true,
-      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow)
+      playerDetail: buildPlayerLiveDetail(player as unknown as LivePlayerRow),
     });
   },
 
   async onSharePitch() {
     if (this.data.shareBusy) return;
-    const pitch = this.selectComponent("#squad-pitch") as WechatMiniprogram.Component.TrivialInstance & {
-      exportShareImage?: () => Promise<string>;
-    } | null;
+    const pitch = this.selectComponent("#squad-pitch") as
+      | (WechatMiniprogram.Component.TrivialInstance & {
+          exportShareImage?: () => Promise<string>;
+        })
+      | null;
     if (!pitch?.exportShareImage) {
       wx.showToast({ title: "阵容图还没准备好", icon: "none" });
       return;
@@ -1120,7 +1237,7 @@ Page({
     try {
       const path = await pitch.exportShareImage();
       this.setData({ shareImagePath: path });
-        await presentImage(path);
+      await presentImage(path);
     } catch {
       wx.showToast({ title: "阵容图生成失败", icon: "none" });
     } finally {
@@ -1129,21 +1246,26 @@ Page({
   },
 
   onShareAppMessage() {
-    const teamName = this.data.pitchHeader?.teamName || this.data.headerTitle || "我的球队";
+    const teamName =
+      this.data.pitchHeader?.teamName || this.data.headerTitle || "我的球队";
     return {
       title: `${teamName} · GW${this.data.event}`,
       path: "/pages/my-fpl/team/team",
-      imageUrl: this.data.shareImagePath || undefined
+      imageUrl: this.data.shareImagePath || undefined,
     };
   },
 
   onClosePlayer() {
     this.setData({
-      playerDetailOpen: false
+      playerDetailOpen: false,
     });
   },
 
-  async loadTab(tab: EntrySummaryTab, forceRefresh: boolean, originatingTrace?: PageRequestTrace): Promise<void> {
+  async loadTab(
+    tab: EntrySummaryTab,
+    forceRefresh: boolean,
+    originatingTrace?: PageRequestTrace,
+  ): Promise<void> {
     if (tab === "squad" || !this.data.entryId) return;
     this.tabForceRefreshPending = forceRefresh;
     const requestId = ++this.tabRequestId;
@@ -1152,62 +1274,106 @@ Page({
       ? {
           ...originatingTrace,
           callerSurface: "my-fpl-team-tab",
-          trigger: forceRefresh ? "refresh" as const : "tab" as const
+          trigger: forceRefresh ? ("refresh" as const) : ("tab" as const),
         }
       : capturePageRequestTrace({
           callerSurface: "my-fpl-team-tab",
-          trigger: forceRefresh ? "refresh" : "tab"
+          trigger: forceRefresh ? "refresh" : "tab",
         });
     this.setData({ tabLoading: true, tabError: "" });
+    let viewerTabRecoveryAttempted = false;
     try {
       let historyPayload = this.historyPayload;
       let transferPayload = this.transferPayload;
       if (forceRefresh || !historyPayload) {
         historyPayload = await getEntryTeamStatsHistory(entryId, forceRefresh, trace);
         if (this.restartForPrincipalChange(entryId)) return;
-        if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
+        if (requestId !== this.tabRequestId || entryId !== this.data.entryId)
+          return;
       }
       if (tab === "transfer" && (forceRefresh || !transferPayload)) {
         transferPayload = await getEntryTeamStatsTransfers(entryId, forceRefresh, trace);
         if (this.restartForPrincipalChange(entryId)) return;
-        if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
+        if (requestId !== this.tabRequestId || entryId !== this.data.entryId)
+          return;
       }
       if (this.restartForPrincipalChange(entryId)) return;
-      if (requestId !== this.tabRequestId || entryId !== this.data.entryId) return;
+      if (requestId !== this.tabRequestId || entryId !== this.data.entryId)
+        return;
       this.historyPayload = historyPayload;
       this.transferPayload = transferPayload;
       const support = mapHistorySupportRows(
         historyPayload,
         transferPayload || [],
-        getApp<IAppOption>().globalData.season
+        getApp<IAppOption>().globalData.season,
       );
       this.setData({
         transferRows: support.transferRows,
-        ...buildTransferView(support.transferRows, this.data.transferFilter, this.data.transferPageSize),
+        ...buildTransferView(
+          support.transferRows,
+          this.data.transferFilter,
+          this.data.transferPageSize,
+        ),
         chipInventoryRows: support.chipInventoryRows,
         chipLogRows: support.chipLogRows,
         historyRows: support.historyRows,
-        pagedHistoryRows: support.historyRows.slice(0, this.data.historyPageSize),
+        pagedHistoryRows: support.historyRows.slice(
+          0,
+          this.data.historyPageSize,
+        ),
         historyHasMore: support.historyRows.length > this.data.historyPageSize,
         seasonHistoryRows: support.seasonHistoryRows,
         hasTransfers: support.transferRows.length > 0,
         hasChips: support.chipLogRows.length > 0,
-        hasHistory: support.historyRows.length > 0 || support.seasonHistoryRows.length > 0,
+        hasHistory:
+          support.historyRows.length > 0 ||
+          support.seasonHistoryRows.length > 0,
         transferError: "",
         ...seasonChartPageState(
           historyToSeasonChartPoints(historyPayload.results),
           this.data.seasonChartMode,
-          this.data.seasonChartSelectedGw
+          this.data.seasonChartSelectedGw,
         ),
-        ...pastSeasonPageState(support.seasonHistoryRows, this.data.pastSeasonSelected)
+        ...pastSeasonPageState(
+          support.seasonHistoryRows,
+          this.data.pastSeasonSelected,
+        ),
       });
     } catch (error) {
       if (this.restartForPrincipalChange(entryId)) return;
       if (requestId !== this.tabRequestId) return;
-      const message = error instanceof Error ? error.message : "分页数据加载失败";
+      if (
+        !viewerTabRecoveryAttempted &&
+        isViewerEntryAuthorizationError(error)
+      ) {
+        viewerTabRecoveryAttempted = true;
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!this.pageVisible || requestId !== this.tabRequestId) return;
+          if (!refreshedEntryId || refreshedEntryId !== entryId) {
+            if (this.restartForPrincipalChange(entryId)) return;
+          } else {
+            const syncError = "球队状态尚未同步，请稍后重试";
+            this.setData({
+              tabError: syncError,
+              ...(tab === "transfer" ? { transferError: syncError } : {}),
+            });
+            return;
+          }
+        } catch {
+          const syncError = "球队状态尚未同步，请稍后重试";
+          this.setData({
+            tabError: syncError,
+            ...(tab === "transfer" ? { transferError: syncError } : {}),
+          });
+          return;
+        }
+      }
+      const message =
+        error instanceof Error ? error.message : "分页数据加载失败";
       this.setData({
         tabError: message,
-        ...(tab === "transfer" ? { transferError: message } : {})
+        ...(tab === "transfer" ? { transferError: message } : {}),
       });
     } finally {
       if (requestId === this.tabRequestId) {
@@ -1218,26 +1384,42 @@ Page({
   },
 
   onSeasonChartMode(event: WechatMiniprogram.TouchEvent) {
-    const mode = String(event.currentTarget.dataset.mode || "rank") as SeasonChartMode;
+    const mode = String(
+      event.currentTarget.dataset.mode || "rank",
+    ) as SeasonChartMode;
     if (mode === this.data.seasonChartMode) return;
-    this.setData(seasonChartPageState(this.data.seasonChartPoints, mode, this.data.seasonChartSelectedGw));
+    this.setData(
+      seasonChartPageState(
+        this.data.seasonChartPoints,
+        mode,
+        this.data.seasonChartSelectedGw,
+      ),
+    );
   },
 
-  onSeasonChartSelect(event: WechatMiniprogram.CustomEvent<{ x: number | null }>) {
+  onSeasonChartSelect(
+    event: WechatMiniprogram.CustomEvent<{ x: number | null }>,
+  ) {
     const selectedGw = event.detail?.x == null ? null : Number(event.detail.x);
-    this.setData(seasonChartPageState(
-      this.data.seasonChartPoints,
-      this.data.seasonChartMode,
-      Number.isFinite(selectedGw as number) ? selectedGw : null
-    ));
+    this.setData(
+      seasonChartPageState(
+        this.data.seasonChartPoints,
+        this.data.seasonChartMode,
+        Number.isFinite(selectedGw as number) ? selectedGw : null,
+      ),
+    );
   },
 
-  onPastSeasonSelect(event: WechatMiniprogram.CustomEvent<{ x: number | null }>) {
+  onPastSeasonSelect(
+    event: WechatMiniprogram.CustomEvent<{ x: number | null }>,
+  ) {
     const selected = event.detail?.x == null ? null : Number(event.detail.x);
-    this.setData(pastSeasonPageState(
-      this.data.seasonHistoryRows,
-      Number.isFinite(selected as number) ? selected : null
-    ));
+    this.setData(
+      pastSeasonPageState(
+        this.data.seasonHistoryRows,
+        Number.isFinite(selected as number) ? selected : null,
+      ),
+    );
   },
 
   setActiveTab(tab: EntrySummaryTab) {
@@ -1246,7 +1428,7 @@ Page({
       showSquad: tab === "squad",
       showTransfer: tab === "transfer",
       showChips: tab === "chips",
-      showHistory: tab === "history"
+      showHistory: tab === "history",
     });
   },
 
@@ -1262,7 +1444,11 @@ Page({
       if (this.perfTracker) {
         void this.runForcedRefresh(
           this.perfTracker,
-          capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh", forceReason: "user-refresh" })
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-team-primary",
+            trigger: "refresh",
+            forceReason: "user-refresh",
+          }),
         );
       }
       return;
@@ -1271,7 +1457,11 @@ Page({
       if (this.perfTracker) {
         void this.runForcedRefresh(
           this.perfTracker,
-          capturePageRequestTrace({ callerSurface: "my-fpl-team-primary", trigger: "refresh", forceReason: "user-refresh" })
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-team-primary",
+            trigger: "refresh",
+            forceReason: "user-refresh",
+          }),
         );
       }
       return;
@@ -1289,26 +1479,26 @@ Page({
       return;
     }
     this.loadData(true);
-  }
+  },
 });
 
 function emptySeasonChartState() {
   return {
     ...seasonChartPageState([], "rank", null),
-    ...pastSeasonPageState([], null)
+    ...pastSeasonPageState([], null),
   };
 }
 
 function seasonChartPageState(
   points: SeasonChartPoint[],
   mode: SeasonChartMode,
-  selectedGw: number | null
+  selectedGw: number | null,
 ) {
   return {
     seasonChartPoints: points,
     seasonChartModes: SEASON_CHART_MODES,
     seasonChartMode: mode,
-    ...buildSeasonChartView(points, mode, selectedGw)
+    ...buildSeasonChartView(points, mode, selectedGw),
   };
 }
 
@@ -1317,18 +1507,21 @@ function pastRowsFromHistory(rows: SeasonHistoryRow[]): PastSeasonChartPoint[] {
     season: row.season,
     totalPoints: row.pointsValue,
     overallRank: row.rankValue,
-    current: row.current
+    current: row.current,
   }));
 }
 
-function pastSeasonPageState(rows: SeasonHistoryRow[], selectedIndex: number | null) {
+function pastSeasonPageState(
+  rows: SeasonHistoryRow[],
+  selectedIndex: number | null,
+) {
   const points = pastRowsFromHistory(rows);
   return {
     pastSeasonVisible: points.length >= 2,
     pastSeasonSeries: toPastSeasonChartPoints(points),
     pastSeasonSummary: pastSeasonSummary(points, selectedIndex),
     pastSeasonSelected: selectedIndex,
-    pastSeasonHasSelected: selectedIndex != null
+    pastSeasonHasSelected: selectedIndex != null,
   };
 }
 
@@ -1338,7 +1531,7 @@ function squadListState(rows: SquadRow[]) {
     starterRows: rows.filter((row) => !row.bench),
     benchRows: rows.filter((row) => row.bench),
     hasSquad: rows.length > 0,
-    hasBench: rows.some((row) => row.bench)
+    hasBench: rows.some((row) => row.bench),
   };
 }
 
@@ -1357,7 +1550,7 @@ function emptyPitchState(): {
     pitchHeader: null,
     pitchBenchBoost: false,
     shareImagePath: "",
-    shareBusy: false
+    shareBusy: false,
   };
 }
 
@@ -1370,7 +1563,7 @@ function pitchStateFromEventResult(eventResult: EntryEventResult) {
     pitchHeader: view.header,
     pitchBenchBoost: view.benchBoost,
     shareImagePath: "",
-    shareBusy: false
+    shareBusy: false,
   };
 }
 
@@ -1378,29 +1571,41 @@ function findSquadRowForPitch(
   rows: SquadRow[],
   playerId: string,
   pitchPlayers: SquadPitchPlayer[],
-  pitchBench: SquadPitchPlayer[]
+  pitchBench: SquadPitchPlayer[],
 ): SquadRow | undefined {
   const direct = rows.find((row) => row.id === playerId);
   if (direct) return direct;
-  const pitchPlayer = [...pitchPlayers, ...pitchBench].find((player) => player.id === playerId);
+  const pitchPlayer = [...pitchPlayers, ...pitchBench].find(
+    (player) => player.id === playerId,
+  );
   if (!pitchPlayer) return undefined;
-  return rows.find((row) => row.name === pitchPlayer.webName && row.position === pitchPlayer.position);
+  return rows.find(
+    (row) =>
+      row.name === pitchPlayer.webName && row.position === pitchPlayer.position,
+  );
 }
 
 function mapApiDataToTeamStats(
   eventResult: EntryEventResult,
   history: EntryHistoryPayload,
   transferHistory: EntryGameweekTransfers[],
-  currentSeason?: string
+  currentSeason?: string,
 ): TeamStatsViewModel {
-  const historySupport = mapHistorySupportRows(history, transferHistory, currentSeason);
+  const historySupport = mapHistorySupportRows(
+    history,
+    transferHistory,
+    currentSeason,
+  );
 
   const squadRows = mapSquadRows(eventResult.eventPicks || []);
   const captain = eventResult.eventPlayedCaptain;
 
   return {
     headerTitle: eventResult.entry.entryName,
-    headerSubtitle: [eventResult.entry.playerName || "-", eventResult.entry.region || "-"].join(" · "),
+    headerSubtitle: [
+      eventResult.entry.playerName || "-",
+      eventResult.entry.region || "-",
+    ].join(" · "),
     heroScore: String(eventResult.eventPoints),
     heroScoreSub: `净得分 ${eventResult.eventNetPoints} · 队长 ${captain?.webName || "-"} (${eventResult.eventCaptainPoints})`,
     totalTransfersText: `总转会 ${formatNumber(eventResult.entry.totalTransfers)}`,
@@ -1408,19 +1613,19 @@ function mapApiDataToTeamStats(
       { label: "总分", value: String(eventResult.overallPoints) },
       { label: "总排名", value: formatCompactNumber(eventResult.overallRank) },
       { label: "阵容身价", value: formatMoney(eventResult.teamValue) },
-      { label: "银行余额", value: formatMoney(eventResult.bank) }
+      { label: "银行余额", value: formatMoney(eventResult.bank) },
     ],
     eventStats: [
       { label: "开卡", value: formatChip(eventResult.eventChip) },
       { label: "本轮转会", value: String(eventResult.eventTransfers) },
-      { label: "板凳分", value: String(eventResult.eventBenchPoints) }
+      { label: "板凳分", value: String(eventResult.eventBenchPoints) },
     ],
     squadRows,
     transferRows: historySupport.transferRows,
     chipInventoryRows: historySupport.chipInventoryRows,
     chipLogRows: historySupport.chipLogRows,
     historyRows: historySupport.historyRows,
-    seasonHistoryRows: historySupport.seasonHistoryRows
+    seasonHistoryRows: historySupport.seasonHistoryRows,
   };
 }
 
@@ -1430,16 +1635,29 @@ export const CHIP_HALF_SPLIT_GW = 19;
 const CHIP_INVENTORY_FAMILIES = [
   { code: "WC", name: "Wildcard", keys: ["WC", "WILDCARD"] },
   { code: "FH", name: "Free Hit", keys: ["FH", "FREEHIT", "FREE_HIT"] },
-  { code: "BB", name: "Bench Boost", keys: ["BB", "BBOOST", "BENCH_BOOST", "BENCHBOOST"] },
-  { code: "TC", name: "Triple Captain", keys: ["3XC", "TC", "TRIPLE_CAPTAIN", "TRIPLECAPTAIN"] }
+  {
+    code: "BB",
+    name: "Bench Boost",
+    keys: ["BB", "BBOOST", "BENCH_BOOST", "BENCHBOOST"],
+  },
+  {
+    code: "TC",
+    name: "Triple Captain",
+    keys: ["3XC", "TC", "TRIPLE_CAPTAIN", "TRIPLECAPTAIN"],
+  },
 ];
 
 /** Half-season inventory — mirrors the web TeamChipsTab table. */
-export function buildChipInventory(usage: Array<{ eventId: number; chip: string }>): ChipInventoryRow[] {
+export function buildChipInventory(
+  usage: Array<{ eventId: number; chip: string }>,
+): ChipInventoryRow[] {
   return CHIP_INVENTORY_FAMILIES.map((family) => {
     const used = usage.filter((item) =>
-      family.keys.includes(item.chip.toUpperCase().replace(/[\s-]+/g, "_")));
-    const firstUsed = used.filter((item) => item.eventId <= CHIP_HALF_SPLIT_GW).length;
+      family.keys.includes(item.chip.toUpperCase().replace(/[\s-]+/g, "_")),
+    );
+    const firstUsed = used.filter(
+      (item) => item.eventId <= CHIP_HALF_SPLIT_GW,
+    ).length;
     const secondUsed = used.length - firstUsed;
     const firstLeft = Math.max(0, 1 - firstUsed);
     const secondLeft = Math.max(0, 1 - secondUsed);
@@ -1450,7 +1668,7 @@ export function buildChipInventory(usage: Array<{ eventId: number; chip: string 
       firstText: `${firstUsed} / ${firstLeft}`,
       secondText: `${secondUsed} / ${secondLeft}`,
       firstOut: firstLeft === 0,
-      secondOut: secondLeft === 0
+      secondOut: secondLeft === 0,
     };
   });
 }
@@ -1466,18 +1684,24 @@ interface HistorySupportViewModel {
 function mapHistorySupportRows(
   history: EntryHistoryPayload,
   transferHistory: EntryGameweekTransfers[],
-  currentSeason?: string
+  currentSeason?: string,
 ): HistorySupportViewModel {
   const transferByEvent = new Map<number, EntryGameweekTransfers>();
   transferHistory.forEach((item) => transferByEvent.set(item.eventId, item));
-  const sortedHistory = [...history.results].sort((a, b) => b.eventId - a.eventId);
-  const chipEvents = sortedHistory
-    .filter((item) => Boolean(item.eventChip) && item.eventChip !== "NONE");
+  const sortedHistory = [...history.results].sort(
+    (a, b) => b.eventId - a.eventId,
+  );
+  const chipEvents = sortedHistory.filter(
+    (item) => Boolean(item.eventChip) && item.eventChip !== "NONE",
+  );
 
   return {
     transferRows: mapTransferRows(sortedHistory, transferByEvent),
     chipInventoryRows: buildChipInventory(
-      chipEvents.map((item) => ({ eventId: item.eventId, chip: String(item.eventChip) }))
+      chipEvents.map((item) => ({
+        eventId: item.eventId,
+        chip: String(item.eventChip),
+      })),
     ),
     chipLogRows: chipEvents.map((item) => ({
       id: `chip-${item.eventId}`,
@@ -1486,17 +1710,22 @@ function mapHistorySupportRows(
       chip: formatChip(item.eventChip),
       pointsText: formatPoints(item.eventPoints),
       netText: formatPoints(item.eventNetPoints),
-      rankText: formatCompactNumber(item.eventRank)
+      rankText: formatCompactNumber(item.eventRank),
     })),
     historyRows: sortedHistory.map(mapHistoryRow),
     seasonHistoryRows: [...history.history]
       .sort((a, b) => b.season.localeCompare(a.season))
-      .map((item) => mapSeasonHistoryRow(item, currentSeason))
+      .map((item) => mapSeasonHistoryRow(item, currentSeason)),
   };
 }
 
 function mapSquadRows(picks: EntryEventPick[]): SquadRow[] {
-  const positionOrder: Record<string, number> = { GKP: 1, DEF: 2, MID: 3, FWD: 4 };
+  const positionOrder: Record<string, number> = {
+    GKP: 1,
+    DEF: 2,
+    MID: 3,
+    FWD: 4,
+  };
   return [...picks]
     .sort((a, b) => {
       const aBench = a.multiplier === 0 ? 1 : 0;
@@ -1504,7 +1733,10 @@ function mapSquadRows(picks: EntryEventPick[]): SquadRow[] {
       if (aBench !== bBench) {
         return aBench - bBench;
       }
-      return (positionOrder[a.elementTypeName] || 5) - (positionOrder[b.elementTypeName] || 5);
+      return (
+        (positionOrder[a.elementTypeName] || 5) -
+        (positionOrder[b.elementTypeName] || 5)
+      );
     })
     .map((pick, index) => ({
       id: `${index}-${pick.webName}`,
@@ -1529,7 +1761,7 @@ function mapSquadRows(picks: EntryEventPick[]): SquadRow[] {
       yellowCards: pick.yellowCards || 0,
       redCards: pick.redCards || 0,
       bonus: pick.bonus || 0,
-      bps: pick.bps
+      bps: pick.bps,
     }));
 }
 
@@ -1544,12 +1776,26 @@ function pickMetaText(pick: EntryEventPick): string {
 }
 
 function normalizeChipCode(chip?: string | null): string {
-  const code = String(chip || "").toUpperCase().replace(/[\s-]+/g, "_");
+  const code = String(chip || "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
   if (!code || code === "NONE") return "";
   if (code === "WILDCARD" || code === "WC") return "WC";
   if (code === "FREE_HIT" || code === "FREEHIT" || code === "FH") return "FH";
-  if (code === "BENCH_BOOST" || code === "BBOOST" || code === "BENCHBOOST" || code === "BB") return "BB";
-  if (code === "TRIPLE_CAPTAIN" || code === "TRIPLECAPTAIN" || code === "3XC" || code === "TC") return "TC";
+  if (
+    code === "BENCH_BOOST" ||
+    code === "BBOOST" ||
+    code === "BENCHBOOST" ||
+    code === "BB"
+  )
+    return "BB";
+  if (
+    code === "TRIPLE_CAPTAIN" ||
+    code === "TRIPLECAPTAIN" ||
+    code === "3XC" ||
+    code === "TC"
+  )
+    return "TC";
   if (code === "MANAGER" || code === "AM") return "AM";
   return code;
 }
@@ -1559,13 +1805,20 @@ function isUnlimitedTransferChip(chip: string): boolean {
   return chip === "WC" || chip === "FH";
 }
 
-function mapTransferRows(historyRows: EntryHistoryItem[], transferByEvent: Map<number, EntryGameweekTransfers>): TransferRow[] {
+function mapTransferRows(
+  historyRows: EntryHistoryItem[],
+  transferByEvent: Map<number, EntryGameweekTransfers>,
+): TransferRow[] {
   return historyRows.map((history) => {
     const transferInfo = transferByEvent.get(history.eventId);
-    const moves = (transferInfo?.transfers || []).map((move, index) => mapTransferMove(history.eventId, move, index));
+    const moves = (transferInfo?.transfers || []).map((move, index) =>
+      mapTransferMove(history.eventId, move, index),
+    );
     const chip = normalizeChipCode(history.eventChip);
-    const collapsible = isUnlimitedTransferChip(chip)
-      || Math.max(moves.length, history.eventTransfers) >= TRANSFER_COLLAPSE_MOVE_THRESHOLD;
+    const collapsible =
+      isUnlimitedTransferChip(chip) ||
+      Math.max(moves.length, history.eventTransfers) >=
+        TRANSFER_COLLAPSE_MOVE_THRESHOLD;
     return {
       id: `transfer-${history.eventId}`,
       gameweek: `GW${history.eventId}`,
@@ -1577,13 +1830,17 @@ function mapTransferRows(historyRows: EntryHistoryItem[], transferByEvent: Map<n
       chip,
       transferCount: history.eventTransfers,
       collapsible,
-      collapsed: collapsible
+      collapsed: collapsible,
     };
   });
 }
 
 /** Top-of-tab summary + filtered page — mirrors the web TeamTransfersTab header. */
-export function buildTransferView(rows: TransferRow[], filter: TransferFilter, pageSize = TRANSFER_PAGE_SIZE): {
+export function buildTransferView(
+  rows: TransferRow[],
+  filter: TransferFilter,
+  pageSize = TRANSFER_PAGE_SIZE,
+): {
   transferSummary: MetricCard[];
   visibleTransferRows: TransferRow[];
   transferFilterNote: string;
@@ -1595,42 +1852,61 @@ export function buildTransferView(rows: TransferRow[], filter: TransferFilter, p
   const totalCost = rows.reduce((sum, row) => sum + Number(row.cost || 0), 0);
   const transferSummary: MetricCard[] = [
     { label: "总转会", value: String(totalMoves) },
-    { label: "转会扣分", value: totalCost > 0 ? `-${totalCost}` : "0", tone: totalCost > 0 ? "bad" : "default" },
-    { label: "有转会轮数", value: String(withRows.length) }
+    {
+      label: "转会扣分",
+      value: totalCost > 0 ? `-${totalCost}` : "0",
+      tone: totalCost > 0 ? "bad" : "default",
+    },
+    { label: "有转会轮数", value: String(withRows.length) },
   ];
-  const filtered = filter === "all"
-    ? rows
-    : filter === "none"
-      ? rows.filter((row) => row.transferCount === 0)
-      : withRows;
-  const transferFilterNote = filter === "all"
-    ? `全部 ${rows.length} 轮`
-    : filter === "none"
-      ? `无转会 ${noneCount} 轮 · 共 ${rows.length} 轮`
-      : `有转会 ${withRows.length} 轮 · 共 ${rows.length} 轮`;
+  const filtered =
+    filter === "all"
+      ? rows
+      : filter === "none"
+        ? rows.filter((row) => row.transferCount === 0)
+        : withRows;
+  const transferFilterNote =
+    filter === "all"
+      ? `全部 ${rows.length} 轮`
+      : filter === "none"
+        ? `无转会 ${noneCount} 轮 · 共 ${rows.length} 轮`
+        : `有转会 ${withRows.length} 轮 · 共 ${rows.length} 轮`;
   return {
     transferSummary,
     visibleTransferRows: filtered.slice(0, pageSize),
     transferFilterNote,
-    transferHasMore: filtered.length > pageSize
+    transferHasMore: filtered.length > pageSize,
   };
 }
 
-function transferPointsText(points: number | undefined, played: boolean | undefined): string {
+function transferPointsText(
+  points: number | undefined,
+  played: boolean | undefined,
+): string {
   if (played === false) return "未出场";
   return `${points ?? 0} 分`;
 }
 
-function mapTransferMove(eventId: number, move: EntryTransferMove, index: number): TransferMoveRow {
+function mapTransferMove(
+  eventId: number,
+  move: EntryTransferMove,
+  index: number,
+): TransferMoveRow {
   return {
     id: `move-${eventId}-${index}`,
     outName: move.elementOutWebName || "-",
     outTeam: move.elementOutTeamShortName || "",
-    outPointsText: transferPointsText(move.elementOutPoints, move.elementOutPlayed),
+    outPointsText: transferPointsText(
+      move.elementOutPoints,
+      move.elementOutPlayed,
+    ),
     inName: move.elementInWebName || "-",
     inTeam: move.elementInTeamShortName || "",
-    inPointsText: transferPointsText(move.elementInPoints, move.elementInPlayed),
-    priceText: `${formatMoney(move.elementOutCost)} → ${formatMoney(move.elementInCost)}`
+    inPointsText: transferPointsText(
+      move.elementInPoints,
+      move.elementInPlayed,
+    ),
+    priceText: `${formatMoney(move.elementOutCost)} → ${formatMoney(move.elementInCost)}`,
   };
 }
 
@@ -1646,13 +1922,13 @@ function mapHistoryRow(item: EntryHistoryItem): HistoryRow {
     captainPointsText: captain ? String(item.eventCaptainPoints ?? 0) : "",
     costText: cost > 0 ? `-${cost}` : "0",
     costBad: cost > 0,
-    rankText: formatCompactNumber(item.overallRank)
+    rankText: formatCompactNumber(item.overallRank),
   };
 }
 
 export function mapSeasonHistoryRow(
   item: EntrySeasonHistoryItem,
-  currentSeason?: string
+  currentSeason?: string,
 ): SeasonHistoryRow {
   return {
     id: `season-${item.season}`,
@@ -1661,7 +1937,7 @@ export function mapSeasonHistoryRow(
     overallRank: formatCompactNumber(item.overallRank),
     pointsValue: item.totalPoints || 0,
     rankValue: item.overallRank || 0,
-    current: isCurrentSeasonLabel(item.season, currentSeason)
+    current: isCurrentSeasonLabel(item.season, currentSeason),
   };
 }
 
@@ -1692,7 +1968,7 @@ function formatChip(chip?: string | null): string {
     FREE_HIT: "FH",
     TRIPLE_CAPTAIN: "TC",
     WILDCARD: "WC",
-    MANAGER: "AM"
+    MANAGER: "AM",
   };
   return labels[chip] || chip;
 }

@@ -171,13 +171,18 @@ export function formatLiveEntryShareText(input: {
   netPoints: number;
   totalPoints: number | string;
   transferCost: number;
+  transferCostKnown: boolean;
   chip?: string;
   captainName?: string;
   starters: LivePlayerRow[];
   bench: LivePlayerRow[];
 }): string {
   const teamName = textValue(input.entryName, "我的球队");
-  const hits = input.transferCost > 0 ? ` (−${input.transferCost})` : "";
+  const hits = !input.transferCostKnown
+    ? " (转会扣分待确认)"
+    : input.transferCost > 0
+      ? ` (−${input.transferCost})`
+      : "";
   // Net points are derivable from 实时 + hits, so the meta line keeps only
   // identity and season context.
   const meta = [
@@ -223,6 +228,8 @@ export function formatLiveTournamentShareText(input: {
     displayNet?: string;
     displayTotal?: string;
     displayHit?: string;
+    transferCostKnown?: boolean;
+    eventPointsKnown?: boolean;
     playedText?: string;
   }>;
 }): string {
@@ -233,13 +240,37 @@ export function formatLiveTournamentShareText(input: {
     ""
   ];
 
-  input.rows.forEach((row, index) => {
-    const rank = row.visibleRank || index + 1;
+  input.rows.forEach((row) => {
+    const eventPointsKnown =
+      typeof row.eventPointsKnown === "boolean"
+        ? row.eventPointsKnown
+        : row.displayLive !== undefined
+          ? row.displayLive !== "—"
+          : typeof row.livePoints === "number" && Number.isFinite(row.livePoints);
+    const rank =
+      eventPointsKnown &&
+      typeof row.visibleRank === "number" &&
+      Number.isSafeInteger(row.visibleRank) &&
+      row.visibleRank > 0
+        ? String(row.visibleRank)
+        : "—";
     const team = textValue(row.entryName, "-");
     const gw = textValue(row.displayLive, String(numberValue(row.livePoints)));
-    const hit = numberValue(row.transferCost, Math.abs(numberValue(row.displayHit)));
+    const displayHit = String(row.displayHit || "").trim();
+    const transferCostKnown =
+      typeof row.transferCostKnown === "boolean"
+        ? row.transferCostKnown
+        : (typeof row.transferCost === "number" && Number.isFinite(row.transferCost)) ||
+          /^-?\d+$/.test(displayHit);
+    const hit = transferCostKnown
+      ? numberValue(row.transferCost, Math.abs(numberValue(displayHit)))
+      : 0;
     const total = textValue(row.displayTotal, String(numberValue(row.liveTotalPoints ?? row.totalPoints)));
-    const hitText = hit > 0 ? ` (−${hit})` : "";
+    const hitText = !transferCostKnown
+      ? " (转会扣分待确认)"
+      : hit > 0
+        ? ` (−${hit})`
+        : "";
     lines.push(`${rank}. ${team} · GW ${gw}${hitText} · 总 ${total}`);
   });
 

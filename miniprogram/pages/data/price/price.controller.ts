@@ -87,6 +87,7 @@ interface PricePageData {
   error: string;
   staleMessage: string;
   playersError: string;
+  playersErrorWorkload: "home" | "player-stats";
   historyError: string;
   changeDate: string;
   players: PlayerOption[];
@@ -592,6 +593,7 @@ Page({
     error: "",
     staleMessage: "",
     playersError: "",
+    playersErrorWorkload: "home",
     historyError: "",
     changeDate: formatPickerDate(),
     players: [],
@@ -1276,10 +1278,15 @@ Page({
       callerSurface: "price-team-directory",
       trigger: "load",
     });
-    this.setData({ playerLoading: true, playersError: "" });
+    this.setData({
+      playerLoading: true,
+      playersError: "",
+      playersErrorWorkload: "home",
+    });
     try {
       const context = await ensureAppContext({ reason: "page-load", forceRefresh });
       if (!this.pageActive || this.perfTracker !== tracker) return;
+      this.setData({ playersErrorWorkload: "player-stats" });
       const season = context.season;
       const teams = await getTeamList(season, forceRefresh, trace) as TeamDirectoryItem[];
       if (!this.pageActive || this.perfTracker !== tracker) return;
@@ -1374,8 +1381,16 @@ Page({
   ): Promise<void> {
     this.setData(
       append
-        ? { loadingMore: true, playersError: "" }
-        : { playerLoading: true, playersError: "" },
+        ? {
+            loadingMore: true,
+            playersError: "",
+            playersErrorWorkload: "player-stats",
+          }
+        : {
+            playerLoading: true,
+            playersError: "",
+            playersErrorWorkload: "player-stats",
+          },
     );
 
     try {

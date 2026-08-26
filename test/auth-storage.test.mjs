@@ -1,24 +1,34 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 
 import {
   clearApiSession,
   clearSessionCredentials,
   confirmMiniProgramEmailLink,
+  ensureMiniProgramAccountFresh,
   getApiSessionToken,
+  getLastSessionCredentialState,
   getLinkedAccountSnapshot,
   getStoredMiniProgramProfile,
+  isMiniProgramProfileFresh,
   logoutMiniProgramSession,
   refreshWechatApiSession,
   restoreApiSessionCredentials,
   saveMiniProgramFollowEntry,
   synchronizeMiniProgramAccount,
-  unlinkMiniProgramWebAccount
+  unlinkMiniProgramWebAccount,
 } from "../miniprogram/services/auth.service.ts";
 import {
   currentMyFplEntryId,
-  waitForAuthoritativeFollow
+  waitForAuthoritativeFollow,
 } from "../miniprogram/utils/follow.ts";
+import { acknowledgeDiagnosticDisclosure } from "../miniprogram/utils/privacy.ts";
+
+beforeEach(() => {
+  // Auth-storage tests exercise the post-disclosure session contract. The
+  // dedicated observability suite covers the waiting path itself.
+  acknowledgeDiagnosticDisclosure();
+});
 
 test("standalone viewer entry stays separate from optional Web ownership", async () => {
   const previousWx = globalThis.wx;
@@ -41,7 +51,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
       },
       request: (options) => {
         loginRequest = options;
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData });
     clearSessionCredentials();
@@ -71,9 +81,9 @@ test("standalone viewer entry stays separate from optional Web ownership", async
           entryConflict: true,
           fplEntryId: 6953,
           fplEntryVerifiedAt: "2026-08-23T00:00:00.000Z",
-          wechatLinked: true
-        }
-      }
+          wechatLinked: true,
+        },
+      },
     });
     await refresh;
 
@@ -106,9 +116,9 @@ test("standalone viewer entry stays separate from optional Web ownership", async
           entryConflict: true,
           fplEntryId: 7001,
           fplEntryVerifiedAt: "2026-08-23T01:00:00.000Z",
-          wechatLinked: true
-        }
-      }
+          wechatLinked: true,
+        },
+      },
     });
     await rebind;
     assert.equal(getStoredMiniProgramProfile()?.webVerifiedEntryId, 7001);
@@ -154,7 +164,7 @@ test("standalone account migrates, replays, and preserves its team across Web un
     entryConflict: false,
     fplEntryId: webAccountLinked ? serverFollowEntryId : null,
     fplEntryVerifiedAt: webAccountLinked ? "2026-08-24T00:00:00.000Z" : null,
-    wechatLinked: true
+    wechatLinked: true,
   });
 
   try {
@@ -179,7 +189,10 @@ test("standalone account migrates, replays, and preserves its team across Web un
             deferredProfileRequest = options;
             return;
           }
-          options.success({ statusCode: 200, data: { success: true, profile: profile() } });
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile() },
+          });
           return;
         }
         if (options.url.endsWith("/follow-entry") && options.method === "PUT") {
@@ -189,16 +202,25 @@ test("standalone account migrates, replays, and preserves its team across Web un
             return;
           }
           serverFollowEntryId = options.data.entryId;
-          options.success({ statusCode: 200, data: { success: true, profile: profile() } });
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile() },
+          });
           return;
         }
-        if (options.url.endsWith("/account-link") && options.method === "DELETE") {
+        if (
+          options.url.endsWith("/account-link") &&
+          options.method === "DELETE"
+        ) {
           webAccountLinked = false;
-          options.success({ statusCode: 200, data: { success: true, profile: profile() } });
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile() },
+          });
           return;
         }
         throw new Error(`unexpected request ${options.method} ${options.url}`);
-      }
+      },
     };
     globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
     clearSessionCredentials();
@@ -216,13 +238,17 @@ test("standalone account migrates, replays, and preserves its team across Web un
         webAccountLinked: false,
         token: "standalone-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: profile()
-      }
+        profile: profile(),
+      },
     });
     await refresh;
 
     await synchronizeMiniProgramAccount();
-    assert.equal(serverFollowEntryId, 8743559, "legacy local selection is uploaded once");
+    assert.equal(
+      serverFollowEntryId,
+      8743559,
+      "legacy local selection is uploaded once",
+    );
     assert.equal(currentMyFplEntryId(), 8743559);
     assert.equal(storage.has("pending-follow-entry-v1"), false);
     assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });
@@ -237,7 +263,7 @@ test("standalone account migrates, replays, and preserves its team across Web un
     assert.equal(storage.has("gql:v2:session:old-follow"), false);
     deferredProfileRequest.success({
       statusCode: 200,
-      data: { success: true, profile: staleProfile }
+      data: { success: true, profile: staleProfile },
     });
     await staleSync;
     deferProfile = false;
@@ -246,22 +272,38 @@ test("standalone account migrates, replays, and preserves its team across Web un
 
     failNextFollowWrite = true;
     assert.equal(await saveMiniProgramFollowEntry(7002), false);
-    assert.equal(currentMyFplEntryId(), 7002, "offline selection applies locally");
+    assert.equal(
+      currentMyFplEntryId(),
+      7002,
+      "offline selection applies locally",
+    );
     assert.equal(storage.has("pending-follow-entry-v1"), true);
-    await synchronizeMiniProgramAccount();
-    assert.equal(serverFollowEntryId, 7002, "pending selection replays on profile sync");
+    await ensureMiniProgramAccountFresh();
+    assert.equal(
+      serverFollowEntryId,
+      7002,
+      "pending selection replays even while the cached profile is fresh",
+    );
     assert.equal(storage.has("pending-follow-entry-v1"), false);
 
     webAccountLinked = true;
     await synchronizeMiniProgramAccount();
     assert.deepEqual(getLinkedAccountSnapshot(), {
       linked: true,
-      email: "web@example.com"
+      email: "web@example.com",
     });
     const tokenBeforeUnlink = getApiSessionToken();
     await unlinkMiniProgramWebAccount();
-    assert.equal(getApiSessionToken(), tokenBeforeUnlink, "unlink keeps the Mini session");
-    assert.equal(currentMyFplEntryId(), 7002, "unlink keeps the Mini viewer team");
+    assert.equal(
+      getApiSessionToken(),
+      tokenBeforeUnlink,
+      "unlink keeps the Mini session",
+    );
+    assert.equal(
+      currentMyFplEntryId(),
+      7002,
+      "unlink keeps the Mini viewer team",
+    );
     assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });
   } finally {
     clearSessionCredentials();
@@ -292,7 +334,7 @@ test("an exact Mini/Web team conflict prompts once and closes to Mini by default
     entryConflict: serverChoice === null,
     fplEntryId: 202,
     fplEntryVerifiedAt: "2026-08-24T00:00:00.000Z",
-    wechatLinked: true
+    wechatLinked: true,
   });
 
   try {
@@ -317,17 +359,23 @@ test("an exact Mini/Web team conflict prompts once and closes to Mini by default
           return;
         }
         if (options.url.endsWith("/profile")) {
-          options.success({ statusCode: 200, data: { success: true, profile: profile() } });
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile() },
+          });
           return;
         }
         if (options.url.endsWith("/entry-choice")) {
           choices.push(options.data.choice);
           serverChoice = options.data.choice;
-          options.success({ statusCode: 200, data: { success: true, profile: profile() } });
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile() },
+          });
           return;
         }
         throw new Error(`unexpected request ${options.method} ${options.url}`);
-      }
+      },
     };
     globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
     clearSessionCredentials();
@@ -344,8 +392,8 @@ test("an exact Mini/Web team conflict prompts once and closes to Mini by default
         webAccountLinked: true,
         token: "conflict-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: profile()
-      }
+        profile: profile(),
+      },
     });
     await refresh;
     await synchronizeMiniProgramAccount();
@@ -357,7 +405,11 @@ test("an exact Mini/Web team conflict prompts once and closes to Mini by default
 
     await synchronizeMiniProgramAccount();
     await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.deepEqual(choices, ["MINI"], "the resolved pair is not prompted again");
+    assert.deepEqual(
+      choices,
+      ["MINI"],
+      "the resolved pair is not prompted again",
+    );
     assert.equal(modalCount, 1);
   } finally {
     clearSessionCredentials();
@@ -378,11 +430,11 @@ test("an already-resolved app auth gate keeps the standalone viewer entry", asyn
       getStorageSync: (key) => storage.get(key),
       setStorageSync: (key, value) => storage.set(key, value),
       removeStorageSync: (key) => storage.delete(key),
-      canIUse: () => false
+      canIUse: () => false,
     };
     globalThis.getApp = () => ({
       authReady: Promise.resolve(),
-      globalData
+      globalData,
     });
     clearSessionCredentials();
     storage.set("api-session-token", "restored-account-token");
@@ -394,7 +446,605 @@ test("an already-resolved app auth gate keeps the standalone viewer entry", asyn
 
     assert.equal(getApiSessionToken(), "restored-account-token");
     assert.equal(currentMyFplEntryId(), 8743559);
-    assert.equal(globalData.entryId, 8743559, "the standalone viewer is unchanged");
+    assert.equal(
+      globalData.entryId,
+      8743559,
+      "the standalone viewer is unchanged",
+    );
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("profile freshness gates warm reads and merges concurrent profile sync", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const now = Date.now();
+  const storage = new Map([
+    ["api-session-token", "freshness-token"],
+    ["api-session-expires-at", "2099-01-01T00:00:00.000Z"],
+    ["api-profile-v2-initialized", true],
+    ["api-profile-checked-at", now - 30_000],
+    ["entry", 101],
+    [
+      "api-profile-v2",
+      {
+        id: "freshness-profile",
+        followEntryId: 101,
+        effectiveEntryId: 101,
+        effectiveEntrySource: "MINI",
+        webVerifiedEntryId: null,
+        webAccountLinked: false,
+        emailVerified: false,
+        entryConflict: false,
+        wechatLinked: true,
+      },
+    ],
+  ]);
+  const globalData = { entryId: 101 };
+  let profileRequests = 0;
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      request: (options) => {
+        assert.match(options.url, /\/profile$/);
+        assert.equal(options.header.Authorization, "Bearer freshness-token");
+        profileRequests += 1;
+        options.success({
+          statusCode: 200,
+          data: {
+            success: true,
+            profile: {
+              id: "freshness-profile",
+              followEntryId: 202,
+              effectiveEntryId: 202,
+              effectiveEntrySource: "MINI",
+              webVerifiedEntryId: null,
+              webAccountLinked: false,
+              emailVerified: false,
+              entryConflict: false,
+              wechatLinked: true,
+            },
+          },
+        });
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+    storage.set("api-session-token", "freshness-token");
+    storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
+    storage.set("api-profile-v2-initialized", true);
+    storage.set("api-profile-checked-at", now - 30_000);
+    storage.set("entry", 101);
+    storage.set("api-profile-v2", {
+      id: "freshness-profile",
+      followEntryId: 101,
+      effectiveEntryId: 101,
+      effectiveEntrySource: "MINI",
+      webVerifiedEntryId: null,
+      webAccountLinked: false,
+      emailVerified: false,
+      entryConflict: false,
+      wechatLinked: true,
+    });
+
+    await restoreApiSessionCredentials();
+    await ensureMiniProgramAccountFresh();
+    assert.equal(
+      profileRequests,
+      0,
+      "a checked profile younger than 60 seconds is reused",
+    );
+    assert.equal(currentMyFplEntryId(), 101);
+
+    storage.set("api-profile-checked-at", now + 30_000);
+    assert.equal(
+      isMiniProgramProfileFresh(60_000, now),
+      false,
+      "a profile checked in the future is treated as stale rather than fresh",
+    );
+
+    storage.set("api-profile-checked-at", now - 61_000);
+    const [first, second] = await Promise.all([
+      ensureMiniProgramAccountFresh(),
+      ensureMiniProgramAccountFresh(),
+    ]);
+    assert.equal(
+      profileRequests,
+      1,
+      "concurrent stale reads share one /profile request",
+    );
+    assert.equal(first?.effectiveEntryId, 202);
+    assert.equal(second?.effectiveEntryId, 202);
+    assert.equal(currentMyFplEntryId(), 202);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("profile sync discards a response from a superseded session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let emailConfirmRequest;
+  let deferredProfileRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId, webAccountLinked = false) => ({
+    id,
+    email: webAccountLinked ? "b@example.com" : null,
+    webAccountLinked,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/email/confirm")) {
+          emailConfirmRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            deferredProfileRequest = options;
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("account-b", 202, true),
+            },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "session-a-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const staleSync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(deferredProfileRequest, "the session-A profile request is pending");
+
+    const confirmation = confirmMiniProgramEmailLink(
+      "b@example.com",
+      "654321",
+    );
+    loginSuccess({ code: "session-b-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(emailConfirmRequest, "the session-B confirmation request started");
+    emailConfirmRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: true,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-b", 202, true),
+      },
+    });
+    await confirmation;
+
+    deferredProfileRequest.success({
+      statusCode: 200,
+      data: { success: true, profile: profile("account-a", 101) },
+    });
+    await staleSync;
+
+    assert.equal(profileRequestCount, 2, "sync restarts once under session B");
+    assert.equal(getApiSessionToken(), "session-b");
+    assert.equal(getStoredMiniProgramProfile()?.id, "account-b");
+    assert.equal(currentMyFplEntryId(), 202);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("profile sync reuses the response from a same-session 401 retry", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId) => ({
+    id,
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            options.success({
+              statusCode: 401,
+              data: { success: false, error: "session expired" },
+            });
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("account-b", 202),
+            },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const sync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(profileRequestCount, 1);
+    loginSuccess({ code: "retry-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-b", 202),
+      },
+    });
+    await sync;
+
+    assert.equal(profileRequestCount, 2, "the successful retry is reused");
+    assert.equal(getApiSessionToken(), "session-b");
+    assert.equal(getStoredMiniProgramProfile()?.id, "account-b");
+    assert.equal(currentMyFplEntryId(), 202);
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("pending follow replay accepts the session-retried mutation response", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let followRequestCount = 0;
+  let profileRequestCount = 0;
+  let serverFollowEntryId = 101;
+
+  const profile = (entryId) => ({
+    id: "account",
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: entryId ? "MINI" : null,
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginSuccess = success;
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile(serverFollowEntryId) },
+          });
+          return;
+        }
+        if (options.url.endsWith("/follow-entry")) {
+          followRequestCount += 1;
+          if (followRequestCount === 1) {
+            options.fail({ errMsg: "offline" });
+            return;
+          }
+          if (followRequestCount === 2) {
+            options.success({
+              statusCode: 401,
+              data: { success: false, error: "session expired" },
+            });
+            return;
+          }
+          serverFollowEntryId = options.data.entryId;
+          options.success({
+            statusCode: 200,
+            data: { success: true, profile: profile(serverFollowEntryId) },
+          });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile(101),
+      },
+    });
+    await initialRefresh;
+
+    assert.equal(await saveMiniProgramFollowEntry(202), false);
+    assert.equal(storage.has("pending-follow-entry-v1"), true);
+
+    const sync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    loginSuccess({ code: "retry-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-b",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile(101),
+      },
+    });
+    await sync;
+
+    assert.equal(followRequestCount, 3);
+    assert.equal(profileRequestCount, 1);
+    assert.equal(serverFollowEntryId, 202);
+    assert.equal(storage.has("pending-follow-entry-v1"), false);
+    assert.equal(getStoredMiniProgramProfile()?.followEntryId, 202);
+    assert.equal(getApiSessionToken(), "session-b");
+  } finally {
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("profile sync stops after logout instead of restoring a session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map([["entry", 101]]);
+  const globalData = { entryId: 101 };
+  let loginSuccess;
+  let loginRequest;
+  let loginCount = 0;
+  let deferredProfileRequest;
+  let profileRequestCount = 0;
+
+  const profile = (id, entryId) => ({
+    id,
+    email: null,
+    webAccountLinked: false,
+    followEntryId: entryId,
+    webVerifiedEntryId: null,
+    effectiveEntryId: entryId,
+    effectiveEntrySource: "MINI",
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+  });
+
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => false,
+      login: ({ success }) => {
+        loginCount += 1;
+        if (loginCount === 1) {
+          loginSuccess = success;
+          return;
+        }
+        success({ code: "unexpected-relogin" });
+      },
+      request: (options) => {
+        if (options.url.endsWith("/wechat/login")) {
+          loginRequest = options;
+          if (loginCount > 1) {
+            options.success({
+              statusCode: 200,
+              data: {
+                success: true,
+                contractVersion: 2,
+                authenticated: true,
+                webAccountLinked: false,
+                token: "unexpected-session",
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                profile: profile("unexpected-account", 202),
+              },
+            });
+          }
+          return;
+        }
+        if (options.url.endsWith("/profile")) {
+          profileRequestCount += 1;
+          if (profileRequestCount === 1) {
+            deferredProfileRequest = options;
+            return;
+          }
+          options.success({
+            statusCode: 200,
+            data: {
+              success: true,
+              profile: profile("unexpected-account", 202),
+            },
+          });
+          return;
+        }
+        if (options.url.endsWith("/session") && options.method === "DELETE") {
+          options.success({ statusCode: 204, data: { success: true } });
+          return;
+        }
+        throw new Error(`unexpected request ${options.method} ${options.url}`);
+      },
+    };
+    globalThis.getApp = () => ({ authReady: Promise.resolve(), globalData });
+    clearSessionCredentials();
+
+    const initialRefresh = refreshWechatApiSession();
+    loginSuccess({ code: "initial-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "session-a",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: profile("account-a", 101),
+      },
+    });
+    await initialRefresh;
+
+    const staleSync = synchronizeMiniProgramAccount();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(deferredProfileRequest);
+
+    await logoutMiniProgramSession();
+    deferredProfileRequest.success({
+      statusCode: 200,
+      data: { success: true, profile: profile("account-a", 101) },
+    });
+    await assert.rejects(staleSync, /登录状态已变更/);
+
+    assert.equal(loginCount, 1, "logout does not trigger a replacement login");
+    assert.equal(profileRequestCount, 1);
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getStoredMiniProgramProfile(), null);
   } finally {
     clearSessionCredentials();
     globalThis.wx = previousWx;
@@ -415,11 +1065,11 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
           "gql:v2:public:shared",
           "gql:v2:session:private",
           "gql:legacy",
-          "live-board:last-good:entry-live-board-v1:session:2026:1:123:7"
-        ]
+          "live-board:last-good:entry-live-board-v1:session:2026:1:123:7",
+        ],
       }),
-      getStorageSync: (key) => key === "entry" ? 123 : undefined,
-      removeStorageSync: (key) => removed.push(key)
+      getStorageSync: (key) => (key === "entry" ? 123 : undefined),
+      removeStorageSync: (key) => removed.push(key),
     };
     globalThis.getApp = () => ({ globalData });
 
@@ -447,6 +1097,7 @@ test("remote sign-out failure still clears local credentials", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
+  const realtimeEvents = [];
   let requestCount = 0;
 
   try {
@@ -457,8 +1108,12 @@ test("remote sign-out failure still clears local credentials", async () => {
         return undefined;
       },
       canIUse: () => true,
-      getStorage: ({ success }) => success({ data: "token", errMsg: "getStorage:ok" }),
+      getStorage: ({ success }) =>
+        success({ data: "token", errMsg: "getStorage:ok" }),
       removeStorageSync: (key) => removed.push(key),
+      getRealtimeLogManager: () => ({
+        info: (payload) => realtimeEvents.push(payload),
+      }),
       request: ({ fail, success }) => {
         requestCount += 1;
         if (requestCount === 1) {
@@ -466,20 +1121,55 @@ test("remote sign-out failure still clears local credentials", async () => {
           return;
         }
         success({ statusCode: 204, data: { success: true } });
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData: { entryId: 123 } });
 
     await restoreApiSessionCredentials();
     const result = await logoutMiniProgramSession();
     assert.deepEqual(result, { localCleared: true, remoteRevoked: false });
+    assert.equal(
+      realtimeEvents.find((event) => event.eventCode === "session_revoke_network_failed")
+        ?.trigger,
+      "logout_revoke",
+    );
     assert.equal(getApiSessionToken(), null);
     assert.ok(removed.includes("api-session-token"));
-    assert.deepEqual(await logoutMiniProgramSession(), { localCleared: true, remoteRevoked: true });
+    assert.deepEqual(await logoutMiniProgramSession(), {
+      localCleared: true,
+      remoteRevoked: true,
+    });
     assert.equal(requestCount, 2);
   } finally {
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
+  }
+});
+
+test("resident expiry keeps the expired credential state for the next refresh", async () => {
+  const previousWx = globalThis.wx;
+  const now = Date.now();
+  const originalNow = Date.now;
+  const expiresAt = new Date(now + 1_000).toISOString();
+  try {
+    globalThis.wx = {
+      getStorageInfoSync: () => ({ keys: [] }),
+      getStorageSync: (key) => (key === "api-session-expires-at" ? expiresAt : undefined),
+      setStorageSync: () => undefined,
+      removeStorageSync: () => undefined,
+      canIUse: () => true,
+      getStorage: ({ success }) => success({ data: "resident-token", errMsg: "getStorage:ok" }),
+    };
+    clearSessionCredentials();
+    Date.now = () => now;
+    await restoreApiSessionCredentials();
+    Date.now = () => now + 2_000;
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getLastSessionCredentialState(), "expired");
+  } finally {
+    Date.now = originalNow;
+    clearSessionCredentials();
+    globalThis.wx = previousWx;
   }
 });
 
@@ -508,7 +1198,7 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
         }
         revoked.push(options.header.Authorization);
         options.success({ statusCode: 204, data: { success: true } });
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData: {} });
 
@@ -533,9 +1223,9 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
           email: null,
           fplEntryId: null,
           fplEntryVerifiedAt: null,
-          wechatLinked: true
-        }
-      }
+          wechatLinked: true,
+        },
+      },
     });
 
     assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
@@ -543,6 +1233,81 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
     await assert.rejects(refresh, /登录状态已变更/);
     assert.equal(getApiSessionToken(), null);
   } finally {
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("logout does not let delayed encrypted persistence restore a session", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  const revoked = [];
+  let loginSuccess;
+  let loginRequest;
+  let releaseEncryptedWrite;
+
+  try {
+    globalThis.wx = {
+      getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
+      getStorageInfoSync: () => ({ keys: [...storage.keys()] }),
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key),
+      canIUse: () => true,
+      getStorage: ({ fail }) => fail({ errMsg: "getStorage:fail data not found" }),
+      setStorage: (options) => {
+        releaseEncryptedWrite = () => {
+          storage.set(options.key, options.data);
+          options.success();
+        };
+      },
+      login: (options) => {
+        loginSuccess = options.success;
+      },
+      request: (options) => {
+        if (options.method === "POST") {
+          loginRequest = options;
+          return;
+        }
+        revoked.push(options.header.Authorization);
+        options.success({ statusCode: 204, data: { success: true } });
+      },
+    };
+    globalThis.getApp = () => ({ globalData: {} });
+    clearSessionCredentials();
+
+    const refresh = refreshWechatApiSession();
+    loginSuccess({ code: "wechat-code" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(loginRequest);
+    loginRequest.success({
+      statusCode: 200,
+      data: {
+        success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: false,
+        token: "delayed-persistence-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: { id: "profile", webAccountLinked: false },
+      },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(typeof releaseEncryptedWrite, "function");
+
+    const logout = logoutMiniProgramSession();
+    releaseEncryptedWrite();
+
+    assert.deepEqual(await logout, { localCleared: true, remoteRevoked: true });
+    await refresh;
+    assert.deepEqual(revoked, ["Bearer delayed-persistence-token"]);
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(getLastSessionCredentialState(), "missing");
+    assert.equal(storage.has("api-session-token"), false);
+    assert.equal(storage.has("api-session-expires-at"), false);
+  } finally {
+    clearSessionCredentials();
     globalThis.wx = previousWx;
     globalThis.getApp = previousGetApp;
   }
@@ -573,7 +1338,7 @@ test("logout revokes a displaced refresh credential when email confirmation fail
         }
         revoked.push(options.header.Authorization);
         options.success({ statusCode: 204, data: { success: true } });
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData: {} });
     clearSessionCredentials();
@@ -601,9 +1366,9 @@ test("logout revokes a displaced refresh credential when email confirmation fail
           email: null,
           fplEntryId: null,
           fplEntryVerifiedAt: null,
-          wechatLinked: true
-        }
-      }
+          wechatLinked: true,
+        },
+      },
     });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(loginCallbacks.length, 1);
@@ -613,7 +1378,7 @@ test("logout revokes a displaced refresh credential when email confirmation fail
     assert.ok(emailRequest);
     emailRequest.success({
       statusCode: 500,
-      data: { success: false, error: "confirmation failed" }
+      data: { success: false, error: "confirmation failed" },
     });
 
     await assert.rejects(confirm);
@@ -644,13 +1409,16 @@ test("duplicate email confirmations share the first in-flight request", async ()
       login: (options) => loginCallbacks.push(options.success),
       request: (options) => {
         emailRequest = options;
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData: {} });
     clearSessionCredentials();
 
     const first = confirmMiniProgramEmailLink("fpl@example.com", "123456");
-    const duplicate = confirmMiniProgramEmailLink("other@example.com", "654321");
+    const duplicate = confirmMiniProgramEmailLink(
+      "other@example.com",
+      "654321",
+    );
     assert.strictEqual(duplicate, first);
     assert.equal(loginCallbacks.length, 1);
 
@@ -669,9 +1437,9 @@ test("duplicate email confirmations share the first in-flight request", async ()
           email: "fpl@example.com",
           fplEntryId: null,
           fplEntryVerifiedAt: null,
-          wechatLinked: true
-        }
-      }
+          wechatLinked: true,
+        },
+      },
     });
 
     await first;
@@ -694,18 +1462,19 @@ test("email confirmation is rejected while logout is in flight", async () => {
     globalThis.wx = {
       getAccountInfoSync: () => ({ miniProgram: { envVersion: "trial" } }),
       getStorageInfoSync: () => ({ keys: [] }),
-      getStorageSync: (key) => key === "api-session-token"
-        ? "token-before-confirm"
-        : key === "api-session-expires-at"
-          ? "2099-01-01T00:00:00.000Z"
-          : undefined,
+      getStorageSync: (key) =>
+        key === "api-session-token"
+          ? "token-before-confirm"
+          : key === "api-session-expires-at"
+            ? "2099-01-01T00:00:00.000Z"
+            : undefined,
       setStorageSync: () => undefined,
       removeStorageSync: () => undefined,
       canIUse: () => false,
       login: (options) => loginCallbacks.push(options.success),
       request: (options) => {
         if (options.method === "DELETE") deleteRequest = options;
-      }
+      },
     };
     globalThis.getApp = () => ({ globalData: {} });
     clearSessionCredentials();
@@ -714,7 +1483,7 @@ test("email confirmation is rejected while logout is in flight", async () => {
     const logout = logoutMiniProgramSession();
     await assert.rejects(
       confirmMiniProgramEmailLink("fpl@example.com", "123456"),
-      /正在退出登录/
+      /正在退出登录/,
     );
     assert.equal(loginCallbacks.length, 0);
     assert.ok(deleteRequest);
@@ -742,12 +1511,13 @@ test("legacy plaintext session tokens migrate to encrypted storage", async () =>
         return undefined;
       },
       canIUse: () => true,
-      getStorage: ({ fail }) => fail({ errMsg: "getStorage:fail data is not encrypted" }),
+      getStorage: ({ fail }) =>
+        fail({ errMsg: "getStorage:fail data is not encrypted" }),
       setStorage: (options) => {
         encryptedWrite = options;
         options.success();
       },
-      removeStorageSync: (key) => removed.push(key)
+      removeStorageSync: (key) => removed.push(key),
     };
     globalThis.getApp = () => ({ globalData: {} });
 
@@ -776,26 +1546,28 @@ test("linked snapshot surfaces stored display email until credentials clear", as
       getStorageSync: (key) => {
         if (key === "api-session-expires-at") return "2099-01-01T00:00:00.000Z";
         if (key === "api-profile-email") return "fpl@example.com";
-        if (key === "api-profile-v2") return {
-          id: "mini-profile",
-          email: "fpl@example.com",
-          webAccountLinked: true,
-          followEntryId: 6953,
-          effectiveEntryId: 6953,
-          effectiveEntrySource: "MINI"
-        };
+        if (key === "api-profile-v2")
+          return {
+            id: "mini-profile",
+            email: "fpl@example.com",
+            webAccountLinked: true,
+            followEntryId: 6953,
+            effectiveEntryId: 6953,
+            effectiveEntrySource: "MINI",
+          };
         return undefined;
       },
       canIUse: () => true,
-      getStorage: ({ success }) => success({ data: "token", errMsg: "getStorage:ok" }),
-      removeStorageSync: (key) => removed.push(key)
+      getStorage: ({ success }) =>
+        success({ data: "token", errMsg: "getStorage:ok" }),
+      removeStorageSync: (key) => removed.push(key),
     };
     globalThis.getApp = () => ({ globalData: {} });
 
     await restoreApiSessionCredentials();
     assert.deepEqual(getLinkedAccountSnapshot(), {
       linked: true,
-      email: "fpl@example.com"
+      email: "fpl@example.com",
     });
     clearSessionCredentials();
     assert.deepEqual(getLinkedAccountSnapshot(), { linked: false, email: "" });

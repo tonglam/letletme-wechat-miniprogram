@@ -12,17 +12,20 @@ import {
   type TournamentEventResult,
   type TournamentSeasonMetricKey,
   type TournamentSeasonMetric,
-  type TournamentSeasonSnapshot
+  type TournamentSeasonSnapshot,
 } from "../../../services/tournament.service";
 import type { EntryTournamentRow } from "../../../models/competition";
 import { goToEntrySearch } from "../../../utils/navigation";
-import { canonicalAction, openWebsiteAction } from "../../../utils/canonical-action";
+import {
+  canonicalAction,
+  openWebsiteAction,
+} from "../../../utils/canonical-action";
 import {
   formatAverageMoney,
   formatAverageNumber,
   formatCompactNumber,
   formatMoney,
-  formatPoints
+  formatPoints,
 } from "../../../utils/summary-format";
 import {
   TOURNAMENT_PATH_MODES,
@@ -30,18 +33,20 @@ import {
   tournamentPathHint,
   tournamentPathSummary,
   type TournamentPathMode,
-  type TournamentPathPoint
+  type TournamentPathPoint,
 } from "../../../utils/season-chart";
 import type { MiniChartPoint } from "../../../utils/mini-chart";
 import { recordMyFplVisit } from "../../../utils/perf";
 import {
   currentMyFplEntryId,
-  waitForAuthoritativeFollow
+  refreshAuthoritativeFollow,
+  waitForAuthoritativeFollow,
 } from "../../../utils/follow";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
-  type PageRequestTrace
+  isViewerEntryAuthorizationError,
+  type PageRequestTrace,
 } from "../../../services/graphql.service";
 import { canReadEventReporting } from "../../../utils/event-context";
 
@@ -190,7 +195,7 @@ export const SEASON_PATH_RECENT_WINDOW = 8;
 export function paginateBoardRows<T>(
   rows: T[],
   requestedPage: number,
-  pageSize = BOARD_PAGE_SIZE
+  pageSize = BOARD_PAGE_SIZE,
 ): {
   rows: T[];
   page: number;
@@ -211,7 +216,7 @@ export function paginateBoardRows<T>(
     from: rows.length > 0 ? start + 1 : 0,
     to: Math.min(start + size, rows.length),
     hasPrevious: page > 1,
-    hasNext: page < pageCount
+    hasNext: page < pageCount,
   };
 }
 
@@ -225,35 +230,42 @@ export function shouldReloadLeagues(
   currentEvent: number,
   loadedContextRevision: number,
   currentContextRevision: number,
-  now = Date.now()
+  now = Date.now(),
 ): boolean {
-  return !lastLoadAt
-    || loadedEntryId !== currentEntryId
-    || Boolean(loadedSeason && currentSeason && loadedSeason !== currentSeason)
-    || loadedEvent !== currentEvent
-    || loadedContextRevision !== currentContextRevision
-    || now - lastLoadAt >= LEAGUES_REVALIDATE_MS;
+  return (
+    !lastLoadAt ||
+    loadedEntryId !== currentEntryId ||
+    Boolean(loadedSeason && currentSeason && loadedSeason !== currentSeason) ||
+    loadedEvent !== currentEvent ||
+    loadedContextRevision !== currentContextRevision ||
+    now - lastLoadAt >= LEAGUES_REVALIDATE_MS
+  );
 }
 
 export function seasonPathWindow(
   start: number,
   end: number,
-  windowSize = SEASON_PATH_RECENT_WINDOW
-): { recentStart: number; recentEnd: number; hasOlder: boolean; olderEnd: number } {
+  windowSize = SEASON_PATH_RECENT_WINDOW,
+): {
+  recentStart: number;
+  recentEnd: number;
+  hasOlder: boolean;
+  olderEnd: number;
+} {
   const recentEnd = Math.max(start, end);
   const recentStart = Math.max(start, recentEnd - windowSize + 1);
   return {
     recentStart,
     recentEnd,
     hasOlder: recentStart > start,
-    olderEnd: recentStart - 1
+    olderEnd: recentStart - 1,
   };
 }
 
 export function seasonPathCacheKey(
   tournamentId: number,
   entryId: number,
-  throughEventId: number
+  throughEventId: number,
 ): string {
   return `${tournamentId}:${entryId}:${throughEventId}`;
 }
@@ -262,14 +274,14 @@ const SEASON_SORT_OPTIONS: SortOption[] = [
   { key: "rank", label: "排名", asc: true },
   { key: "c1", label: "总积分", asc: false },
   { key: "c2", label: "总排名", asc: true },
-  { key: "c3", label: "价值", asc: false }
+  { key: "c3", label: "价值", asc: false },
 ];
 
 const GW_SORT_OPTIONS: SortOption[] = [
   { key: "rank", label: "排名", asc: true },
   { key: "c1", label: "本轮", asc: false },
   { key: "c2", label: "扣分", asc: false },
-  { key: "c3", label: "总分", asc: false }
+  { key: "c3", label: "总分", asc: false },
 ];
 
 const METRIC_LABELS: Record<TournamentSeasonMetricKey, string> = {
@@ -278,12 +290,12 @@ const METRIC_LABELS: Record<TournamentSeasonMetricKey, string> = {
   TRANSFERS: "转会次数",
   TOTAL_COSTS: "转会扣分",
   BENCH_POINTS: "板凳分",
-  AUTO_SUB_POINTS: "自动换人分"
+  AUTO_SUB_POINTS: "自动换人分",
 };
 
 export function readTournamentsCache(
   entryId: number | undefined,
-  season: string | undefined
+  season: string | undefined,
 ): LeaguesCache | null {
   if (!entryId || !season) {
     return null;
@@ -298,8 +310,14 @@ export function readTournamentsCache(
 
 function readStoredDirectoryCache(): LeaguesCache | null {
   try {
-    const cached = wx.getStorageSync(DIRECTORY_CACHE_KEY) as LeaguesCache | undefined;
-    return cached && cached.entryId && cached.season && Array.isArray(cached.tournaments) ? cached : null;
+    const cached = wx.getStorageSync(DIRECTORY_CACHE_KEY) as
+      LeaguesCache | undefined;
+    return cached &&
+      cached.entryId &&
+      cached.season &&
+      Array.isArray(cached.tournaments)
+      ? cached
+      : null;
   } catch {
     return null;
   }
@@ -307,7 +325,8 @@ function readStoredDirectoryCache(): LeaguesCache | null {
 
 function readLastPick(entryId: number): number {
   try {
-    const all = wx.getStorageSync(LAST_PICK_KEY) as Record<string, number> | undefined;
+    const all = wx.getStorageSync(LAST_PICK_KEY) as
+      Record<string, number> | undefined;
     return Number(all?.[String(entryId)]) || 0;
   } catch {
     return 0;
@@ -316,20 +335,28 @@ function readLastPick(entryId: number): number {
 
 function writeLastPick(entryId: number, tournamentId: number): void {
   try {
-    const all = (wx.getStorageSync(LAST_PICK_KEY) || {}) as Record<string, number>;
+    const all = (wx.getStorageSync(LAST_PICK_KEY) || {}) as Record<
+      string,
+      number
+    >;
     all[String(entryId)] = tournamentId;
     wx.setStorageSync(LAST_PICK_KEY, all);
-  } catch { /* best effort */ }
+  } catch {
+    /* best effort */
+  }
 }
 
-function metricValueText(key: TournamentSeasonMetricKey, value?: number | null): string {
+function metricValueText(
+  key: TournamentSeasonMetricKey,
+  value?: number | null,
+): string {
   if (value === undefined || value === null) return "-";
   return key === "TEAM_VALUE" ? formatMoney(value) : formatPoints(value);
 }
 
 export function metricAverageValueText(
   key: TournamentSeasonMetricKey,
-  value?: number | null
+  value?: number | null,
 ): string {
   if (value === undefined || value === null) return "-";
   return key === "TEAM_VALUE"
@@ -349,9 +376,12 @@ function emptyPathState() {
 function pathPageState(
   points: TournamentPathPoint[],
   mode: TournamentPathMode,
-  selectedGw: number | null
+  selectedGw: number | null,
 ) {
-  const selected = selectedGw == null ? null : points.find((point) => point.gameweek === selectedGw) || null;
+  const selected =
+    selectedGw == null
+      ? null
+      : points.find((point) => point.gameweek === selectedGw) || null;
   return {
     pathPoints: points,
     pathModes: TOURNAMENT_PATH_MODES,
@@ -363,7 +393,7 @@ function pathPageState(
     pathHint: tournamentPathHint(mode),
     pathSummary: tournamentPathSummary(selected, mode),
     pathSelectedGw: selected ? selected.gameweek : null,
-    pathHasSelected: Boolean(selected)
+    pathHasSelected: Boolean(selected),
   };
 }
 
@@ -419,7 +449,7 @@ PerformancePage({
     hasSeasonData: false,
     hasGwData: false,
     fromCache: false,
-    ...emptyPathState()
+    ...emptyPathState(),
   } as LeaguesData,
 
   requestId: 0,
@@ -448,10 +478,19 @@ PerformancePage({
     this.startupPending = true;
     const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "load" });
     await waitForAuthoritativeFollow();
-    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-    try { await getApp<IAppOption>().initAppData(false); } catch { /* load without cache identity */ }
-    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-    const currentGw = Math.max(0, Number(getApp<IAppOption>().globalData.gw) || 0);
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision)
+      return;
+    try {
+      await getApp<IAppOption>().initAppData(false);
+    } catch {
+      /* load without cache identity */
+    }
+    if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision)
+      return;
+    const currentGw = Math.max(
+      0,
+      Number(getApp<IAppOption>().globalData.gw) || 0,
+    );
     this.setData({ event: currentGw, maxGw: Math.max(1, currentGw) });
     this.startupPending = false;
     await this.loadLeagues(false, trace, lifecycleRevision);
@@ -465,12 +504,24 @@ PerformancePage({
       const forceRefresh = this.resumeForceRefresh;
       const resumeIncomplete = this.resumeOnShow;
       const lifecycleRevision = this.lifecycleRevision;
-      const trace = capturePageRequestTrace({ callerSurface: "my-fpl-leagues", trigger: "show" });
+      const trace = capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues",
+        trigger: "show",
+      });
       await waitForAuthoritativeFollow();
-      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-      try { await getApp<IAppOption>().initAppData(false); } catch { /* retain the last context */ }
-      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
-      const nextGw = Math.max(0, Number(getApp<IAppOption>().globalData.gw) || 0);
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision)
+        return;
+      try {
+        await getApp<IAppOption>().initAppData(false);
+      } catch {
+        /* retain the last context */
+      }
+      if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision)
+        return;
+      const nextGw = Math.max(
+        0,
+        Number(getApp<IAppOption>().globalData.gw) || 0,
+      );
       if (nextGw > 0 && nextGw !== this.data.maxGw) {
         this.setData({ maxGw: nextGw, event: this.data.event || nextGw });
       }
@@ -481,9 +532,9 @@ PerformancePage({
       // Compare against the picker GW, not current/next GW: browsing a
       // historical round must not force a directory reload on every show.
       if (
-        forceRefresh
-        || resumeIncomplete
-        || shouldReloadLeagues(
+        forceRefresh ||
+        resumeIncomplete ||
+        shouldReloadLeagues(
           this.lastLoadAt,
           this.loadedEntryId,
           currentMyFplEntryId() || 0,
@@ -492,7 +543,7 @@ PerformancePage({
           this.loadedEvent,
           this.data.event,
           this.loadedContextRevision,
-          snapshot?.contextRevision ?? 0
+          snapshot?.contextRevision ?? 0,
         )
       ) {
         await this.loadLeagues(forceRefresh, trace, lifecycleRevision);
@@ -502,10 +553,10 @@ PerformancePage({
 
   onHide() {
     this.pageVisible = false;
-    this.resumeOnShow = this.resumeOnShow || this.startupPending || this.data.loading || this.loadPending
-      || this.data.viewLoading || this.data.pathLoading;
+    this.resumeOnShow = this.resumeOnShow || this.startupPending || this.data.loading || this.loadPending || this.data.viewLoading || this.data.pathLoading;
     if (this.loadPending) {
-      this.resumeForceRefresh = this.resumeForceRefresh || this.loadForceRefresh;
+      this.resumeForceRefresh =
+        this.resumeForceRefresh || this.loadForceRefresh;
     }
     if (this.data.viewLoading || this.data.pathLoading) {
       this.setData({ viewLoading: false, pathLoading: false });
@@ -533,7 +584,11 @@ PerformancePage({
     this.loadPending = true;
     this.loadForceRefresh = true;
     try {
-      try { await getApp<IAppOption>().initAppData(true); } catch { /* retain the last context */ }
+      try {
+        await getApp<IAppOption>().initAppData(true);
+      } catch {
+        /* retain the last context */
+      }
       if (!this.pageVisible) return;
       await this.loadLeagues(true, trace);
     } finally {
@@ -541,60 +596,106 @@ PerformancePage({
     }
   },
 
+  showEntryEmptyState() {
+    this.clearEntryScopedViewState();
+    this.loadedSeason = undefined;
+    this.pathLoadedKey = "";
+    this.loadedEntryId = 0;
+    this.loadedEvent = 0;
+    this.loadedContextRevision = 0;
+    this.setData({
+      loading: false,
+      error: "",
+      entryId: 0,
+      tournaments: [],
+      tournamentNames: [],
+      selectedTournament: null,
+      emptyState: "entry",
+      emptyEyebrow: "需要球队",
+      emptyTitle: "先选择我的球队",
+      emptyDescription: "查找球队并设为我的球队后，即可查看你参与的赛事。",
+      emptyActionText: "去选择球队",
+      fromCache: false,
+    });
+  },
+
+  clearEntryScopedViewState() {
+    this.viewRequestId += 1;
+    this.pathRequestId += 1;
+    this.seasonRows = [];
+    this.gwRows = [];
+    this.pathLoadedKey = "";
+    this.setData({
+      viewLoading: false,
+      viewError: "",
+      hasSeasonData: false,
+      hasGwData: false,
+      boardRows: [],
+      displayedRows: [],
+      boardTotalRows: 0,
+      boardPage: 1,
+      boardPageCount: 1,
+      boardFrom: 0,
+      boardTo: 0,
+      hasPreviousBoardPage: false,
+      hasNextBoardPage: false,
+      ...emptyPathState(),
+    });
+  },
+
   async loadLeagues(
     forceRefresh = false,
     trace: PageRequestTrace | null | undefined = capturePageRequestTrace({
       callerSurface: "my-fpl-leagues",
-      trigger: forceRefresh ? "refresh" : "load"
+      trigger: forceRefresh ? "refresh" : "load",
     }),
-    lifecycleRevision?: number
+    lifecycleRevision?: number,
   ) {
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
-    const isActiveRequest = () => this.pageVisible
-      && ownerRevision === this.lifecycleRevision
-      && requestId === this.requestId;
-    const entryId = currentMyFplEntryId();
+    const isActiveRequest = () =>
+      this.pageVisible &&
+      ownerRevision === this.lifecycleRevision &&
+      requestId === this.requestId;
+    let entryId = currentMyFplEntryId();
     const season = getApp<IAppOption>().globalData.season || undefined;
 
     if (!entryId) {
-      this.loadedSeason = undefined;
-      this.setData({
-        loading: false,
-        error: "",
-        entryId: 0,
-        tournaments: [],
-        tournamentNames: [],
-        selectedTournament: null,
-        emptyState: "entry",
-        emptyEyebrow: "需要球队",
-        emptyTitle: "先选择我的球队",
-        emptyDescription: "查找球队并设为我的球队后，即可查看你参与的赛事。",
-        emptyActionText: "去选择球队",
-        fromCache: false
-      });
+      this.showEntryEmptyState();
       return;
     }
 
-    const principalChanged = this.data.entryId > 0 && this.data.entryId !== entryId;
-    const seasonChanged = Boolean(this.loadedSeason && season && this.loadedSeason !== season);
+    const principalChanged =
+      this.data.entryId > 0 && this.data.entryId !== entryId;
+    const seasonChanged = Boolean(
+      this.loadedSeason && season && this.loadedSeason !== season,
+    );
     if (principalChanged || seasonChanged) {
+      this.clearEntryScopedViewState();
       this.loadedSeason = undefined;
       this.pathLoadedKey = "";
-      this.setData({ tournaments: [], tournamentNames: [], selectedTournament: null, fromCache: false });
+      this.setData({
+        tournaments: [],
+        tournamentNames: [],
+        selectedTournament: null,
+        fromCache: false,
+      });
     }
     // On a cold offline launch the persisted cache season is the only known
     // identity; keep that last-good view until authoritative context returns.
     const offlineCached = season ? null : readStoredDirectoryCache();
     const cacheSeason = season || offlineCached?.season;
-    const cached = readTournamentsCache(entryId, cacheSeason) || (
-      offlineCached?.entryId === entryId ? offlineCached : null
-    );
-    if (cached && (principalChanged || seasonChanged || !this.data.tournaments.length)) {
+    const cached =
+      readTournamentsCache(entryId, cacheSeason) ||
+      (offlineCached?.entryId === entryId ? offlineCached : null);
+    if (
+      cached &&
+      (principalChanged || seasonChanged || !this.data.tournaments.length)
+    ) {
       this.setData({
         tournaments: cached.tournaments,
         tournamentNames: cached.tournaments.map((t) => t.name),
-        fromCache: true
+        fromCache: true,
       });
       this.loadedSeason = cached.season;
       this.afterDirectoryReady();
@@ -602,23 +703,82 @@ PerformancePage({
     this.setData({ loading: !cached, error: "", entryId, emptyState: "" });
     this.loadPending = true;
     this.loadForceRefresh = forceRefresh;
+    let authorizationRecoveryAttempted = false;
 
     try {
       // The web and GraphQL backends now expose one authenticated desk for
       // My FPL competitions. It owns membership, setup state, finalized-event
       // gating, and the tournament directory; the legacy entryTournaments
       // projection can be stale or disagree with the selected viewer.
-      const desk = await getMyFplCompetitionsDesk(
-        null,
-        this.data.event > 0 ? this.data.event : null,
-        forceRefresh,
-        trace ?? undefined
-      );
+      let desk: MyFplCompetitionsDesk;
+      try {
+        desk = await getMyFplCompetitionsDesk(
+          null,
+          this.data.event > 0 ? this.data.event : null,
+          forceRefresh,
+          trace ?? undefined,
+        );
+      } catch (error) {
+        if (
+          authorizationRecoveryAttempted ||
+          !isViewerEntryAuthorizationError(error)
+        ) {
+          throw error;
+        }
+        authorizationRecoveryAttempted = true;
+        let refreshedEntryId: number | null;
+        try {
+          refreshedEntryId = await refreshAuthoritativeFollow();
+        } catch {
+          if (isActiveRequest()) {
+            this.setData({
+              loading: false,
+              error: "球队状态尚未同步，请稍后重试",
+            });
+          }
+          return;
+        }
+        if (!isActiveRequest()) return;
+        if (!refreshedEntryId) {
+          this.showEntryEmptyState();
+          return;
+        }
+        if (refreshedEntryId === entryId) {
+          this.setData({
+            loading: false,
+            error: "球队状态尚未同步，请稍后重试",
+          });
+          return;
+        }
+        this.clearEntryScopedViewState();
+        this.loadedSeason = undefined;
+        this.loadedEntryId = 0;
+        entryId = refreshedEntryId;
+        this.setData({
+          loading: true,
+          error: "",
+          entryId,
+          tournaments: [],
+          tournamentNames: [],
+          selectedTournament: null,
+          emptyState: "",
+          fromCache: false,
+        });
+        desk = await getMyFplCompetitionsDesk(
+          null,
+          this.data.event > 0 ? this.data.event : null,
+          forceRefresh,
+          trace ?? undefined,
+        );
+      }
       const tournaments = desk.tournaments || [];
       if (!isActiveRequest()) return;
       const currentSeason = getApp<IAppOption>().globalData.season || undefined;
       const currentEntryId = currentMyFplEntryId();
-      if ((season && currentSeason && season !== currentSeason) || currentEntryId !== entryId) {
+      if (
+        (season && currentSeason && season !== currentSeason) ||
+        currentEntryId !== entryId
+      ) {
         void this.loadLeagues(true, trace);
         return;
       }
@@ -629,23 +789,26 @@ PerformancePage({
         entryId: effectiveEntryId,
         tournaments,
         tournamentNames: tournaments.map((t) => t.name),
-        fromCache: false
+        fromCache: false,
       });
       this.loadedSeason = currentSeason || cached?.season;
       this.lastLoadAt = Date.now();
       this.loadedEntryId = effectiveEntryId;
       this.loadedEvent = this.data.event;
-      this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
+      this.loadedContextRevision =
+        getAppContextSnapshot()?.contextRevision ?? 0;
       try {
         if (currentSeason) {
           wx.setStorageSync(DIRECTORY_CACHE_KEY, {
             entryId: effectiveEntryId,
             season: currentSeason,
             tournaments,
-            storedAt: Date.now()
+            storedAt: Date.now(),
           } satisfies LeaguesCache);
         }
-      } catch { /* cache is best effort */ }
+      } catch {
+        /* cache is best effort */
+      }
       if (desk.state === "UNAVAILABLE" && tournaments.length === 0) {
         this.setData({ error: "赛事数据暂时不可用，请稍后重试" });
         return;
@@ -657,7 +820,9 @@ PerformancePage({
         loading: false,
         error: cached
           ? "刷新失败，当前显示上次成功结果"
-          : error instanceof Error ? error.message : "赛事加载失败"
+          : error instanceof Error
+            ? error.message
+            : "赛事加载失败",
       });
     } finally {
       if (isActiveRequest()) {
@@ -676,14 +841,18 @@ PerformancePage({
         emptyState: "tournaments",
         emptyEyebrow: "没有赛事",
         emptyTitle: "此 FPL 账户尚未关联赛事",
-        emptyDescription: "赛事由经理在网页版创建并关联官方联赛后，会显示在这里。",
-        emptyActionText: ""
+        emptyDescription:
+          "赛事由经理在网页版创建并关联官方联赛后，会显示在这里。",
+        emptyActionText: "",
       });
       return;
     }
     this.setData({ emptyState: "" });
     const lastId = readLastPick(this.data.entryId);
-    const index = Math.max(0, tournaments.findIndex((t) => Number(t.id) === lastId));
+    const index = Math.max(
+      0,
+      tournaments.findIndex((t) => Number(t.id) === lastId),
+    );
     this.pickTournament(index, false);
     void this.loadView(this.data.activeView, false);
   },
@@ -694,15 +863,17 @@ PerformancePage({
     if (!selected) return;
     // A finished tournament pins the review window to its final gameweek.
     const endGw = Number(selected.groupEndedEventId) || 0;
-    const maxGw = endGw > 0 && (this.data.maxGw <= 0 || endGw < this.data.maxGw)
-      ? endGw
-      : this.data.maxGw;
-    const event = this.data.event > 0 && this.data.event <= maxGw ? this.data.event : maxGw;
+    const maxGw =
+      endGw > 0 && (this.data.maxGw <= 0 || endGw < this.data.maxGw)
+        ? endGw
+        : this.data.maxGw;
+    const event =
+      this.data.event > 0 && this.data.event <= maxGw ? this.data.event : maxGw;
     this.setData({
       selectedTournamentIndex: tournaments.indexOf(selected),
       selectedTournament: selected,
       maxGw,
-      event
+      event,
     });
     if (this.data.entryId) {
       writeLastPick(this.data.entryId, Number(selected.id));
@@ -726,7 +897,7 @@ PerformancePage({
         hasNextBoardPage: false,
         viewError: "",
         ...emptyPathState(),
-        pathLoading: true
+        pathLoading: true,
       });
       void this.loadView(this.data.activeView, false);
     }
@@ -740,7 +911,8 @@ PerformancePage({
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
     const value = Number(event.detail.value);
-    if (!Number.isFinite(value) || value <= 0 || value === this.data.event) return;
+    if (!Number.isFinite(value) || value <= 0 || value === this.data.event)
+      return;
     this.setData({ event: value, gwNotice: "" });
     this.gwRows = [];
     this.setData({ hasGwData: false });
@@ -748,7 +920,7 @@ PerformancePage({
       this.data.activeView === "gameweek" ? "gameweek" : "season",
       false,
       undefined,
-      { reloadPath: false }
+      { reloadPath: false },
     );
   },
 
@@ -769,12 +941,14 @@ PerformancePage({
       boardFrom: 0,
       boardTo: 0,
       hasPreviousBoardPage: false,
-      hasNextBoardPage: false
+      hasNextBoardPage: false,
     });
   },
 
   onViewTap(event: WechatMiniprogram.TouchEvent) {
-    const view = String(event.currentTarget.dataset.view || "season") as LeagueView;
+    const view = String(
+      event.currentTarget.dataset.view || "season",
+    ) as LeagueView;
     if (view === this.data.activeView) return;
     this.setData({
       activeView: view,
@@ -784,7 +958,7 @@ PerformancePage({
       sortKey: "rank",
       sortAsc: true,
       boardPage: 1,
-      keyword: ""
+      keyword: "",
     });
     const cachedRows = view === "season" ? this.seasonRows : this.gwRows;
     if (cachedRows.length) {
@@ -792,7 +966,7 @@ PerformancePage({
         boardRows: cachedRows,
         boardCol1: view === "season" ? "总积分" : "本轮",
         boardCol2: view === "season" ? "总排名" : "扣分",
-        boardCol3: view === "season" ? "价值" : "总分"
+        boardCol3: view === "season" ? "价值" : "总分",
       });
       this.syncBoard();
       return;
@@ -804,47 +978,55 @@ PerformancePage({
     view: LeagueView,
     forceRefresh: boolean,
     originatingTrace?: PageRequestTrace,
-    options?: { reloadPath?: boolean }
+    options?: { reloadPath?: boolean },
   ) {
     const tournament = this.data.selectedTournament;
     const entryId = this.data.entryId;
     if (!tournament || !entryId || this.data.event <= 0) return;
     const requestId = ++this.viewRequestId;
     const trace = originatingTrace
-      ? { ...originatingTrace, callerSurface: "my-fpl-leagues-view", trigger: forceRefresh ? "refresh" as const : "tab" as const }
+      ? {
+          ...originatingTrace,
+          callerSurface: "my-fpl-leagues-view",
+          trigger: forceRefresh ? ("refresh" as const) : ("tab" as const),
+        }
       : capturePageRequestTrace({
           callerSurface: "my-fpl-leagues-view",
-          trigger: forceRefresh ? "refresh" : "tab"
-    });
+          trigger: forceRefresh ? "refresh" : "tab",
+        });
     this.setData({ viewLoading: true, viewError: "" });
+    let viewerEntryRecoveryAttempted = false;
     try {
       // The desk owns finalized-event gating. Keep the shared event helper in
       // the reporting surface so legacy context remains classified consistently
       // while PRESEASON/PENDING states are still rendered by the desk.
       const requestedEvent = canReadEventReporting(
         this.data.event,
-        getAppContextSnapshot()?.currentEvent
+        getAppContextSnapshot()?.currentEvent,
       )
         ? this.data.event
-        : this.data.event > 0 ? this.data.event : null;
+        : this.data.event > 0
+          ? this.data.event
+          : null;
       const desk = await getMyFplCompetitionsDesk(
         Number(tournament.id),
         requestedEvent,
         forceRefresh,
-        trace
+        trace,
       );
       if (!this.isActiveViewRequest(requestId)) return;
       const eventId = Number(desk.eventId) || 0;
       const viewerEntryId = Number(desk.aggregate?.viewer?.entryId) || 0;
       const viewEntryId = viewerEntryId || entryId;
-      const board = desk.state === "READY" && eventId > 0 && desk.aggregate
-        ? await getCompleteMyFplCompetitionBoard(
-            Number(tournament.id),
-            eventId,
-            forceRefresh,
-            trace
-          )
-        : null;
+      const board =
+        desk.state === "READY" && eventId > 0 && desk.aggregate
+          ? await getCompleteMyFplCompetitionBoard(
+              Number(tournament.id),
+              eventId,
+              forceRefresh,
+              trace,
+            )
+          : null;
       if (!this.isActiveViewRequest(requestId)) return;
       if (desk.state === "UNAVAILABLE") {
         this.clearViewData("赛事数据暂时不可用，请稍后重试");
@@ -859,7 +1041,7 @@ PerformancePage({
           trace,
           options?.reloadPath !== false,
           desk,
-          board
+          board,
         );
       } else {
         await this.loadGameweekView(
@@ -869,14 +1051,50 @@ PerformancePage({
           requestId,
           trace,
           desk,
-          board
+          board,
         );
       }
       if (!this.isActiveViewRequest(requestId)) return;
     } catch (error) {
       if (!this.isActiveViewRequest(requestId)) return;
+      if (
+        !viewerEntryRecoveryAttempted &&
+        isViewerEntryAuthorizationError(error)
+      ) {
+        viewerEntryRecoveryAttempted = true;
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!this.isActiveViewRequest(requestId)) return;
+          if (!refreshedEntryId) {
+            this.showEntryEmptyState();
+            return;
+          }
+          if (refreshedEntryId !== entryId) {
+            this.clearEntryScopedViewState();
+            this.loadedSeason = undefined;
+            this.loadedEntryId = 0;
+            this.pathLoadedKey = "";
+            this.setData({
+              entryId: refreshedEntryId,
+              tournaments: [],
+              tournamentNames: [],
+              selectedTournament: null,
+              emptyState: "",
+              fromCache: false,
+              viewError: "",
+            });
+            void this.loadLeagues(true, trace);
+            return;
+          }
+          this.setData({ viewError: "球队状态尚未同步，请稍后重试" });
+          return;
+        } catch {
+          this.setData({ viewError: "球队状态尚未同步，请稍后重试" });
+          return;
+        }
+      }
       this.setData({
-        viewError: error instanceof Error ? error.message : "赛事数据加载失败"
+        viewError: error instanceof Error ? error.message : "赛事数据加载失败",
       });
     } finally {
       if (this.isActiveViewRequest(requestId)) {
@@ -897,15 +1115,12 @@ PerformancePage({
     trace?: PageRequestTrace,
     reloadPath = true,
     desk?: MyFplCompetitionsDesk,
-    board?: MyFplCompetitionBoard | null
+    board?: MyFplCompetitionBoard | null,
   ) {
     const aggregate = desk?.aggregate;
-    const snapshot = aggregate && board
-      ? seasonSnapshotFromDesk(aggregate, board)
-      : null;
-    const summary = aggregate
-      ? rankingSummaryFromDesk(aggregate)
-      : undefined;
+    const snapshot =
+      aggregate && board ? seasonSnapshotFromDesk(aggregate, board) : null;
+    const summary = aggregate ? rankingSummaryFromDesk(aggregate) : undefined;
     if (!this.isActiveViewRequest(requestId)) return;
     if (!snapshot || !snapshot.standings.length) {
       this.seasonRows = [];
@@ -913,20 +1128,31 @@ PerformancePage({
         hasSeasonData: false,
         boardTotalRows: board?.totalRows || board?.fieldSize || 0,
         boardRows: this.data.activeView === "season" ? [] : this.data.boardRows,
-        displayedRows: this.data.activeView === "season" ? [] : this.data.displayedRows
+        displayedRows:
+          this.data.activeView === "season" ? [] : this.data.displayedRows,
       });
       if (this.data.activeView === "season") this.syncBoard();
       return;
     }
     const me = summary;
-    this.seasonRows = snapshot.standings.map((row) => seasonBoardRow(row, entryId));
+    this.seasonRows = snapshot.standings.map((row) =>
+      seasonBoardRow(row, entryId),
+    );
     this.setData({
       hasSeasonData: true,
-      boardTotalRows: Math.max(board?.totalRows || 0, board?.fieldSize || 0, snapshot.entryCount || 0),
+      boardTotalRows: Math.max(
+        board?.totalRows || 0,
+        board?.fieldSize || 0,
+        snapshot.entryCount || 0,
+      ),
       heroRank: formatCompactNumber(me?.tournamentOverallRank),
       heroRankSub: heroSubText(me),
       heroKicker: `截至第 ${snapshot.asOfEventId || this.data.event} 轮的积分榜`,
-      meTiles: meSeasonTiles(me, snapshot.metrics || [], Math.max(1, Number(snapshot.asOfEventId || this.data.event) || 1)),
+      meTiles: meSeasonTiles(
+        me,
+        snapshot.metrics || [],
+        Math.max(1, Number(snapshot.asOfEventId || this.data.event) || 1),
+      ),
       overviewStats: overviewStatTiles(snapshot),
       leaderRows: (snapshot.metrics || []).map((metric) => ({
         id: metric.key,
@@ -936,55 +1162,65 @@ PerformancePage({
           metric.leaderPlayerName || "",
           metric.averageValue !== null && metric.averageValue !== undefined
             ? `场均 ${metricAverageValueText(metric.key, metric.averageValue)}`
-            : ""
-        ].filter(Boolean).join(" · "),
-        value: metricValueText(metric.key, metric.leaderValue)
-      }))
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        value: metricValueText(metric.key, metric.leaderValue),
+      })),
     });
     if (this.data.activeView === "season") {
       this.setData({ boardRows: this.seasonRows });
       this.syncBoard();
     }
     const pathKey = seasonPathCacheKey(tournamentId, entryId, this.data.event);
-    const needsPath = forceRefresh
-      || this.pathLoadedKey !== pathKey
-      || this.data.pathPoints.length < 2;
-    if (reloadPath && needsPath) void this.loadSeasonPath(tournamentId, entryId, forceRefresh, trace);
+    const needsPath =
+      forceRefresh ||
+      this.pathLoadedKey !== pathKey ||
+      this.data.pathPoints.length < 2;
+    if (reloadPath && needsPath)
+      void this.loadSeasonPath(tournamentId, entryId, forceRefresh, trace);
   },
 
   async loadSeasonPath(
     tournamentId: number,
     entryId: number,
     forceRefresh: boolean,
-    trace?: PageRequestTrace
+    trace?: PageRequestTrace,
   ) {
-    const start = Math.max(1, Number(this.data.selectedTournament?.groupStartedEventId) || 1);
+    const start = Math.max(
+      1,
+      Number(this.data.selectedTournament?.groupStartedEventId) || 1,
+    );
     const end = Math.max(start, this.data.event);
     const pathKey = seasonPathCacheKey(tournamentId, entryId, end);
-    const keepExisting = !forceRefresh
-      && this.pathLoadedKey === pathKey
-      && this.data.pathPoints.length > 0;
+    const keepExisting =
+      !forceRefresh &&
+      this.pathLoadedKey === pathKey &&
+      this.data.pathPoints.length > 0;
     if (forceRefresh) this.pathLoadedKey = "";
     const requestId = ++this.pathRequestId;
-    this.setData(keepExisting
-      ? { pathLoading: true }
-      : {
-          pathLoading: true,
-          pathVisible: false,
-          pathPoints: [],
-          pathSeries: []
-        });
+    this.setData(
+      keepExisting
+        ? { pathLoading: true }
+        : {
+            pathLoading: true,
+            pathVisible: false,
+            pathPoints: [],
+            pathSeries: [],
+          },
+    );
     try {
       const payload = await getMyFplCompetitionSeasonPath(
         tournamentId,
         end,
         forceRefresh,
-        trace
+        trace,
       );
       if (requestId !== this.pathRequestId || !this.pageVisible) return;
       const points = pathPointsFromDesk(payload);
       this.setData({
-        ...pathPageState(points, this.data.pathMode, this.data.pathSelectedGw)
+        ...pathPageState(points, this.data.pathMode, this.data.pathSelectedGw),
       });
       this.pathLoadedKey = pathKey;
       this.setData({ pathLoading: false });
@@ -993,19 +1229,28 @@ PerformancePage({
       if (!(keepExisting && this.data.pathPoints.length >= 2)) {
         this.pathLoadedKey = "";
       }
-      this.setData({ pathLoading: false, pathVisible: this.data.pathPoints.length >= 2 });
+      this.setData({
+        pathLoading: false,
+        pathVisible: this.data.pathPoints.length >= 2,
+      });
     }
   },
 
   onPathMode(event: WechatMiniprogram.TouchEvent) {
-    const mode = String(event.currentTarget.dataset.mode || "tournamentRank") as TournamentPathMode;
-    this.setData(pathPageState(this.data.pathPoints, mode, this.data.pathSelectedGw));
+    const mode = String(
+      event.currentTarget.dataset.mode || "tournamentRank",
+    ) as TournamentPathMode;
+    this.setData(
+      pathPageState(this.data.pathPoints, mode, this.data.pathSelectedGw),
+    );
   },
 
   onPathSelect(event: WechatMiniprogram.CustomEvent<{ x: number | null }>) {
     const gw = event.detail?.x == null ? null : Number(event.detail.x);
     if (gw == null || !Number.isFinite(gw)) {
-      this.setData(pathPageState(this.data.pathPoints, this.data.pathMode, null));
+      this.setData(
+        pathPageState(this.data.pathPoints, this.data.pathMode, null),
+      );
       return;
     }
     this.setData(pathPageState(this.data.pathPoints, this.data.pathMode, gw));
@@ -1018,17 +1263,21 @@ PerformancePage({
     requestId: number,
     trace?: PageRequestTrace,
     desk?: MyFplCompetitionsDesk,
-    board?: MyFplCompetitionBoard | null
+    board?: MyFplCompetitionBoard | null,
   ) {
     let activeDesk = desk;
     let activeBoard = board;
-    let activeEntryId = Number(activeDesk?.aggregate?.viewer?.entryId) || entryId;
+    let activeEntryId =
+      Number(activeDesk?.aggregate?.viewer?.entryId) || entryId;
     let event = Number(activeDesk?.eventId) || this.data.event;
     let notice = "";
-    const ready = (candidateDesk?: MyFplCompetitionsDesk, candidateBoard?: MyFplCompetitionBoard | null) =>
-      candidateDesk?.state === "READY"
-      && Boolean(candidateDesk.aggregate)
-      && candidateBoard?.state === "READY";
+    const ready = (
+      candidateDesk?: MyFplCompetitionsDesk,
+      candidateBoard?: MyFplCompetitionBoard | null,
+    ) =>
+      candidateDesk?.state === "READY" &&
+      Boolean(candidateDesk.aggregate) &&
+      candidateBoard?.state === "READY";
     if (!ready(activeDesk, activeBoard) && event > 1) {
       // Web parity: fall back one finalized GW when the requested round is
       // still pending. The desk remains the source of truth for this state.
@@ -1037,19 +1286,21 @@ PerformancePage({
         tournamentId,
         fallback,
         forceRefresh,
-        trace
+        trace,
       );
       if (!this.isActiveViewRequest(requestId)) return;
       const retriedEvent = Number(retriedDesk.eventId) || fallback;
-      const retriedViewerEntryId = Number(retriedDesk.aggregate?.viewer?.entryId) || 0;
-      const retriedBoard = retriedDesk.state === "READY" && retriedDesk.aggregate
-        ? await getCompleteMyFplCompetitionBoard(
-            tournamentId,
-            retriedEvent,
-            forceRefresh,
-            trace
-          )
-        : null;
+      const retriedViewerEntryId =
+        Number(retriedDesk.aggregate?.viewer?.entryId) || 0;
+      const retriedBoard =
+        retriedDesk.state === "READY" && retriedDesk.aggregate
+          ? await getCompleteMyFplCompetitionBoard(
+              tournamentId,
+              retriedEvent,
+              forceRefresh,
+              trace,
+            )
+          : null;
       if (!this.isActiveViewRequest(requestId)) return;
       if (ready(retriedDesk, retriedBoard)) {
         notice = `第 ${event} 轮赛事结果尚未就绪 · 当前显示第 ${fallback} 轮数据`;
@@ -1065,8 +1316,10 @@ PerformancePage({
         hasGwData: false,
         boardTotalRows: activeBoard?.totalRows || activeBoard?.fieldSize || 0,
         gwNotice: notice,
-        boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
-        displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
+        boardRows:
+          this.data.activeView === "gameweek" ? [] : this.data.boardRows,
+        displayedRows:
+          this.data.activeView === "gameweek" ? [] : this.data.displayedRows,
       });
       if (this.data.activeView === "gameweek") this.syncBoard();
       return;
@@ -1079,22 +1332,35 @@ PerformancePage({
         hasGwData: false,
         boardTotalRows: activeBoard.totalRows || activeBoard.fieldSize || 0,
         gwNotice: notice,
-        boardRows: this.data.activeView === "gameweek" ? [] : this.data.boardRows,
-        displayedRows: this.data.activeView === "gameweek" ? [] : this.data.displayedRows
+        boardRows:
+          this.data.activeView === "gameweek" ? [] : this.data.boardRows,
+        displayedRows:
+          this.data.activeView === "gameweek" ? [] : this.data.displayedRows,
       });
       if (this.data.activeView === "gameweek") this.syncBoard();
       return;
     }
     const prevRankByEntry = previousRanksFromDesk(activeBoard);
-    this.gwRows = results.map((row) => gameweekBoardRow(row, activeEntryId, prevRankByEntry));
+    this.gwRows = results.map((row) =>
+      gameweekBoardRow(row, activeEntryId, prevRankByEntry),
+    );
     this.setData({
       hasGwData: true,
-      boardTotalRows: Math.max(activeBoard.totalRows || 0, activeBoard.fieldSize || 0, results.length),
+      boardTotalRows: Math.max(
+        activeBoard.totalRows || 0,
+        activeBoard.fieldSize || 0,
+        results.length,
+      ),
       gwNotice: notice,
-      gwTiles: gwPerformanceTiles(results, prevRankByEntry, activeEntryId, event),
+      gwTiles: gwPerformanceTiles(
+        results,
+        prevRankByEntry,
+        activeEntryId,
+        event,
+      ),
       topRows: gwTopRows(results),
       riserRows: gwMovementRows(results, prevRankByEntry, true),
-      fallerRows: gwMovementRows(results, prevRankByEntry, false)
+      fallerRows: gwMovementRows(results, prevRankByEntry, false),
     });
     if (this.data.activeView === "gameweek") {
       this.setData({ boardRows: this.gwRows });
@@ -1113,12 +1379,18 @@ PerformancePage({
   },
 
   onSortTap(event: WechatMiniprogram.TouchEvent) {
-    const key = String(event.currentTarget.dataset.key || "rank") as BoardSortKey;
+    const key = String(
+      event.currentTarget.dataset.key || "rank",
+    ) as BoardSortKey;
     const option = this.data.sortOptions.find((item) => item.key === key);
     if (key === this.data.sortKey) {
       this.setData({ sortAsc: !this.data.sortAsc, boardPage: 1 });
     } else {
-      this.setData({ sortKey: key, sortAsc: option ? option.asc : true, boardPage: 1 });
+      this.setData({
+        sortKey: key,
+        sortAsc: option ? option.asc : true,
+        boardPage: 1,
+      });
     }
     this.syncBoard();
   },
@@ -1139,12 +1411,21 @@ PerformancePage({
   syncBoard() {
     const keyword = this.data.keyword.trim().toLowerCase();
     const filtered = keyword
-      ? this.data.boardRows.filter((row) =>
-          row.name.toLowerCase().includes(keyword) || row.manager.toLowerCase().includes(keyword))
+      ? this.data.boardRows.filter(
+          (row) =>
+            row.name.toLowerCase().includes(keyword) ||
+            row.manager.toLowerCase().includes(keyword),
+        )
       : [...this.data.boardRows];
     const key = this.data.sortKey;
     const pick = (row: BoardRow) =>
-      key === "rank" ? row.sortRank : key === "c1" ? row.sortC1 : key === "c2" ? row.sortC2 : row.sortC3;
+      key === "rank"
+        ? row.sortRank
+        : key === "c1"
+          ? row.sortC1
+          : key === "c2"
+            ? row.sortC2
+            : row.sortC3;
     const asc = this.data.sortAsc;
     filtered.sort((a, b) => {
       const diff = pick(a) - pick(b);
@@ -1159,7 +1440,7 @@ PerformancePage({
       boardFrom: page.from,
       boardTo: page.to,
       hasPreviousBoardPage: page.hasPrevious,
-      hasNextBoardPage: page.hasNext
+      hasNextBoardPage: page.hasNext,
     });
   },
 
@@ -1172,7 +1453,10 @@ PerformancePage({
   async onOpenWebsite() {
     const action = canonicalAction("LEAGUE_PREPARE");
     if (await openWebsiteAction(action)) {
-      recordMyFplVisit({ surface: "leagues", handoffActionType: action.actionType });
+      recordMyFplVisit({
+        surface: "leagues",
+        handoffActionType: action.actionType,
+      });
     }
   },
 
@@ -1188,11 +1472,11 @@ PerformancePage({
       return;
     }
     void this.loadLeagues(true);
-  }
+  },
 });
 
 function rankingSummaryFromDesk(
-  aggregate: MyFplCompetitionAggregate
+  aggregate: MyFplCompetitionAggregate,
 ): TournamentEntryRankingSummary | undefined {
   const viewer = aggregate.viewer;
   if (!viewer) return undefined;
@@ -1214,13 +1498,18 @@ function rankingSummaryFromDesk(
     leaderOverallPoints: viewer.leaderOverallPoints,
     gapToLeader: viewer.gapToLeader,
     pointsBehindNext: viewer.pointsBehindNext,
-    pointsAheadOfPrev: viewer.pointsAheadOfPrev
+    pointsAheadOfPrev: viewer.pointsAheadOfPrev,
   };
 }
 
-function boardRowsFromDesk(board: MyFplCompetitionBoard): MyFplCompetitionBoardRow[] {
+function boardRowsFromDesk(
+  board: MyFplCompetitionBoard,
+): MyFplCompetitionBoardRow[] {
   const rows = [...(board.rows || [])];
-  if (board.viewerRow && !rows.some((row) => row.entryId === board.viewerRow?.entryId)) {
+  if (
+    board.viewerRow &&
+    !rows.some((row) => row.entryId === board.viewerRow?.entryId)
+  ) {
     rows.push(board.viewerRow);
   }
   return rows;
@@ -1228,7 +1517,7 @@ function boardRowsFromDesk(board: MyFplCompetitionBoard): MyFplCompetitionBoardR
 
 function seasonSnapshotFromDesk(
   aggregate: MyFplCompetitionAggregate,
-  board: MyFplCompetitionBoard
+  board: MyFplCompetitionBoard,
 ): TournamentSeasonSnapshot {
   return {
     asOfEventId: aggregate.eventId,
@@ -1245,12 +1534,14 @@ function seasonSnapshotFromDesk(
       playerName: row.playerName,
       overallPoints: row.overallPoints,
       overallRank: row.overallRank,
-      teamValue: row.teamValue
-    }))
+      teamValue: row.teamValue,
+    })),
   };
 }
 
-function boardResultsFromDesk(board: MyFplCompetitionBoard): TournamentEventResult[] {
+function boardResultsFromDesk(
+  board: MyFplCompetitionBoard,
+): TournamentEventResult[] {
   return boardRowsFromDesk(board).map((row) => ({
     entryId: row.entryId,
     entryName: row.entryName,
@@ -1266,21 +1557,29 @@ function boardResultsFromDesk(board: MyFplCompetitionBoard): TournamentEventResu
     eventChip: row.eventChip,
     captainPoints: row.captainPoints,
     teamValue: row.teamValue,
-    bank: row.bank
+    bank: row.bank,
   }));
 }
 
-function previousRanksFromDesk(board: MyFplCompetitionBoard): Map<number, number> {
+function previousRanksFromDesk(
+  board: MyFplCompetitionBoard,
+): Map<number, number> {
   const previous = new Map<number, number>();
   for (const row of boardRowsFromDesk(board)) {
-    if (row.previousRank !== null && row.previousRank !== undefined && row.previousRank > 0) {
+    if (
+      row.previousRank !== null &&
+      row.previousRank !== undefined &&
+      row.previousRank > 0
+    ) {
       previous.set(row.entryId, row.previousRank);
     }
   }
   return previous;
 }
 
-function pathPointsFromDesk(payload: MyFplCompetitionSeasonPath): TournamentPathPoint[] {
+function pathPointsFromDesk(
+  payload: MyFplCompetitionSeasonPath,
+): TournamentPathPoint[] {
   return (payload.points || [])
     .filter((point) => point.gameweek > 0)
     .map((point) => ({
@@ -1288,7 +1587,7 @@ function pathPointsFromDesk(payload: MyFplCompetitionSeasonPath): TournamentPath
       tournamentRank: point.tournamentRank ?? null,
       overallPoints: point.overallPoints ?? null,
       leaderOverallPoints: point.leaderOverallPoints ?? null,
-      averageOverallPoints: point.averageOverallPoints ?? null
+      averageOverallPoints: point.averageOverallPoints ?? null,
     }));
 }
 
@@ -1297,7 +1596,11 @@ function heroSubText(me: TournamentEntryRankingSummary | undefined): string {
   const parts = [`总积分 ${formatPoints(me.overallPoints)}`];
   if (me.tournamentOverallRank === 1) {
     // Web: "Top of the table" plus the cushion over 2nd place.
-    parts.push(me.pointsAheadOfPrev ? `领跑中 · 领先下一名 ${formatPoints(me.pointsAheadOfPrev)}` : "领跑中");
+    parts.push(
+      me.pointsAheadOfPrev
+        ? `领跑中 · 领先下一名 ${formatPoints(me.pointsAheadOfPrev)}`
+        : "领跑中",
+    );
   } else {
     if (me.gapToLeader) {
       parts.push(`距榜首 ${formatPoints(me.gapToLeader)}`);
@@ -1316,12 +1619,17 @@ function heroSubText(me: TournamentEntryRankingSummary | undefined): string {
 function meSeasonTiles(
   me: TournamentEntryRankingSummary | undefined,
   metrics: TournamentSeasonMetric[] = [],
-  gwCount = 0
+  gwCount = 0,
 ): TileStat[] {
   if (!me) return [];
-  const avgByKey = new Map(metrics.map((metric) => [metric.key, metric.averageValue]));
+  const avgByKey = new Map(
+    metrics.map((metric) => [metric.key, metric.averageValue]),
+  );
   // Web secondary tiles show both the in-tournament rank and the field average.
-  const metaWithAvg = (key: TournamentSeasonMetricKey, rank?: number | null): string => {
+  const metaWithAvg = (
+    key: TournamentSeasonMetricKey,
+    rank?: number | null,
+  ): string => {
     const parts: string[] = [];
     if (rank) parts.push(`赛事内第 ${formatCompactNumber(rank)} 名`);
     const avg = avgByKey.get(key);
@@ -1331,11 +1639,31 @@ function meSeasonTiles(
     return parts.join(" · ");
   };
   const tiles = [
-    { label: "球队价值", value: formatMoney(me.teamValue), meta: metaWithAvg("TEAM_VALUE", me.tournamentTeamValueRank) },
-    { label: "转会数", value: formatPoints(me.transfersNum), meta: metaWithAvg("TRANSFERS", me.tournamentTransfersRank) },
-    { label: "总扣分", value: formatPoints(me.totalCosts), meta: metaWithAvg("TOTAL_COSTS", me.tournamentCostsRank) },
-    { label: "替补积分", value: formatPoints(me.totalBenchPoints), meta: metaWithAvg("BENCH_POINTS", me.tournamentBenchPointsRank) },
-    { label: "自动换人", value: formatPoints(me.autoSubPoints), meta: metaWithAvg("AUTO_SUB_POINTS", me.tournamentAutoSubRank) }
+    {
+      label: "球队价值",
+      value: formatMoney(me.teamValue),
+      meta: metaWithAvg("TEAM_VALUE", me.tournamentTeamValueRank),
+    },
+    {
+      label: "转会数",
+      value: formatPoints(me.transfersNum),
+      meta: metaWithAvg("TRANSFERS", me.tournamentTransfersRank),
+    },
+    {
+      label: "总扣分",
+      value: formatPoints(me.totalCosts),
+      meta: metaWithAvg("TOTAL_COSTS", me.tournamentCostsRank),
+    },
+    {
+      label: "替补积分",
+      value: formatPoints(me.totalBenchPoints),
+      meta: metaWithAvg("BENCH_POINTS", me.tournamentBenchPointsRank),
+    },
+    {
+      label: "自动换人",
+      value: formatPoints(me.autoSubPoints),
+      meta: metaWithAvg("AUTO_SUB_POINTS", me.tournamentAutoSubRank),
+    },
   ];
   // Sixth tile (fills the 2-col grid): scoring rate. The hero already carries
   // total points, so the tile shows points-per-GW against the field average.
@@ -1344,7 +1672,9 @@ function meSeasonTiles(
     const fieldAverage = avgByKey.get("OVERALL_POINTS");
     const metaParts: string[] = [];
     if (me.tournamentOverallRank) {
-      metaParts.push(`赛事内第 ${formatCompactNumber(me.tournamentOverallRank)} 名`);
+      metaParts.push(
+        `赛事内第 ${formatCompactNumber(me.tournamentOverallRank)} 名`,
+      );
     }
     if (fieldAverage !== null && fieldAverage !== undefined) {
       metaParts.push(`场均 ${formatAverageNumber(fieldAverage / gwCount)}`);
@@ -1352,24 +1682,29 @@ function meSeasonTiles(
     tiles.push({
       label: "每轮均分",
       value: formatAverageNumber(overallPoints / gwCount),
-      meta: metaParts.join(" · ")
+      meta: metaParts.join(" · "),
     });
   }
   return tiles;
 }
 
-export function overviewStatTiles(snapshot: TournamentSeasonSnapshot): TileStat[] {
+export function overviewStatTiles(
+  snapshot: TournamentSeasonSnapshot,
+): TileStat[] {
   return [
     { label: "参赛", value: formatPoints(snapshot.entryCount) },
     { label: "榜首总分", value: formatPoints(snapshot.leaderOverallPoints) },
-    { label: "平均总分", value: formatAverageNumber(snapshot.averageOverallPoints) },
-    { label: "冠亚分差", value: formatPoints(snapshot.gapFirstSecond) }
+    {
+      label: "平均总分",
+      value: formatAverageNumber(snapshot.averageOverallPoints),
+    },
+    { label: "冠亚分差", value: formatPoints(snapshot.gapFirstSecond) },
   ];
 }
 
 function seasonBoardRow(
   row: TournamentSeasonSnapshot["standings"][number],
-  viewerEntryId: number
+  viewerEntryId: number,
 ): BoardRow {
   return {
     entryId: row.entryId,
@@ -1387,7 +1722,7 @@ function seasonBoardRow(
     sortRank: num(row.rank, 999999),
     sortC1: num(row.overallPoints),
     sortC2: row.overallRank ? num(row.overallRank) : 999999999,
-    sortC3: num(row.teamValue)
+    sortC3: num(row.teamValue),
   };
 }
 
@@ -1398,7 +1733,7 @@ function chipCode(chip?: string | null): string {
     FREE_HIT: "FH",
     TRIPLE_CAPTAIN: "TC",
     WILDCARD: "WC",
-    MANAGER: "AM"
+    MANAGER: "AM",
   };
   return codes[chip] || "";
 }
@@ -1406,7 +1741,7 @@ function chipCode(chip?: string | null): string {
 function gameweekBoardRow(
   row: TournamentEventResult,
   viewerEntryId: number,
-  prevRankByEntry?: Map<number, number>
+  prevRankByEntry?: Map<number, number>,
 ): BoardRow {
   const gwPoints = row.eventNetPoints ?? row.eventPoints;
   const cost = num(row.eventCost);
@@ -1430,15 +1765,20 @@ function gameweekBoardRow(
     sortRank: num(row.eventGroupRank, 999999),
     sortC1: num(gwPoints),
     sortC2: cost,
-    sortC3: num(row.overallPoints)
+    sortC3: num(row.overallPoints),
   };
 }
 
-function movementText(currentRank: number | null | undefined, prevRank: number | undefined): Pick<TileStat, "meta" | "tone"> {
+function movementText(
+  currentRank: number | null | undefined,
+  prevRank: number | undefined,
+): Pick<TileStat, "meta" | "tone"> {
   if (!currentRank || !prevRank) return { meta: "", tone: "" };
   const delta = prevRank - currentRank;
-  if (delta > 0) return { meta: `上升 ${formatCompactNumber(delta)}`, tone: "good" };
-  if (delta < 0) return { meta: `下降 ${formatCompactNumber(-delta)}`, tone: "bad" };
+  if (delta > 0)
+    return { meta: `上升 ${formatCompactNumber(delta)}`, tone: "good" };
+  if (delta < 0)
+    return { meta: `下降 ${formatCompactNumber(-delta)}`, tone: "bad" };
   return { meta: "无变化", tone: "" };
 }
 
@@ -1446,33 +1786,38 @@ function gwPerformanceTiles(
   results: TournamentEventResult[],
   prevRankByEntry: Map<number, number>,
   entryId: number,
-  event: number
+  event: number,
 ): TileStat[] {
   const mine = results.find((row) => row.entryId === entryId);
-  const top = [...results].sort((a, b) => num(b.eventPoints) - num(a.eventPoints))[0];
-  const movement = movementText(mine?.eventGroupRank, prevRankByEntry.get(entryId));
+  const top = [...results].sort(
+    (a, b) => num(b.eventPoints) - num(a.eventPoints),
+  )[0];
+  const movement = movementText(
+    mine?.eventGroupRank,
+    prevRankByEntry.get(entryId),
+  );
   const cost = num(mine?.eventCost);
   return [
     {
       label: "我的排名",
       value: formatCompactNumber(mine?.eventGroupRank),
       meta: movement.meta,
-      tone: movement.tone
+      tone: movement.tone,
     },
     {
       label: `第 ${event} 轮积分`,
       value: formatPoints(mine?.eventNetPoints ?? mine?.eventPoints),
-      meta: cost > 0 ? `本轮扣分：-${cost}` : ""
+      meta: cost > 0 ? `本轮扣分：-${cost}` : "",
     },
     {
       label: "队长得分",
-      value: formatPoints(mine?.captainPoints)
+      value: formatPoints(mine?.captainPoints),
     },
     {
       label: "最高得分",
       value: formatPoints(top?.eventPoints),
-      meta: top?.entryName || ""
-    }
+      meta: top?.entryName || "",
+    },
   ];
 }
 
@@ -1483,15 +1828,17 @@ function gwTopRows(results: TournamentEventResult[]): HighlightRow[] {
     .map((row, index) => ({
       id: `top-${row.entryId}`,
       title: `${index + 1}. ${row.entryName || "-"}`,
-      meta: [row.playerName, chipCode(row.eventChip)].filter(Boolean).join(" · "),
-      value: formatPoints(row.eventPoints)
+      meta: [row.playerName, chipCode(row.eventChip)]
+        .filter(Boolean)
+        .join(" · "),
+      value: formatPoints(row.eventPoints),
     }));
 }
 
 function gwMovementRows(
   results: TournamentEventResult[],
   prevRankByEntry: Map<number, number>,
-  risers: boolean
+  risers: boolean,
 ): HighlightRow[] {
   if (!prevRankByEntry.size) return [];
   return results
@@ -1509,6 +1856,6 @@ function gwMovementRows(
       title: item.row.entryName || "-",
       meta: `#${item.prev} → #${item.current}`,
       value: `${item.delta > 0 ? "+" : ""}${formatCompactNumber(item.delta)}`,
-      tone: item.delta > 0 ? "good" : "bad"
+      tone: item.delta > 0 ? "good" : "bad",
     }));
 }

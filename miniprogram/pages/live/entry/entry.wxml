@@ -11,7 +11,7 @@
   </view>
 
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">
-    <app-error-state message="{{error}}" bind:retry="onRetry" />
+    <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   </view>
   <app-loading wx:elif="{{loading && !hasData}}" text="加载实时积分" />
   <view wx:elif="{{emptyState === 'entry'}}" id="perf-primary-content" class="section">
@@ -66,7 +66,7 @@
     />
   </view>
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status wx:if="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view id="perf-primary-content" class="section live-summary">
       <view class="score-card scoreboard">
         <view class="score-top">
@@ -156,7 +156,7 @@
     <view class="section card lineup-card">
       <view class="section-heading">本周转会{{transfersLoading && transfers.length > 0 ? ' · 刷新中' : ''}}</view>
       <app-loading wx:if="{{transfersLoading && transfers.length === 0}}" text="加载本周转会" />
-      <app-error-state wx:elif="{{transfersError}}" message="{{transfersError}}" bind:retry="onRetry" />
+      <app-error-state wx:elif="{{transfersError}}" message="{{transfersError}}" workload="interactive" bind:retry="onRetry" />
       <app-empty-state wx:elif="{{transfers.length === 0}}" title="本周保持原阵容" description="GW{{event}} 没有转会记录" />
       <view wx:for="{{transfers}}" wx:key="rowKey" class="swap-row">
         <view class="swap-side">

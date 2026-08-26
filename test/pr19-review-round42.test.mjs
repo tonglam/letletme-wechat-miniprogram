@@ -8,7 +8,7 @@ test("Players preserves forced search semantics across hide/show", () => {
   const page = read("miniprogram/pages/data/players/players.ts");
   assert.match(page, /searchPendingForceRefresh/);
   assert.match(page, /onHide\(\)[\s\S]*resumeSearchAfterShow = this\.searchPending[\s\S]*resumeSearchForceRefresh = this\.searchPendingForceRefresh/);
-  assert.match(page, /onShow\(\)[\s\S]*resumeSearch[\s\S]*startSearch\(this\.data\.keyword, resumeSearchForceRefresh\)/);
+  assert.match(page, /onShow\(\)[\s\S]*resumeSearch[\s\S]*resumeSearchSnapshot\([\s\S]*resumeSearchForceRefresh/);
   assert.match(page, /onRetry\(\)[\s\S]*startSearch\(this\.data\.keyword, true\)/);
 });
 

@@ -16,9 +16,17 @@ import type {
 import {
   filterTournamentLiveRows,
   mapTournamentLiveRows,
+  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
+import {
+  officialManagerEventPoints,
+  officialManagerNetPoints,
+  officialManagerTotalPoints,
+  managerScoreNextRefreshAt,
+  traceableOfficialManagerScore,
+} from "./live-manager-score";
 
 // Live payloads are expensive enough to deduplicate rapid page revisits, but
 // short-lived enough to stay process-local (graphql.service does not persist
@@ -267,6 +275,7 @@ export async function getLivePointsByEntrySnapshot(
     CALC_LIVE_POINTS_BY_ENTRY,
     variables,
   );
+  const score = traceableOfficialManagerScore(result.score);
   return {
     data: {
       availability: result.availability,
@@ -274,12 +283,13 @@ export async function getLivePointsByEntrySnapshot(
       event: result.event,
       entryName: result.entryName,
       playerName: result.playerName,
-      score: result.score,
-      livePoints: result.livePoints,
-      liveNetPoints: result.liveNetPoints,
-      netPointsKnown: result.score?.netEventPoints != null,
-      liveTotalPoints: result.liveTotalPoints,
-      transferCost: result.transferCost,
+      score,
+      livePoints: officialManagerEventPoints(score),
+      liveNetPoints: officialManagerNetPoints(score),
+      netPointsKnown: officialManagerNetPoints(score) !== undefined,
+      liveTotalPoints: officialManagerTotalPoints(score),
+      transferCost: score?.transferCost,
+      scoreNextRefreshAt: managerScoreNextRefreshAt(result.score),
       captainName: result.captainName,
       chip: result.chip,
       played: result.played,
@@ -877,8 +887,11 @@ export async function getLivePointsByTournamentSnapshot(
     data.entryLiveCompetitionsDesk.failedEntryIds,
     data.entryLiveCompetitionsDesk.unavailableEntryIds,
   );
+  const mappedRows = mapTournamentLiveRows(
+    data.entryLiveCompetitionsDesk.board,
+  );
   return {
-    data: mapTournamentLiveRows(data.entryLiveCompetitionsDesk.board),
+    data: mappedRows,
     snapshot: data.entryLiveCompetitionsDesk.revision
       ? {
           eventId: data.entryLiveCompetitionsDesk.eventId,
@@ -897,6 +910,13 @@ export async function getLivePointsByTournamentSnapshot(
     failedEntryIds: unavailableEntryIds,
     unavailableEntryIds,
     officialCoverage: data.entryLiveCompetitionsDesk.officialCoverage,
+    traceableEntries: mappedRows.filter(
+      (row) => officialManagerEventPoints(row.score) !== undefined,
+    ).length,
+    traceableScoreStates: combinedTournamentTraceableScoreStates(
+      undefined,
+      mappedRows,
+    ),
     totalEntries: data.entryLiveCompetitionsDesk.totalEntries,
     partialError: data.entryLiveCompetitionsDesk.partial
       ? `部分结果不可用：${Math.max(1, unavailableEntryIds.length)}/${data.entryLiveCompetitionsDesk.totalEntries} 支参赛球队计算失败`
@@ -961,6 +981,8 @@ export async function searchLivePointsByTournamentSnapshot(
     failedEntryIds: result.failedEntryIds,
     unavailableEntryIds: result.unavailableEntryIds,
     officialCoverage: result.officialCoverage,
+    traceableEntries: result.traceableEntries,
+    traceableScoreStates: result.traceableScoreStates,
     totalEntries: result.totalEntries,
     partialError: result.partialError,
   };

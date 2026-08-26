@@ -9,7 +9,7 @@
       bind:action="onLinkAccount"
     />
   </view>
-  <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" bind:retry="onRetry" />
+  <app-error-state id="perf-primary-content" wx:elif="{{error}}" message="{{error}}" workload="interactive" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading}}" text="加载球队资料" />
   <block wx:else>
     <entry-card id="perf-primary-content" entry="{{entry}}" bind:change="onChangeEntry" />

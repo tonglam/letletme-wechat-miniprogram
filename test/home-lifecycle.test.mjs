@@ -37,7 +37,7 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   assert.match(page, /Promise\.all\(\[marketTask, supplementTask\]\)/);
   assert.match(
     page,
-    /getEntryInfo[\s\S]*this\.setData\(\{ entry, entryError: "" \}\)/,
+    /getEntryInfo[\s\S]*const previousEntryId = Number\([\s\S]*const nextEntryId = Number\([\s\S]*this\.setData\(\{[\s\S]*entry,[\s\S]*entryError: "",[\s\S]*previousEntryId !== nextEntryId[\s\S]*leagues: \[\]/,
   );
   assert.match(
     page,

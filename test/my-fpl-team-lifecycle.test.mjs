@@ -31,6 +31,16 @@ test("My FPL Team sends every no-team viewer to team selection", () => {
   assert.match(page, /if \(this\.data\.emptyState === "entry"\) \{\s*goToEntrySearch\(\)/);
 });
 
+test("My FPL lazy tabs recover once after viewer authorization loss", () => {
+  const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
+  assert.match(page, /let viewerTabRecoveryAttempted = false/);
+  assert.match(
+    page,
+    /async loadTab[\s\S]*catch \(error\)[\s\S]*!viewerTabRecoveryAttempted[\s\S]*isViewerEntryAuthorizationError\(error\)[\s\S]*await refreshAuthoritativeFollow\(\)[\s\S]*球队状态尚未同步，请稍后重试/,
+  );
+  assert.match(page, /restartForPrincipalChange\(entryId\)[\s\S]*tabLoading: false[\s\S]*tabError: ""/);
+});
+
 test("My FPL Team owns independent primary and tab status surfaces", () => {
   const template = source("miniprogram/pages/my-fpl/team/team.wxml");
   assert.match(template, /id="perf-primary-content"/);

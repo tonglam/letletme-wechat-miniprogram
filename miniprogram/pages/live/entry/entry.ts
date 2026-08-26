@@ -6,7 +6,6 @@ import {
   getLivePointsByEntrySnapshot,
   getLiveSnapshot,
 } from "../../../services/live.service";
-import { getApiSessionToken } from "../../../services/auth.service";
 import type {
   LiveManagerScore,
   LivePlayerRow,
@@ -34,7 +33,10 @@ import {
 } from "../../../utils/live-status";
 import { durationBucket, recordLiveTransition } from "../../../utils/perf";
 import { miniLogger } from "../../../utils/logger";
-import { currentFollowEntryId } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
   buildPlayerLiveDetail,
@@ -71,6 +73,7 @@ export function noLiveEventState() {
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as const,
     transfersError: "",
     emptyState: "preseason" as const,
     event: 0,
@@ -106,6 +109,7 @@ interface LiveEntryData {
   hasData: boolean;
   noPicks: boolean;
   error: string;
+  errorWorkload: "home" | "gameweek";
   transfersError: string;
   emptyState: LiveEntryEmptyState;
   displayState: LiveDisplayState;
@@ -126,6 +130,7 @@ interface LiveEntryData {
   netPoints: number;
   netPointsKnown: boolean;
   transferCost: number;
+  transferCostKnown: boolean;
   captainText: string;
   chipText: string;
   playedText: string;
@@ -175,6 +180,17 @@ function managerScoreStatusText(score?: LiveManagerScore): string {
   return "官方实时";
 }
 
+function hasRefreshDeadline(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function firstRefreshDeadline(...values: unknown[]): string {
+  for (const value of values) {
+    if (hasRefreshDeadline(value)) return value;
+  }
+  return "";
+}
+
 function captainDisplayName(
   players: Array<{
     captain?: boolean;
@@ -214,6 +230,7 @@ Page({
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home" as "home" | "gameweek",
     transfersError: "",
     emptyState: "",
     displayState: "fresh",
@@ -234,6 +251,7 @@ Page({
     netPoints: 0,
     netPointsKnown: false,
     transferCost: 0,
+    transferCostKnown: false,
     captainText: "-",
     chipText: "无",
     playedText: "-",
@@ -338,15 +356,7 @@ Page({
     }
     tracker.mark("contextReadyAt");
     this.loadedSeason = context.season || undefined;
-    if (!this.hasRouteEntry && !getApiSessionToken()) {
-      // With no valid session the stored follow is only offline/display
-      // fallback: the account may have been linked to a different entry
-      // since, so wait for the refreshed profile to re-assert it (the login
-      // may not even have started while the privacy callback is pending).
-      try {
-        await app.authReady;
-      } catch {}
-    }
+    if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
     const currentGw = currentLiveEventId(context);
@@ -385,16 +395,21 @@ Page({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(),
-      shouldReloadOnUnchangedProbe: () =>
-        Boolean(
+      shouldReloadOnUnchangedProbe: () => {
+        const nextRefreshAt = firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        );
+        return Boolean(
           this.data.scoreState === "SETTLING" ||
-          (this.data.scoreNextRefreshAt &&
-            Date.parse(this.data.scoreNextRefreshAt) <= Date.now()),
-        ),
+          (nextRefreshAt && Date.parse(nextRefreshAt) <= Date.now()),
+        );
+      },
       getNextRefreshAt: () =>
-        this.data.scoreNextRefreshAt ||
-        this.liveSnapshot?.nextRefreshAt ||
-        null,
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ) || null,
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -442,6 +457,11 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    if (resumed && !this.hasRouteEntry) {
+      await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
+    const previousEntryId = this.data.entryId;
     let showContext = getAppContextSnapshot();
     if (resumed) {
       const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
@@ -469,7 +489,6 @@ Page({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
-      if (this.restartForPrincipalChange(this.data.entryId)) return;
       const nextSeason =
         showContext?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
@@ -482,6 +501,18 @@ Page({
         nextEventId > 0 && this.data.emptyState === "preseason";
       const eventContextChanged =
         seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
+      const restartAfterContext = async (): Promise<boolean> => {
+        if (!this.restartForPrincipalChange(previousEntryId, false)) return false;
+        if (this.data.event > 0) {
+          this.liveRefresh?.sync();
+          await this.loadData({ includeTransfers: true, forceRefresh: true });
+        } else {
+          this.liveRefresh?.stop();
+          this.setData(noLiveEventState());
+        }
+        this.syncDisplayState();
+        return true;
+      };
       if (eventContextChanged && (seasonChanged || wasCurrentEvent)) {
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
@@ -514,6 +545,7 @@ Page({
           totalText: "—",
           netPoints: 0,
           transferCost: 0,
+          transferCostKnown: false,
           captainText: "-",
           chipText: "无",
           playedText: "-",
@@ -525,6 +557,7 @@ Page({
           ...emptyLiveOverlayState(),
           ...emptyLivePitchState(),
         });
+        if (await restartAfterContext()) return;
         this.liveRefresh?.sync();
         if (nextEventId > 0) {
           await this.loadData({ includeTransfers: true, forceRefresh: true });
@@ -535,6 +568,7 @@ Page({
       if (nextEventId > 0 && nextEventId !== this.data.maxGw) {
         this.setData({ maxGw: nextEventId });
       }
+      if (await restartAfterContext()) return;
     }
     if (
       resumed &&
@@ -646,6 +680,8 @@ Page({
     this.forcedRefreshPending = true;
     this.refreshContextPending = true;
     try {
+      if (!this.hasRouteEntry) await waitForAuthoritativeFollow();
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
         context = await this.ensureContext("pull-refresh", true);
@@ -683,6 +719,7 @@ Page({
         loading: false,
         refreshing: false,
         error: message,
+        errorWorkload: "home",
         ...(this.data.emptyState === "preseason"
           ? { emptyState: "" as const }
           : {}),
@@ -753,7 +790,10 @@ Page({
     }
   },
 
-  restartForPrincipalChange(entryId: number | undefined): boolean {
+  restartForPrincipalChange(
+    entryId: number | undefined,
+    loadData = true,
+  ): boolean {
     // An explicit non-followed route entry is a stable read-only view. The
     // normal personal surface, however, must track the authoritative follow
     // even when a request's 401 recovery changes it mid-flight.
@@ -790,6 +830,7 @@ Page({
       totalText: "—",
       netPoints: 0,
       transferCost: 0,
+      transferCostKnown: false,
       captainText: "-",
       chipText: "无",
       playedText: "-",
@@ -804,8 +845,10 @@ Page({
     });
     if (nextEntryId) {
       void this.loadEntryIdentity(nextEntryId);
-      this.liveRefresh?.sync();
-      void this.loadData({ includeTransfers: true, forceRefresh: true });
+      if (loadData) {
+        this.liveRefresh?.sync();
+        void this.loadData({ includeTransfers: true, forceRefresh: true });
+      }
     }
     this.syncDisplayState();
     return true;
@@ -904,10 +947,11 @@ Page({
         : this.perfTracker;
     this.setData(
       background
-        ? { refreshing: true, error: "" }
+        ? { refreshing: true, error: "", errorWorkload: "gameweek" as const }
         : {
             loading: true,
             error: "",
+            errorWorkload: "gameweek" as const,
             emptyState: "",
             noPicks: false,
           },
@@ -966,10 +1010,23 @@ Page({
             result.score?.totalScope === "OVERALL" &&
             typeof result.score.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
+          const transferCostKnown =
+            typeof result.score?.transferCost === "number" &&
+            Number.isFinite(result.score.transferCost);
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
+          const priorSnapshotNextRefreshAt =
+            this.liveSnapshot?.eventId === eventId
+              ? this.liveSnapshot.nextRefreshAt
+              : undefined;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+          const scoreNextRefreshAt = firstRefreshDeadline(
+            result.score?.nextRefreshAt,
+            result.scoreNextRefreshAt,
+            liveResult.snapshot?.nextRefreshAt,
+            priorSnapshotNextRefreshAt,
+          );
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.setData(
             {
@@ -983,7 +1040,7 @@ Page({
                 result.score?.reconciliation === "SOURCE_SKEW"
                   ? "明细同步中"
                   : "",
-              scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+              scoreNextRefreshAt,
               error: "",
               total,
               livePoints: headlinePoints,
@@ -991,9 +1048,10 @@ Page({
               totalText,
               netPoints,
               netPointsKnown,
-              transferCost: numberValue(
-                result.score?.transferCost ?? result.transferCost,
-              ),
+              transferCost: transferCostKnown
+                ? numberValue(result.score?.transferCost)
+                : 0,
+              transferCostKnown,
               summaryTiles: hasOfficialHeadline
                 ? [
                     { label: "实时积分", value: `${headlinePoints}` },
@@ -1020,7 +1078,11 @@ Page({
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
-          if (hasOfficialHeadline || result.score?.state === "SETTLING") {
+          if (
+            hasOfficialHeadline ||
+            result.score?.state === "SETTLING" ||
+            hasRefreshDeadline(scoreNextRefreshAt)
+          ) {
             this.liveRefresh?.sync();
           } else {
             this.liveRefresh?.stop();
@@ -1053,11 +1115,24 @@ Page({
         const netPoints = netPointsKnown
           ? numberValue(result.score?.netEventPoints)
           : 0;
-        const transferCost = numberValue(
-          result.score?.transferCost ?? result.transferCost,
-        );
+        const transferCostKnown =
+          typeof result.score?.transferCost === "number" &&
+          Number.isFinite(result.score.transferCost);
+        const transferCost = transferCostKnown
+          ? numberValue(result.score?.transferCost)
+          : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
+        const priorSnapshotNextRefreshAt =
+          this.liveSnapshot?.eventId === eventId
+            ? this.liveSnapshot.nextRefreshAt
+            : undefined;
         this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+        const scoreNextRefreshAt = firstRefreshDeadline(
+          result.score?.nextRefreshAt,
+          result.scoreNextRefreshAt,
+          liveResult.snapshot?.nextRefreshAt,
+          priorSnapshotNextRefreshAt,
+        );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         this.setData(
           {
@@ -1069,7 +1144,7 @@ Page({
               result.score?.reconciliation === "SOURCE_SKEW"
                 ? "明细同步中"
                 : "",
-            scoreNextRefreshAt: result.score?.nextRefreshAt || "",
+            scoreNextRefreshAt,
             error: "",
             total,
             livePoints,
@@ -1078,6 +1153,7 @@ Page({
             netPoints,
             netPointsKnown,
             transferCost,
+            transferCostKnown,
             captainText: captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
@@ -1090,7 +1166,11 @@ Page({
               { label: "实时总分", value: totalText },
               {
                 label: "转会扣分",
-                value: transferCost > 0 ? `-${transferCost}` : "0",
+                value: transferCostKnown
+                  ? transferCost > 0
+                    ? `-${transferCost}`
+                    : "0"
+                  : "—",
               },
             ],
             starters,
@@ -1221,8 +1301,15 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
+    const hasManagerRetry = hasRefreshDeadline(
+      firstRefreshDeadline(
+        this.data.scoreNextRefreshAt,
+        this.liveSnapshot?.nextRefreshAt,
+      ),
+    );
     if (
       this.data.noPicks &&
+      !hasManagerRetry &&
       this.data.scoreState !== "SETTLING" &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
@@ -1243,6 +1330,12 @@ Page({
   revalidateCachedSnapshot(): boolean {
     if (
       this.data.noPicks &&
+      !hasRefreshDeadline(
+        firstRefreshDeadline(
+          this.data.scoreNextRefreshAt,
+          this.liveSnapshot?.nextRefreshAt,
+        ),
+      ) &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
       return false;
@@ -1423,6 +1516,7 @@ Page({
         netPoints: this.data.netPoints,
         totalPoints: this.data.totalText,
         transferCost: this.data.transferCost,
+        transferCostKnown: this.data.transferCostKnown,
         chip: this.data.chipText,
         captainName: this.data.captainText,
         starters: this.data.starters || [],

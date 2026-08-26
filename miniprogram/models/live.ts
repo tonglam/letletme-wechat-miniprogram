@@ -37,6 +37,20 @@ export type LiveDataAvailability =
 
 export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
 
+export type LiveManagerScoreSource =
+  | "FPL_EVENT_LIVE"
+  | "FPL_ENTRY_SUMMARY"
+  | "FPL_CLASSIC_STANDINGS"
+  | "FPL_FINAL_RESULT"
+  | "UNAVAILABLE";
+
+export type LiveManagerScoreState =
+  | "FRESH"
+  | "STALE"
+  | "SETTLING"
+  | "FINAL"
+  | "UNAVAILABLE";
+
 export interface LiveSnapshotStatus {
   eventId: number;
   revision: string | null;
@@ -65,6 +79,10 @@ export interface LiveSnapshotResult<T> {
   failedEntryIds?: number[];
   unavailableEntryIds?: number[];
   officialCoverage?: number;
+  /** Traceable rows before any client-side search narrows the returned data. */
+  traceableEntries?: number;
+  /** Traceable score states before any client-side search narrows the rows. */
+  traceableScoreStates?: LiveManagerScoreState[];
   totalEntries?: number;
   partialError?: string;
 }
@@ -78,8 +96,8 @@ export interface LiveManagerScore {
   overallRank?: number | null;
   leagueRank?: number | null;
   transferCost?: number;
-  source?: string;
-  state?: string;
+  source?: LiveManagerScoreSource;
+  state?: LiveManagerScoreState;
   eventPointSemantics?: string;
   revision?: string | null;
   checkedAt?: string | null;
@@ -144,6 +162,8 @@ export interface LiveEntryResult {
   netPointsKnown?: boolean;
   liveTotalPoints?: number;
   transferCost?: number;
+  /** Retry metadata retained even when an untraceable score payload is rejected. */
+  scoreNextRefreshAt?: string;
   captainName?: string;
   chip?: string;
   played?: number;
@@ -214,6 +234,8 @@ export interface LiveTournamentRow {
   picks?: LivePlayerRow[];
   searchText?: string;
   score?: LiveManagerScore;
+  /** Retry metadata retained even when an untraceable score payload is rejected. */
+  scoreNextRefreshAt?: string;
 }
 
 export interface LiveTournamentRowsResult {

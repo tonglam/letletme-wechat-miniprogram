@@ -22,12 +22,14 @@ export const storageKeys = {
   pendingEntryChoice: "pending-entry-choice-v1",
   deviceId: "mini-program-device-id",
   graphqlCooldownUntil: "graphql-cooldown-until",
+  graphqlCooldownWorkloads: "graphql-cooldown-workloads-v1",
   pendingBugReportDraft: "pending-bug-report-draft",
+  diagnosticDisclosure: "auth-diagnostic-disclosure-v1",
   lastPriceChangeBoard: "price-change-board:last-good:v1",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",
   lastTeamId: "stat-team",
-  lastTeamSeason: "stat-team-season"
+  lastTeamSeason: "stat-team-season",
 } as const;
 
 export const storagePrefixes = {

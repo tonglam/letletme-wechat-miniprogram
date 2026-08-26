@@ -34,6 +34,7 @@ test("tournament preseason is a stable business empty state", () => {
     refreshing: false,
     hasData: false,
     error: "",
+    errorWorkload: "home",
     errorSuffix: "",
     tournamentListError: "",
     tournamentListErrorSuffix: "",
@@ -58,6 +59,7 @@ test("entry preseason is a stable business empty state", () => {
     hasData: false,
     noPicks: false,
     error: "",
+    errorWorkload: "home",
     transfersError: "",
     emptyState: "preseason",
     event: 0,
@@ -72,11 +74,61 @@ test("entry preseason is a stable business empty state", () => {
   });
 });
 
+test("entry NO_PICKS keeps polling when an unavailable score retains a retry deadline", () => {
+  const context = {
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      noPicks: true,
+      hasData: false,
+      scoreState: "UNAVAILABLE",
+      scoreNextRefreshAt: new Date(Date.now() + 60_000).toISOString()
+    },
+    pageVisible: true,
+    liveSnapshot: {
+      eventId: 33,
+      revision: "live-retry",
+      state: "SETTLED",
+      publishedAt: null,
+      checkedAt: null
+    }
+  };
+
+  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+});
+
+test("entry NO_PICKS keeps polling when only the snapshot retains a retry deadline", () => {
+  const context = {
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      noPicks: true,
+      hasData: false,
+      scoreState: "UNAVAILABLE",
+      scoreNextRefreshAt: ""
+    },
+    pageVisible: true,
+    liveSnapshot: {
+      eventId: 33,
+      revision: "live-retry",
+      state: "SETTLED",
+      publishedAt: null,
+      checkedAt: null,
+      nextRefreshAt: new Date(Date.now() + 60_000).toISOString()
+    }
+  };
+
+  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+});
+
 test("match offseason is a scheduled empty state, not a request error", () => {
   assert.deepEqual(matchModule.noScheduleState(), {
     loading: false,
     refreshing: false,
     error: "",
+    errorWorkload: "home",
     hasData: false,
     scheduleEmpty: true,
     matches: [],
@@ -505,6 +557,58 @@ test("entry resume drops a historical selection after a season rollover", async 
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "load:1:true:true", "display"]);
 });
 
+test("entry viewer recovery applies the current event before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, gw: 34, season: "2026/27" }
+  });
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      viewOnly: false,
+      hasData: true,
+      total: 77
+    },
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 34 });
+    },
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    loadEntryIdentity() {},
+    setData(update) { Object.assign(this.data, update); },
+    loadData(options) {
+      calls.push(`load:${this.data.entryId}:${this.data.event}:${options.forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await entryPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(calls, [
+    "context:page-show",
+    "stop",
+    "stop",
+    "display",
+    "sync:34",
+    "load:456:34:true",
+    "display"
+  ]);
+});
+
 test("entry resume clears live data when a new season has no event yet", async () => {
   const calls = [];
   globalThis.getApp = () => ({
@@ -653,6 +757,7 @@ test("tournament resume drops a historical selection after a season rollover", a
       calls.push(`tournaments:${this.data.event}:${forceRefresh}`);
       return Promise.resolve();
     },
+    restartForPrincipalChange() { return false; },
     syncDisplayState() { calls.push("display"); }
   };
 
@@ -671,6 +776,58 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);
+});
+
+test("tournament viewer recovery revalidates the event before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, season: "2026/27", gw: 34 }
+  });
+  const calls = [];
+  const context = {
+    ...tournamentPage,
+    data: {
+      ...tournamentPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      hasData: true,
+      selectedTournament: { id: 7, name: "Old league", participantCount: 10 },
+      displayedRows: [{ entry: 1 }]
+    },
+    rows: [{ entry: 1 }],
+    pageVisible: false,
+    hasShown: true,
+    loadedSeason: "2025/26",
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({ season: "2026/27", currentEvent: 34 });
+    },
+    liveRefresh: {
+      stop() { calls.push("stop"); },
+      sync() { calls.push(`sync:${context.data.event}`); }
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadTournaments(forceRefresh) {
+      calls.push(`tournaments:${this.data.entryId}:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    },
+    syncDisplayState() { calls.push("display"); }
+  };
+
+  await tournamentPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(context.rows, []);
+  assert.deepEqual(calls, [
+    "context:page-show",
+    "stop",
+    "stop",
+    "sync:34",
+    "tournaments:456:34:true",
+    "display"
+  ]);
 });
 
 test("tournament rollover to a season without a live event commits preseason", async () => {
@@ -1058,6 +1215,42 @@ test("team resume advances a current selection to the new gameweek", async () =>
   assert.equal(context.data.maxGw, 34);
   assert.equal(context.data.hasTeamData, false);
   assert.deepEqual(calls, ["context:page-show", "load:true"]);
+});
+
+test("team viewer recovery applies the current gameweek before reloading", async () => {
+  globalThis.getApp = () => ({
+    globalData: { entryId: 456, gw: 34, season: "2026-27" }
+  });
+  const calls = [];
+  const context = {
+    ...teamPage,
+    data: {
+      ...teamPage.data,
+      entryId: 123,
+      event: 33,
+      maxGw: 33,
+      hasTeamData: true
+    },
+    hasShown: true,
+    loadedSeason: "2025-26",
+    _loadedAt: Date.now(),
+    ensureContext(reason) {
+      calls.push(`context:${reason}`);
+      return Promise.resolve({});
+    },
+    setData(update) { Object.assign(this.data, update); },
+    loadData(forceRefresh) {
+      calls.push(`load:${this.data.entryId}:${this.data.event}:${forceRefresh}`);
+      return Promise.resolve();
+    }
+  };
+
+  await teamPage.onShow.call(context);
+
+  assert.equal(context.data.entryId, 456);
+  assert.equal(context.data.event, 34);
+  assert.equal(context.data.maxGw, 34);
+  assert.deepEqual(calls, ["context:page-show", "load:456:34:true"]);
 });
 
 test("team first load honors deadline-derived event context freshness", async () => {
