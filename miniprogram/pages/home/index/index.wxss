@@ -219,6 +219,18 @@
   text-align: center;
 }
 
+/* Dream team — compact grouped list, not the web pitch view */
+.dream-group + .dream-group {
+  margin-top: 20rpx;
+}
+
+.dream-points {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
 .transfer-empty,
 .transfer-empty-inline {
   padding: 28rpx 16rpx;

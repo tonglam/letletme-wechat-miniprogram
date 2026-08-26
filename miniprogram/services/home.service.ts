@@ -632,6 +632,7 @@ export async function getMiniHomePricePredictions(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
 ): Promise<MiniHomePricePredictionResult> {
+
   const read = await getPriceChangeBoard(forceRefresh, trace ?? undefined);
   const board = read.board;
   // Web parity: likely-to-change only, split by progress sign, sorted by
@@ -668,6 +669,107 @@ export async function getMiniHomePricePredictions(
       .slice(0, HOME_TEASER_LIMIT)
       .map(mapRow),
     notice,
+  };
+}
+
+const MINI_HOME_DREAM_TEAM_QUERY = `
+  query MiniHomeDreamTeam($eventId: Int!) {
+    homeGameweek(eventId: $eventId) {
+      gameweekDesk {
+        dreamTeam {
+          id
+          webName
+          position
+          teamShortName
+          totalPoints
+        }
+      }
+    }
+  }
+`;
+
+interface MiniHomeDreamTeamResponse {
+  homeGameweek: {
+    gameweekDesk?: {
+      dreamTeam?: Array<{
+        id?: number | null;
+        webName?: string | null;
+        position?: string | null;
+        teamShortName?: string | null;
+        totalPoints?: number | null;
+      }> | null;
+    } | null;
+  } | null;
+}
+
+export interface HomeDreamTeamPlayer {
+  id: number;
+  name: string;
+  team: string;
+  position: string;
+  points: number;
+}
+
+export interface HomeDreamTeamGroup {
+  key: string;
+  label: string;
+  rows: HomeDreamTeamPlayer[];
+}
+
+export interface MiniHomeDreamTeamResult {
+  groups: HomeDreamTeamGroup[];
+}
+
+const DREAM_TEAM_GROUP_ORDER: Array<{ key: string; label: string }> = [
+  { key: "GKP", label: "门将" },
+  { key: "DEF", label: "后卫" },
+  { key: "MID", label: "中场" },
+  { key: "FWD", label: "前锋" },
+];
+
+/** Grouped, position-ordered dream team — the mini program renders a compact list instead of the web pitch. */
+export function groupDreamTeam(
+  players: NonNullable<NonNullable<NonNullable<MiniHomeDreamTeamResponse["homeGameweek"]>["gameweekDesk"]>["dreamTeam"]>,
+): HomeDreamTeamGroup[] {
+  const rows = players
+    .filter((player) => Number.isSafeInteger(Number(player.id)) && Number(player.id) > 0)
+    .map((player) => ({
+      id: Number(player.id),
+      name: String(player.webName || "-"),
+      team: String(player.teamShortName || "-"),
+      position: shortPosition(player.position || ""),
+      points: Number(player.totalPoints) || 0,
+    }));
+  return DREAM_TEAM_GROUP_ORDER
+    .map((group) => ({
+      ...group,
+      rows: rows
+        .filter((row) => row.position === group.key)
+        .sort((left, right) => right.points - left.points),
+    }))
+    .filter((group) => group.rows.length > 0);
+}
+
+export async function getMiniHomeDreamTeam(
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<MiniHomeDreamTeamResult> {
+  const result = await graphqlRead<MiniHomeDreamTeamResponse>(
+    MINI_HOME_DREAM_TEAM_QUERY,
+    { eventId },
+    {
+      authMode: "public",
+      cachePolicy: "market",
+      cacheVariant: `dream-team:event:${eventId}`,
+      forceRefresh,
+      trace,
+    },
+  );
+  const error = rootError(result.errors, "homeGameweek");
+  if (error) throw new Error(error);
+  return {
+    groups: groupDreamTeam(result.data.homeGameweek?.gameweekDesk?.dreamTeam || []),
   };
 }
 

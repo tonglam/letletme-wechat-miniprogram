@@ -13,12 +13,19 @@ const home = readFileSync(
 
 describe("home public read path", () => {
   it("uses one compact public supplement operation", () => {
-    assert.match(service, /query MiniHomeSupplement/);
-    assert.doesNotMatch(service, /\$eventId: Int!/);
-    assert.doesNotMatch(service, /\$changeDate/);
-    assert.match(service, /eventOverallResult\s*\{/);
-    assert.match(service, /miniProgramNotice/);
-    assert.match(service, /eventOverallResult/);
+    // The supplement operation stays variable-free so a single cache entry
+    // serves any event; event-scoped reads (e.g. the dream team) live in
+    // their own operations with their own cache variants.
+    const supplement = service.slice(
+      service.indexOf("MINI_HOME_SUPPLEMENT_QUERY"),
+      service.indexOf("interface MiniHomeSupplementResponse"),
+    );
+    assert.match(supplement, /query MiniHomeSupplement/);
+    assert.doesNotMatch(supplement, /\$eventId: Int!/);
+    assert.doesNotMatch(supplement, /\$changeDate/);
+    assert.match(supplement, /eventOverallResult\s*\{/);
+    assert.match(supplement, /miniProgramNotice/);
+    assert.match(supplement, /eventOverallResult/);
     assert.doesNotMatch(service, /playerValues/);
     assert.match(service, /authMode: "public"/);
     assert.match(service, /cachePolicy: "market"/);
@@ -113,5 +120,23 @@ describe("home public read path", () => {
     assert.match(home, /setInterval\([\s\S]*?loadFixtureGw\(this\.data\.selectedFixtureGw, true, true\)/);
     assert.match(home, /onHide\(\) \{[\s\S]*?stopFixtureLiveRefresh/);
     assert.match(home, /onUnload\(\) \{[\s\S]*?stopFixtureLiveRefresh/);
+  });
+
+  it("loads the dream team for the same event shown in the GW stats card", () => {
+    assert.match(service, /query MiniHomeDreamTeam\(\$eventId: Int!\)/);
+    assert.match(service, /homeGameweek\(eventId: \$eventId\)/);
+    assert.match(service, /dreamTeam \{[\s\S]*?totalPoints/);
+    assert.match(
+      home,
+      /supplement\.summary\?\.event[\s\S]*?loadDreamTeam\(summaryEvent/,
+    );
+    assert.match(home, /onTapDreamPlayer[\s\S]*?goToPlayerDetail/);
+  });
+
+  it("routes tappable GW stat tiles to entry and player pages", () => {
+    assert.match(home, /targetId: Number\(summary\.highestScoringEntry\)/);
+    assert.match(home, /targetId: Number\(summary\.mostCaptainedPlayer\?\.id\)/);
+    assert.match(home, /key === "highestScore"[\s\S]*?goToLiveEntry/);
+    assert.match(home, /onOpenGameweekStats[\s\S]*?routes\.summaryGameweek/);
   });
 });

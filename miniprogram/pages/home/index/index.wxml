@@ -244,6 +244,34 @@
       <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
     </view>
 
+    <view wx:if="{{dreamTeamGroups.length > 0}}" class="section card dream-card">
+      <view class="gw-stats-head">
+        <view class="section-title">本周最佳阵容</view>
+        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点击球员查看详情</view>
+      </view>
+      <view wx:for="{{dreamTeamGroups}}" wx:key="key" wx:for-item="group" class="dream-group">
+        <view class="transfer-col-head">{{group.label}}</view>
+        <view
+          wx:for="{{group.rows}}"
+          wx:key="id"
+          wx:for-item="player"
+          class="transfer-row dream-row"
+          data-id="{{player.id}}"
+          catchtap="onTapDreamPlayer"
+          hover-class="hover-dim"
+        >
+          <view class="transfer-player">
+            <view class="transfer-name-line">
+              <text class="pos-badge {{pos.cls(player.position)}}">{{player.position}}</text>
+              <text class="transfer-name">{{player.name}}</text>
+            </view>
+            <text class="transfer-meta">{{player.team}}</text>
+          </view>
+          <text class="dream-points">{{player.points}} 分</text>
+        </view>
+      </view>
+    </view>
+
     <view id="perf-primary-fixtures" class="section card fixture-card">
       <view class="fixture-head">
         <view class="fixture-head-copy">

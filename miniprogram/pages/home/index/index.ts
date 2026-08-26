@@ -5,6 +5,7 @@ import { getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.servic
 import type { EntryLeague } from "../../../models/entry";
 import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../services/auth.service";
 import {
+  getMiniHomeDreamTeam,
   getMiniHomeMarket,
   getMiniHomePersonalLeagues,
   getMiniHomePricePredictions,
@@ -12,6 +13,7 @@ import {
 } from "../../../services/home.service";
 import type {
   HomeAvailabilityRow,
+  HomeDreamTeamGroup,
   HomeMarketMover,
   MiniHomeMarketMode
 } from "../../../services/home.service";
@@ -54,6 +56,8 @@ interface HomeData {
   fixtureLive: boolean;
   fixtureEmptyPast: boolean;
   gameweekStats: HomeStatRow[];
+  dreamTeamEvent: number;
+  dreamTeamGroups: HomeDreamTeamGroup[];
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
   marketCoverage: string;
@@ -180,6 +184,8 @@ Page({
     fixtureLive: false,
     fixtureEmptyPast: false,
     gameweekStats: [],
+    dreamTeamEvent: 0,
+    dreamTeamGroups: [],
     marketMode: "empty",
     marketTab: "pulse",
     marketCoverage: "最新每日持有率变化",
@@ -234,6 +240,7 @@ Page({
   _refreshRequestId: 0,
   _hasShown: false,
   _lifecycleRevision: 0,
+  _dreamTeamLoadedEvent: 0,
 
   onLoad() {
     this._pageVisible = true;
@@ -815,6 +822,12 @@ Page({
       ...(gwStats ? { gameweekStats: gwStats } : {})
     });
     if (!isActiveSecondary()) return;
+    // Dream team follows the same event as the GW stats card so the two stay
+    // consistent; it is below the fold and must not gate personal data.
+    const summaryEvent = Number(supplement.summary?.event || 0);
+    if (summaryEvent > 0) {
+      void this.loadDreamTeam(summaryEvent, forceRefresh);
+    }
     await personalTask;
     if (!isActiveSecondary()) return;
     this._secondaryPending = false;
@@ -1015,6 +1028,27 @@ Page({
 
   onOpenGameweekStats() {
     navigateTo(routes.summaryGameweek);
+  },
+
+  async loadDreamTeam(event: number, forceRefresh = false) {
+    if (!forceRefresh && this._dreamTeamLoadedEvent === event) return;
+    try {
+      const result = await getMiniHomeDreamTeam(event, forceRefresh);
+      if (!this._pageVisible) return;
+      this._dreamTeamLoadedEvent = event;
+      this.setData({
+        dreamTeamEvent: event,
+        dreamTeamGroups: result.groups,
+      });
+    } catch {
+      // The dream team card is optional below-the-fold content: stay hidden on failure.
+    }
+  },
+
+  onTapDreamPlayer(event: WechatMiniprogram.TouchEvent) {
+    const playerId = Number(event.currentTarget.dataset.id || 0);
+    if (!Number.isSafeInteger(playerId) || playerId <= 0) return;
+    goToPlayerDetail(playerId);
   },
 
   onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {
