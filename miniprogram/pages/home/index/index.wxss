@@ -68,14 +68,14 @@
   font-size: 24rpx;
 }
 
-/* Countdown share — dark-card companion to the light-card .tool-btn */
-.deadline-actions {
+.deadline-side {
   display: flex;
-  justify-content: flex-end;
-  gap: 16rpx;
-  margin-top: 24rpx;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
 }
 
+/* Countdown share — dark-card companion to the light-card .tool-btn */
 .deadline-share {
   display: inline-flex;
   align-items: center;

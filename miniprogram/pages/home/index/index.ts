@@ -20,7 +20,6 @@ import { buildDreamTeamPitchState } from "../../../utils/squad-pitch";
 import type { SquadPitchHeader, SquadPitchPlayer } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import { formatGameweekShareText } from "../../../utils/gameweek-share";
-import { formatDeadlineShareText } from "../../../utils/deadline-share";
 import {
   exportDeadlineShareImage,
   presentDeadlineShareImage,
@@ -71,7 +70,6 @@ interface HomeData {
   dreamHeader: Partial<SquadPitchHeader>;
   dreamShareBusy: boolean;
   dreamShareCopied: boolean;
-  deadlineShareCopied: boolean;
   deadlineShareBusy: boolean;
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
@@ -217,7 +215,6 @@ Page({
     dreamHeader: {},
     dreamShareBusy: false,
     dreamShareCopied: false,
-    deadlineShareCopied: false,
     deadlineShareBusy: false,
     marketMode: "empty",
     marketTab: "pulse",
@@ -277,7 +274,6 @@ Page({
   _dreamTeamLoadedEvent: 0,
   _deadlineRetryAttempts: 0,
   _dreamShareCopiedTimer: undefined as number | undefined,
-  _deadlineShareCopiedTimer: undefined as number | undefined,
 
   onLoad() {
     this._pageVisible = true;
@@ -409,7 +405,6 @@ Page({
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
     this.clearDreamShareCopiedTimer();
-    this.clearDeadlineShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -429,7 +424,6 @@ Page({
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
     this.clearDreamShareCopiedTimer();
-    this.clearDeadlineShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -1157,37 +1151,6 @@ Page({
       wx.showToast({ title: "图片生成失败", icon: "none" });
     } finally {
       this.setData({ deadlineShareBusy: false });
-    }
-  },
-
-  onCopyDeadlineShare() {
-    if (!this.data.utcDeadline) return;
-    const text = formatDeadlineShareText({
-      event: this.data.nextGw,
-      deadlineText: this.data.deadline,
-      countdown: this.data.countdown,
-      passed: this.data.deadlinePassed,
-    });
-    void copyShareText(text).then((ok) => {
-      if (!ok) {
-        wx.showToast({ title: "复制失败", icon: "none" });
-        return;
-      }
-      this.setData({ deadlineShareCopied: true });
-      if (this._deadlineShareCopiedTimer !== undefined) {
-        clearTimeout(this._deadlineShareCopiedTimer);
-      }
-      this._deadlineShareCopiedTimer = setTimeout(() => {
-        this._deadlineShareCopiedTimer = undefined;
-        this.setData({ deadlineShareCopied: false });
-      }, 2000) as unknown as number;
-    });
-  },
-
-  clearDeadlineShareCopiedTimer() {
-    if (this._deadlineShareCopiedTimer !== undefined) {
-      clearTimeout(this._deadlineShareCopiedTimer);
-      this._deadlineShareCopiedTimer = undefined;
     }
   },
 
