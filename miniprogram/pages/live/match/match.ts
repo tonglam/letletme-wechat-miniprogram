@@ -41,6 +41,7 @@ import {
   type LiveMatchShareCanvas,
   type LiveMatchShareCanvasTarget,
 } from "../../../utils/live-match-share-image";
+import { windowPixelRatio } from "../../../utils/system-info";
 import { miniLogger } from "../../../utils/logger";
 import {
   buildPlayerLiveDetail,
@@ -181,9 +182,7 @@ function queryLiveMatchShareCanvas(
         resolve({
           canvas: canvas as unknown as LiveMatchShareCanvas,
           ctx: ctx as unknown as LiveMatchShareCanvasTarget["ctx"],
-          pixelRatio: liveMatchSharePixelRatio(
-            Number(wx.getSystemInfoSync().pixelRatio),
-          ),
+          pixelRatio: liveMatchSharePixelRatio(windowPixelRatio()),
           toTempFilePath: (node) =>
             new Promise((pathResolve, pathReject) => {
               wx.canvasToTempFilePath(

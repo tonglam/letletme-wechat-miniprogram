@@ -6,6 +6,8 @@
  * here — missing names/positions drop the pick, missing kits use a placeholder.
  */
 
+import { devicePlatform } from "./system-info";
+
 export type SquadPosition = "GKP" | "DEF" | "MID" | "FWD";
 
 export type SquadTeamCode =
@@ -151,7 +153,7 @@ export const SQUAD_PITCH_CDN_BASE = "https://letletme.top/images/squad-pitch";
 
 function squadPitchAssetBase(): string {
   try {
-    if (wx.getSystemInfoSync().platform === "devtools") return "/assets/squad-pitch";
+    if (devicePlatform() === "devtools") return "/assets/squad-pitch";
   } catch {
     // Node tests and missing wx resolve to the published CDN path.
   }

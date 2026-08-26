@@ -8,6 +8,7 @@
  */
 import type { CountdownParts } from "./date";
 import { presentImage } from "./album-presenter";
+import { windowPixelRatio } from "./system-info";
 import {
   SHARE_BRAND_VERSION,
   drawShareBranding,
@@ -241,9 +242,7 @@ export function exportDeadlineShareImage(
     if (typeof createOffscreen !== "function") {
       throw new Error("share canvas unavailable");
     }
-    const pixelRatio = deadlineSharePixelRatio(
-      Number(wx.getSystemInfoSync().pixelRatio),
-    );
+    const pixelRatio = deadlineSharePixelRatio(windowPixelRatio());
     const canvas = createOffscreen({
       type: "2d",
       width: Math.round(plan.width * pixelRatio),

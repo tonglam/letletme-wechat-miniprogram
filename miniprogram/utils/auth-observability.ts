@@ -140,7 +140,11 @@ export function collectMiniProgramLoginContext(
     device = api.getDeviceInfo?.() ?? {};
   } catch {}
   try {
-    systemInfo = api.getSystemInfoSync?.() ?? {};
+    // getSystemInfoSync is deprecated; only fall back when getDeviceInfo did
+    // not provide the fields the context below reads from it.
+    if (device.platform == null || device.system == null) {
+      systemInfo = api.getSystemInfoSync?.() ?? {};
+    }
   } catch {}
   try {
     appBase = api.getAppBaseInfo?.() ?? {};

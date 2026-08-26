@@ -16,6 +16,7 @@ import {
   shareExportPixelRatio,
   shareUsesPortraitLayout
 } from "../../utils/squad-pitch-canvas";
+import { windowPixelRatio } from "../../utils/system-info";
 
 interface SquadPitchData {
   pitchBg: string;
@@ -186,7 +187,7 @@ function exportViaOffscreenCanvas(input: {
     createOffscreenCanvas?: (options: { type: string; width: number; height: number }) => WechatMiniprogram.OffscreenCanvas;
   }).createOffscreenCanvas;
   if (typeof createOffscreen !== "function") return null;
-  const pixelRatio = shareExportPixelRatio(Number(wx.getSystemInfoSync().pixelRatio));
+  const pixelRatio = shareExportPixelRatio(windowPixelRatio());
   const size = shareCanvasSize(shareUsesPortraitLayout(
     input.players,
     input.benchPlayers,
@@ -246,7 +247,7 @@ function queryShareCanvas(component: WechatMiniprogram.Component.TrivialInstance
         resolve({
           canvas,
           ctx: ctx as unknown as WechatMiniprogram.CanvasContext,
-          pixelRatio: shareExportPixelRatio(Number(wx.getSystemInfoSync().pixelRatio))
+          pixelRatio: shareExportPixelRatio(windowPixelRatio())
         });
       });
   });
