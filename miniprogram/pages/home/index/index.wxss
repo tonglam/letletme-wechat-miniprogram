@@ -391,6 +391,19 @@
   box-sizing: border-box;
 }
 
+.gw-stat-tappable {
+  position: relative;
+}
+
+.gw-stat-tappable::after {
+  content: "›";
+  position: absolute;
+  top: 14rpx;
+  right: 20rpx;
+  color: var(--chalk-a60);
+  font-size: 26rpx;
+}
+
 /* Odd counts: last tile spans the full row so the band stays balanced */
 .gw-stat-item:last-of-type:nth-child(odd) {
   grid-column: 1 / -1;

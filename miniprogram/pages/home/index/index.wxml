@@ -228,11 +228,20 @@
       <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
       <view class="gw-stats-grid">
-        <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
+        <view
+          wx:for="{{gameweekStats}}"
+          wx:key="key"
+          class="gw-stat-item {{item.targetId ? 'gw-stat-tappable' : ''}}"
+          data-key="{{item.key}}"
+          data-target="{{item.targetId}}"
+          catchtap="onTapGameweekStat"
+          hover-class="{{item.targetId ? 'hover-dim' : ''}}"
+        >
           <text class="gw-stat-label">{{item.label}}</text>
           <text class="gw-stat-value">{{item.value}}</text>
         </view>
       </view>
+      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
     </view>
 
     <view id="perf-primary-fixtures" class="section card fixture-card">

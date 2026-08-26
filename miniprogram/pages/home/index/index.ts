@@ -19,7 +19,7 @@ import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
-import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
+import { goToEntrySearch, goToLiveEntry, goToPlayerDetail, navigateTo } from "../../../utils/navigation";
 import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
@@ -104,6 +104,8 @@ interface HomeStatRow {
   key: string;
   label: string;
   value: string;
+  /** Entry id for the highest-score tile, player id for player tiles; 0 = not tappable. */
+  targetId: number;
 }
 
 /** Home warm-show skip window. Live index and leagues use the same 60s; team uses 5 min. */
@@ -998,6 +1000,23 @@ Page({
     navigateTo(routes.liveMatch);
   },
 
+  onTapGameweekStat(event: WechatMiniprogram.TouchEvent) {
+    const key = String(event.currentTarget.dataset.key || "");
+    const targetId = Number(event.currentTarget.dataset.target || 0);
+    if (!Number.isSafeInteger(targetId) || targetId <= 0) return;
+    // Web parity: highest score opens that entry's live points, player tiles
+    // open the player detail. The mini program "code" is the element id.
+    if (key === "highestScore") {
+      goToLiveEntry(targetId);
+      return;
+    }
+    goToPlayerDetail(targetId);
+  },
+
+  onOpenGameweekStats() {
+    navigateTo(routes.summaryGameweek);
+  },
+
   onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {
     const dateKey = String(event.currentTarget.dataset.key || "");
     const day = this.data.fixtureDays.find((item) => item.dateKey === dateKey);
@@ -1221,22 +1240,32 @@ export function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStat
     {
       key: "highestScore",
       label: "最高分",
-      value: formatOptionalNumber(summary.highestScore)
+      value: formatOptionalNumber(summary.highestScore),
+      targetId: Number(summary.highestScoringEntry) > 0
+        ? Number(summary.highestScoringEntry)
+        : 0
     },
     {
       key: "topScorer",
       label: "最高分球员",
-      value: formatTopScorer(summary)
+      value: formatTopScorer(summary),
+      targetId: Number(summary.topElementInfo?.player?.id) > 0
+        ? Number(summary.topElementInfo?.player?.id)
+        : 0
     },
     {
       key: "viceCaptain",
       label: "最多选择队长",
-      value: summary.mostCaptainedPlayer?.webName || "-"
+      value: summary.mostCaptainedPlayer?.webName || "-",
+      targetId: Number(summary.mostCaptainedPlayer?.id) > 0
+        ? Number(summary.mostCaptainedPlayer?.id)
+        : 0
     },
     {
       key: "chip",
       label: "开的最多的卡",
-      value: topChip ? `${formatChipName(topChip.chipName)} ${formatCompactNumber(topChip.numberPlayed)}` : "-"
+      value: topChip ? `${formatChipName(topChip.chipName)} ${formatCompactNumber(topChip.numberPlayed)}` : "-",
+      targetId: 0
     }
   ];
 
