@@ -327,7 +327,7 @@ function pulsePlayerMeta(player: MarketPulsePlayer): string {
 
 function signedPercentagePoints(value: number): string {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${Math.abs(value).toFixed(1)} 个百分点`;
+  return `${sign}${Math.abs(value).toFixed(1)}%`;
 }
 
 function signedCompact(value: number): string {

@@ -579,7 +579,7 @@ export async function getMiniHomeMarket(
         team: mover.player.teamShortName || "-",
         position: shortPosition(mover.player.position),
         meta: `${Number(mover.fromSelectedByPercent || 0).toFixed(1)}% → ${Number(mover.toSelectedByPercent || 0).toFixed(1)}%`,
-        changeText: `${change > 0 ? "+" : ""}${change.toFixed(1)} 个百分点`,
+        changeText: `${change > 0 ? "+" : ""}${change.toFixed(1)}%`,
         rising: !falling,
       };
     };
