@@ -56,6 +56,7 @@ export interface EntryLeague {
   type?: "CLASSIC" | "H2H" | string;
   shortName?: string | null;
   tournamentId?: number;
+  visibility?: "PRIVATE" | "PUBLIC" | string | null;
   movement?: EntryLeagueMovement | null;
   h2hMatchup?: HomeH2HMatchup | null;
 }

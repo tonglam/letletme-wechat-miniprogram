@@ -23,6 +23,7 @@ export const MINI_HOME_PERSONAL_LEAGUES_QUERY = `
         key
         name
         leagueType
+        visibility
         rank
         movement {
           direction
@@ -66,6 +67,7 @@ interface MiniHomePersonalLeaguesResponse {
       key: string;
       name: string;
       leagueType: "CLASSIC" | "H2H";
+      visibility?: "PRIVATE" | "PUBLIC" | null;
       rank?: number | null;
       movement?: { direction?: string; places?: number | null } | null;
       tournamentId?: number | null;
@@ -211,6 +213,7 @@ export async function getMiniHomePersonalLeagues(
       rank: league.rank ?? undefined,
       officialKind: "INVITATIONAL",
       type: league.leagueType,
+      visibility: league.visibility ?? null,
       tournamentId: league.tournamentId ?? undefined,
       movement: league.movement ?? null,
       h2hMatchup: league.h2hMatchup ?? null,

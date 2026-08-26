@@ -35,6 +35,7 @@ interface LeagueRow {
   shortName?: string | null;
   type?: string | null;
   tournamentId?: number;
+  visibility?: string | null;
   movement?: { direction?: string; places?: number | null } | null;
   h2hMatchup?: HomeH2HMatchup | null;
 }
@@ -43,6 +44,8 @@ interface LeagueDisplayRow extends LeagueRow {
   rankText: string;
   movementText: string;
   movementClass: string;
+  visibilityText: string;
+  visibilityClass: string;
   h2h: HomeH2HDisplay | null;
 }
 
@@ -93,6 +96,20 @@ function formatMovement(
   return { movementText: "", movementClass: "" };
 }
 
+/** Web LeagueVisibilityBadge parity: classic rows lead with a 公开/私人 pill. */
+function formatVisibility(
+  visibility?: string | null
+): { visibilityText: string; visibilityClass: string } {
+  const value = String(visibility || "").toUpperCase();
+  if (value === "PUBLIC") {
+    return { visibilityText: "公开", visibilityClass: "visibility-public" };
+  }
+  if (value === "PRIVATE") {
+    return { visibilityText: "私人", visibilityClass: "visibility-private" };
+  }
+  return { visibilityText: "", visibilityClass: "" };
+}
+
 function buildPanel(
   key: "classic" | "h2h",
   title: string,
@@ -109,6 +126,7 @@ function buildPanel(
       ...league,
       rankText: typeof rank === "number" ? `#${rank}` : "",
       ...formatMovement(league.movement),
+      ...formatVisibility(league.visibility),
       h2h: key === "h2h" && league.h2hMatchup
         ? formatHomeH2HMatchup(league.h2hMatchup)
         : null

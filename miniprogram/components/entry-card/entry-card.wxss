@@ -185,6 +185,33 @@
   white-space: nowrap;
 }
 
+.entry-league-main {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-league-badge {
+  flex-shrink: 0;
+  padding: 3rpx 10rpx;
+  border-radius: 8rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.entry-league-badge.visibility-public {
+  background: var(--accent-tint);
+  color: var(--green-ink);
+}
+
+.entry-league-badge.visibility-private {
+  background: var(--track);
+  color: var(--muted-ink);
+}
+
 .entry-league-side {
   display: flex;
   flex-shrink: 0;

@@ -176,4 +176,19 @@ describe("home public read path", () => {
     assert.match(image, /export function exportDeadlineShareImage/);
     assert.match(image, /drawShareBranding/);
   });
+
+  it("badges classic league rows with the web visibility labels", () => {
+    assert.match(service, /leagueRanks \{[\s\S]*?visibility[\s\S]*?movement/);
+    assert.match(service, /visibility: league\.visibility \?\? null/);
+    const card = readFileSync(
+      new URL("../miniprogram/components/entry-card/entry-card.ts", import.meta.url),
+      "utf8",
+    );
+    const cardWxml = readFileSync(
+      new URL("../miniprogram/components/entry-card/entry-card.wxml", import.meta.url),
+      "utf8",
+    );
+    assert.match(card, /visibilityText: "公开"[\s\S]*?visibilityText: "私人"/);
+    assert.match(cardWxml, /entry-league-badge \{\{item\.visibilityClass\}\}/);
+  });
 });

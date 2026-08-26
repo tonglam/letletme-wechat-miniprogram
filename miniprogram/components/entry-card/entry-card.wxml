@@ -25,7 +25,10 @@
           <text class="action" catchtap="onOpenAllLeagues">全部</text>
         </view>
         <view wx:for="{{classicPanel.items}}" wx:key="id" class="entry-league-row">
-          <text class="entry-league-name">{{item.name}}</text>
+          <view class="entry-league-main">
+            <text wx:if="{{item.visibilityText}}" class="entry-league-badge {{item.visibilityClass}}">{{item.visibilityText}}</text>
+            <text class="entry-league-name">{{item.name}}</text>
+          </view>
           <view class="entry-league-side">
             <text wx:if="{{item.movementText}}" class="entry-league-movement {{item.movementClass}}">{{item.movementText}}</text>
             <text wx:if="{{item.viewerRank || item.rank}}" class="entry-league-rank">{{item.viewerRank || item.rank}}</text>
