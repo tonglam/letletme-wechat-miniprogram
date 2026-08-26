@@ -1,6 +1,14 @@
 import { graphqlRead } from "./graphql.service";
 import type { GraphQLErrorInfo, PageRequestTrace } from "./graphql.service";
+import { getPriceChangeBoard } from "./price-change.service";
 import { currentMyFplEntryId } from "../utils/follow";
+import { formatPrice } from "../utils/fpl";
+import {
+  formatPredictionPercent,
+  isLikelyToChange,
+  priceChangeStatusLabel,
+} from "../utils/price-change";
+import type { PriceChangePlayer } from "../models/price-change";
 import type { GameweekOverallSummary } from "../models/summary";
 import type { EntryLeague, HomeH2HMatchup } from "../models/entry";
 
@@ -216,6 +224,14 @@ const MINI_HOME_MARKET_QUERY = `
           previousStatus
           news
         }
+        priceChanges {
+          changeDate
+          oldPrice
+          newPrice
+          change
+          direction
+          player { playerId webName teamShortName position }
+        }
     }
     marketOwnershipDay(limit: 5) {
       period
@@ -256,6 +272,15 @@ interface MarketPlayer {
   selectedByPercent?: number;
 }
 
+interface MarketPriceChange {
+  changeDate?: string | null;
+  oldPrice?: number | null;
+  newPrice?: number | null;
+  change?: number | null;
+  direction?: string | null;
+  player: MarketPlayer;
+}
+
 interface MiniHomeMarketResponse {
   marketPulse: {
     availabilityUpdates?: Array<{
@@ -264,6 +289,7 @@ interface MiniHomeMarketResponse {
       previousStatus?: string | null;
       news?: string | null;
     }>;
+    priceChanges?: MarketPriceChange[];
   } | null;
   marketOwnershipDay: {
     period: "DAILY";
@@ -331,7 +357,16 @@ export interface MiniHomeMarketResult {
   risers: HomeMarketMover[];
   fallers: HomeMarketMover[];
   availability: HomeAvailabilityRow[];
+  priceChangeDate: string;
+  priceRisers: HomeMarketMover[];
+  priceFallers: HomeMarketMover[];
   error: string;
+}
+
+export interface MiniHomePricePredictionResult {
+  rises: HomeMarketMover[];
+  falls: HomeMarketMover[];
+  notice: string;
 }
 
 const AVAILABILITY_STATUS: Record<string, string> = {
@@ -443,6 +478,52 @@ function mapAvailability(
     });
 }
 
+function formatTenthsOrDash(value?: number | null): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? formatPrice(value)
+    : "—";
+}
+
+function mapPriceChanges(
+  changes: MarketPriceChange[] | undefined,
+): Pick<MiniHomeMarketResult, "priceChangeDate" | "priceRisers" | "priceFallers"> {
+  // Web parity: ignore zero-change rows, split by direction, sort by the
+  // absolute change size, then cap at the teaser limit.
+  const moved = (changes || []).filter(
+    (item) => Number(item.change) !== 0 && item.player,
+  );
+  const rawDate = String(changes?.[0]?.changeDate || "");
+  const mapRow = (item: MarketPriceChange): HomeMarketMover => {
+    const change = Number(item.change) || 0;
+    return {
+      id: String(item.player.playerId),
+      name: item.player.webName || "-",
+      team: item.player.teamShortName || "-",
+      position: shortPosition(item.player.position),
+      meta: `${formatTenthsOrDash(item.oldPrice)} → ${formatTenthsOrDash(item.newPrice)}`,
+      changeText: `${change > 0 ? "+" : "-"}${formatTenthsOrDash(Math.abs(change))}`,
+      rising: item.direction === "RISE",
+    };
+  };
+  const byChangeSize = (
+    left: MarketPriceChange,
+    right: MarketPriceChange,
+  ) => Math.abs(Number(right.change) || 0) - Math.abs(Number(left.change) || 0);
+  return {
+    priceChangeDate: rawDate.length >= 10 ? rawDate.slice(5, 10) : rawDate,
+    priceRisers: moved
+      .filter((item) => item.direction === "RISE")
+      .sort(byChangeSize)
+      .slice(0, HOME_TEASER_LIMIT)
+      .map(mapRow),
+    priceFallers: moved
+      .filter((item) => item.direction === "FALL")
+      .sort(byChangeSize)
+      .slice(0, HOME_TEASER_LIMIT)
+      .map(mapRow),
+  };
+}
+
 export async function getMiniHomeMarket(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
@@ -460,6 +541,7 @@ export async function getMiniHomeMarket(
   const pulse = result.data.marketPulse;
   const ownership = result.data.marketOwnershipDay;
   const availability = mapAvailability(pulse?.availabilityUpdates || []);
+  const priceDesk = mapPriceChanges(pulse?.priceChanges);
   const coverage = marketCoverageCopy(ownership);
   const error = [
     rootError(result.errors, "marketPulse"),
@@ -512,6 +594,7 @@ export async function getMiniHomeMarket(
         .slice(0, HOME_TEASER_LIMIT)
         .map((row) => mapMover(row, true)),
       availability,
+      ...priceDesk,
       error,
     };
   }
@@ -527,6 +610,7 @@ export async function getMiniHomeMarket(
       risers: [],
       fallers: [],
       availability,
+      ...priceDesk,
       error,
     };
   }
@@ -539,7 +623,51 @@ export async function getMiniHomeMarket(
     risers: [],
     fallers: [],
     availability,
+    ...priceDesk,
     error,
+  };
+}
+
+export async function getMiniHomePricePredictions(
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<MiniHomePricePredictionResult> {
+  const read = await getPriceChangeBoard(forceRefresh, trace ?? undefined);
+  const board = read.board;
+  // Web parity: likely-to-change only, split by progress sign, sorted by
+  // absolute progress, capped at the teaser limit.
+  const likely = (board.players || []).filter(
+    (player) =>
+      isLikelyToChange(player) && Number.isFinite(player.progressPercent),
+  );
+  const byProgress = (left: PriceChangePlayer, right: PriceChangePlayer) =>
+    Math.abs(right.progressPercent) - Math.abs(left.progressPercent);
+  const mapRow = (player: PriceChangePlayer): HomeMarketMover => ({
+    id: String(player.playerId),
+    name: player.webName || "-",
+    team: player.teamShortName || "-",
+    position: shortPosition(player.position),
+    meta: `${formatTenthsOrDash(player.currentPrice)} · ${priceChangeStatusLabel(player.status)}`,
+    changeText: formatPredictionPercent(player.progressPercent),
+    rising: player.progressPercent > 0,
+  });
+  const notice = board.status === "PARTIAL"
+    ? "预测数据不完整，仅供参考"
+    : board.status === "STALE" || read.cacheStale || read.usedLastGood
+      ? "显示为最近一次成功的预测数据"
+      : "";
+  return {
+    rises: likely
+      .filter((player) => player.progressPercent > 0)
+      .sort(byProgress)
+      .slice(0, HOME_TEASER_LIMIT)
+      .map(mapRow),
+    falls: likely
+      .filter((player) => player.progressPercent < 0)
+      .sort(byProgress)
+      .slice(0, HOME_TEASER_LIMIT)
+      .map(mapRow),
+    notice,
   };
 }
 

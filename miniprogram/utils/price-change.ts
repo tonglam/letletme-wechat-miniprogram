@@ -81,11 +81,15 @@ export interface PriceChangeViewRow {
   sellingPriceText: string;
 }
 
-function isLikelyToChange(player: PriceChangePlayer): boolean {
+export function isLikelyToChange(player: PriceChangePlayer): boolean {
   return player.status === "VERY_LIKELY_RISE"
     || player.status === "LIKELY_RISE"
     || player.status === "LIKELY_FALL"
     || player.status === "VERY_LIKELY_FALL";
+}
+
+export function priceChangeStatusLabel(status: PriceChangePredictionStatus): string {
+  return STATUS_LABELS[status];
 }
 
 /** Web parity: likely squad, other likely, remaining squad, then the pool. */

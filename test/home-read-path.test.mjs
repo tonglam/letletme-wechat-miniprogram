@@ -77,4 +77,27 @@ describe("home public read path", () => {
     assert.match(home, /contextMissing \|\| deadlineExpired/);
     assert.doesNotMatch(home, /refreshEventAndDeadline/);
   });
+
+  it("rides recorded price changes on the existing market pulse query", () => {
+    assert.match(service, /marketPulse\(days: \$days\) \{[\s\S]*?priceChanges \{[\s\S]*?changeDate[\s\S]*?oldPrice[\s\S]*?newPrice[\s\S]*?direction/);
+    assert.match(service, /mapPriceChanges/);
+    assert.match(service, /priceRisers/);
+    assert.match(service, /priceFallers/);
+  });
+
+  it("loads the prediction board lazily from the price tab only", () => {
+    assert.match(home, /onSelectMarketTab[\s\S]*?tab === "price"[\s\S]*?loadPricePredictions/);
+    assert.match(home, /getMiniHomePricePredictions/);
+    assert.match(
+      service,
+      /getPriceChangeBoard[\s\S]*?isLikelyToChange[\s\S]*?progressPercent > 0[\s\S]*?progressPercent < 0/,
+    );
+  });
+
+  it("keeps recorded price rows under the market failure retention rule", () => {
+    assert.match(
+      home,
+      /hasPreviousMarket[\s\S]*?priceRisers\.length > 0[\s\S]*?priceFallers\.length > 0/,
+    );
+  });
 });

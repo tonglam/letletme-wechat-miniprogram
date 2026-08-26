@@ -197,6 +197,28 @@
   margin-bottom: 6rpx;
 }
 
+.market-tabs {
+  margin-bottom: 20rpx;
+}
+
+.transfer-subhead {
+  margin: 8rpx 0 12rpx;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.transfer-note {
+  margin: -4rpx 0 12rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.transfer-more {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
 .transfer-empty,
 .transfer-empty-inline {
   padding: 28rpx 16rpx;

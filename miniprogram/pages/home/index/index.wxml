@@ -73,7 +73,13 @@
         </view>
         <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
       </view>
+      <view class="tab-strip market-tabs">
+        <view class="tab-item {{marketTab === 'pulse' ? 'tab-active' : ''}}" data-tab="pulse" catchtap="onSelectMarketTab" hover-class="hover-dim">转会动态</view>
+        <view class="tab-item {{marketTab === 'price' ? 'tab-active' : ''}}" data-tab="price" catchtap="onSelectMarketTab" hover-class="hover-dim">身价变动</view>
+      </view>
       <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+
+      <block wx:if="{{marketTab === 'pulse'}}">
       <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0 && !marketUnavailable}}" class="section-status">转会台加载中</view>
       <block wx:else>
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
@@ -136,6 +142,82 @@
             <view class="watch-body">{{item.body}}</view>
           </view>
         </view>
+      </block>
+      </block>
+
+      <block wx:else>
+        <view class="transfer-subhead">今日涨跌{{priceChangeDate ? ' · ' + priceChangeDate : ''}}</view>
+        <view wx:if="{{priceRisers.length === 0 && priceFallers.length === 0}}" class="transfer-empty-inline">今日暂无身价变动</view>
+        <view wx:else class="transfer-split">
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-up">上涨</view>
+            <view wx:if="{{priceRisers.length === 0}}" class="transfer-empty-inline">暂无上涨</view>
+            <view wx:for="{{priceRisers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-up">{{item.changeText}}</text>
+            </view>
+          </view>
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-down">下跌</view>
+            <view wx:if="{{priceFallers.length === 0}}" class="transfer-empty-inline">暂无下跌</view>
+            <view wx:for="{{priceFallers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-down">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="transfer-subhead">预测涨跌</view>
+        <view wx:if="{{predictionNotice}}" class="transfer-note">{{predictionNotice}}</view>
+        <view wx:if="{{predictionLoading}}" class="section-status">身价预测加载中</view>
+        <view wx:elif="{{predictionError}}" class="transfer-empty">
+          {{predictionError}}
+          <text class="action transfer-empty-retry" bindtap="onRetryPredictions" hover-class="hover-dim">重试</text>
+        </view>
+        <view wx:elif="{{predictionLoaded && predictedRisers.length === 0 && predictedFallers.length === 0}}" class="transfer-empty-inline">暂无明确涨跌信号</view>
+        <view wx:else class="transfer-split">
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-up">预计上涨</view>
+            <view wx:if="{{predictedRisers.length === 0}}" class="transfer-empty-inline">暂无上涨信号</view>
+            <view wx:for="{{predictedRisers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-up">{{item.changeText}}</text>
+            </view>
+          </view>
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-down">预计下跌</view>
+            <view wx:if="{{predictedFallers.length === 0}}" class="transfer-empty-inline">暂无下跌信号</view>
+            <view wx:for="{{predictedFallers}}" wx:key="id" class="transfer-row">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-down">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="action section-link transfer-more" catchtap="onOpenPricePredictions" hover-class="hover-dim">查看完整身价预测</view>
       </block>
     </view>
 

@@ -7,6 +7,7 @@ import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../service
 import {
   getMiniHomeMarket,
   getMiniHomePersonalLeagues,
+  getMiniHomePricePredictions,
   getMiniHomeSupplement
 } from "../../../services/home.service";
 import type {
@@ -52,12 +53,22 @@ interface HomeData {
   fixtureCount: number;
   gameweekStats: HomeStatRow[];
   marketMode: MiniHomeMarketMode;
+  marketTab: "pulse" | "price";
   marketCoverage: string;
   marketLeadTitle: string;
   marketLeadRows: HomeMarketMover[];
   marketRisers: HomeMarketMover[];
   marketFallers: HomeMarketMover[];
   availabilityRows: HomeAvailabilityRow[];
+  priceChangeDate: string;
+  priceRisers: HomeMarketMover[];
+  priceFallers: HomeMarketMover[];
+  predictedRisers: HomeMarketMover[];
+  predictedFallers: HomeMarketMover[];
+  predictionNotice: string;
+  predictionLoading: boolean;
+  predictionError: string;
+  predictionLoaded: boolean;
   gw: number;
   currentGw: number;
   nextGw: number;
@@ -159,12 +170,22 @@ Page({
     fixtureCount: 0,
     gameweekStats: [],
     marketMode: "empty",
+    marketTab: "pulse",
     marketCoverage: "最新每日持有率变化",
     marketLeadTitle: "最新每日持有率变化",
     marketLeadRows: [],
     marketRisers: [],
     marketFallers: [],
     availabilityRows: [],
+    priceChangeDate: "",
+    priceRisers: [],
+    priceFallers: [],
+    predictedRisers: [],
+    predictedFallers: [],
+    predictionNotice: "",
+    predictionLoading: false,
+    predictionError: "",
+    predictionLoaded: false,
     gw: 0,
     currentGw: 0,
     nextGw: 0,
@@ -185,6 +206,7 @@ Page({
   _lastLoadAt: 0,
   _loadRequestId: 0,
   _fixtureGwRequestId: 0,
+  _priceRequestId: 0,
   _loadedContextRevision: 0,
   _perfTracker: undefined as PagePerformanceTracker | undefined,
   _pageVisible: false,
@@ -324,6 +346,7 @@ Page({
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
     this._fixtureGwRequestId += 1;
+    this._priceRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
     this.clearNoticeTimer();
@@ -340,6 +363,7 @@ Page({
     this._lifecycleRevision += 1;
     this._loadRequestId += 1;
     this._fixtureGwRequestId += 1;
+    this._priceRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
     this.clearNoticeTimer();
@@ -434,6 +458,11 @@ Page({
       // the fixture response. Personal desk is above the fold; public desks are
       // independent and must not gate each other.
       void this.loadSecondaryData(requestId, currentGw, forceRefresh, trace, tracker);
+      // The prediction board is loaded lazily on tab activation; once loaded it
+      // follows the same refresh cadence as the rest of the page.
+      if (this.data.predictionLoaded) {
+        void this.loadPricePredictions(forceRefresh);
+      }
       const fixtureResult = await fixtureTask;
       if (!this._pageVisible || requestId !== this._loadRequestId) return;
       const fixtureResponseAt = Date.now();
@@ -707,7 +736,9 @@ Page({
       this.data.marketLeadRows.length > 0 ||
       this.data.marketRisers.length > 0 ||
       this.data.marketFallers.length > 0 ||
-      this.data.availabilityRows.length > 0;
+      this.data.availabilityRows.length > 0 ||
+      this.data.priceRisers.length > 0 ||
+      this.data.priceFallers.length > 0;
     const marketPatch = market
       ? {
           priceError: "",
@@ -719,6 +750,9 @@ Page({
           marketRisers: market.risers,
           marketFallers: market.fallers,
           availabilityRows: market.availability,
+          priceChangeDate: market.priceChangeDate,
+          priceRisers: market.priceRisers,
+          priceFallers: market.priceFallers,
         }
       : hasPreviousMarket
         ? {
@@ -737,6 +771,9 @@ Page({
             marketRisers: [],
             marketFallers: [],
             availabilityRows: [],
+            priceChangeDate: "",
+            priceRisers: [],
+            priceFallers: [],
           };
     const nextNotice = this.data.noticeClosed || supplement.errors.notice
       ? this.data.noticeText
@@ -894,6 +931,52 @@ Page({
 
   onOpenPriceChanges() {
     navigateTo(routes.dataPrice);
+  },
+
+  onSelectMarketTab(event: WechatMiniprogram.TouchEvent) {
+    const tab = String(event.currentTarget.dataset.tab || "");
+    if ((tab !== "pulse" && tab !== "price") || tab === this.data.marketTab) return;
+    this.setData({ marketTab: tab });
+    if (tab === "price" && !this.data.predictionLoaded && !this.data.predictionLoading) {
+      void this.loadPricePredictions();
+    }
+  },
+
+  async loadPricePredictions(forceRefresh = false) {
+    const requestId = ++this._priceRequestId;
+    const hadRows =
+      this.data.predictedRisers.length > 0 || this.data.predictedFallers.length > 0;
+    this.setData({
+      predictionLoading: !hadRows,
+      predictionError: "",
+    });
+    try {
+      const result = await getMiniHomePricePredictions(forceRefresh);
+      if (!this._pageVisible || requestId !== this._priceRequestId) return;
+      this.setData({
+        predictedRisers: result.rises,
+        predictedFallers: result.falls,
+        predictionNotice: result.notice,
+        predictionLoading: false,
+        predictionError: "",
+        predictionLoaded: true,
+      });
+    } catch (error) {
+      if (!this._pageVisible || requestId !== this._priceRequestId) return;
+      this.setData({
+        predictionLoading: false,
+        predictionLoaded: true,
+        predictionError: error instanceof Error ? error.message : "身价预测加载失败",
+      });
+    }
+  },
+
+  onRetryPredictions() {
+    void this.loadPricePredictions(true);
+  },
+
+  onOpenPricePredictions() {
+    navigateTo(routes.explorePriceChanges);
   },
 
   onOpenLiveMatches() {
