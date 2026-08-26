@@ -53,11 +53,25 @@ type PendingTelemetryQueue = {
   samples: ClientTelemetrySample[];
 };
 
+type InFlightTelemetrySlice = {
+  batchId: string;
+  samples: ClientTelemetrySample[];
+};
+
 const MAX_QUEUE_SAMPLES = 100;
 const BATCH_SIZE = 50;
 const FLUSH_SAMPLE_COUNT = 20;
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_SAMPLE_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_SAMPLE_VALUES: Partial<Record<ClientTelemetryMetric, number>> = {
+  route_ready_ms: 10_000_000,
+  api_duration_ms: 10_000_000,
+  graphql_proxy_ms: 10_000_000,
+  lcp_ms: 10_000_000,
+  inp_ms: 10_000_000,
+  cls: 10,
+  last_good_age_ms: 24 * 60 * 60 * 1000,
+};
 
 const VALID_SURFACES = new Set<ClientTelemetrySurface>([
   "home",
@@ -97,6 +111,7 @@ let queue: PendingTelemetryQueue | null = null;
 let queueOwner: unknown;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushInFlight: Promise<void> | null = null;
+let inFlightSlice: InFlightTelemetrySlice | null = null;
 
 function currentEnvironment(): {
   deviceGroup: "wechat_phone" | "wechat_devtools";
@@ -144,7 +159,13 @@ function isSample(value: unknown): value is ClientTelemetrySample {
     (candidate.deviceGroup === "wechat_phone" || candidate.deviceGroup === "wechat_devtools") &&
     (candidate.sampleSource === "real" || candidate.sampleSource === "synthetic") &&
     VALID_RESULTS.has(candidate.result as ClientTelemetryResult) &&
-    (candidate.value === undefined || (typeof candidate.value === "number" && Number.isFinite(candidate.value) && candidate.value >= 0));
+    (candidate.value === undefined || (
+      typeof candidate.value === "number" &&
+      Number.isFinite(candidate.value) &&
+      candidate.value >= 0 &&
+      MAX_SAMPLE_VALUES[candidate.metric as ClientTelemetryMetric] !== undefined &&
+      candidate.value <= MAX_SAMPLE_VALUES[candidate.metric as ClientTelemetryMetric]!
+    ));
 }
 
 function isUuid(value: string): boolean {
@@ -203,7 +224,13 @@ export function enqueueClientTelemetry(
   },
 ): void {
   if (!shouldSample(sample.result)) return;
-  if (sample.value !== undefined && (!Number.isFinite(sample.value) || sample.value < 0)) return;
+  if (
+    sample.value !== undefined &&
+    (!Number.isFinite(sample.value) ||
+      sample.value < 0 ||
+      MAX_SAMPLE_VALUES[sample.metric] === undefined ||
+      sample.value > MAX_SAMPLE_VALUES[sample.metric]!)
+  ) return;
   const environment = currentEnvironment();
   const target = loadQueue();
   const normalized: ClientTelemetrySample = {
@@ -217,7 +244,17 @@ export function enqueueClientTelemetry(
   };
   target.samples.push(normalized);
   if (target.samples.length > MAX_QUEUE_SAMPLES) {
-    target.samples.splice(0, target.samples.length - MAX_QUEUE_SAMPLES);
+    const protectedSamples =
+      inFlightSlice?.batchId === target.batchId
+        ? new Set(inFlightSlice.samples)
+        : null;
+    while (target.samples.length > MAX_QUEUE_SAMPLES) {
+      const evictionIndex = target.samples.findIndex(
+        (candidate) => !protectedSamples?.has(candidate),
+      );
+      if (evictionIndex < 0) break;
+      target.samples.splice(evictionIndex, 1);
+    }
   }
   persistQueue();
   if (target.samples.length >= FLUSH_SAMPLE_COUNT) {
@@ -270,13 +307,28 @@ export async function flushClientTelemetry(): Promise<void> {
   if (!pending.samples.length) return;
   const samples = pending.samples.slice(0, BATCH_SIZE);
   const run = (async () => {
-    const delivered = await sendBatch(pending, samples);
+    // Keep the sent objects protected until the acknowledgement arrives. New
+    // samples may be appended while the request is in flight, and queue cap
+    // eviction must never remove an unacknowledged sample.
+    inFlightSlice = { batchId: pending.batchId, samples };
+    let delivered = false;
+    try {
+      delivered = await sendBatch(pending, samples);
+    } catch {
+      delivered = false;
+    }
     const current = loadQueue();
     if (delivered && current.batchId === pending.batchId) {
-      current.samples.splice(0, samples.length);
-      if (!current.samples.length) current.batchId = createBatchId();
+      const acknowledged = new Set(samples);
+      current.samples = current.samples.filter(
+        (candidate) => !acknowledged.has(candidate),
+      );
+      // A new slice is a new idempotency unit. Retain the old batchId only
+      // while retrying this exact unacknowledged slice.
+      current.batchId = createBatchId();
       persistQueue();
     }
+    inFlightSlice = null;
     if (current.samples.length) scheduleFlush();
   })();
   flushInFlight = run;

@@ -265,14 +265,14 @@ export function recordApi(
     ts: Date.now()
   });
   const authRequest = name.startsWith("auth:");
-  const result = !ok
-    ? details.statusCode === 401 || details.code === "UNAUTHENTICATED"
-      ? "auth_error"
-      : details.statusCode === 408 || details.statusCode === 504 || details.code === "TIMEOUT"
-        ? "timeout"
-        : "error"
-    : details.source === "stale"
-      ? "stale"
+  const result = details.source === "stale"
+    ? "stale"
+    : !ok
+      ? details.statusCode === 401 || details.code === "UNAUTHENTICATED"
+        ? "auth_error"
+        : details.statusCode === 408 || details.statusCode === 504 || details.code === "TIMEOUT"
+          ? "timeout"
+          : "error"
       : "ok";
   enqueueClientTelemetry({
     surface: authRequest ? "auth" : surfaceForTelemetry(details.callerSurface, name),
