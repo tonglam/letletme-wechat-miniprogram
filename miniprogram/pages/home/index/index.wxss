@@ -535,6 +535,23 @@
   box-sizing: border-box;
 }
 
+.fixture-board.is-live {
+  border-color: var(--danger-a30);
+  color: var(--danger);
+}
+
+.fixture-live-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 16rpx;
+  border: 1rpx solid var(--danger-a30);
+  border-radius: 8rpx;
+  background: var(--danger-tint);
+  color: var(--danger);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
 .fixture-tz {
   margin-top: 12rpx;
   padding-top: 16rpx;

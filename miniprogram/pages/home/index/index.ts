@@ -51,6 +51,8 @@ interface HomeData {
   selectedFixtureDayKey: string;
   selectedDayRows: HomeFixtureMatch[];
   fixtureCount: number;
+  fixtureLive: boolean;
+  fixtureEmptyPast: boolean;
   gameweekStats: HomeStatRow[];
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
@@ -89,6 +91,7 @@ export interface HomeFixtureMatch {
   awayName: string;
   centerLabel: string;
   finished: boolean;
+  live: boolean;
 }
 
 export interface HomeFixtureDay {
@@ -106,6 +109,10 @@ interface HomeStatRow {
 /** Home warm-show skip window. Live index and leagues use the same 60s; team uses 5 min. */
 const HOME_REVALIDATE_MS = 60 * 1000;
 const HOME_DEADLINE_RETRY_MS = 60 * 1000;
+/** Live fixture poll cadence — mirrors the web home fixtures desk (30s). */
+const FIXTURE_LIVE_REFRESH_MS = 30 * 1000;
+/** Web parity: the fixture stepper can browse every gameweek, not just future ones. */
+const MIN_FIXTURE_GW = 1;
 export const NOTICE_AUTO_CLOSE_MS = 5 * 1000;
 
 export function shouldReloadHome(
@@ -168,6 +175,8 @@ Page({
     selectedFixtureDayKey: "",
     selectedDayRows: [],
     fixtureCount: 0,
+    fixtureLive: false,
+    fixtureEmptyPast: false,
     gameweekStats: [],
     marketMode: "empty",
     marketTab: "pulse",
@@ -202,6 +211,7 @@ Page({
 
   countdownTimer: undefined as number | undefined,
   noticeTimer: undefined as number | undefined,
+  fixtureLiveTimer: undefined as number | undefined,
   _initialLoadDone: false,
   _lastLoadAt: 0,
   _loadRequestId: 0,
@@ -298,6 +308,7 @@ Page({
           const event = this.data.selectedFixtureGw;
           if (event > 0) void this.loadFixtureGw(event);
         }
+        this.syncFixtureLiveRefresh();
       }
     } catch (error) {
       if (this._pageVisible) this.showContextError(error);
@@ -349,6 +360,7 @@ Page({
     this._priceRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
+    this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
@@ -366,6 +378,7 @@ Page({
     this._priceRequestId += 1;
     this._refreshRequestId += 1;
     this.stopCountdown();
+    this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
@@ -400,7 +413,7 @@ Page({
     try {
       const fixtureLoadStartedAt = Date.now();
       const fixtureRequestStartedAt = Date.now();
-      const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw);
+      const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, MIN_FIXTURE_GW);
       const currentGw = app.globalData.gw;
       const hadFixtureRows = this.data.fixtureCount > 0 && this.data.selectedFixtureGw === fixtureGw;
       await this.syncAppState({
@@ -411,7 +424,8 @@ Page({
         fixtureStaleMessage: "",
         entryError: "",
         selectedFixtureGw: fixtureGw,
-        minFixtureGw: app.globalData.nextGw
+        minFixtureGw: MIN_FIXTURE_GW,
+        fixtureEmptyPast: fixtureGw < (app.globalData.currentGw || app.globalData.nextGw || MIN_FIXTURE_GW)
       });
 
       let fixtureError = "";
@@ -491,6 +505,7 @@ Page({
           fixtureLoading: false,
           loading: false
         }, () => {
+          this.syncFixtureLiveRefresh();
           tracker?.mark("primarySetDataAt");
           wx.nextTick(() => tracker?.observePrimary("#perf-primary-fixtures"));
           const fixtureSetDataCallbackAt = Date.now();
@@ -832,8 +847,8 @@ Page({
       gw: app.globalData.gw,
       currentGw: app.globalData.currentGw,
       nextGw: app.globalData.nextGw,
-      minFixtureGw: app.globalData.nextGw,
-      selectedFixtureGw: clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, app.globalData.nextGw),
+      minFixtureGw: MIN_FIXTURE_GW,
+      selectedFixtureGw: clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, MIN_FIXTURE_GW),
       deadline: app.globalData.deadline,
       utcDeadline: app.globalData.utcDeadline,
       countdown: formatCountdown(getDeadlineDiffMs(app.globalData.utcDeadline)),
@@ -1015,17 +1030,21 @@ Page({
     }
   },
 
-  async loadFixtureGw(event: number, forceRefresh = false) {
+  async loadFixtureGw(event: number, forceRefresh = false, silent = false) {
     const requestId = ++this._fixtureGwRequestId;
-    this.setData({
-      fixtureLoading: true,
-      fixtureError: "",
-      fixtureStaleMessage: "",
-      fixtureStoredAt: null,
-      fixtureStaleStoredAt: null,
-      selectedFixtureGw: event,
-      ...emptyFixtureDesk()
-    });
+    if (!silent) {
+      this.setData({
+        fixtureLoading: true,
+        fixtureError: "",
+        fixtureStaleMessage: "",
+        fixtureStoredAt: null,
+        fixtureStaleStoredAt: null,
+        selectedFixtureGw: event,
+        fixtureLive: false,
+        fixtureEmptyPast: event < (this.data.currentGw || this.data.nextGw || MIN_FIXTURE_GW),
+        ...emptyFixtureDesk()
+      });
+    }
     try {
       const read = await readCoreEventFixtureSchedule(
         event,
@@ -1039,19 +1058,45 @@ Page({
         fixtureStoredAt: read.meta.storedAt || Date.now(),
         fixtureStaleStoredAt: staleStoredAt,
         fixtureStaleMessage: read.meta.stale ? fixtureStaleMessage(staleStoredAt) : ""
+      }, () => {
+        this.syncFixtureLiveRefresh();
       });
     } catch (error) {
       if (!this._pageVisible || requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      if (silent) return; // Keep showing the last good rows on a failed background tick.
       this.setData({
         ...emptyFixtureDesk(),
+        fixtureLive: false,
         fixtureStaleMessage: "",
         fixtureStaleStoredAt: null,
         fixtureError: error instanceof Error ? error.message : "赛程加载失败"
       });
     } finally {
-      if (this._pageVisible && requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
+      if (!silent && this._pageVisible && requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
         this.setData({ fixtureLoading: false });
       }
+    }
+  },
+
+  syncFixtureLiveRefresh() {
+    const shouldRun = this.data.fixtureLive && this._pageVisible;
+    if (!shouldRun) {
+      this.stopFixtureLiveRefresh();
+      return;
+    }
+    if (this.fixtureLiveTimer !== undefined) return;
+    this.fixtureLiveTimer = setInterval(() => {
+      // Skip the tick while the page is hidden or a user-initiated load is in
+      // flight — the next tick (or the onShow restart) catches up.
+      if (!this._pageVisible || !this.data.fixtureLive || this.data.fixtureLoading) return;
+      void this.loadFixtureGw(this.data.selectedFixtureGw, true, true);
+    }, FIXTURE_LIVE_REFRESH_MS) as unknown as number;
+  },
+
+  stopFixtureLiveRefresh() {
+    if (this.fixtureLiveTimer !== undefined) {
+      clearInterval(this.fixtureLiveTimer);
+      this.fixtureLiveTimer = undefined;
     }
   },
 
@@ -1081,19 +1126,22 @@ function formatKickoffTime(date: Date): string {
 function mapHomeFixtureMatch(fixture: Fixture, index: number): HomeFixtureMatch {
   const kickoff = fixture.kickoffTime ? new Date(fixture.kickoffTime) : null;
   const validKickoff = Boolean(kickoff && !Number.isNaN(kickoff.getTime()));
-  const finished = fixture.finished === true
-    && typeof fixture.homeScore === "number"
+  const hasScore = typeof fixture.homeScore === "number"
     && typeof fixture.awayScore === "number";
+  const finished = fixture.finished === true && hasScore;
+  // Web parity: in-progress matches show the live score, not the kickoff time.
+  const live = fixture.started === true && !finished && hasScore;
   return {
     id: String(fixture.id || `${fixture.teamId || "team"}-${fixture.againstTeamId || "against"}-${index}`),
     homeName: fixture.teamName || fixture.homeTeam || fixture.teamShortName || "-",
     awayName: fixture.againstTeamName || fixture.awayTeam || fixture.againstTeamShortName || "-",
-    centerLabel: finished
+    centerLabel: finished || live
       ? `${fixture.homeScore}-${fixture.awayScore}`
       : validKickoff
         ? formatKickoffTime(kickoff as Date)
         : "待定",
-    finished
+    finished,
+    live
   };
 }
 
@@ -1132,14 +1180,15 @@ export function groupHomeFixturesByDay(
   return { days, selectedDayKey };
 }
 
-function fixtureDeskState(fixtures: Fixture[]): Pick<HomeData, "fixtureDays" | "selectedFixtureDayKey" | "selectedDayRows" | "fixtureCount"> {
+function fixtureDeskState(fixtures: Fixture[]): Pick<HomeData, "fixtureDays" | "selectedFixtureDayKey" | "selectedDayRows" | "fixtureCount" | "fixtureLive"> {
   const grouped = groupHomeFixturesByDay(fixtures);
   const selected = grouped.days.find((day) => day.dateKey === grouped.selectedDayKey);
   return {
     fixtureDays: grouped.days,
     selectedFixtureDayKey: grouped.selectedDayKey,
     selectedDayRows: selected ? selected.rows : [],
-    fixtureCount: grouped.days.reduce((count, day) => count + day.rows.length, 0)
+    fixtureCount: grouped.days.reduce((count, day) => count + day.rows.length, 0),
+    fixtureLive: grouped.days.some((day) => day.rows.some((row) => row.live))
   };
 }
 

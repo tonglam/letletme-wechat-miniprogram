@@ -100,4 +100,18 @@ describe("home public read path", () => {
       /hasPreviousMarket[\s\S]*?priceRisers\.length > 0[\s\S]*?priceFallers\.length > 0/,
     );
   });
+
+  it("lets the fixture stepper browse back to GW1", () => {
+    assert.match(home, /MIN_FIXTURE_GW = 1/);
+    assert.match(home, /minFixtureGw: MIN_FIXTURE_GW/);
+    assert.doesNotMatch(home, /minFixtureGw: app\.globalData\.nextGw/);
+  });
+
+  it("shows live scores and polls every 30s while a match is in progress", () => {
+    assert.match(home, /FIXTURE_LIVE_REFRESH_MS = 30 \* 1000/);
+    assert.match(home, /fixture\.started === true && !finished/);
+    assert.match(home, /setInterval\([\s\S]*?loadFixtureGw\(this\.data\.selectedFixtureGw, true, true\)/);
+    assert.match(home, /onHide\(\) \{[\s\S]*?stopFixtureLiveRefresh/);
+    assert.match(home, /onUnload\(\) \{[\s\S]*?stopFixtureLiveRefresh/);
+  });
 });

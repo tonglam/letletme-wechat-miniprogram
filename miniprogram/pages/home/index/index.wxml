@@ -240,6 +240,7 @@
         <view class="fixture-head-copy">
           <view class="section-title">近期赛程</view>
           <view wx:if="{{selectedFixtureGw || nextGw}}" class="gw-pill-dark">GW{{selectedFixtureGw || nextGw}}</view>
+          <view wx:if="{{fixtureLive}}" class="fixture-live-pill">直播中</view>
         </view>
         <view class="fixture-head-tools">
           <view class="fixture-live-link" bindtap="onOpenLiveMatches" hover-class="hover-dim">打开实时比赛</view>
@@ -259,8 +260,8 @@
         <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
         <app-empty-state
           wx:if="{{fixtureCount === 0}}"
-          title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
-          description="官方赛程发布后会自动显示在这里"
+          title="{{fixtureEmptyPast ? 'GW' + (selectedFixtureGw || nextGw) + ' 暂无赛程数据' : 'GW' + (selectedFixtureGw || nextGw) + ' 赛程还没公布'}}"
+          description="{{fixtureEmptyPast ? '该轮数据暂未收录' : '官方赛程发布后会自动显示在这里'}}"
           actionText="重新加载"
           bind:action="onRetryFixtures"
         />
@@ -277,7 +278,7 @@
           </view>
           <view wx:for="{{selectedDayRows}}" wx:key="id" class="fixture-row">
             <text class="fixture-team home-team">{{item.homeName}}</text>
-            <view class="fixture-board {{item.finished ? 'is-score' : ''}}">{{item.centerLabel}}</view>
+            <view class="fixture-board {{item.finished ? 'is-score' : ''}} {{item.live ? 'is-score is-live' : ''}}">{{item.centerLabel}}</view>
             <text class="fixture-team away-team">{{item.awayName}}</text>
           </view>
           <view class="fixture-tz">时间按本机时区</view>
