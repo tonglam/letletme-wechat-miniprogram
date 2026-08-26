@@ -36,4 +36,5 @@ export const storagePrefixes = {
   graphqlCache: "gql:",
   graphqlPublicCache: "gql:v2:public:",
   graphqlSessionCache: "gql:v2:session:",
+  liveBoardLastGood: "live-board:last-good:"
 } as const;

@@ -374,6 +374,15 @@ function clearStoredGraphQLSessionCache(): void {
   clearGraphQLMemoryCache();
 }
 
+function clearStoredLiveBoardLastGood(): void {
+  try {
+    const { keys } = wx.getStorageInfoSync();
+    keys
+      .filter((key) => key.startsWith(storagePrefixes.liveBoardLastGood))
+      .forEach((key) => wx.removeStorageSync(key));
+  } catch {}
+}
+
 // In-memory mirror of the platform-encrypted session so hot paths (every
 // GraphQL request) never touch storage. `undefined` = encrypted storage has
 // not been restored yet; `null` = restoration found no usable session.
@@ -636,6 +645,7 @@ export function clearApiSession(): void {
   lastSessionCredentialState = "missing";
   sessionMemory = undefined;
   clearStoredGraphQLSessionCache();
+  clearStoredLiveBoardLastGood();
   const retainedEntryId = readLocalEntryId();
   [
     storageKeys.apiSessionToken,

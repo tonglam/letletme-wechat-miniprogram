@@ -47,9 +47,32 @@ test("tournament preseason is a stable business empty state", () => {
     displayedRows: [],
     filteredCount: 0,
     lastUpdated: "",
-    scoreStatusText: "官方分数不可用",
+    scoreStatusText: "正在确认官方分数",
     scoreNextRefreshAt: ""
   });
+});
+
+test("legacy tournament boards keep team exposure rules during paged recovery", async () => {
+  const calls = [];
+  const context = {
+    data: {
+      ...tournamentPage.data,
+      event: 1,
+      selectedTournament: { id: 7, participantCount: 10 },
+      teamExposureRules: [
+        { teamShortName: "ARS", name: "Arsenal", count: 2 }
+      ]
+    },
+    usingLegacyBoard: true,
+    loadLegacyRows(options) {
+      calls.push(options);
+      return Promise.resolve();
+    }
+  };
+
+  await tournamentPage.loadRows.call(context, { forceRefresh: true });
+
+  assert.deepEqual(calls, [{ forceRefresh: true }]);
 });
 
 test("entry preseason is a stable business empty state", () => {
@@ -731,6 +754,10 @@ test("tournament resume drops a historical selection after a season rollover", a
       ownershipSummary: "Old player",
       selectedOwnershipTeam: { id: 1, name: "Old team" },
       ownershipAvailablePlayers: [{ element: 999, name: "Old player" }],
+      captainFilters: [999],
+      captainValues: ["Old captain"],
+      captainFilterNames: ["Old captain"],
+      captainOptions: [{ element: 999, name: "Old captain", on: true }],
       teamExposureRules: [{ teamShortName: "ARS", name: "Old team", count: 2 }],
       pendingExposureTeam: { shortName: "CHE", name: "Old pending" },
       shareSheetOpen: true,
@@ -773,6 +800,10 @@ test("tournament resume drops a historical selection after a season rollover", a
   assert.equal(context.data.selectedOwnershipTeam, null);
   assert.deepEqual(context.data.teamExposureRules, []);
   assert.equal(context.data.pendingExposureTeam, null);
+  assert.deepEqual(context.data.captainFilters, []);
+  assert.deepEqual(context.data.captainValues, []);
+  assert.deepEqual(context.data.captainFilterNames, []);
+  assert.deepEqual(context.data.captainOptions, []);
   assert.equal(context.data.shareSheetOpen, false);
   assert.equal(context.failedEntryCount, 0);
   assert.deepEqual(calls, ["context:page-show", "stop", "sync:1", "tournaments:1:true", "display"]);

@@ -1,8 +1,11 @@
 import {
+  canPaginateTournamentBoard,
   filterTournamentLiveRows,
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  hasUnresolvedTournamentTeamExposureRules,
+  isTournamentBoardControlGenerationCurrent,
   mapTournamentLiveRows,
   compareKnownTournamentValues,
   combinedTournamentTraceableEntries,
@@ -125,6 +128,56 @@ const rows = mapTournamentLiveRows([
     ]
   }
 ]);
+
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: false,
+    boardControlRequestId: 4,
+    committedBoardControlRequestId: 4,
+  }),
+  true,
+  "pagination is allowed for the committed board controls",
+);
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: true,
+    boardControlRequestId: 5,
+    committedBoardControlRequestId: 4,
+  }),
+  false,
+  "pagination is blocked while changed controls reload page one",
+);
+assertEqual(
+  canPaginateTournamentBoard({
+    loading: false,
+    refreshing: false,
+    boardControlRequestId: 5,
+    committedBoardControlRequestId: 4,
+  }),
+  false,
+  "pagination is blocked while controls differ from the visible page",
+);
+assertEqual(
+  isTournamentBoardControlGenerationCurrent({
+    boardControlRequestId: 6,
+    committedBoardControlRequestId: 6,
+    expectedBoardControlRequestId: 5,
+  }),
+  false,
+  "a share is invalidated when board controls change mid-request",
+);
+assertEqual(
+  hasUnresolvedTournamentTeamExposureRules([{ teamId: undefined }]),
+  true,
+  "legacy team rules without canonical ids cannot use the paged board",
+);
+assertEqual(
+  hasUnresolvedTournamentTeamExposureRules([{ teamId: 7 }]),
+  false,
+  "team rules with canonical ids can use the paged board",
+);
 
 assertEqual(rows[0]?.entry, 101, "entry id is preserved");
 assertEqual(rows[0]?.liveTotalPoints, 1510, "live total is preserved");

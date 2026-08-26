@@ -64,6 +64,7 @@ export interface TournamentTeamExposureFilter {
 }
 
 export interface TournamentTeamOption {
+  id?: number;
   shortName: string;
   name: string;
 }
@@ -298,6 +299,42 @@ export function filterTournamentLiveRows(rows: LiveTournamentRow[], keyword: str
     return rows;
   }
   return rows.filter((row) => (row.searchText || searchText(row)).includes(normalizedKeyword));
+}
+
+export function canPaginateTournamentBoard(input: {
+  loading: boolean;
+  refreshing: boolean;
+  boardControlRequestId: number;
+  committedBoardControlRequestId: number;
+}): boolean {
+  return !input.loading
+    && !input.refreshing
+    && isTournamentBoardControlGenerationCurrent({
+      boardControlRequestId: input.boardControlRequestId,
+      committedBoardControlRequestId: input.committedBoardControlRequestId,
+      expectedBoardControlRequestId: input.boardControlRequestId,
+    });
+}
+
+export function isTournamentBoardControlGenerationCurrent(input: {
+  boardControlRequestId: number;
+  committedBoardControlRequestId: number;
+  expectedBoardControlRequestId: number;
+}): boolean {
+  return input.boardControlRequestId === input.expectedBoardControlRequestId
+    && input.committedBoardControlRequestId ===
+      input.expectedBoardControlRequestId;
+}
+
+export function hasUnresolvedTournamentTeamExposureRules(
+  rules: readonly { teamId?: number }[],
+): boolean {
+  return rules.some(
+    (rule) =>
+      typeof rule.teamId !== "number" ||
+      !Number.isSafeInteger(rule.teamId) ||
+      rule.teamId <= 0,
+  );
 }
 
 export function filterTournamentRowsByOwnership(
