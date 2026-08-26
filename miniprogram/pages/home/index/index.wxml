@@ -90,7 +90,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-up">持有上升</view>
             <view wx:if="{{marketRisers.length === 0}}" class="transfer-empty-inline">今日暂无持有率上升</view>
-            <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -104,7 +104,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-down">持有下降</view>
             <view wx:if="{{marketFallers.length === 0}}" class="transfer-empty-inline">今日暂无持有率下降</view>
-            <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -118,7 +118,7 @@
         </view>
         <view wx:elif="{{marketLeadRows.length > 0}}" class="transfer-lead">
           <view class="transfer-col-head">{{marketLeadTitle}}</view>
-          <view wx:for="{{marketLeadRows}}" wx:key="id" class="transfer-row">
+          <view wx:for="{{marketLeadRows}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
             <view class="transfer-player">
               <view class="transfer-name-line">
                 <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -137,7 +137,7 @@
 
         <view wx:if="{{availabilityRows.length > 0}}" class="transfer-watch">
           <view class="transfer-col-head">出场状态观察</view>
-          <view wx:for="{{availabilityRows}}" wx:key="id" class="watch-row">
+          <view wx:for="{{availabilityRows}}" wx:key="id" class="watch-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
             <view class="watch-top">
               <text class="transfer-name">{{item.name}}</text>
               <text class="watch-status watch-{{item.statusKey}}">{{item.status}}</text>
@@ -156,7 +156,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-up">上涨</view>
             <view wx:if="{{priceRisers.length === 0}}" class="transfer-empty-inline">暂无上涨</view>
-            <view wx:for="{{priceRisers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{priceRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -170,7 +170,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-down">下跌</view>
             <view wx:if="{{priceFallers.length === 0}}" class="transfer-empty-inline">暂无下跌</view>
-            <view wx:for="{{priceFallers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{priceFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -195,7 +195,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-up">预计上涨</view>
             <view wx:if="{{predictedRisers.length === 0}}" class="transfer-empty-inline">暂无上涨信号</view>
-            <view wx:for="{{predictedRisers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{predictedRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -209,7 +209,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-down">预计下跌</view>
             <view wx:if="{{predictedFallers.length === 0}}" class="transfer-empty-inline">暂无下跌信号</view>
-            <view wx:for="{{predictedFallers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{predictedFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -248,31 +248,40 @@
       <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
     </view>
 
-    <view wx:if="{{dreamTeamGroups.length > 0}}" class="section card dream-card">
+    <view wx:if="{{hasDreamTeam}}" class="section card dream-card">
       <view class="gw-stats-head">
         <view class="section-title">本周最佳阵容</view>
-        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点击球员查看详情</view>
+        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点球员看详情</view>
       </view>
-      <view wx:for="{{dreamTeamGroups}}" wx:key="key" wx:for-item="group" class="dream-group">
-        <view class="transfer-col-head">{{group.label}}</view>
-        <view
-          wx:for="{{group.rows}}"
-          wx:key="id"
-          wx:for-item="player"
-          class="transfer-row dream-row"
-          data-id="{{player.id}}"
-          catchtap="onTapDreamPlayer"
-          hover-class="hover-dim"
-        >
-          <view class="transfer-player">
-            <view class="transfer-name-line">
-              <text class="pos-badge {{pos.cls(player.position)}}">{{player.position}}</text>
-              <text class="transfer-name">{{player.name}}</text>
+      <view class="dream-pitch-section">
+        <view class="live-pitch-bar">
+          <text class="live-pitch-label">梦之队</text>
+          <view class="live-pitch-actions">
+            <view
+              class="tool-btn tool-btn-labeled {{dreamShareBusy ? 'done' : ''}}"
+              bindtap="onShareDreamPitch"
+              hover-class="hover-dim"
+            >
+              <text class="tool-label">{{dreamShareBusy ? '生成中' : '分享图片'}}</text>
             </view>
-            <text class="transfer-meta">{{player.team}}</text>
+            <view
+              class="tool-btn tool-btn-labeled {{dreamShareCopied ? 'done' : ''}}"
+              bindtap="onCopyDreamShare"
+              hover-class="hover-dim"
+            >
+              <image wx:if="{{dreamShareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{dreamShareCopied ? '已复制' : '分享文字'}}</text>
+            </view>
           </view>
-          <text class="dream-points">{{player.points}} 分</text>
         </view>
+        <squad-pitch
+          id="home-dream-pitch"
+          players="{{dreamPlayers}}"
+          header="{{dreamHeader}}"
+          benchBoost="{{false}}"
+          bind:playertap="onDreamPlayerTap"
+        />
       </view>
     </view>
 

@@ -716,44 +716,8 @@ export interface HomeDreamTeamPlayer {
   points: number;
 }
 
-export interface HomeDreamTeamGroup {
-  key: string;
-  label: string;
-  rows: HomeDreamTeamPlayer[];
-}
-
 export interface MiniHomeDreamTeamResult {
-  groups: HomeDreamTeamGroup[];
-}
-
-const DREAM_TEAM_GROUP_ORDER: Array<{ key: string; label: string }> = [
-  { key: "GKP", label: "门将" },
-  { key: "DEF", label: "后卫" },
-  { key: "MID", label: "中场" },
-  { key: "FWD", label: "前锋" },
-];
-
-/** Grouped, position-ordered dream team — the mini program renders a compact list instead of the web pitch. */
-export function groupDreamTeam(
-  players: NonNullable<NonNullable<NonNullable<MiniHomeDreamTeamResponse["homeGameweek"]>["gameweekDesk"]>["dreamTeam"]>,
-): HomeDreamTeamGroup[] {
-  const rows = players
-    .filter((player) => Number.isSafeInteger(Number(player.id)) && Number(player.id) > 0)
-    .map((player) => ({
-      id: Number(player.id),
-      name: String(player.webName || "-"),
-      team: String(player.teamShortName || "-"),
-      position: shortPosition(player.position || ""),
-      points: Number(player.totalPoints) || 0,
-    }));
-  return DREAM_TEAM_GROUP_ORDER
-    .map((group) => ({
-      ...group,
-      rows: rows
-        .filter((row) => row.position === group.key)
-        .sort((left, right) => right.points - left.points),
-    }))
-    .filter((group) => group.rows.length > 0);
+  players: HomeDreamTeamPlayer[];
 }
 
 export async function getMiniHomeDreamTeam(
@@ -775,7 +739,15 @@ export async function getMiniHomeDreamTeam(
   const error = rootError(result.errors, "homeGameweek");
   if (error) throw new Error(error);
   return {
-    groups: groupDreamTeam(result.data.homeGameweek?.gameweekDesk?.dreamTeam || []),
+    players: (result.data.homeGameweek?.gameweekDesk?.dreamTeam || [])
+      .filter((player) => Number.isSafeInteger(Number(player?.id)) && Number(player?.id) > 0)
+      .map((player) => ({
+        id: Number(player?.id),
+        name: String(player?.webName || "-"),
+        team: String(player?.teamShortName || "-"),
+        position: shortPosition(player?.position || ""),
+        points: Number(player?.totalPoints) || 0,
+      })),
   };
 }
 

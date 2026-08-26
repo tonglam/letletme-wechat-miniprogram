@@ -13,10 +13,14 @@ import {
 } from "../../../services/home.service";
 import type {
   HomeAvailabilityRow,
-  HomeDreamTeamGroup,
   HomeMarketMover,
   MiniHomeMarketMode
 } from "../../../services/home.service";
+import { buildDreamTeamPitchState } from "../../../utils/squad-pitch";
+import type { SquadPitchHeader, SquadPitchPlayer } from "../../../utils/squad-pitch";
+import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import { formatGameweekShareText } from "../../../utils/gameweek-share";
+import { copyShareText } from "../../../utils/live-share";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
@@ -57,7 +61,11 @@ interface HomeData {
   fixtureEmptyPast: boolean;
   gameweekStats: HomeStatRow[];
   dreamTeamEvent: number;
-  dreamTeamGroups: HomeDreamTeamGroup[];
+  hasDreamTeam: boolean;
+  dreamPlayers: SquadPitchPlayer[];
+  dreamHeader: Partial<SquadPitchHeader>;
+  dreamShareBusy: boolean;
+  dreamShareCopied: boolean;
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
   marketCoverage: string;
@@ -197,7 +205,11 @@ Page({
     fixtureEmptyPast: false,
     gameweekStats: [],
     dreamTeamEvent: 0,
-    dreamTeamGroups: [],
+    hasDreamTeam: false,
+    dreamPlayers: [],
+    dreamHeader: {},
+    dreamShareBusy: false,
+    dreamShareCopied: false,
     marketMode: "empty",
     marketTab: "pulse",
     marketCoverage: "最新每日持有率变化",
@@ -255,6 +267,7 @@ Page({
   _lifecycleRevision: 0,
   _dreamTeamLoadedEvent: 0,
   _deadlineRetryAttempts: 0,
+  _dreamShareCopiedTimer: undefined as number | undefined,
 
   onLoad() {
     this._pageVisible = true;
@@ -385,6 +398,7 @@ Page({
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
+    this.clearDreamShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -403,6 +417,7 @@ Page({
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
+    this.clearDreamShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -1071,19 +1086,88 @@ Page({
       const result = await getMiniHomeDreamTeam(event, forceRefresh);
       if (!this._pageVisible) return;
       this._dreamTeamLoadedEvent = event;
+      // Same pitch rendering as the gameweek summary page's dream team tab.
+      const pitch = buildDreamTeamPitchState(result.players, event);
       this.setData({
         dreamTeamEvent: event,
-        dreamTeamGroups: result.groups,
+        dreamPlayers: pitch.pitchPlayers,
+        dreamHeader: pitch.pitchHeader,
+        hasDreamTeam: pitch.pitchPlayers.length > 0,
       });
     } catch {
       // The dream team card is optional below-the-fold content: stay hidden on failure.
     }
   },
 
-  onTapDreamPlayer(event: WechatMiniprogram.TouchEvent) {
+  onDreamPlayerTap(event: WechatMiniprogram.CustomEvent) {
+    const playerId = Number(event.detail?.playerId || 0);
+    if (!Number.isSafeInteger(playerId) || playerId <= 0) return;
+    goToPlayerDetail(playerId);
+  },
+
+  onTapMarketPlayer(event: WechatMiniprogram.TouchEvent) {
     const playerId = Number(event.currentTarget.dataset.id || 0);
     if (!Number.isSafeInteger(playerId) || playerId <= 0) return;
     goToPlayerDetail(playerId);
+  },
+
+  async onShareDreamPitch() {
+    if (this.data.dreamShareBusy) return;
+    const pitch = this.selectComponent("#home-dream-pitch") as WechatMiniprogram.Component.TrivialInstance & {
+      exportPortraitShareImage?: () => Promise<string>;
+    } | null;
+    if (!pitch?.exportPortraitShareImage) {
+      wx.showToast({ title: "阵容图还没准备好", icon: "none" });
+      return;
+    }
+    this.setData({ dreamShareBusy: true });
+    try {
+      await presentSquadPitchShareImage(await pitch.exportPortraitShareImage());
+    } catch {
+      wx.showToast({ title: "阵容图生成失败", icon: "none" });
+    } finally {
+      this.setData({ dreamShareBusy: false });
+    }
+  },
+
+  onCopyDreamShare() {
+    if (!this.data.hasDreamTeam) return;
+    const points = this.data.dreamPlayers.reduce(
+      (total, player) => total + (Number(player.score) || 0),
+      0,
+    );
+    const text = formatGameweekShareText({
+      event: this.data.dreamTeamEvent,
+      headlineStats: [],
+      mostRows: [],
+      chipRows: [],
+      dreamPlayers: this.data.dreamPlayers,
+      dreamPoints: points,
+      eliteRows: [],
+      transfersInRows: [],
+      transfersOutRows: [],
+    }, "dreamTeam");
+    void copyShareText(text).then((ok) => {
+      if (!ok) {
+        wx.showToast({ title: "复制失败", icon: "none" });
+        return;
+      }
+      this.setData({ dreamShareCopied: true });
+      if (this._dreamShareCopiedTimer !== undefined) {
+        clearTimeout(this._dreamShareCopiedTimer);
+      }
+      this._dreamShareCopiedTimer = setTimeout(() => {
+        this._dreamShareCopiedTimer = undefined;
+        this.setData({ dreamShareCopied: false });
+      }, 2000) as unknown as number;
+    });
+  },
+
+  clearDreamShareCopiedTimer() {
+    if (this._dreamShareCopiedTimer !== undefined) {
+      clearTimeout(this._dreamShareCopiedTimer);
+      this._dreamShareCopiedTimer = undefined;
+    }
   },
 
   onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {

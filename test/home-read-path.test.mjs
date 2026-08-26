@@ -10,6 +10,14 @@ const home = readFileSync(
   new URL("../miniprogram/pages/home/index/index.ts", import.meta.url),
   "utf8"
 );
+const homeWxml = readFileSync(
+  new URL("../miniprogram/pages/home/index/index.wxml", import.meta.url),
+  "utf8"
+);
+const homeJson = readFileSync(
+  new URL("../miniprogram/pages/home/index/index.json", import.meta.url),
+  "utf8"
+);
 
 describe("home public read path", () => {
   it("uses one compact public supplement operation", () => {
@@ -130,7 +138,15 @@ describe("home public read path", () => {
       home,
       /supplement\.summary\?\.event[\s\S]*?loadDreamTeam\(summaryEvent/,
     );
-    assert.match(home, /onTapDreamPlayer[\s\S]*?goToPlayerDetail/);
+  });
+
+  it("renders the dream team on the shared squad pitch with share actions", () => {
+    assert.match(homeJson, /squad-pitch/);
+    assert.match(homeWxml, /<squad-pitch[\s\S]*?bind:playertap="onDreamPlayerTap"/);
+    assert.match(home, /buildDreamTeamPitchState/);
+    assert.match(home, /onDreamPlayerTap[\s\S]*?goToPlayerDetail/);
+    assert.match(home, /onShareDreamPitch[\s\S]*?exportPortraitShareImage[\s\S]*?presentSquadPitchShareImage/);
+    assert.match(home, /onCopyDreamShare[\s\S]*?formatGameweekShareText[\s\S]*?"dreamTeam"/);
   });
 
   it("routes tappable GW stat tiles to entry and player pages", () => {

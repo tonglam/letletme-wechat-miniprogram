@@ -46,9 +46,9 @@ test("every visible share action uses the canonical text or image label", () => 
     }
   }
 
-  assert.equal(actions.length, 17, "the complete set of visible share actions is covered");
-  assert.equal(actions.filter((action) => action.expected === "分享文字").length, 13);
-  assert.equal(actions.filter((action) => action.expected === "分享图片").length, 4);
+  assert.equal(actions.length, 19, "the complete set of visible share actions is covered");
+  assert.equal(actions.filter((action) => action.expected === "分享文字").length, 14);
+  assert.equal(actions.filter((action) => action.expected === "分享图片").length, 5);
 });
 
 test("legacy share-button labels cannot return", () => {
