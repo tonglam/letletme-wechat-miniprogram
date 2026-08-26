@@ -68,6 +68,34 @@
   font-size: 24rpx;
 }
 
+.deadline-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+/* Countdown share — dark-card companion to the light-card .tool-btn */
+.deadline-share {
+  display: inline-flex;
+  align-items: center;
+  padding: 10rpx 20rpx;
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 12rpx;
+  background: var(--black-a25);
+}
+
+.deadline-share-label {
+  color: var(--electric);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.deadline-share.done .deadline-share-label {
+  color: var(--chalk-a60);
+}
+
 .countdown {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

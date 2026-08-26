@@ -161,4 +161,20 @@ describe("home public read path", () => {
     assert.match(home, /patch\.deadlinePassed = passed/);
     assert.match(home, /this\._deadlineRetryAttempts = 0/);
   });
+
+  it("shares the countdown card as copyable text with cleanup on hide", () => {
+    assert.match(homeWxml, /deadline-share[\s\S]*?catchtap="onCopyDeadlineShare"/);
+    assert.match(
+      home,
+      /onCopyDeadlineShare\(\) \{[\s\S]*?formatDeadlineShareText\(\{[\s\S]*?event: this\.data\.nextGw[\s\S]*?passed: this\.data\.deadlinePassed[\s\S]*?\}\)[\s\S]*?copyShareText/,
+    );
+    assert.match(home, /onHide\(\) \{[\s\S]*?clearDeadlineShareCopiedTimer/);
+    assert.match(home, /onUnload\(\) \{[\s\S]*?clearDeadlineShareCopiedTimer/);
+    const util = readFileSync(
+      new URL("../miniprogram/utils/deadline-share.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(util, /export function formatDeadlineShareText/);
+    assert.match(util, /passed/);
+  });
 });
