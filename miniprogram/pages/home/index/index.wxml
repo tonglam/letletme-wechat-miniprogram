@@ -34,12 +34,7 @@
           <view class="deadline-label">下一轮截止</view>
           <view class="deadline-time">{{deadline || '等待赛程更新'}}</view>
         </view>
-        <view class="deadline-side">
-          <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
-          <view wx:if="{{utcDeadline}}" class="deadline-share {{deadlineShareCopied ? 'done' : ''}}" catchtap="onCopyDeadlineShare" hover-class="hover-dim">
-            <text class="deadline-share-label">{{deadlineShareCopied ? '已复制' : '分享文字'}}</text>
-          </view>
-        </view>
+        <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
       </view>
       <view wx:if="{{deadlinePassed}}" class="deadline-live">
         <text class="deadline-live-tag">LIVE</text>
@@ -64,6 +59,14 @@
         </view>
       </view>
       <view wx:else class="deadline-empty">赛程更新后显示倒计时</view>
+      <view wx:if="{{utcDeadline}}" class="deadline-actions">
+        <view class="deadline-share {{deadlineShareBusy ? 'done' : ''}}" catchtap="onShareDeadlineImage" hover-class="hover-dim">
+          <text class="deadline-share-label">{{deadlineShareBusy ? '生成中' : '分享图片'}}</text>
+        </view>
+        <view class="deadline-share {{deadlineShareCopied ? 'done' : ''}}" catchtap="onCopyDeadlineShare" hover-class="hover-dim">
+          <text class="deadline-share-label">{{deadlineShareCopied ? '已复制' : '分享文字'}}</text>
+        </view>
+      </view>
     </view>
 
     <view wx:if="{{pos.hasTeam(entry) || entryError}}" class="section">

@@ -177,4 +177,18 @@ describe("home public read path", () => {
     assert.match(util, /export function formatDeadlineShareText/);
     assert.match(util, /passed/);
   });
+
+  it("exports the countdown card as a branded share image", () => {
+    assert.match(homeWxml, /catchtap="onShareDeadlineImage"/);
+    assert.match(
+      home,
+      /onShareDeadlineImage[\s\S]*?exportDeadlineShareImage\(\{[\s\S]*?event: this\.data\.nextGw[\s\S]*?passed: this\.data\.deadlinePassed[\s\S]*?\}\)[\s\S]*?presentDeadlineShareImage/,
+    );
+    const image = readFileSync(
+      new URL("../miniprogram/utils/deadline-share-image.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(image, /export function exportDeadlineShareImage/);
+    assert.match(image, /drawShareBranding/);
+  });
 });

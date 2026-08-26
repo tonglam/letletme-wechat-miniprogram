@@ -21,6 +21,10 @@ import type { SquadPitchHeader, SquadPitchPlayer } from "../../../utils/squad-pi
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import { formatGameweekShareText } from "../../../utils/gameweek-share";
 import { formatDeadlineShareText } from "../../../utils/deadline-share";
+import {
+  exportDeadlineShareImage,
+  presentDeadlineShareImage,
+} from "../../../utils/deadline-share-image";
 import { copyShareText } from "../../../utils/live-share";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
@@ -68,6 +72,7 @@ interface HomeData {
   dreamShareBusy: boolean;
   dreamShareCopied: boolean;
   deadlineShareCopied: boolean;
+  deadlineShareBusy: boolean;
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
   marketCoverage: string;
@@ -213,6 +218,7 @@ Page({
     dreamShareBusy: false,
     dreamShareCopied: false,
     deadlineShareCopied: false,
+    deadlineShareBusy: false,
     marketMode: "empty",
     marketTab: "pulse",
     marketCoverage: "最新每日持有率变化",
@@ -1133,6 +1139,24 @@ Page({
       wx.showToast({ title: "阵容图生成失败", icon: "none" });
     } finally {
       this.setData({ dreamShareBusy: false });
+    }
+  },
+
+  async onShareDeadlineImage() {
+    if (this.data.deadlineShareBusy || !this.data.utcDeadline) return;
+    this.setData({ deadlineShareBusy: true });
+    try {
+      const path = await exportDeadlineShareImage({
+        event: this.data.nextGw,
+        deadlineText: this.data.deadline,
+        countdown: this.data.countdown,
+        passed: this.data.deadlinePassed,
+      });
+      await presentDeadlineShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ deadlineShareBusy: false });
     }
   },
 
