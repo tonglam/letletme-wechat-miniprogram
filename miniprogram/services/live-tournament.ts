@@ -326,6 +326,17 @@ export function isTournamentBoardControlGenerationCurrent(input: {
       input.expectedBoardControlRequestId;
 }
 
+export function hasUnresolvedTournamentTeamExposureRules(
+  rules: readonly { teamId?: number }[],
+): boolean {
+  return rules.some(
+    (rule) =>
+      typeof rule.teamId !== "number" ||
+      !Number.isSafeInteger(rule.teamId) ||
+      rule.teamId <= 0,
+  );
+}
+
 export function filterTournamentRowsByOwnership(
   rows: LiveTournamentRow[],
   filter: TournamentOwnershipFilter

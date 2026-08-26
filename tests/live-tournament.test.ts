@@ -4,6 +4,7 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  hasUnresolvedTournamentTeamExposureRules,
   isTournamentBoardControlGenerationCurrent,
   mapTournamentLiveRows,
   compareKnownTournamentValues,
@@ -166,6 +167,16 @@ assertEqual(
   }),
   false,
   "a share is invalidated when board controls change mid-request",
+);
+assertEqual(
+  hasUnresolvedTournamentTeamExposureRules([{ teamId: undefined }]),
+  true,
+  "legacy team rules without canonical ids cannot use the paged board",
+);
+assertEqual(
+  hasUnresolvedTournamentTeamExposureRules([{ teamId: 7 }]),
+  false,
+  "team rules with canonical ids can use the paged board",
 );
 
 assertEqual(rows[0]?.entry, 101, "entry id is preserved");

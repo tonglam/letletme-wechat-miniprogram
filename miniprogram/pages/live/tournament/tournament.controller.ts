@@ -66,6 +66,7 @@ import {
   filterTournamentRowsByOwnership,
   filterTournamentRowsByTeamExposure,
   getTournamentTeamOptions,
+  hasUnresolvedTournamentTeamExposureRules,
   isTournamentBoardControlGenerationCurrent,
   compareKnownTournamentValues,
   combinedTournamentTraceableEntries,
@@ -1175,6 +1176,10 @@ PerformancePage({
                 ownershipSearch: "",
                 ownershipSearchResults: [],
                 ownershipMatchedText: "",
+                captainFilters: [],
+                captainValues: [],
+                captainFilterNames: [],
+                captainOptions: [],
                 teamExposureMatchedText: "",
                 teamExposureRules: [],
                 pendingExposureTeamIndex: 0,
@@ -1719,6 +1724,9 @@ PerformancePage({
   ): LiveBoardVariables | null {
     const scope = this.currentBoardScope();
     if (!scope) return null;
+    if (hasUnresolvedTournamentTeamExposureRules(this.data.teamExposureRules)) {
+      return null;
+    }
     const ownerIds = this.data.selectedOwnershipPlayers
       .map((player) => Number(player.element))
       .filter((value) => Number.isSafeInteger(value) && value > 0)
@@ -2071,6 +2079,14 @@ PerformancePage({
       });
       this.syncDisplayState();
       return Promise.resolve();
+    }
+    if (
+      this.usingLegacyBoard &&
+      hasUnresolvedTournamentTeamExposureRules(this.data.teamExposureRules)
+    ) {
+      // Legacy team options are keyed by short name only. Do not let a
+      // recovered paged request silently drop those rules from its variables.
+      return this.loadLegacyRows(options);
     }
     const variables = this.buildBoardVariables();
     if (!variables) {
