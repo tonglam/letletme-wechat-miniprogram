@@ -70,6 +70,37 @@
   opacity: 0.7;
 }
 
+/* Sheet share action — sits left of the close button on the dark hero */
+.pls-share {
+  position: absolute;
+  top: 24rpx;
+  right: 88rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  height: 48rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid var(--electric-a28, rgba(0, 255, 133, 0.28));
+  border-radius: 999rpx;
+  background: var(--black-a25, rgba(0, 0, 0, 0.25));
+  box-sizing: border-box;
+}
+
+.pls-share-icon {
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.pls-share-label {
+  color: var(--electric);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.pls-share.done .pls-share-label {
+  color: var(--chalk-a60, rgba(245, 241, 232, 0.6));
+}
+
 /* Position badge on the dark hero — solid pills, web market-position-badge palette */
 .pls-hero .pos-badge {
   padding: 2rpx 12rpx;

@@ -62,6 +62,10 @@ import {
   type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import {
+  exportPlayerLiveShareImage,
+  presentPlayerLiveShareImage,
+} from "../../../utils/player-live-share-image";
 
 interface SummaryTile {
   label: string;
@@ -150,6 +154,7 @@ interface LiveEntryData {
   shareCopied: boolean;
   shareSheetOpen: boolean;
   shareText: string;
+  playerShareBusy: boolean;
   pitchPlayers: SquadPitchPlayer[];
   pitchBench: SquadPitchPlayer[];
   pitchHeader: SquadPitchHeader | null;
@@ -275,6 +280,7 @@ Page({
     shareCopied: false,
     shareSheetOpen: false,
     shareText: "",
+    playerShareBusy: false,
     pitchPlayers: [],
     pitchBench: [],
     pitchHeader: null,
@@ -1504,6 +1510,24 @@ Page({
     this.setData({
       playerDetailOpen: false,
     });
+  },
+
+  async onSharePlayerImage() {
+    const detail = this.data.playerDetail;
+    if (this.data.playerShareBusy || !detail) return;
+    this.setData({ playerShareBusy: true });
+    try {
+      const path = await exportPlayerLiveShareImage({
+        detail,
+        event: this.data.event,
+        entryName: this.data.entryName,
+      });
+      await presentPlayerLiveShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ playerShareBusy: false });
+    }
   },
 
   async onSharePitch() {

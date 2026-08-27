@@ -6,6 +6,10 @@
     <!-- Hero: dark fascia band, same language as the page scoreboard -->
     <view class="pls-hero">
       <view class="pls-handle"></view>
+      <view wx:if="{{shareable}}" class="pls-share {{shareBusy ? 'done' : ''}}" catchtap="onShareImage" hover-class="hover-dim">
+        <image src="/assets/icons/image.svg" class="pls-share-icon" mode="aspectFit" />
+        <text class="pls-share-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+      </view>
       <view class="pls-close" bindtap="onClose" hover-class="hover-dim">
         <image src="/assets/icons/close.svg" class="pls-close-icon" mode="aspectFit" />
       </view>
