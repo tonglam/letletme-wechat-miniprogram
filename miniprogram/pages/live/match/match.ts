@@ -42,6 +42,15 @@ import {
   type LiveMatchShareCanvasTarget,
 } from "../../../utils/live-match-share-image";
 import { windowPixelRatio } from "../../../utils/system-info";
+import {
+  countLiveMatchTabs,
+  liveMatchTabKey,
+  preferredLiveMatchTab,
+} from "../../../utils/live-match-tabs";
+import {
+  exportPlayerLiveShareImage,
+  presentPlayerLiveShareImage,
+} from "../../../utils/player-live-share-image";
 import { miniLogger } from "../../../utils/logger";
 import {
   buildPlayerLiveDetail,
@@ -51,6 +60,10 @@ import {
 interface StatusOption {
   key: string;
   label: string;
+}
+
+interface StatusTab extends StatusOption {
+  count: number;
 }
 
 interface MatchGroup {
@@ -620,12 +633,17 @@ function coreMatch(fixture: Fixture): LiveMatch {
 }
 
 function matchStatus(match: LiveMatch): string {
-  const status = String(
-    match.status || match.playStatus || "not_start",
-  ).toLowerCase();
-  if (status === "playing" || status === "live") return "playing";
-  if (status === "finished") return "finished";
-  return "not_start";
+  return liveMatchTabKey(match.status || match.playStatus);
+}
+
+function buildStatusTabs(matches: LiveMatch[]): StatusTab[] {
+  const counts = countLiveMatchTabs(
+    matches.map((match) => match.status || match.playStatus),
+  );
+  return STATUS_OPTIONS.map((option) => ({
+    ...option,
+    count: counts[option.key as keyof typeof counts] ?? 0,
+  }));
 }
 
 function filterMatches(
@@ -711,7 +729,7 @@ Page({
     status: DEFAULT_STATUS,
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
-    statusOptions: STATUS_OPTIONS,
+    statusTabs: buildStatusTabs([]),
     matches: [] as LiveMatch[],
     groups: [] as MatchGroup[],
     lastUpdated: "",
@@ -724,6 +742,7 @@ Page({
     expandedTeam: "home" as "home" | "away",
     playerDetailOpen: false,
     playerDetail: null as PlayerLiveDetailView | null,
+    playerShareBusy: false,
   },
 
   copiedMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -744,6 +763,10 @@ Page({
   hasShown: false,
   targetEventId: 0,
   coreMatches: [] as LiveMatch[],
+  // True once the user (or a stored choice) owns the tab; until then the
+  // active tab follows the content like the web live/matches desk does.
+  statusFromStorage: false,
+  playerDetailMatchLabel: "",
   liveWindow: false,
   kickoffTransitionTimer: undefined as number | undefined,
   contextDeadlineTimer: undefined as number | undefined,
@@ -779,6 +802,7 @@ Page({
       wx.setStorageSync(STORAGE_STATUS_KEY, "not_start");
     }
     if (isValidStatus(storedStatus)) {
+      this.statusFromStorage = true;
       this.setData({
         status: storedStatus,
         activeStatusLabel:
@@ -1152,6 +1176,7 @@ Page({
         this.setData({
           matches: [],
           groups: [],
+          statusTabs: buildStatusTabs([]),
           hasData: false,
           fixtureStaleMessage: "",
           lastUpdated: "",
@@ -1341,13 +1366,15 @@ Page({
             (fixture) => !fixture.finished && fixture.started === true,
           );
         this.armKickoffTransition(coreRead.data);
-        const activeStatus = this.data.status;
+        const activeStatus = this.resolveActiveStatus(core);
         const activeStatusLabel =
           STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label ||
           "比赛";
         const matches = filterMatches(core, activeStatus);
         this.setData(
           {
+            status: activeStatus,
+            statusTabs: buildStatusTabs(core),
             activeStatusLabel,
             emptyDescription: emptyDescription(activeStatus),
             matches,
@@ -1381,9 +1408,11 @@ Page({
           this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.coreMatches = mergeLiveOverlay(core, liveResult.data);
-          const overlayStatus = this.data.status;
+          const overlayStatus = this.resolveActiveStatus(this.coreMatches);
           const overlaid = filterMatches(this.coreMatches, overlayStatus);
           this.setData({
+            status: overlayStatus,
+            statusTabs: buildStatusTabs(this.coreMatches),
             activeStatusLabel:
               STATUS_OPTIONS.find((item) => item.key === overlayStatus)
                 ?.label || "比赛",
@@ -1436,6 +1465,18 @@ Page({
     };
     void request.then(clearRequest, clearRequest);
     return request;
+  },
+
+  resolveActiveStatus(matches: LiveMatch[]): string {
+    // Web parity (getPreferredLiveMatchesTab): until the user picks a tab,
+    // follow the content — live first, then upcoming, then finished. An
+    // empty desk keeps the current tab (the preseason not-started default).
+    if (this.statusFromStorage || matches.length === 0) {
+      return this.data.status;
+    }
+    return preferredLiveMatchTab(
+      matches.map((match) => match.status || match.playStatus),
+    );
   },
 
   shouldAutoRefresh(): boolean {
@@ -1501,6 +1542,7 @@ Page({
     }
     const activeStatusLabel =
       STATUS_OPTIONS.find((item) => item.key === status)?.label || "比赛";
+    this.statusFromStorage = true;
     wx.setStorageSync(STORAGE_STATUS_KEY, status);
     const matches = filterMatches(this.coreMatches, status);
     this.setData({
@@ -1550,6 +1592,12 @@ Page({
     if (!Number.isFinite(element) || matchId === "") return;
     const player = findMatchPlayer(this.coreMatches, matchId, element);
     if (!player) return;
+    const match = this.coreMatches.find(
+      (item) => String(item.matchId) === String(matchId),
+    );
+    this.playerDetailMatchLabel = match
+      ? `${match.homeTeamDisplay || ""} VS ${match.awayTeamDisplay || ""}`.trim()
+      : "";
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
@@ -1557,7 +1605,26 @@ Page({
   },
 
   onClosePlayer() {
+    this.playerDetailMatchLabel = "";
     this.setData({ playerDetailOpen: false, playerDetail: null });
+  },
+
+  async onSharePlayerImage() {
+    const detail = this.data.playerDetail;
+    if (this.data.playerShareBusy || !detail) return;
+    this.setData({ playerShareBusy: true });
+    try {
+      const path = await exportPlayerLiveShareImage({
+        detail,
+        event: this.targetEventId || this.currentEventId,
+        entryName: this.playerDetailMatchLabel || undefined,
+      });
+      await presentPlayerLiveShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      if (this.pageVisible) this.setData({ playerShareBusy: false });
+    }
   },
 
   onRetry() {

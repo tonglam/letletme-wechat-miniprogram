@@ -12,13 +12,13 @@
 
     <view class="status-tabs">
       <view
-        wx:for="{{statusOptions}}"
+        wx:for="{{statusTabs}}"
         wx:key="key"
         class="status-tab {{status === item.key ? 'active' : ''}}"
         data-status="{{item.key}}"
         bindtap="onStatusTap"
         hover-class="hover-dim"
-      >{{item.label}}</view>
+      >{{item.label}} <text class="status-tab-count">{{item.count}}</text></view>
     </view>
   </block>
 
@@ -206,7 +206,7 @@
   <view class="match-share-slot">
     <canvas type="2d" id="live-match-share-canvas" class="match-share-canvas"></canvas>
   </view>
-  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" shareable="{{true}}" shareBusy="{{playerShareBusy}}" bind:close="onClosePlayer" bind:shareimage="onSharePlayerImage" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>
