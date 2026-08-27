@@ -346,6 +346,8 @@ export interface HomeMarketMover {
   meta: string;
   changeText: string;
   rising: boolean;
+  /** Prediction rows only: |progressPercent| capped at 100 for the bar. */
+  progressPct?: number;
 }
 
 export interface HomeAvailabilityRow {
@@ -671,6 +673,7 @@ export async function getMiniHomePricePredictions(
     meta: `${formatTenthsOrDash(player.currentPrice)} · ${priceChangeStatusLabel(player.status)}`,
     changeText: formatPredictionPercent(player.progressPercent),
     rising: player.progressPercent > 0,
+    progressPct: Math.min(100, Math.abs(Number(player.progressPercent) || 0)),
   });
   const notice = board.status === "PARTIAL"
     ? "预测数据不完整，仅供参考"

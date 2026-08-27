@@ -262,13 +262,6 @@
   margin-bottom: 20rpx;
 }
 
-.transfer-subhead {
-  margin: 8rpx 0 12rpx;
-  color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 800;
-}
-
 .transfer-note {
   margin: -4rpx 0 12rpx;
   color: var(--muted-ink);
@@ -278,6 +271,28 @@
 .transfer-more {
   margin-top: 20rpx;
   text-align: center;
+}
+
+/* Prediction rows — web LikelyPlayerRow progress bar */
+.transfer-progress {
+  margin-top: 8rpx;
+  height: 6rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: var(--track);
+}
+
+.transfer-progress-fill {
+  height: 100%;
+  border-radius: 999rpx;
+}
+
+.transfer-progress-up {
+  background: var(--green-ink);
+}
+
+.transfer-progress-down {
+  background: var(--danger);
 }
 
 /* Dream team — same squad-pitch rendering as the gameweek summary page */

@@ -100,8 +100,8 @@ describe("home public read path", () => {
     assert.match(service, /priceFallers/);
   });
 
-  it("loads the prediction board lazily from the price tab only", () => {
-    assert.match(home, /onSelectMarketTab[\s\S]*?tab === "price"[\s\S]*?loadPricePredictions/);
+  it("loads the prediction board lazily from the trends tab only", () => {
+    assert.match(home, /onSelectPriceTab[\s\S]*?tab === "likely"[\s\S]*?loadPricePredictions/);
     assert.match(home, /getMiniHomePricePredictions/);
     assert.match(
       service,

@@ -175,18 +175,22 @@ test("home first viewport order matches the web: deadline, personal desk, GW sta
       fixtures > market,
     "web order: deadline, personal desk, GW stats, dream team, transfer desk, fixtures last",
   );
-  assert.match(template, /市场动态/);
+  // Two market cards mirror the web HomeMarketCarousel + HomePriceChangeCarousel.
+  assert.match(template, /持有率变化/);
+  assert.match(template, /出场状态观察/);
+  assert.match(template, /身价变化/);
+  assert.match(template, /涨跌趋势/);
   assert.match(template, /打开市场/);
+  assert.match(template, /查看全部预测/);
   assert.match(template, /持有上升/);
   assert.match(template, /持有下降/);
-  assert.match(template, /出场状态观察/);
-  assert.match(template, /市场动态|marketLeadTitle/);
+  assert.equal(template.match(/section card transfer-desk/g)?.length, 2, "market area is two cards");
   assert.match(template, /notice-strip/);
   assert.match(template, /noticeText/);
   assert.match(page, /noticeText: supplement\.notice|noticeText: nextNotice/);
   assert.match(page, /NOTICE_AUTO_CLOSE_MS = 5 \* 1000/);
   assert.match(page, /scheduleNoticeAutoClose/);
-  assert.doesNotMatch(template, /section-title">身价变化/);
+  assert.match(template, /section-title">\{\{priceTab === 'today' \? '身价变化' : '涨跌趋势'\}\}/);
   assert.match(template, /bind-team[\s\S]*onChangeEntry[\s\S]*onGoAccountLink/);
   assert.match(template, /accountLinkReady && !accountLinked/);
   assert.doesNotMatch(template, /选择球队后开始/);

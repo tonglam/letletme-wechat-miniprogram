@@ -74,7 +74,8 @@ interface HomeData {
   playerDetail: PlayerLiveDetailView | null;
   deadlineShareBusy: boolean;
   marketMode: MiniHomeMarketMode;
-  marketTab: "pulse" | "price";
+  pulseTab: "ownership" | "watch";
+  priceTab: "today" | "likely";
   marketCoverage: string;
   marketLeadTitle: string;
   marketLeadRows: HomeMarketMover[];
@@ -220,7 +221,8 @@ Page({
     playerDetail: null,
     deadlineShareBusy: false,
     marketMode: "empty",
-    marketTab: "pulse",
+    pulseTab: "ownership",
+    priceTab: "today",
     marketCoverage: "最新每日持有率变化",
     marketLeadTitle: "最新每日持有率变化",
     marketLeadRows: [],
@@ -1020,11 +1022,18 @@ Page({
     navigateTo(routes.dataPrice);
   },
 
-  onSelectMarketTab(event: WechatMiniprogram.TouchEvent) {
+  onSelectPulseTab(event: WechatMiniprogram.TouchEvent) {
     const tab = String(event.currentTarget.dataset.tab || "");
-    if ((tab !== "pulse" && tab !== "price") || tab === this.data.marketTab) return;
-    this.setData({ marketTab: tab });
-    if (tab === "price" && !this.data.predictionLoaded && !this.data.predictionLoading) {
+    if ((tab !== "ownership" && tab !== "watch") || tab === this.data.pulseTab) return;
+    this.setData({ pulseTab: tab });
+  },
+
+  onSelectPriceTab(event: WechatMiniprogram.TouchEvent) {
+    const tab = String(event.currentTarget.dataset.tab || "");
+    if ((tab !== "today" && tab !== "likely") || tab === this.data.priceTab) return;
+    this.setData({ priceTab: tab });
+    // The prediction board stays lazy: first activation of the trends view.
+    if (tab === "likely" && !this.data.predictionLoaded && !this.data.predictionLoading) {
       void this.loadPricePredictions();
     }
   },
