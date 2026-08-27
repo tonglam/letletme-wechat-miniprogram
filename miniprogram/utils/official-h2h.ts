@@ -197,6 +197,38 @@ export function officialH2HSideName(side: OfficialH2HMatchSide): string {
   return side.entryName || "";
 }
 
+/**
+ * Web MatchupHistoryBoard status badge: live when the entry desk flags its
+ * current event live, finished for past events or a final current one, else
+ * upcoming (进行中/已结束/待开始).
+ */
+export function officialH2HMatchupStatusText(
+  match: { eventId: number },
+  desk?: {
+    eventId?: number | null;
+    isLive?: boolean | null;
+    isFinal?: boolean | null;
+  } | null,
+): "进行中" | "已结束" | "待开始" {
+  const currentEventId =
+    desk && typeof desk.eventId === "number" ? desk.eventId : null;
+  if (
+    desk?.isLive === true &&
+    currentEventId != null &&
+    match.eventId === currentEventId
+  ) {
+    return "进行中";
+  }
+  if (
+    currentEventId != null &&
+    (match.eventId < currentEventId ||
+      (match.eventId === currentEventId && desk?.isFinal === true))
+  ) {
+    return "已结束";
+  }
+  return "待开始";
+}
+
 /** TournamentLifecycle phase labels (LC.phase) plus queue/terminal states. */
 export function tournamentSetupPhaseText(phase?: string | null): string {
   switch (phase) {
@@ -249,6 +281,64 @@ export function tournamentGroupModeText(groupMode?: string | null): string {
   if (groupMode === "BATTLE_RACES") return "对战";
   if (groupMode === "POINTS_RACES") return "积分赛";
   return "无小组赛";
+}
+
+/** Web TournamentDetailClient SETUP_PHASES order. */
+export const TOURNAMENT_SETUP_PHASES = [
+  "SYNCING_ENTRIES",
+  "BUILDING_STRUCTURE",
+  "CALCULATING_STANDINGS",
+  "ENRICHING_HISTORY",
+  "FINALIZING",
+] as const;
+
+export type TournamentSetupPhaseState = "complete" | "active" | "pending";
+
+export interface TournamentSetupPhaseRow {
+  phase: (typeof TOURNAMENT_SETUP_PHASES)[number];
+  label: string;
+  state: TournamentSetupPhaseState;
+  progressText: string;
+}
+
+/**
+ * Web TournamentDetailClient setup checklist: READY counts as past every
+ * phase, QUEUED activates the first one, and the active phase carries its
+ * completed/total counter unless the backend reports INDETERMINATE progress
+ * (then the web shows indeterminateProgress instead).
+ */
+export function tournamentSetupPhaseRows(
+  setup?: TournamentSetupProgress | null,
+): TournamentSetupPhaseRow[] {
+  const phase = setup?.phase || "QUEUED";
+  const currentIndex =
+    phase === "READY"
+      ? TOURNAMENT_SETUP_PHASES.length
+      : TOURNAMENT_SETUP_PHASES.findIndex((item) => item === phase);
+  const completed = Number(setup?.completedUnits);
+  const total = Number(setup?.totalUnits);
+  const determinate =
+    setup?.progressMode !== "INDETERMINATE" &&
+    Number.isFinite(completed) &&
+    Number.isFinite(total) &&
+    total > 0;
+  return TOURNAMENT_SETUP_PHASES.map((item, index) => {
+    const complete = currentIndex > index;
+    const active =
+      currentIndex === index || (phase === "QUEUED" && index === 0);
+    let progressText = "";
+    if (active && determinate) {
+      progressText = `${completed}/${total}`;
+    } else if (active && setup?.progressMode === "INDETERMINATE") {
+      progressText = "后台仍在继续处理，完成时间暂无法确定。";
+    }
+    return {
+      phase: item,
+      label: tournamentSetupPhaseText(item),
+      state: complete ? "complete" : active ? "active" : "pending",
+      progressText,
+    };
+  });
 }
 
 export function tournamentKnockoutModeText(

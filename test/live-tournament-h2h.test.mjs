@@ -86,6 +86,79 @@ test("the H2H template renders standings, fixtures and the setup card", () => {
   assert.match(template, /bindtap="onRetry"/);
 });
 
+test("the setup card renders the web phase checklist", () => {
+  const template = source("miniprogram/pages/live/tournament/tournament.wxml");
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+
+  // Web TournamentDetailClient: READY completes every phase, the active
+  // phase carries completed/total unless INDETERMINATE.
+  assert.match(controller, /tournamentSetupPhaseRows\(setup\)/);
+  assert.match(controller, /setupPhases: failed \? \[\] : tournamentSetupPhaseRows/);
+  assert.match(template, /wx:for="\{\{setupPhases\}\}"/);
+  assert.match(template, /class="setup-phase-row \{\{item\.state\}\}"/);
+  assert.match(template, /\{\{item\.progressText\}\}/);
+});
+
+test("the 我的对阵 tab lazy-loads the viewer's entry desk once", () => {
+  const service = source("miniprogram/services/tournament-detail.service.ts");
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const template = source("miniprogram/pages/live/tournament/tournament.wxml");
+
+  // Web GET_ENTRY_OFFICIAL_H2H_MATCHUPS: the entry-wide desk, picked by
+  // tournamentId (MatchupHistoryBoard).
+  assert.match(
+    service,
+    /entryOfficialH2HDesk\(entryId: \$entryId\) \{ tournamentId eventId isLive isFinal matches/,
+  );
+  assert.match(
+    controller,
+    /desks\.find\(\(candidate\) => candidate\.tournamentId === tournamentId\)/,
+  );
+  // Badges follow the desk's own event/isLive/isFinal.
+  assert.match(controller, /officialH2HMatchupStatusText\(match, desk\)/);
+  // First activation loads; afterwards the desk piggybacks on the 60s board
+  // refresh so live badges stay accurate.
+  assert.match(controller, /if \(tab === "mine"\) void this\.loadH2HMatchups\(\);/);
+  assert.match(
+    controller,
+    /this\.data\.h2hMatchupsLoaded\) \{ void this\.loadH2HMatchups\(\{ background: true, forceRefresh: true \}\)/,
+  );
+  assert.match(template, /data-tab="mine" bindtap="onH2HTabTap"/);
+  assert.match(template, /wx:for="\{\{h2hMatchups\}\}"/);
+  assert.match(template, /\{\{item\.roundText\}\}/);
+  assert.match(template, /\{\{item\.statusText\}\}/);
+  assert.match(template, /暂无对阵记录。/);
+  assert.match(template, /我的对阵暂时无法获取。/);
+});
+
+test("the H2H view shares the visible tab as text or image", () => {
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const template = source("miniprogram/pages/live/tournament/tournament.wxml");
+  const shareText = source("miniprogram/utils/live-share.ts");
+
+  // Board idiom: one 分享文字/分享图片 pair, content follows the active tab.
+  assert.match(template, /bindtap="onCopyH2HShare"/);
+  assert.match(template, /bindtap="onShareH2HImage"/);
+  assert.match(
+    controller,
+    /async onShareH2HImage\(\)[\s\S]*exportTournamentH2HShareImage\(\{[\s\S]*presentTournamentH2HShareImage\(path\)/,
+  );
+  assert.match(
+    controller,
+    /onCopyH2HShare\(\): Promise<void>[\s\S]*formatOfficialH2HShareText\(\{[\s\S]*copyShareText\(text\)/,
+  );
+  // Tab-aware payload: 我的对阵 lazy-loads the entry desk before sharing.
+  assert.match(
+    controller,
+    /h2hTab === "mine"\) \{\s*if \(this\.data\.h2hMatchupsLoading\) return;\s*if \(!this\.data\.h2hMatchupsLoaded\) await this\.loadH2HMatchups\(\);/,
+  );
+  // Web share builders: standings rows, fixture labels, matchup history.
+  assert.match(shareText, /对战积分榜:/);
+  assert.match(shareText, /本轮对阵:/);
+  assert.match(shareText, /我的对阵/);
+  assert.match(shareText, /对战积分 · \$\{row\.pointsForText\} 总得分/);
+});
+
 test("the detail disclosure opens from the toolbar and lists statistics, rules and roster", () => {
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
   const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");

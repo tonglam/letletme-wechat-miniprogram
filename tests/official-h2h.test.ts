@@ -2,6 +2,7 @@ import {
   filterTournamentRoster,
   isOfficialH2HTournamentRow,
   isTournamentSetupInFlight,
+  officialH2HMatchupStatusText,
   officialH2HPhaseLabel,
   officialH2HScoreSourceText,
   officialH2HSideName,
@@ -13,6 +14,7 @@ import {
   tournamentHasKnockout,
   tournamentKnockoutModeText,
   tournamentLeagueTypeText,
+  tournamentSetupPhaseRows,
   tournamentSetupPhaseText,
   tournamentSetupProgressText,
   traceableOfficialH2HBoard,
@@ -196,6 +198,53 @@ equal(
   "average side label",
 );
 
+// --- matchup history status (web MatchupHistoryBoard badge) ---
+equal(
+  officialH2HMatchupStatusText(
+    { eventId: 5 },
+    { eventId: 5, isLive: true, isFinal: false },
+  ),
+  "进行中",
+  "live current event is live",
+);
+equal(
+  officialH2HMatchupStatusText(
+    { eventId: 4 },
+    { eventId: 5, isLive: true, isFinal: false },
+  ),
+  "已结束",
+  "past event is finished",
+);
+equal(
+  officialH2HMatchupStatusText(
+    { eventId: 5 },
+    { eventId: 5, isLive: false, isFinal: true },
+  ),
+  "已结束",
+  "final current event is finished",
+);
+equal(
+  officialH2HMatchupStatusText(
+    { eventId: 5 },
+    { eventId: 5, isLive: false, isFinal: false },
+  ),
+  "待开始",
+  "current event neither live nor final is upcoming",
+);
+equal(
+  officialH2HMatchupStatusText(
+    { eventId: 6 },
+    { eventId: 5, isLive: false, isFinal: false },
+  ),
+  "待开始",
+  "future event is upcoming",
+);
+equal(
+  officialH2HMatchupStatusText({ eventId: 5 }, null),
+  "待开始",
+  "missing desk is upcoming",
+);
+
 // --- setup lifecycle ---
 equal(tournamentSetupPhaseText("SYNCING_ENTRIES"), "同步经理数据", "phase label");
 equal(tournamentSetupPhaseText("CALCULATING_STANDINGS"), "计算积分榜", "phase label");
@@ -233,6 +282,59 @@ equal(
   }),
   "构建赛事结构",
   "indeterminate progress hides the counter",
+);
+
+// --- setup phase checklist (web TournamentDetailClient SETUP_PHASES) ---
+const phaseStates = (setup?: Parameters<typeof tournamentSetupPhaseRows>[0]) =>
+  tournamentSetupPhaseRows(setup).map((row) => row.state).join(",");
+const midSetup = tournamentSetupPhaseRows({
+  status: "PROCESSING",
+  phase: "CALCULATING_STANDINGS",
+  completedUnits: 3,
+  totalUnits: 7,
+  progressMode: "DETERMINATE",
+});
+equal(midSetup.length, 5, "five setup phases");
+equal(
+  midSetup.map((row) => row.state).join(","),
+  "complete,complete,active,pending,pending",
+  "phases before the current one are complete, the rest pending",
+);
+equal(midSetup[2].label, "计算积分榜", "active phase label");
+equal(midSetup[2].progressText, "3/7", "active phase carries the counter");
+equal(midSetup[0].progressText, "", "completed phase hides the counter");
+equal(
+  phaseStates({
+    status: "PROCESSING",
+    phase: "QUEUED",
+    completedUnits: 0,
+    totalUnits: 0,
+    progressMode: "INDETERMINATE",
+  }),
+  "active,pending,pending,pending,pending",
+  "QUEUED activates the first phase",
+);
+equal(
+  phaseStates({ status: "READY", phase: "READY" }),
+  "complete,complete,complete,complete,complete",
+  "READY completes every phase",
+);
+const indeterminateSetup = tournamentSetupPhaseRows({
+  status: "PROCESSING",
+  phase: "FINALIZING",
+  completedUnits: 0,
+  totalUnits: 0,
+  progressMode: "INDETERMINATE",
+});
+equal(
+  indeterminateSetup[4].progressText,
+  "后台仍在继续处理，完成时间暂无法确定。",
+  "indeterminate active phase shows the web fallback copy",
+);
+equal(
+  tournamentSetupPhaseRows(null)[0].state,
+  "active",
+  "missing setup behaves like QUEUED",
 );
 
 // --- disclosure labels ---

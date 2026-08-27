@@ -281,6 +281,71 @@ export function formatLiveTournamentShareText(input: {
   return lines.join("\n");
 }
 
+/** `{home} 60 — 55 {away}` with a score, `{home} 对阵 {away}` without (web shareMatchLabel). */
+function officialH2HShareMatchLabel(match: {
+  homeName: string;
+  awayName: string;
+  /** "60 — 55", or 对阵 when the score is not traceable yet. */
+  scoreText: string;
+}): string {
+  return `${match.homeName} ${match.scoreText} ${match.awayName}`;
+}
+
+/**
+ * Official H2H share copy (web OfficialH2HCompetitionView share builders):
+ * standings → `GW{n} 对战总览` + 对战积分榜 lines, fixtures → 本轮对阵 lines,
+ * 我的对阵 → `GW{n}: …` history lines. Dressed in the Mini's `# title` +
+ * site-link share-text conventions.
+ */
+export function formatOfficialH2HShareText(input: {
+  kind: "standings" | "matches" | "matchups";
+  gameweek: number;
+  tournamentName?: string;
+  tournamentId?: number | string;
+  standings?: Array<{
+    rankText: string;
+    entryName: string;
+    matchPointsText: string;
+    pointsForText: string;
+  }>;
+  matches?: Array<{
+    labelText?: string;
+    homeName: string;
+    awayName: string;
+    scoreText: string;
+  }>;
+}): string {
+  const title = textValue(input.tournamentName, "赛事");
+  const lines: string[] = [];
+  if (input.kind === "matchups") {
+    lines.push(`# ${title} · 我的对阵`);
+    (input.matches || []).forEach((match) => {
+      lines.push(`${match.labelText || "GW?"}: ${officialH2HShareMatchLabel(match)}`);
+    });
+  } else {
+    lines.push(`# ${title} · GW${input.gameweek} 对战总览`);
+    if (input.kind === "standings") {
+      lines.push("对战积分榜:");
+      (input.standings || []).forEach((row) => {
+        lines.push(
+          `${row.rankText}. ${row.entryName} · ${row.matchPointsText} 对战积分 · ${row.pointsForText} 总得分`,
+        );
+      });
+    } else {
+      lines.push("本轮对阵:");
+      (input.matches || []).forEach((match) => {
+        lines.push(officialH2HShareMatchLabel(match));
+      });
+    }
+  }
+
+  if (input.tournamentId !== undefined && input.tournamentId !== "") {
+    lines.push("", `实时赛事：${SITE}/live/competitions?tournamentId=${input.tournamentId}`);
+  }
+
+  return lines.join("\n");
+}
+
 /**
  * Plain-text match summary for social paste — same compact recipe as the web
  * match card: one header line, then one inline line per highlight group

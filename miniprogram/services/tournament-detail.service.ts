@@ -2,6 +2,7 @@ import { graphqlRequest } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 import type {
   OfficialH2HBoard,
+  OfficialH2HMatch,
   TournamentDetailKind,
   TournamentParticipantRow,
   TournamentSetupProgress,
@@ -96,6 +97,43 @@ export const GET_TOURNAMENT_OFFICIAL_H2H = `
   }
 `;
 
+/**
+ * Viewer matchup history across every official H2H tournament the entry
+ * plays in (web GET_ENTRY_OFFICIAL_H2H_MATCHUPS); callers pick the current
+ * tournamentId out of the returned list.
+ */
+export const GET_ENTRY_OFFICIAL_H2H_MATCHUPS = `
+  query EntryOfficialH2HMatchups($entryId: Int!) {
+    entryOfficialH2HDesk(entryId: $entryId) {
+      tournamentId
+      eventId
+      isLive
+      isFinal
+      matches {
+        officialMatchId
+        eventId
+        sourceOrder
+        phase
+        knockoutName
+        isBye
+        winnerEntryId
+        tiebreak
+        sourceCheckedAt
+        home { entryId entryName playerName isAverage points matchPoints }
+        away { entryId entryName playerName isAverage points matchPoints }
+      }
+    }
+  }
+`;
+
+export interface EntryOfficialH2HMatchupsItem {
+  tournamentId: number;
+  eventId: number;
+  isLive?: boolean | null;
+  isFinal?: boolean | null;
+  matches?: OfficialH2HMatch[] | null;
+}
+
 export interface TournamentDetailInfo {
   id: number;
   name: string;
@@ -164,4 +202,19 @@ export async function getTournamentOfficialH2H(
     { cachePolicy: "reporting", forceRefresh, trace },
   );
   return data.tournamentOfficialH2H;
+}
+
+export async function getEntryOfficialH2HMatchups(
+  entryId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+): Promise<EntryOfficialH2HMatchupsItem[]> {
+  const data = await graphqlRequest<{
+    entryOfficialH2HDesk: EntryOfficialH2HMatchupsItem[];
+  }>(
+    GET_ENTRY_OFFICIAL_H2H_MATCHUPS,
+    { entryId },
+    { cachePolicy: "reporting", forceRefresh, trace },
+  );
+  return data.entryOfficialH2HDesk || [];
 }

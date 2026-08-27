@@ -58,9 +58,13 @@ test("tournament preseason is a stable business empty state", () => {
     h2hViewerRankText: "",
     h2hViewerMatchPointsText: "",
     h2hViewerRecordText: "",
+    h2hMatchups: [],
+    h2hMatchupsLoading: false,
+    h2hMatchupsLoaded: false,
+    h2hMatchupsFailed: false,
     setupActive: false,
     setupFailed: false,
-    setupPhaseText: ""
+    setupPhases: []
   });
 });
 
