@@ -601,6 +601,7 @@ Page({
   ) {
     const isActiveSecondary = () => this._pageVisible && requestId === this._loadRequestId;
     if (!isActiveSecondary()) return;
+    tracker?.expectSecondaryCompletion();
     this._secondaryPending = true;
     const app = getApp<IAppOption>();
     this.setData({

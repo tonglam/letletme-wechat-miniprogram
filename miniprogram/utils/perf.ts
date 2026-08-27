@@ -283,7 +283,10 @@ export function recordApi(
   flush();
 }
 
-export function recordPagePerformance(record: Omit<PagePerformanceRecord, "ts">): void {
+export function recordPagePerformance(
+  record: Omit<PagePerformanceRecord, "ts">,
+  options: { routeReadyFinal?: boolean } = {},
+): void {
   const data = load();
   if (!Array.isArray(data.pagePerformance)) data.pagePerformance = [];
   const existing = data.pagePerformance.findIndex(
@@ -307,7 +310,11 @@ export function recordPagePerformance(record: Omit<PagePerformanceRecord, "ts">)
     data.pagePerformance.push({ ...record, ts: Date.now() });
   }
   const completion = record.completeAt ?? record.softFailureAt;
-  if (completion !== undefined && !reportedPageReady.has(record.navigationId)) {
+  if (
+    options.routeReadyFinal === true &&
+    completion !== undefined &&
+    !reportedPageReady.has(record.navigationId)
+  ) {
     reportedPageReady.add(record.navigationId);
     enqueueClientTelemetry({
       surface: surfaceForTelemetry(record.route),

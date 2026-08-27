@@ -118,8 +118,14 @@ function currentEnvironment(): {
   sampleSource: "real" | "synthetic";
 } {
   const synthetic = getMiniProgramEnv() === "develop";
+  let isDevTools = false;
+  try {
+    isDevTools = wx.getSystemInfoSync().platform === "devtools";
+  } catch {
+    // Node tests and older runtimes default to the real-device bucket.
+  }
   return {
-    deviceGroup: synthetic ? "wechat_devtools" : "wechat_phone",
+    deviceGroup: isDevTools ? "wechat_devtools" : "wechat_phone",
     sampleSource: synthetic ? "synthetic" : "real",
   };
 }

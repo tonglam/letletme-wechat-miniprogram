@@ -7,9 +7,10 @@ import {
 } from "../miniprogram/services/client-telemetry.service.ts";
 import { storageKeys } from "../miniprogram/config/storage-keys.ts";
 
-function installWx(storage, requests, onRequest = () => {}) {
+function installWx(storage, requests, onRequest = () => {}, { envVersion = "release", platform = "ios" } = {}) {
   globalThis.wx = {
-    getAccountInfoSync: () => ({ miniProgram: { envVersion: "release" } }),
+    getAccountInfoSync: () => ({ miniProgram: { envVersion } }),
+    getSystemInfoSync: () => ({ platform }),
     getStorageSync: (key) => storage.get(key),
     setStorageSync: (key, value) => storage.set(key, value),
     removeStorageSync: (key) => storage.delete(key),
@@ -19,6 +20,25 @@ function installWx(storage, requests, onRequest = () => {}) {
     },
   };
 }
+
+test("client telemetry derives the device bucket from the runtime platform", () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map();
+  try {
+    installWx(storage, [], () => {}, { envVersion: "develop", platform: "ios" });
+    enqueueClientTelemetry(errorSample());
+    assert.equal(storage.get(storageKeys.clientTelemetryQueue).samples[0].deviceGroup, "wechat_phone");
+    assert.equal(storage.get(storageKeys.clientTelemetryQueue).samples[0].sampleSource, "synthetic");
+
+    const devToolsStorage = new Map();
+    installWx(devToolsStorage, [], () => {}, { envVersion: "release", platform: "devtools" });
+    enqueueClientTelemetry(errorSample());
+    assert.equal(devToolsStorage.get(storageKeys.clientTelemetryQueue).samples[0].deviceGroup, "wechat_devtools");
+    assert.equal(devToolsStorage.get(storageKeys.clientTelemetryQueue).samples[0].sampleSource, "real");
+  } finally {
+    globalThis.wx = previousWx;
+  }
+});
 
 function errorSample() {
   return {
