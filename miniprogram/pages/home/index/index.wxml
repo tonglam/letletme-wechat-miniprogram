@@ -74,6 +74,66 @@
       <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" bind:openleagues="onOpenLeagues" />
     </view>
 
+    <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
+      <view class="gw-stats-head">
+        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
+      </view>
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
+      <view class="gw-stats-grid">
+        <view
+          wx:for="{{gameweekStats}}"
+          wx:key="key"
+          class="gw-stat-item {{item.targetId ? 'gw-stat-tappable' : ''}}"
+          data-key="{{item.key}}"
+          data-target="{{item.targetId}}"
+          catchtap="onTapGameweekStat"
+          hover-class="{{item.targetId ? 'hover-dim' : ''}}"
+        >
+          <text class="gw-stat-label">{{item.label}}</text>
+          <text class="gw-stat-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
+    </view>
+
+    <view wx:if="{{hasDreamTeam}}" class="section card dream-card">
+      <view class="gw-stats-head">
+        <view class="section-title">本周最佳阵容</view>
+        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点球员看详情</view>
+      </view>
+      <view class="dream-pitch-section">
+        <view class="live-pitch-bar">
+          <text class="live-pitch-label">梦之队</text>
+          <view class="live-pitch-actions">
+            <view
+              class="tool-btn tool-btn-labeled {{dreamShareBusy ? 'done' : ''}}"
+              bindtap="onShareDreamPitch"
+              hover-class="hover-dim"
+            >
+              <text class="tool-label">{{dreamShareBusy ? '生成中' : '分享图片'}}</text>
+            </view>
+            <view
+              class="tool-btn tool-btn-labeled {{dreamShareCopied ? 'done' : ''}}"
+              bindtap="onCopyDreamShare"
+              hover-class="hover-dim"
+            >
+              <image wx:if="{{dreamShareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
+              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+              <text class="tool-label">{{dreamShareCopied ? '已复制' : '分享文字'}}</text>
+            </view>
+          </view>
+        </view>
+        <squad-pitch
+          id="home-dream-pitch"
+          players="{{dreamPlayers}}"
+          header="{{dreamHeader}}"
+          benchBoost="{{false}}"
+          bind:playertap="onDreamPlayerTap"
+        />
+      </view>
+    </view>
+
     <view class="section card transfer-desk">
       <view class="transfer-head">
         <view>
@@ -228,66 +288,6 @@
         </view>
         <view class="action section-link transfer-more" catchtap="onOpenPricePredictions" hover-class="hover-dim">查看完整身价预测</view>
       </block>
-    </view>
-
-    <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
-      <view class="gw-stats-head">
-        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
-      </view>
-      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-      <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
-      <view class="gw-stats-grid">
-        <view
-          wx:for="{{gameweekStats}}"
-          wx:key="key"
-          class="gw-stat-item {{item.targetId ? 'gw-stat-tappable' : ''}}"
-          data-key="{{item.key}}"
-          data-target="{{item.targetId}}"
-          catchtap="onTapGameweekStat"
-          hover-class="{{item.targetId ? 'hover-dim' : ''}}"
-        >
-          <text class="gw-stat-label">{{item.label}}</text>
-          <text class="gw-stat-value">{{item.value}}</text>
-        </view>
-      </view>
-      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
-    </view>
-
-    <view wx:if="{{hasDreamTeam}}" class="section card dream-card">
-      <view class="gw-stats-head">
-        <view class="section-title">本周最佳阵容</view>
-        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点球员看详情</view>
-      </view>
-      <view class="dream-pitch-section">
-        <view class="live-pitch-bar">
-          <text class="live-pitch-label">梦之队</text>
-          <view class="live-pitch-actions">
-            <view
-              class="tool-btn tool-btn-labeled {{dreamShareBusy ? 'done' : ''}}"
-              bindtap="onShareDreamPitch"
-              hover-class="hover-dim"
-            >
-              <text class="tool-label">{{dreamShareBusy ? '生成中' : '分享图片'}}</text>
-            </view>
-            <view
-              class="tool-btn tool-btn-labeled {{dreamShareCopied ? 'done' : ''}}"
-              bindtap="onCopyDreamShare"
-              hover-class="hover-dim"
-            >
-              <image wx:if="{{dreamShareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
-              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{dreamShareCopied ? '已复制' : '分享文字'}}</text>
-            </view>
-          </view>
-        </view>
-        <squad-pitch
-          id="home-dream-pitch"
-          players="{{dreamPlayers}}"
-          header="{{dreamHeader}}"
-          benchBoost="{{false}}"
-          bind:playertap="onDreamPlayerTap"
-        />
-      </view>
     </view>
 
     <view id="perf-primary-fixtures" class="section card fixture-card">

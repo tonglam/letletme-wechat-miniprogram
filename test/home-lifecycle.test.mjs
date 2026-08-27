@@ -152,14 +152,15 @@ test("home accepts a personal league desk only for the same entry id", () => {
   );
 });
 
-test("home first viewport order matches the web: deadline, team desk, market, then fixtures last", () => {
+test("home first viewport order matches the web: deadline, personal desk, GW stats, dream team, market, fixtures last", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
   const template = source("miniprogram/pages/home/index/index.wxml");
   const bindTeam = template.indexOf("bind-team");
   const deadline = template.indexOf("deadline-card");
   const boundEntry = template.lastIndexOf("<entry-card");
-  const market = template.indexOf("transfer-desk");
   const gwStats = template.indexOf("gw-stats-card");
+  const dreamTeam = template.indexOf("dream-card");
+  const market = template.indexOf("transfer-desk");
   const fixtures = template.indexOf("perf-primary-fixtures");
   assert.ok(
     bindTeam >= 0 && bindTeam < deadline,
@@ -168,10 +169,11 @@ test("home first viewport order matches the web: deadline, team desk, market, th
   assert.ok(
     deadline >= 0 &&
       boundEntry > deadline &&
-      market > boundEntry &&
-      gwStats > market &&
-      fixtures > gwStats,
-    "web order: deadline, personal desk, transfer desk, stats, fixtures last",
+      gwStats > boundEntry &&
+      dreamTeam > gwStats &&
+      market > dreamTeam &&
+      fixtures > market,
+    "web order: deadline, personal desk, GW stats, dream team, transfer desk, fixtures last",
   );
   assert.match(template, /市场动态/);
   assert.match(template, /打开市场/);
