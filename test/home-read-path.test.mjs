@@ -191,4 +191,26 @@ describe("home public read path", () => {
     assert.match(card, /visibilityText: "公开"[\s\S]*?visibilityText: "私人"/);
     assert.match(cardWxml, /entry-league-badge \{\{item\.visibilityClass\}\}/);
   });
+
+  it("shares each personal league panel as an image (web PersonalLeagueCarousel)", () => {
+    const card = readFileSync(
+      new URL("../miniprogram/components/entry-card/entry-card.ts", import.meta.url),
+      "utf8",
+    );
+    const cardWxml = readFileSync(
+      new URL("../miniprogram/components/entry-card/entry-card.wxml", import.meta.url),
+      "utf8",
+    );
+    // One share button per panel head; catchtap so the card's open tap does
+    // not fire. The full league list is shared, not the visible preview page.
+    assert.match(cardWxml, /catchtap="onShareLeagueImage" data-panel="classic"/);
+    assert.match(cardWxml, /catchtap="onShareLeagueImage" data-panel="h2h"/);
+    assert.match(
+      card,
+      /async onShareLeagueImage\([\s\S]*exportHomeLeaguesShareImage\(\{[\s\S]*presentHomeLeaguesShareImage\(path\)/,
+    );
+    assert.match(card, /panel === "h2h" \? this\.data\.h2hLeagues : this\.data\.classicLeagues/);
+    assert.match(card, /leagues\.map\(toClassicShareRow\)/);
+    assert.match(card, /leagues\.map\(toH2HShareRow\)/);
+  });
 });

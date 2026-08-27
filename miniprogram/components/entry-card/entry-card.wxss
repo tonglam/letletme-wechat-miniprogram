@@ -132,6 +132,27 @@
   margin-bottom: 4rpx;
 }
 
+.entry-leagues-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+
+.league-share-btn {
+  height: 52rpx;
+  padding: 0 16rpx;
+}
+
+.league-share-btn .tool-icon {
+  width: 26rpx;
+  height: 26rpx;
+}
+
+.league-share-btn .tool-label {
+  font-size: 20rpx;
+}
+
 .entry-leagues-title-row {
   display: flex;
   align-items: center;

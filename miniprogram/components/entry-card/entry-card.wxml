@@ -22,7 +22,13 @@
             <text class="entry-leagues-title">{{classicPanel.title}}</text>
             <text class="entry-leagues-count">{{classicPanel.total}}</text>
           </view>
-          <text class="action" catchtap="onOpenAllLeagues">全部</text>
+          <view class="entry-leagues-head-actions">
+            <view class="tool-btn tool-btn-labeled league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="classic" hover-class="hover-dim">
+              <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
+            </view>
+            <text class="action" catchtap="onOpenAllLeagues">全部</text>
+          </view>
         </view>
         <view wx:for="{{classicPanel.items}}" wx:key="id" class="entry-league-row">
           <view class="entry-league-main">
@@ -45,7 +51,13 @@
             <text class="entry-leagues-title">{{h2hPanel.title}}</text>
             <text class="entry-leagues-count">{{h2hPanel.total}}</text>
           </view>
-          <text class="action" catchtap="onOpenAllLeagues">全部</text>
+          <view class="entry-leagues-head-actions">
+            <view class="tool-btn tool-btn-labeled league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="h2h" hover-class="hover-dim">
+              <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+              <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
+            </view>
+            <text class="action" catchtap="onOpenAllLeagues">全部</text>
+          </view>
         </view>
         <view wx:for="{{h2hPanel.items}}" wx:key="id" class="entry-h2h-row">
           <view class="entry-h2h-head">

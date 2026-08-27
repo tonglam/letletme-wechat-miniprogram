@@ -5,6 +5,12 @@ import {
 } from "../../utils/entry-leagues";
 import { formatHomeH2HMatchup } from "../../utils/home-h2h";
 import type { HomeH2HDisplay } from "../../utils/home-h2h";
+import {
+  exportHomeLeaguesShareImage,
+  presentHomeLeaguesShareImage,
+  type HomeLeaguesShareClassicRow,
+  type HomeLeaguesShareH2HRow,
+} from "../../utils/home-leagues-share-image";
 import type { HomeH2HMatchup } from "../../models/entry";
 
 interface EntryCardInfo {
@@ -141,6 +147,46 @@ function buildPanel(
   };
 }
 
+/** Share rows reuse the same display shaping as the visible panels. */
+function toClassicShareRow(league: LeagueRow): HomeLeaguesShareClassicRow {
+  const movement = formatMovement(league.movement);
+  const visibility = formatVisibility(league.visibility);
+  const rank = league.viewerRank ?? league.rank;
+  return {
+    name: league.name,
+    badgeText: visibility.visibilityText,
+    badgePublic: visibility.visibilityClass === "visibility-public",
+    rankText: typeof rank === "number" ? `#${rank}` : "",
+    movementText: movement.movementText,
+    movementTone:
+      movement.movementClass === "movement-up"
+        ? "up"
+        : movement.movementClass === "movement-down"
+          ? "down"
+          : ""
+  };
+}
+
+function toH2HShareRow(league: LeagueRow): HomeLeaguesShareH2HRow {
+  const display = league.h2hMatchup
+    ? formatHomeH2HMatchup(league.h2hMatchup)
+    : null;
+  const rank = league.viewerRank ?? league.rank;
+  const rankText = typeof rank === "number" ? `#${rank}` : "";
+  return {
+    name: league.name,
+    metaText: display
+      ? [display.eventLabel, display.statusLabel, rankText]
+          .filter((part) => part)
+          .join(" · ")
+      : rankText,
+    hasMatchup: Boolean(display),
+    viewerName: display?.viewer.primary || "",
+    opponentName: display?.opponent.primary || "",
+    centerText: display?.centerLabel || ""
+  };
+}
+
 Component({
   properties: {
     entry: {
@@ -170,6 +216,7 @@ Component({
     classicPanel: null as LeaguePanel | null,
     h2hPanel: null as LeaguePanel | null,
     hasLeaguePanels: false,
+    shareImageBusy: false,
     entryMetaText: "",
     transferText: ""
   },
@@ -300,6 +347,43 @@ Component({
 
     onOpenAllLeagues() {
       this.triggerEvent("openleagues");
+    },
+
+    /** Web PersonalLeagueCarousel shares the panel as an image (image-only). */
+    async onShareLeagueImage(
+      event: WechatMiniprogram.BaseEvent<
+        WechatMiniprogram.IAnyObject,
+        { panel?: string }
+      >
+    ) {
+      const panel = event.currentTarget.dataset.panel === "h2h" ? "h2h" : "classic";
+      if (this.data.shareImageBusy) return;
+      // Share the panel's full league list (web shares the slide's full
+      // content, not the visible preview page).
+      const leagues = (
+        panel === "h2h" ? this.data.h2hLeagues : this.data.classicLeagues
+      ) as LeagueRow[];
+      if (!leagues.length) {
+        wx.showToast({ title: "暂无可分享的联赛", icon: "none" });
+        return;
+      }
+      this.setData({ shareImageBusy: true });
+      try {
+        const entry = (this.properties.entry || {}) as EntryCardInfo;
+        const path = await exportHomeLeaguesShareImage({
+          kind: panel,
+          entryName: entry.entryName || entry.teamName || "",
+          playerName: entry.playerName || "",
+          total: leagues.length,
+          classicRows: panel === "classic" ? leagues.map(toClassicShareRow) : [],
+          h2hRows: panel === "h2h" ? leagues.map(toH2HShareRow) : []
+        });
+        await presentHomeLeaguesShareImage(path);
+      } catch {
+        wx.showToast({ title: "图片生成失败", icon: "none" });
+      } finally {
+        this.setData({ shareImageBusy: false });
+      }
     },
 
     onOpen() {
