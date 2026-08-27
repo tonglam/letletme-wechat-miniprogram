@@ -43,6 +43,7 @@ import {
 } from "../../../utils/live-match-share-image";
 import { windowPixelRatio } from "../../../utils/system-info";
 import {
+  appendNextEventRows,
   countLiveMatchTabs,
   liveMatchTabKey,
   preferredLiveMatchTab,
@@ -1407,7 +1408,14 @@ Page({
           if (!this.pageVisible || requestId !== this.liveRequestId) return;
           this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
-          this.coreMatches = mergeLiveOverlay(core, liveResult.data);
+          this.coreMatches = appendNextEventRows(
+            mergeLiveOverlay(core, liveResult.data),
+            liveResult.data,
+          ).map((match) =>
+            // Rows beyond the core desk are next-event fixtures from the live
+            // snapshot — normalize them for display like any core row.
+            match.statusText ? match : normalizeMatch(match, "not_start"),
+          );
           const overlayStatus = this.resolveActiveStatus(this.coreMatches);
           const overlaid = filterMatches(this.coreMatches, overlayStatus);
           this.setData({

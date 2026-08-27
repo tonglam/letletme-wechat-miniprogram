@@ -1,4 +1,5 @@
 import {
+  appendNextEventRows,
   countLiveMatchTabs,
   liveMatchTabKey,
   preferredLiveMatchTab,
@@ -54,6 +55,49 @@ const empty = countLiveMatchTabs([]);
 check(
   empty.playing === 0 && empty.not_start === 0 && empty.finished === 0,
   "empty desk counts are zero",
+);
+
+// --- appendNextEventRows (web selectLiveMatchEvent fallback parity) ---
+function row(
+  matchId: number,
+  playStatus: string,
+): { matchId: number; playStatus: string } {
+  return { matchId, playStatus };
+}
+
+// Current event still live → next-event rows stay out.
+equal(
+  appendNextEventRows([row(1, "finished"), row(2, "playing")], [
+    row(1, "finished"),
+    row(2, "playing"),
+    row(11, "not_started"),
+  ]).length,
+  2,
+  "mid-event desk keeps next fixtures out",
+);
+
+// Whole event finished → next-event upcoming rows append.
+const settled = appendNextEventRows(
+  [row(1, "finished"), row(2, "finished")],
+  [row(1, "finished"), row(2, "finished"), row(11, "not_started"), row(12, "not_started")],
+);
+equal(settled.length, 4, "settled event gains next-event fixtures");
+equal(settled[2].matchId, 11, "next fixtures keep desk order");
+
+// Overlay rows already in the core list never duplicate.
+const noDupes = appendNextEventRows(
+  [row(1, "finished")],
+  [row(1, "not_started"), row(11, "not_started")],
+);
+equal(noDupes.length, 2, "overlay rows already in the core list are skipped");
+equal(noDupes[1].matchId, 11, "only the fresh row appends");
+
+// Empty or partially-live desks never append.
+equal(appendNextEventRows([], [row(11, "not_started")]).length, 0, "empty desk");
+equal(
+  appendNextEventRows([row(1, "not_start")], [row(11, "not_started")]).length,
+  1,
+  "unfinished current event",
 );
 
 console.log("live-match-tabs tests passed");

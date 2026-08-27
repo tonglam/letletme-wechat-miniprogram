@@ -372,8 +372,10 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
+        homeTeamShortName
         awayTeamId
         awayTeamName
+        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
@@ -387,8 +389,10 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
+        homeTeamShortName
         awayTeamId
         awayTeamName
+        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
@@ -406,8 +410,10 @@ export interface GraphQLMatchData {
   eventId: number;
   homeTeamId: number;
   homeTeamName: string;
+  homeTeamShortName: string | null;
   awayTeamId: number;
   awayTeamName: string;
+  awayTeamShortName: string | null;
   homeScore: number | null;
   awayScore: number | null;
   kickoffTime: string | null;
@@ -457,8 +463,10 @@ export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     matchId: match.fixtureId,
     homeTeamId: match.homeTeamId,
     homeTeamName: match.homeTeamName,
+    homeTeamShortName: match.homeTeamShortName ?? undefined,
     homeScore: match.homeScore ?? undefined,
     awayTeamName: match.awayTeamName,
+    awayTeamShortName: match.awayTeamShortName ?? undefined,
     awayTeamId: match.awayTeamId,
     awayScore: match.awayScore ?? undefined,
     kickoffTime: match.kickoffTime ?? "",

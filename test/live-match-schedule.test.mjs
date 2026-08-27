@@ -99,6 +99,17 @@ test("live match tabs follow web content preference and carry per-tab counts", (
   assert.match(template, /status-tab-count">\{\{item\.count\}\}/);
 });
 
+test("settled desk surfaces next-event fixtures like the web fallback", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const service = source("miniprogram/services/live.service.ts");
+  // Web parity (selectLiveMatchEvent): a fully finished event yields the
+  // not-started tab to the next event's fixtures from the desk snapshot.
+  assert.match(page, /appendNextEventRows\( mergeLiveOverlay\(core, liveResult\.data\), liveResult\.data, \)/);
+  assert.match(page, /match\.statusText \? match : normalizeMatch\(match, "not_start"\)/);
+  assert.match(service, /nextFixtures \{[\s\S]*homeTeamShortName[\s\S]*awayTeamShortName/);
+  assert.match(service, /homeTeamShortName: match\.homeTeamShortName \?\? undefined/);
+});
+
 test("live match player sheet offers image share like the web modal", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const template = source("miniprogram/pages/live/match/match.wxml");

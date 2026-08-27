@@ -39,3 +39,39 @@ export function countLiveMatchTabs(
   });
   return counts;
 }
+
+export interface LiveMatchTabRow {
+  matchId?: number | string;
+  id?: number | string;
+  status?: string;
+  playStatus?: string;
+}
+
+/**
+ * Web parity (selectLiveMatchEvent fallback): once every core fixture of the
+ * displayed event is finished, the useful "not started" view is the NEXT
+ * event's fixtures. The live desk already ships them as nextFixtures — append
+ * the ones not already in the core list. (The web also pins "today" to
+ * Australia/Perth to handle mid-matchday turns; the mini only flips once the
+ * whole event is terminal, which needs no timezone math.)
+ */
+export function appendNextEventRows<T extends LiveMatchTabRow>(
+  merged: readonly T[],
+  overlay: readonly T[],
+): T[] {
+  if (
+    merged.length === 0 ||
+    !merged.every(
+      (match) => liveMatchTabKey(match.status || match.playStatus) === "finished",
+    )
+  ) {
+    return [...merged];
+  }
+  const known = new Set(merged.map((match) => String(match.matchId || match.id)));
+  const upcoming = overlay.filter(
+    (match) =>
+      !known.has(String(match.matchId || match.id)) &&
+      liveMatchTabKey(match.status || match.playStatus) === "not_start",
+  );
+  return upcoming.length > 0 ? [...merged, ...upcoming] : [...merged];
+}
