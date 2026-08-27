@@ -134,6 +134,8 @@ describe("home public read path", () => {
     assert.match(service, /query MiniHomeDreamTeam\(\$eventId: Int!\)/);
     assert.match(service, /homeGameweek\(eventId: \$eventId\)/);
     assert.match(service, /dreamTeam \{[\s\S]*?totalPoints/);
+    // Player detail sheet stats (GameweekBoardPlayer fields).
+    assert.match(service, /dreamTeam \{[\s\S]*?minutes[\s\S]*?goalsScored[\s\S]*?assists[\s\S]*?cleanSheets[\s\S]*?bonus/);
     assert.match(
       home,
       /supplement\.summary\?\.event[\s\S]*?loadDreamTeam\(summaryEvent/,
@@ -144,9 +146,28 @@ describe("home public read path", () => {
     assert.match(homeJson, /squad-pitch/);
     assert.match(homeWxml, /<squad-pitch[\s\S]*?bind:playertap="onDreamPlayerTap"/);
     assert.match(home, /buildDreamTeamPitchState/);
-    assert.match(home, /onDreamPlayerTap[\s\S]*?goToPlayerDetail/);
     assert.match(home, /onShareDreamPitch[\s\S]*?exportPortraitShareImage[\s\S]*?presentSquadPitchShareImage/);
     assert.match(home, /onCopyDreamShare[\s\S]*?formatGameweekShareText[\s\S]*?"dreamTeam"/);
+  });
+
+  it("opens the player detail sheet on dream player tap (web PlayerDetailModal)", () => {
+    assert.match(homeJson, /player-live-sheet/);
+    assert.match(
+      homeWxml,
+      /<player-live-sheet[^>]*show="\{\{playerDetailOpen\}\}"[^>]*bind:close="onClosePlayerDetail"/,
+    );
+    // Scoped to the handler body so the market-row goToPlayerDetail sibling
+    // cannot satisfy these patterns.
+    const tapHandler = home.match(
+      /onDreamPlayerTap\(event[^)]*\) \{[\s\S]*?\n  \},/,
+    );
+    assert.ok(tapHandler, "onDreamPlayerTap handler exists");
+    assert.match(tapHandler[0], /dreamTeamById\[String\(event\.detail\?\.playerId/);
+    assert.match(tapHandler[0], /buildPlayerLiveDetail\(player\)/);
+    assert.match(tapHandler[0], /playerDetailOpen: true/);
+    assert.doesNotMatch(tapHandler[0], /goToPlayerDetail/);
+    assert.match(home, /indexDreamTeamById\(pitch\.pitchPlayers, result\.players\)/);
+    assert.match(home, /onClosePlayerDetail\(\) \{[\s\S]*?playerDetailOpen: false/);
   });
 
   it("routes tappable GW stat tiles to entry and player pages", () => {

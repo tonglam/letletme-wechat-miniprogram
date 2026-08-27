@@ -414,6 +414,17 @@ function shortPosition(position?: string): string {
   return key || "";
 }
 
+/** Omit missing dream-team stats so the live sheet can tell 0 from unknown. */
+function optionalDreamStat<K extends "minutes" | "goalsScored" | "assists" | "cleanSheets" | "bonus">(
+  value: number | null | undefined,
+  key: K,
+): Partial<Record<K, number>> {
+  const parsed = Number(value);
+  return value === null || value === undefined || !Number.isFinite(parsed)
+    ? {}
+    : { [key]: parsed } as Partial<Record<K, number>>;
+}
+
 function availabilityStatusKey(
   status?: string,
 ): keyof typeof AVAILABILITY_STATUS {
@@ -691,6 +702,11 @@ const MINI_HOME_DREAM_TEAM_QUERY = `
           position
           teamShortName
           totalPoints
+          minutes
+          goalsScored
+          assists
+          cleanSheets
+          bonus
         }
       }
     }
@@ -706,6 +722,11 @@ interface MiniHomeDreamTeamResponse {
         position?: string | null;
         teamShortName?: string | null;
         totalPoints?: number | null;
+        minutes?: number | null;
+        goalsScored?: number | null;
+        assists?: number | null;
+        cleanSheets?: number | null;
+        bonus?: number | null;
       }> | null;
     } | null;
   } | null;
@@ -717,6 +738,11 @@ export interface HomeDreamTeamPlayer {
   team: string;
   position: string;
   points: number;
+  minutes?: number;
+  goalsScored?: number;
+  assists?: number;
+  cleanSheets?: number;
+  bonus?: number;
 }
 
 export interface MiniHomeDreamTeamResult {
@@ -750,6 +776,11 @@ export async function getMiniHomeDreamTeam(
         team: String(player?.teamShortName || "-"),
         position: shortPosition(player?.position || ""),
         points: Number(player?.totalPoints) || 0,
+        ...optionalDreamStat(player?.minutes, "minutes"),
+        ...optionalDreamStat(player?.goalsScored, "goalsScored"),
+        ...optionalDreamStat(player?.assists, "assists"),
+        ...optionalDreamStat(player?.cleanSheets, "cleanSheets"),
+        ...optionalDreamStat(player?.bonus, "bonus"),
       })),
   };
 }

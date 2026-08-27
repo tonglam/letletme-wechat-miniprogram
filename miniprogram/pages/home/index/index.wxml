@@ -342,5 +342,6 @@
     </view>
 
   </block>
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayerDetail" />
   <bottomNavBar active="home" />
 </view>

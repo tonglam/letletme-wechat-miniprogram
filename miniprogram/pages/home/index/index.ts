@@ -18,6 +18,9 @@ import type {
 } from "../../../services/home.service";
 import { buildDreamTeamPitchState } from "../../../utils/squad-pitch";
 import type { SquadPitchHeader, SquadPitchPlayer } from "../../../utils/squad-pitch";
+import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "../../live/entry/player-detail";
+import { indexDreamTeamById } from "../../summary/gameweek/dream-detail";
+import type { LivePlayerRow } from "../../../models/live";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import { formatGameweekShareText } from "../../../utils/gameweek-share";
 import {
@@ -70,6 +73,8 @@ interface HomeData {
   dreamHeader: Partial<SquadPitchHeader>;
   dreamShareBusy: boolean;
   dreamShareCopied: boolean;
+  playerDetailOpen: boolean;
+  playerDetail: PlayerLiveDetailView | null;
   deadlineShareBusy: boolean;
   marketMode: MiniHomeMarketMode;
   marketTab: "pulse" | "price";
@@ -215,6 +220,8 @@ Page({
     dreamHeader: {},
     dreamShareBusy: false,
     dreamShareCopied: false,
+    playerDetailOpen: false,
+    playerDetail: null,
     deadlineShareBusy: false,
     marketMode: "empty",
     marketTab: "pulse",
@@ -272,6 +279,7 @@ Page({
   _hasShown: false,
   _lifecycleRevision: 0,
   _dreamTeamLoadedEvent: 0,
+  dreamTeamById: {} as Record<string, LivePlayerRow>,
   _deadlineRetryAttempts: 0,
   _dreamShareCopiedTimer: undefined as number | undefined,
 
@@ -1094,6 +1102,9 @@ Page({
       this._dreamTeamLoadedEvent = event;
       // Same pitch rendering as the gameweek summary page's dream team tab.
       const pitch = buildDreamTeamPitchState(result.players, event);
+      // Same player detail sheet as the gameweek summary page: index the raw
+      // rows so a pitch tap can open the live-style stat card.
+      this.dreamTeamById = indexDreamTeamById(pitch.pitchPlayers, result.players);
       this.setData({
         dreamTeamEvent: event,
         dreamPlayers: pitch.pitchPlayers,
@@ -1106,9 +1117,18 @@ Page({
   },
 
   onDreamPlayerTap(event: WechatMiniprogram.CustomEvent) {
-    const playerId = Number(event.detail?.playerId || 0);
-    if (!Number.isSafeInteger(playerId) || playerId <= 0) return;
-    goToPlayerDetail(playerId);
+    // Web parity: the dream-team pitch opens the player detail card as an
+    // overlay (PlayerDetailModal), not a page navigation.
+    const player = this.dreamTeamById[String(event.detail?.playerId || "")];
+    if (!player) return;
+    this.setData({
+      playerDetailOpen: true,
+      playerDetail: buildPlayerLiveDetail(player)
+    });
+  },
+
+  onClosePlayerDetail() {
+    this.setData({ playerDetailOpen: false });
   },
 
   onTapMarketPlayer(event: WechatMiniprogram.TouchEvent) {
