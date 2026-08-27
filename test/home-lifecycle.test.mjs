@@ -100,7 +100,7 @@ test("home transfer desk matches the web market teaser, not a renamed price list
   assert.match(service, /availabilityUpdates/);
   const retiredOwnershipField = "ownership" + "Movers";
   assert.doesNotMatch(service, new RegExp(retiredOwnershipField));
-  assert.match(service, /marketOwnershipDay/);
+  assert.match(service, /homeMarketDesk/);
   assert.match(service, /mostSelected/);
   assert.doesNotMatch(service, /latest真实身价变化|最新真实身价变化/);
 });

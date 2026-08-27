@@ -28,6 +28,27 @@ export function formatDateKey(date: Date = new Date()): string {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
 }
 
+/**
+ * "8月27日 14:32" — compact local datetime for 更新于 capture labels. This is
+ * the mini counterpart of the web's LocalUpdatedLabel (medium date + time in
+ * the viewer's timezone); returns "" for missing/unparseable values so the
+ * caller can fall back to descriptive copy.
+ */
+export function formatLocalCapturedAt(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** "2026-08-27" → "8月27日" — calendar-day label for date-only fallbacks. */
+export function formatCalendarDayLabel(value?: string | null): string {
+  const raw = String(value || "").slice(0, 10);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  return `${Number(match[2])}月${Number(match[3])}日`;
+}
+
 export interface CountdownParts {
   days: string;
   hours: string;

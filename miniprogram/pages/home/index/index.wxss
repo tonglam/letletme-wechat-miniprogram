@@ -258,6 +258,14 @@
   margin-bottom: 6rpx;
 }
 
+/* Card-head action row: section link + image share (web renderAction row). */
+.transfer-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-shrink: 0;
+}
+
 .market-tabs {
   margin-bottom: 20rpx;
 }

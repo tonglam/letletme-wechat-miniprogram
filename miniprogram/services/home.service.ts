@@ -224,50 +224,60 @@ export async function getMiniHomePersonalLeagues(
 const HOME_TEASER_LIMIT = 5;
 const HOME_AVAILABILITY_LIMIT = 5;
 
-const MINI_HOME_MARKET_QUERY = `
-  query MiniHomeMarket($days: Int) {
-    marketPulse(days: $days) {
-        availabilityUpdates {
-          player { playerId webName teamShortName selectedByPercent }
+// Web parity (GET_HOME_MARKET_DESK): homeMarketDesk serves price changes for
+// the latest change date only — the old marketPulse(days: 7) source mixed the
+// whole week's change dates into one list. The desk also carries capturedAt
+// timestamps and per-section states used by the 更新于 labels and empty copy.
+export const MINI_HOME_MARKET_QUERY = `
+  query MiniHomeMarket {
+    homeMarketDesk {
+      revision
+      capturedAt
+      ownershipState
+      ownership {
+        period
+        date
+        coverage {
           status
-          previousStatus
-          news
+          requestedDays
+          observedDays
+          fromDate
+          toDate
+          missingDates
+          capturedAt
         }
-        priceChanges {
-          changeDate
-          oldPrice
-          newPrice
-          change
-          direction
-          player { playerId webName teamShortName position }
+        risers {
+          player { playerId webName teamShortName position selectedByPercent }
+          fromSelectedByPercent
+          toSelectedByPercent
+          changePercentagePoints
+          fromDate
+          toDate
         }
-    }
-    marketOwnershipDay(limit: 5) {
-      period
-      date
-      coverage {
+        fallers {
+          player { playerId webName teamShortName position selectedByPercent }
+          fromSelectedByPercent
+          toSelectedByPercent
+          changePercentagePoints
+          fromDate
+          toDate
+        }
+      }
+      priceChangesState
+      priceChanges {
+        changeDate
+        oldPrice
+        newPrice
+        change
+        direction
+        player { playerId webName teamShortName position }
+      }
+      availabilityState
+      availabilityUpdates {
+        player { playerId webName teamShortName selectedByPercent }
         status
-        requestedDays
-        observedDays
-        fromDate
-        toDate
-        missingDates
-      }
-      risers {
-        player { playerId webName teamShortName position selectedByPercent }
-        fromSelectedByPercent
-        toSelectedByPercent
-        changePercentagePoints
-        fromDate
-        toDate
-      }
-      fallers {
-        player { playerId webName teamShortName position selectedByPercent }
-        fromSelectedByPercent
-        toSelectedByPercent
-        changePercentagePoints
-        fromDate
-        toDate
+        previousStatus
+        news
       }
     }
   }
@@ -290,49 +300,54 @@ interface MarketPriceChange {
   player: MarketPlayer;
 }
 
+export type HomeMarketSectionState = "AVAILABLE" | "EMPTY" | "UNAVAILABLE";
+
+interface HomeMarketAvailabilityUpdate {
+  player: MarketPlayer;
+  status?: string;
+  previousStatus?: string | null;
+  news?: string | null;
+}
+
+interface HomeMarketOwnershipMover {
+  player: MarketPlayer;
+  fromSelectedByPercent?: number;
+  toSelectedByPercent?: number;
+  changePercentagePoints?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+
 interface MiniHomeMarketResponse {
-  marketPulse: {
-    availabilityUpdates?: Array<{
-      player: MarketPlayer;
-      status?: string;
-      previousStatus?: string | null;
-      news?: string | null;
-    }>;
+  homeMarketDesk: {
+    revision?: string;
+    capturedAt?: string | null;
+    ownershipState?: HomeMarketSectionState;
+    ownership?: {
+      period: "DAILY" | "GAMEWEEK";
+      date?: string | null;
+      coverage: {
+        status:
+          | "READY"
+          | "PARTIAL"
+          | "NO_DATA"
+          | "BASELINE_MISSING"
+          | "NO_PREVIOUS_GAMEWEEK"
+          | "NO_UPCOMING_GAMEWEEK";
+        requestedDays?: number;
+        observedDays?: number;
+        fromDate?: string | null;
+        toDate?: string | null;
+        missingDates?: string[];
+        capturedAt?: string | null;
+      };
+      risers?: HomeMarketOwnershipMover[];
+      fallers?: HomeMarketOwnershipMover[];
+    } | null;
+    priceChangesState?: HomeMarketSectionState;
     priceChanges?: MarketPriceChange[];
-  } | null;
-  marketOwnershipDay: {
-    period: "DAILY";
-    date?: string | null;
-    coverage: {
-      status:
-        | "READY"
-        | "PARTIAL"
-        | "NO_DATA"
-        | "BASELINE_MISSING"
-        | "NO_PREVIOUS_GAMEWEEK"
-        | "NO_UPCOMING_GAMEWEEK";
-      requestedDays?: number;
-      observedDays?: number;
-      fromDate?: string | null;
-      toDate?: string | null;
-      missingDates?: string[];
-    };
-    risers?: Array<{
-      player: MarketPlayer;
-      fromSelectedByPercent?: number;
-      toSelectedByPercent?: number;
-      changePercentagePoints?: number;
-      fromDate?: string;
-      toDate?: string;
-    }>;
-    fallers?: Array<{
-      player: MarketPlayer;
-      fromSelectedByPercent?: number;
-      toSelectedByPercent?: number;
-      changePercentagePoints?: number;
-      fromDate?: string;
-      toDate?: string;
-    }>;
+    availabilityState?: HomeMarketSectionState;
+    availabilityUpdates?: HomeMarketAvailabilityUpdate[];
   } | null;
 }
 
@@ -368,9 +383,19 @@ export interface MiniHomeMarketResult {
   risers: HomeMarketMover[];
   fallers: HomeMarketMover[];
   availability: HomeAvailabilityRow[];
+  /** Raw latest change date (YYYY-MM-DD) — 更新于 fallback when the desk has
+      no capturedAt, mirroring the web's todayDescription fallback. */
   priceChangeDate: string;
   priceRisers: HomeMarketMover[];
   priceFallers: HomeMarketMover[];
+  /** ISO desk capture time (web LocalUpdatedLabel source for the price and
+      availability views). "" when the desk did not report one. */
+  capturedAt: string;
+  /** ISO ownership coverage capture time; the page falls back to capturedAt. */
+  ownershipCapturedAt: string;
+  ownershipState: HomeMarketSectionState;
+  priceChangesState: HomeMarketSectionState;
+  availabilityState: HomeMarketSectionState;
   error: string;
 }
 
@@ -378,6 +403,8 @@ export interface MiniHomePricePredictionResult {
   rises: HomeMarketMover[];
   falls: HomeMarketMover[];
   notice: string;
+  /** ISO prediction-board fetch time (web likely-slide LocalUpdatedLabel). */
+  fetchedAt: string;
 }
 
 const AVAILABILITY_STATUS: Record<string, string> = {
@@ -389,8 +416,12 @@ const AVAILABILITY_STATUS: Record<string, string> = {
   unknown: "状态已更新",
 };
 
+type HomeMarketDeskOwnership = NonNullable<
+  MiniHomeMarketResponse["homeMarketDesk"]
+>["ownership"];
+
 export function marketCoverageCopy(
-  ownership: MiniHomeMarketResponse["marketOwnershipDay"],
+  ownership: HomeMarketDeskOwnership,
 ): string {
   const date = ownership?.date ? ` · ${ownership.date}` : "";
   switch (ownership?.coverage?.status) {
@@ -474,9 +505,7 @@ function availabilityBody(update: {
 }
 
 function mapAvailability(
-  updates: NonNullable<
-    NonNullable<MiniHomeMarketResponse["marketPulse"]>["availabilityUpdates"]
-  >,
+  updates: HomeMarketAvailabilityUpdate[],
 ): HomeAvailabilityRow[] {
   const preferred = updates.filter(
     (item) => Number(item.player.selectedByPercent) >= 1,
@@ -515,8 +544,7 @@ function mapPriceChanges(
     (item) => Number(item.change) !== 0 && item.player,
   );
   const rawDate = String(changes?.[0]?.changeDate || "");
-  const mapRow = (item: MarketPriceChange): HomeMarketMover => {
-    const change = Number(item.change) || 0;
+  const mapRow = (item: MarketPriceChange): HomeMarketMover => {    const change = Number(item.change) || 0;
     return {
       id: String(item.player.playerId),
       name: item.player.webName || "-",
@@ -532,7 +560,7 @@ function mapPriceChanges(
     right: MarketPriceChange,
   ) => Math.abs(Number(right.change) || 0) - Math.abs(Number(left.change) || 0);
   return {
-    priceChangeDate: rawDate.length >= 10 ? rawDate.slice(5, 10) : rawDate,
+    priceChangeDate: rawDate.slice(0, 10),
     priceRisers: moved
       .filter((item) => item.direction === "RISE")
       .sort(byChangeSize)
@@ -552,7 +580,7 @@ export async function getMiniHomeMarket(
 ): Promise<MiniHomeMarketResult> {
   const result = await graphqlRead<MiniHomeMarketResponse>(
     MINI_HOME_MARKET_QUERY,
-    { days: 7 },
+    {},
     {
       authMode: "public",
       cachePolicy: "market",
@@ -560,17 +588,12 @@ export async function getMiniHomeMarket(
       trace,
     },
   );
-  const pulse = result.data.marketPulse;
-  const ownership = result.data.marketOwnershipDay;
-  const availability = mapAvailability(pulse?.availabilityUpdates || []);
-  const priceDesk = mapPriceChanges(pulse?.priceChanges);
+  const desk = result.data.homeMarketDesk;
+  const ownership = desk?.ownership;
+  const availability = mapAvailability(desk?.availabilityUpdates || []);
+  const priceDesk = mapPriceChanges(desk?.priceChanges);
   const coverage = marketCoverageCopy(ownership);
-  const error = [
-    rootError(result.errors, "marketPulse"),
-    rootError(result.errors, "marketOwnershipDay"),
-  ]
-    .filter(Boolean)
-    .join("；");
+  const error = rootError(result.errors, "homeMarketDesk");
 
   // Do not turn a partial GraphQL response into an apparent empty market. The
   // caller can then retain the last complete market desk while surfacing the
@@ -579,10 +602,20 @@ export async function getMiniHomeMarket(
 
   const risers = ownership?.risers || [];
   const fallers = ownership?.fallers || [];
+  const shared = {
+    availability,
+    ...priceDesk,
+    capturedAt: String(desk?.capturedAt || ""),
+    ownershipCapturedAt: String(ownership?.coverage?.capturedAt || ""),
+    ownershipState: desk?.ownershipState || "UNAVAILABLE",
+    priceChangesState: desk?.priceChangesState || "UNAVAILABLE",
+    availabilityState: desk?.availabilityState || "UNAVAILABLE",
+    error,
+  } as const;
 
   if (ownership && (risers.length > 0 || fallers.length > 0)) {
     const mapMover = (
-      mover: NonNullable<typeof risers>[number],
+      mover: HomeMarketOwnershipMover,
       falling = false,
     ): HomeMarketMover => {
       const change = Number(mover.changePercentagePoints) || 0;
@@ -615,28 +648,12 @@ export async function getMiniHomeMarket(
         )
         .slice(0, HOME_TEASER_LIMIT)
         .map((row) => mapMover(row, true)),
-      availability,
-      ...priceDesk,
-      error,
+      ...shared,
     };
   }
 
   // The homepage intentionally does not fall back to a rolling period or an
   // all-time ranking when the latest daily ownership comparison is empty.
-  if (ownership) {
-    return {
-      mode: "empty",
-      coverage,
-      leadTitle: "最新每日持有率变化",
-      leadRows: [],
-      risers: [],
-      fallers: [],
-      availability,
-      ...priceDesk,
-      error,
-    };
-  }
-
   return {
     mode: "empty",
     coverage,
@@ -644,9 +661,7 @@ export async function getMiniHomeMarket(
     leadRows: [],
     risers: [],
     fallers: [],
-    availability,
-    ...priceDesk,
-    error,
+    ...shared,
   };
 }
 
@@ -692,6 +707,7 @@ export async function getMiniHomePricePredictions(
       .slice(0, HOME_TEASER_LIMIT)
       .map(mapRow),
     notice,
+    fetchedAt: String(board.fetchedAt || ""),
   };
 }
 

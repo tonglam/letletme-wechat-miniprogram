@@ -14,6 +14,7 @@ import {
 import type {
   HomeAvailabilityRow,
   HomeMarketMover,
+  HomeMarketSectionState,
   MiniHomeMarketMode
 } from "../../../services/home.service";
 import { buildDreamTeamPitchState } from "../../../utils/squad-pitch";
@@ -27,12 +28,17 @@ import {
   exportDeadlineShareImage,
   presentDeadlineShareImage,
 } from "../../../utils/deadline-share-image";
+import {
+  exportHomeMarketMoversShareImage,
+  exportHomeMarketWatchShareImage,
+  presentHomeMarketShareImage,
+} from "../../../utils/home-market-share-image";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, goToLiveEntry, goToPlayerDetail, navigateTo } from "../../../utils/navigation";
-import { formatCountdown, getDeadlineDiffMs } from "../../../utils/date";
+import { formatCalendarDayLabel, formatCountdown, formatLocalCapturedAt, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
@@ -86,6 +92,19 @@ interface HomeData {
   priceChangeDate: string;
   priceRisers: HomeMarketMover[];
   priceFallers: HomeMarketMover[];
+  /** Raw capture ISO strings + section states from homeMarketDesk. */
+  marketCapturedAt: string;
+  marketOwnershipCapturedAt: string;
+  ownershipState: HomeMarketSectionState;
+  priceChangesState: HomeMarketSectionState;
+  availabilityState: HomeMarketSectionState;
+  /** Per-view 更新于 subtitles (web LocalUpdatedLabel parity). */
+  marketOwnershipUpdated: string;
+  marketWatchUpdated: string;
+  priceTodayUpdated: string;
+  predictionUpdated: string;
+  marketShareBusy: boolean;
+  priceShareBusy: boolean;
   predictedRisers: HomeMarketMover[];
   predictedFallers: HomeMarketMover[];
   predictionNotice: string;
@@ -177,6 +196,46 @@ export function retainedDeskMessage(base: string, retained: boolean): string {
   return retained ? `${message}，已保留上次成功数据` : message;
 }
 
+/**
+ * Per-view 更新于 subtitles for the two market cards — the mini counterpart of
+ * the web carousels' LocalUpdatedLabel. Web sources:
+ * - ownership: ownership.coverage.capturedAt ?? desk.capturedAt, but only while
+ *   ownershipState is AVAILABLE; otherwise the coverage copy is the fallback.
+ * - availability: desk.capturedAt, fallback "更新于 —".
+ * - price today: desk.capturedAt, fallback 更新于 <latest change date>, then
+ *   the unavailable copy when no change date exists either.
+ */
+export function buildMarketUpdatedLabels(market: {
+  capturedAt: string;
+  ownershipCapturedAt: string;
+  ownershipState: HomeMarketSectionState;
+  coverage: string;
+  priceChangeDate: string;
+}): Pick<HomeData, "marketOwnershipUpdated" | "marketWatchUpdated" | "priceTodayUpdated"> {
+  const captured = formatLocalCapturedAt(market.capturedAt);
+  const ownershipCaptured = market.ownershipState === "AVAILABLE"
+    ? formatLocalCapturedAt(market.ownershipCapturedAt) || captured
+    : "";
+  const changeDay = formatCalendarDayLabel(market.priceChangeDate);
+  return {
+    marketOwnershipUpdated: ownershipCaptured
+      ? `更新于 ${ownershipCaptured}`
+      : market.coverage,
+    marketWatchUpdated: captured ? `更新于 ${captured}` : "更新于 —",
+    priceTodayUpdated: captured
+      ? `更新于 ${captured}`
+      : changeDay
+        ? `更新于 ${changeDay}`
+        : "已记录的身价变化暂不可用。",
+  };
+}
+
+/** Likely-view subtitle: prediction board fetch time, else the static copy. */
+export function predictionUpdatedLabel(fetchedAt: string): string {
+  const fetched = formatLocalCapturedAt(fetchedAt);
+  return fetched ? `更新于 ${fetched}` : "按预测进度展示上涨和下跌各前 5 名。";
+}
+
 export function homePersonalLeaguesMatchEntry(
   entry: EntryInfo,
   desk: { entryId: number }
@@ -233,6 +292,17 @@ Page({
     priceChangeDate: "",
     priceRisers: [],
     priceFallers: [],
+    marketCapturedAt: "",
+    marketOwnershipCapturedAt: "",
+    ownershipState: "AVAILABLE",
+    priceChangesState: "AVAILABLE",
+    availabilityState: "AVAILABLE",
+    marketOwnershipUpdated: "最新每日持有率变化",
+    marketWatchUpdated: "更新于 —",
+    priceTodayUpdated: "已记录的身价变化暂不可用。",
+    predictionUpdated: "按预测进度展示上涨和下跌各前 5 名。",
+    marketShareBusy: false,
+    priceShareBusy: false,
     predictedRisers: [],
     predictedFallers: [],
     predictionNotice: "",
@@ -820,6 +890,12 @@ Page({
           priceChangeDate: market.priceChangeDate,
           priceRisers: market.priceRisers,
           priceFallers: market.priceFallers,
+          marketCapturedAt: market.capturedAt,
+          marketOwnershipCapturedAt: market.ownershipCapturedAt,
+          ownershipState: market.ownershipState,
+          priceChangesState: market.priceChangesState,
+          availabilityState: market.availabilityState,
+          ...buildMarketUpdatedLabels(market),
         }
       : hasPreviousMarket
         ? {
@@ -841,6 +917,11 @@ Page({
             priceChangeDate: "",
             priceRisers: [],
             priceFallers: [],
+            marketCapturedAt: "",
+            marketOwnershipCapturedAt: "",
+            ownershipState: "UNAVAILABLE" as HomeMarketSectionState,
+            priceChangesState: "UNAVAILABLE" as HomeMarketSectionState,
+            availabilityState: "UNAVAILABLE" as HomeMarketSectionState,
           };
     const nextNotice = this.data.noticeClosed || supplement.errors.notice
       ? this.data.noticeText
@@ -1062,6 +1143,7 @@ Page({
         predictionLoading: false,
         predictionError: "",
         predictionLoaded: true,
+        predictionUpdated: predictionUpdatedLabel(result.fetchedAt),
       });
     } catch (error) {
       if (!this._pageVisible || requestId !== this._priceRequestId) return;
@@ -1219,6 +1301,98 @@ Page({
       wx.showToast({ title: "图片生成失败", icon: "none" });
     } finally {
       this.setData({ deadlineShareBusy: false });
+    }
+  },
+
+  // Image-only share on both market cards, mirroring the web carousels'
+  // ShareActions (["image"]). The image renders the view the user is looking
+  // at: ownership movers, the availability watch list, recorded price changes,
+  // or the prediction board.
+  async onShareMarketImage() {
+    if (this.data.marketShareBusy) return;
+    const ownership = this.data.pulseTab === "ownership";
+    const rows = ownership
+      ? this.data.marketRisers.length + this.data.marketFallers.length
+      : this.data.availabilityRows.length;
+    if (rows === 0) {
+      wx.showToast({ title: "暂无可分享的数据", icon: "none" });
+      return;
+    }
+    this.setData({ marketShareBusy: true });
+    try {
+      const path = ownership
+        ? await exportHomeMarketMoversShareImage({
+            title: "持有率变化",
+            subtitle: this.data.marketOwnershipUpdated,
+            upTitle: "持有上升",
+            downTitle: "持有下降",
+            upRows: this.data.marketRisers,
+            downRows: this.data.marketFallers,
+          })
+        : await exportHomeMarketWatchShareImage({
+            title: "出场状态观察",
+            subtitle: this.data.marketWatchUpdated,
+            rows: this.data.availabilityRows.map((row) => ({
+              name: row.name,
+              team: row.team,
+              owned: row.owned,
+              status: row.status,
+              tone: row.statusKey === "available"
+                ? "up" as const
+                : row.statusKey === "unknown"
+                  ? "" as const
+                  : "down" as const,
+              body: row.body,
+            })),
+          });
+      await presentHomeMarketShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ marketShareBusy: false });
+    }
+  },
+
+  async onSharePriceImage() {
+    if (this.data.priceShareBusy) return;
+    const likely = this.data.priceTab === "likely";
+    if (likely && !this.data.predictionLoaded) {
+      wx.showToast({ title: "预测加载中，请稍候", icon: "none" });
+      return;
+    }
+    const rows = likely
+      ? this.data.predictedRisers.length + this.data.predictedFallers.length
+      : this.data.priceRisers.length + this.data.priceFallers.length;
+    if (rows === 0) {
+      wx.showToast({ title: "暂无可分享的数据", icon: "none" });
+      return;
+    }
+    this.setData({ priceShareBusy: true });
+    try {
+      const path = await exportHomeMarketMoversShareImage(
+        likely
+          ? {
+              title: "涨跌趋势",
+              subtitle: this.data.predictionUpdated,
+              upTitle: "预计上涨",
+              downTitle: "预计下跌",
+              upRows: this.data.predictedRisers,
+              downRows: this.data.predictedFallers,
+            }
+          : {
+              title: "身价变化",
+              subtitle: this.data.priceTodayUpdated,
+              upTitle: "上涨",
+              downTitle: "下跌",
+              upRows: this.data.priceRisers,
+              downRows: this.data.priceFallers,
+            },
+      );
+      await presentHomeMarketShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ priceShareBusy: false });
     }
   },
 

@@ -97,11 +97,71 @@ describe("home public read path", () => {
     assert.doesNotMatch(home, /refreshEventAndDeadline/);
   });
 
-  it("rides recorded price changes on the existing market pulse query", () => {
-    assert.match(service, /marketPulse\(days: \$days\) \{[\s\S]*?priceChanges \{[\s\S]*?changeDate[\s\S]*?oldPrice[\s\S]*?newPrice[\s\S]*?direction/);
+  it("rides recorded price changes on the web's homeMarketDesk query", () => {
+    // Web parity (GET_HOME_MARKET_DESK): the desk serves price changes for the
+    // latest change date only — marketPulse(days: 7) mixed the whole week's
+    // change dates into one list, which is what made the card look wrong.
+    assert.match(service, /homeMarketDesk \{/);
+    assert.doesNotMatch(service, /marketPulse\(days: \$days\)/);
+    assert.doesNotMatch(service, /marketOwnershipDay/);
+    assert.match(service, /priceChanges \{[\s\S]*?changeDate[\s\S]*?oldPrice[\s\S]*?newPrice[\s\S]*?direction/);
+    assert.match(service, /capturedAt/);
+    assert.match(service, /ownershipState/);
+    assert.match(service, /priceChangesState/);
+    assert.match(service, /availabilityState/);
     assert.match(service, /mapPriceChanges/);
     assert.match(service, /priceRisers/);
     assert.match(service, /priceFallers/);
+  });
+
+  it("labels each market view with its own 更新于 capture time", () => {
+    // Web LocalUpdatedLabel parity: per-view capture time + fallback copy.
+    assert.match(home, /buildMarketUpdatedLabels/);
+    // Slice instead of a brace-matched regex: the helper's inline parameter
+    // type closes with a line-leading `}` that would end the match early.
+    const helper = home.slice(
+      home.indexOf("export function buildMarketUpdatedLabels"),
+      home.indexOf("export function predictionUpdatedLabel"),
+    );
+    assert.ok(helper.length > 0, "buildMarketUpdatedLabels helper exists");
+    // Ownership: coverage.capturedAt ?? desk.capturedAt, AVAILABLE-only.
+    assert.match(helper, /ownershipState === "AVAILABLE"/);
+    assert.match(helper, /formatLocalCapturedAt\(market\.ownershipCapturedAt\) \|\| captured/);
+    assert.match(helper, /market\.coverage/);
+    // Availability: desk.capturedAt, "更新于 —" fallback.
+    assert.match(helper, /更新于 —/);
+    // Price today: desk.capturedAt, falling back to the latest change date.
+    assert.match(helper, /formatCalendarDayLabel\(market\.priceChangeDate\)/);
+    // Likely view: prediction board fetchedAt.
+    assert.match(home, /predictionUpdatedLabel\(result\.fetchedAt\)/);
+    assert.match(homeWxml, /pulseTab === 'ownership' \? marketOwnershipUpdated : marketWatchUpdated/);
+    assert.match(homeWxml, /priceTab === 'today' \? priceTodayUpdated : predictionUpdated/);
+    // Section states drive the empty/unavailable copy.
+    assert.match(homeWxml, /ownershipState === 'UNAVAILABLE' \? '市场数据暂时不可用'/);
+    assert.match(homeWxml, /availabilityState === 'UNAVAILABLE' \? '出场状态暂时不可用'/);
+    assert.match(homeWxml, /priceChangesState === 'UNAVAILABLE' \? '身价数据暂时不可用'/);
+  });
+
+  it("shares both market cards as images (web ShareActions parity)", () => {
+    assert.match(homeWxml, /catchtap="onShareMarketImage"/);
+    assert.match(homeWxml, /catchtap="onSharePriceImage"/);
+    const marketHandler = home.match(/async onShareMarketImage\(\) \{[\s\S]*?\n  \},/);
+    assert.ok(marketHandler, "onShareMarketImage handler exists");
+    assert.match(marketHandler[0], /exportHomeMarketMoversShareImage/);
+    assert.match(marketHandler[0], /exportHomeMarketWatchShareImage/);
+    assert.match(marketHandler[0], /presentHomeMarketShareImage/);
+    const priceHandler = home.match(/async onSharePriceImage\(\) \{[\s\S]*?\n  \},/);
+    assert.ok(priceHandler, "onSharePriceImage handler exists");
+    assert.match(priceHandler[0], /title: "涨跌趋势"/);
+    assert.match(priceHandler[0], /title: "身价变化"/);
+    assert.match(priceHandler[0], /presentHomeMarketShareImage/);
+    const image = readFileSync(
+      new URL("../miniprogram/utils/home-market-share-image.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(image, /export function exportHomeMarketMoversShareImage/);
+    assert.match(image, /export function exportHomeMarketWatchShareImage/);
+    assert.match(image, /drawShareBranding/);
   });
 
   it("loads the prediction board lazily from the trends tab only", () => {
