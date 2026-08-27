@@ -56,6 +56,34 @@
   line-height: 24rpx;
 }
 
+/* Auto-sub arrow — green in / red out; dashed border while still predicted */
+.autosub-badge {
+  flex-shrink: 0;
+  margin-left: 8rpx;
+  padding: 0 6rpx;
+  border: 1rpx solid transparent;
+  border-radius: 6rpx;
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 24rpx;
+}
+
+.autosub-badge.autosub-in {
+  border-color: var(--electric);
+  background: var(--electric);
+  color: var(--plum);
+}
+
+.autosub-badge.autosub-out {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.autosub-badge.autosub-predicted {
+  border-style: dashed;
+}
+
 .player-meta {
   display: flex;
   align-items: center;

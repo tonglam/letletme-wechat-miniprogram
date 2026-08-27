@@ -124,6 +124,15 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         source
         state
         eventPointSemantics
+        effectiveLineup {
+          elementId
+          position
+          effectiveMultiplier
+          pickActive
+          autoSub
+          isCaptain
+          isViceCaptain
+        }
         revision
         checkedAt
         upstreamUpdatedAt
@@ -166,6 +175,17 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         ownGoals
         penaltiesSaved
         penaltiesMissed
+        goalsConceded
+        defensiveContribution
+        starts
+        isGwStarted
+        isGwFinished
+        isPlayed
+        bgw
+        expectedGoals
+        expectedAssists
+        expectedGoalInvolvements
+        expectedGoalsConceded
       }
     }
   }
@@ -197,6 +217,17 @@ interface GraphQLPickListItem {
   ownGoals: number;
   penaltiesSaved: number;
   penaltiesMissed: number;
+  goalsConceded?: number;
+  defensiveContribution?: number;
+  starts?: boolean;
+  isGwStarted?: boolean;
+  isGwFinished?: boolean;
+  isPlayed?: boolean;
+  bgw?: boolean;
+  expectedGoals?: number;
+  expectedAssists?: number;
+  expectedGoalInvolvements?: number;
+  expectedGoalsConceded?: number;
 }
 
 interface CalcLivePointsByEntryResponse {
@@ -240,6 +271,8 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     autoSub: item.autoSub,
     captain: item.isCaptain || item.multiplier >= 2,
     viceCaptain: item.isViceCaptain,
+    isCaptain: item.isCaptain,
+    isViceCaptain: item.isViceCaptain,
     multiplier: item.multiplier,
     cleanSheets: item.cleanSheets,
     saves: item.saves,
@@ -248,6 +281,17 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     ownGoals: item.ownGoals,
     penaltiesSaved: item.penaltiesSaved,
     penaltiesMissed: item.penaltiesMissed,
+    goalsConceded: item.goalsConceded,
+    defensiveContribution: item.defensiveContribution,
+    starts: item.starts,
+    isGwStarted: item.isGwStarted,
+    isGwFinished: item.isGwFinished,
+    isPlayed: item.isPlayed,
+    bgw: item.bgw,
+    expectedGoals: item.expectedGoals,
+    expectedAssists: item.expectedAssists,
+    expectedGoalInvolvements: item.expectedGoalInvolvements,
+    expectedGoalsConceded: item.expectedGoalsConceded,
   }));
 }
 

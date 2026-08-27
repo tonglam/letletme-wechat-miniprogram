@@ -58,6 +58,9 @@ export type ShareDrawLayer =
       webName: string;
       score: number;
       marker: "" | "C" | "V";
+      autoSubArrow?: "" | "↑" | "↓";
+      autoSubIncoming?: boolean;
+      autoSubPredicted?: boolean;
       x: number;
       y: number;
       width: number;
@@ -70,6 +73,9 @@ export type ShareDrawLayer =
       webName: string;
       fixtureText: string;
       scoreText: string;
+      autoSubArrow?: "" | "↑" | "↓";
+      autoSubIncoming?: boolean;
+      autoSubPredicted?: boolean;
       x: number;
       y: number;
       width: number;
@@ -166,6 +172,9 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
         webName: player.webName,
         score: player.score,
         marker: player.marker,
+        autoSubArrow: player.autoSubArrow,
+        autoSubIncoming: player.autoSubIncoming,
+        autoSubPredicted: player.autoSubPredicted,
         x,
         y,
         width: cardWidth
@@ -188,6 +197,9 @@ export function buildShareDrawPlan(input: SharePitchInput): ShareDrawPlan {
         webName: player.webName,
         fixtureText: player.fixtureText,
         scoreText: player.scoreText,
+        autoSubArrow: player.autoSubArrow,
+        autoSubIncoming: player.autoSubIncoming,
+        autoSubPredicted: player.autoSubPredicted,
         x: startX + index * (cardWidth + gap),
         y: panelTop + height * 0.038,
         width: cardWidth
@@ -222,7 +234,8 @@ export function shareCacheKey(input: SharePitchInput): string {
       player.position,
       player.squadPosition,
       player.isCaptain,
-      player.isViceCaptain
+      player.isViceCaptain,
+      player.autoSubRole
     ]),
     bench: bench.map((player) => [
       player.id,
@@ -231,7 +244,8 @@ export function shareCacheKey(input: SharePitchInput): string {
       player.teamCode,
       player.position,
       player.squadPosition,
-      player.fixture
+      player.fixture,
+      player.autoSubRole
     ])
   });
 }
@@ -266,6 +280,7 @@ interface ShareCanvasContext {
   stroke(): void;
   translate(x: number, y: number): void;
   rotate(angle: number): void;
+  setLineDash?(segments: number[]): void;
   fillStyle: string;
   strokeStyle: string;
   lineWidth: number;
@@ -322,6 +337,40 @@ function truncateText(
   return text.slice(0, 1);
 }
 
+
+const SUB_OUT_BG = "#c9183f";
+
+/** Small top-right arrow badge mirroring the on-screen auto-sub marker. */
+function drawAutoSubBadge(
+  ctx: ShareCanvasContext,
+  layer: {
+    autoSubArrow?: "" | "↑" | "↓";
+    autoSubIncoming?: boolean;
+    autoSubPredicted?: boolean;
+  },
+  rightX: number,
+  topY: number
+) {
+  if (!layer.autoSubArrow) return;
+  const size = Math.max(12, 16);
+  const x = rightX - size * 0.35;
+  const y = topY + size * 0.2;
+  ctx.fillStyle = layer.autoSubIncoming ? PITCH_GREEN : SUB_OUT_BG;
+  ctx.fillRect(x - size, y, size, size);
+  if (layer.autoSubPredicted) {
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = layer.autoSubIncoming ? PITCH_PLUM : "#ffffff";
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([3, 2]);
+    ctx.strokeRect(x - size, y, size, size);
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([]);
+  }
+  ctx.fillStyle = layer.autoSubIncoming ? PITCH_PLUM : "#ffffff";
+  ctx.font = `bold ${Math.max(10, size * 0.7)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(layer.autoSubArrow, x - size / 2, y + size / 2 + 0.5);
+}
+
 function drawStarter(
   ctx: ShareCanvasContext,
   layer: Extract<ShareDrawLayer, { type: "starter" }>,
@@ -352,6 +401,7 @@ function drawStarter(
     ctx.textBaseline = "middle";
     ctx.fillText(layer.marker, cx, cy + 0.5);
   }
+  drawAutoSubBadge(ctx, layer, kitX + kitWidth, layer.y);
 
   const plateY = layer.y + kitHeight * 0.78;
   const plateW = layer.width;
@@ -383,6 +433,7 @@ function drawBench(
   if (kit) {
     ctx.drawImage(kit, layer.x + 4, layer.y + 8, kitH * (240 / 220) * 0.72, kitH);
   }
+  drawAutoSubBadge(ctx, layer, layer.x + layer.width - 4, layer.y + 2);
   const textX = layer.x + layer.width * 0.42;
   const maxW = layer.width * 0.54;
   ctx.textAlign = "left";

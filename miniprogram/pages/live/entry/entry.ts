@@ -39,6 +39,10 @@ import {
 } from "../../../utils/follow";
 import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
+  applyLiveAutoSubProjection,
+  deriveLiveAutoSubProjection,
+} from "../../../utils/live-auto-subs";
+import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView,
 } from "./player-detail";
@@ -191,6 +195,10 @@ function firstRefreshDeadline(...values: unknown[]): string {
   return "";
 }
 
+// First-sync race (web parity): the calc can answer READY before picks
+// materialize — retry with backoff instead of flashing an empty squad.
+const EMPTY_PICKS_RETRY_DELAYS_MS = [1500, 3000, 7000, 12000];
+
 function captainDisplayName(
   players: Array<{
     captain?: boolean;
@@ -283,6 +291,7 @@ Page({
   liveForcedFollowupTrackNavigation: false,
   liveRequestId: 0,
   transfersRequestId: 0,
+  emptyPicksRetryCount: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
   liveRefresh: null as LiveRefreshController | null,
@@ -938,6 +947,7 @@ Page({
       return this.liveRequest;
     }
 
+    if (this.liveRequestKey !== requestKey) this.emptyPicksRetryCount = 0;
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const background = options.background === true && this.data.hasData;
@@ -958,6 +968,7 @@ Page({
     );
     this.loadTransfersAfterLive = options.includeTransfers === true;
 
+    let keepLoadingForEmptyPicksRetry = false;
     const request = (async () => {
       try {
         navigationTracker?.mark("primaryRequestStartAt");
@@ -1091,9 +1102,40 @@ Page({
           this.syncDisplayState();
           return;
         }
-        const players = (result.players || result.pickList || []).map(
-          normalizePlayer,
+        const rawRoster = result.players || result.pickList || [];
+        if (
+          rawRoster.length === 0 &&
+          eventId === (this.liveSnapshot?.eventId ?? currentLiveEventId()) &&
+          this.emptyPicksRetryCount < EMPTY_PICKS_RETRY_DELAYS_MS.length
+        ) {
+          const delay = EMPTY_PICKS_RETRY_DELAYS_MS[this.emptyPicksRetryCount];
+          this.emptyPicksRetryCount += 1;
+          keepLoadingForEmptyPicksRetry = true;
+          setTimeout(() => {
+            if (!this.pageVisible || requestId !== this.liveRequestId) return;
+            void this.loadData({ forceRefresh: true, includeTransfers: false });
+          }, delay);
+          return;
+        }
+        this.emptyPicksRetryCount = 0;
+        const rawPlayers = rawRoster;
+        const rawFieldPlayers = rawPlayers.filter(
+          (player) => numberValue(player.elementType) !== 5,
         );
+        // Web parity: derive auto-subs and captain promotion from the server
+        // lineup (or live minutes pre-final) before rows/pitch are built.
+        const autoSubProjection = deriveLiveAutoSubProjection({
+          chip: result.chip,
+          pickList: rawFieldPlayers,
+          score: result.score,
+          snapshot: liveResult.snapshot,
+        });
+        const players = [
+          ...applyLiveAutoSubProjection(rawFieldPlayers, autoSubProjection),
+          ...rawPlayers.filter(
+            (player) => numberValue(player.elementType) === 5,
+          ),
+        ].map(normalizePlayer);
         const managers = players.filter(
           (player) => numberValue(player.elementType) === 5,
         );
@@ -1154,7 +1196,9 @@ Page({
             netPointsKnown,
             transferCost,
             transferCostKnown,
-            captainText: captainDisplayName(players, result.captainName),
+            captainText:
+              autoSubProjection.captainPromotion?.playerInName ??
+              captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
             summaryTiles: [
@@ -1222,6 +1266,9 @@ Page({
       } finally {
         if (this.pageVisible && requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          // A scheduled empty-pickList retry re-arms the loading state so the
+          // page keeps the skeleton instead of flashing an empty squad.
+          if (keepLoadingForEmptyPicksRetry) this.setData({ loading: true });
           this.syncDisplayState();
         }
       }

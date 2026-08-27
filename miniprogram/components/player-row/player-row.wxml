@@ -4,6 +4,7 @@
     <view class="player-title-line">
       <view class="player-name">{{player.name || player.webName || '-'}}</view>
       <text wx:if="{{player.roleText}}" class="role-badge">{{player.roleText}}</text>
+      <text wx:if="{{player.autoSubArrow}}" class="autosub-badge {{player.autoSubIncoming ? 'autosub-in' : 'autosub-out'}} {{player.autoSubPredicted ? 'autosub-predicted' : ''}}">{{player.autoSubArrow}}</text>
     </view>
     <view class="player-meta">
       <text wx:if="{{showTeam}}">{{player.team || player.teamShortName || ''}}</text>
