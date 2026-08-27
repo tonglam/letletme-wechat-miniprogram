@@ -23,18 +23,18 @@
             <text wx:if="{{detail.statusText}}"> · {{detail.statusText}}</text>
           </view>
         </view>
-        <view class="pls-hero-pts">
-          <text class="pls-hero-pts-label">得分</text>
-          <text class="pls-hero-pts-value">{{detail.pointsText}}</text>
-        </view>
       </view>
-      <view wx:if="{{detail.roleBadge || detail.bpsText || detail.bonusText}}" class="pls-hero-foot">
+      <view class="pls-hero-foot">
         <view wx:if="{{detail.roleBadge}}" class="pls-pill pls-pill-role">
           <text class="pls-pill-value pls-pill-role-value">{{detail.roleBadge}}</text>
         </view>
         <view wx:if="{{detail.bpsText}}" class="pls-pill">
           <text class="pls-pill-label">BPS</text>
           <text class="pls-pill-value pls-bps-{{detail.bpsTone}}">{{detail.bpsText}}</text>
+        </view>
+        <view class="pls-pill">
+          <text class="pls-pill-label">得分</text>
+          <text class="pls-pill-value pls-pts-value">{{detail.pointsText}}</text>
         </view>
         <view wx:if="{{detail.bonusText}}" class="pls-pill">
           <text class="pls-pill-label">奖励</text>

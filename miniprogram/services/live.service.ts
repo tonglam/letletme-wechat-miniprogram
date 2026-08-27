@@ -595,6 +595,51 @@ function mapLiveFixturePlayer(
   };
 }
 
+export const PLAYER_LIVE_STATS_QUERY = `
+  query PlayerLiveStats($playerId: Int!, $eventId: Int!) {
+    playerLive(playerId: $playerId, eventId: $eventId) {
+      player { id webName position team { id name shortName } }
+      minutes goalsScored assists cleanSheets goalsConceded ownGoals
+      penaltiesSaved penaltiesMissed yellowCards redCards saves bonus bps
+      defensiveContribution totalPoints
+    }
+  }
+`;
+
+interface PlayerLiveStatsResponse {
+  playerLive: GraphQLLivePerformance | null;
+}
+
+/**
+ * Single-player GW stats for the player detail sheet — the mini counterpart of
+ * the web modal's GET_PLAYER_LIVE lazy fill. Keeps the hosting card's query
+ * thin while the sheet still shows the full stat set (DC, cards, saves…).
+ */
+export async function getPlayerLiveStats(
+  playerId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<LivePlayerRow | null> {
+  if (
+    !Number.isSafeInteger(playerId) || playerId <= 0
+    || !Number.isSafeInteger(eventId) || eventId <= 0
+  ) {
+    return null;
+  }
+  const data = await graphqlRequest<PlayerLiveStatsResponse>(
+    PLAYER_LIVE_STATS_QUERY,
+    { playerId, eventId },
+    {
+      cachePolicy: "live",
+      cacheVariant: `player-live:${eventId}`,
+      forceRefresh,
+      trace,
+    },
+  );
+  return data.playerLive ? mapLiveFixturePlayer(data.playerLive) : null;
+}
+
 async function fetchLiveFixturePlayers(
   ref: { season: string; eventId: number; revision: string },
   fixtureIds: readonly number[],

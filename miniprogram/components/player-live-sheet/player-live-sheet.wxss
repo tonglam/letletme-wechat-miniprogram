@@ -160,27 +160,9 @@
   font-size: 22rpx;
 }
 
-.pls-hero-pts {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  padding-right: 56rpx;
-}
-
-.pls-hero-pts-label {
-  color: var(--chalk-a60);
-  font-size: 18rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-}
-
-.pls-hero-pts-value {
+/* Points pill — same pill shape as bonus/BPS, value keeps the hero green */
+.pls-pts-value {
   color: var(--electric);
-  font-size: 56rpx;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.05;
 }
 
 /* BPS / bonus pills on the dark band */

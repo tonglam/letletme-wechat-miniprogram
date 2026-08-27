@@ -22,7 +22,9 @@ const SUMMARY_PLAYER_FIELDS = `
   goalsScored
   assists
   cleanSheets
+  goalsConceded
   saves
+  defensiveContribution
   bonus
   bps
   yellowCards

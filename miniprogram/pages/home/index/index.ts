@@ -20,6 +20,7 @@ import { buildDreamTeamPitchState } from "../../../utils/squad-pitch";
 import type { SquadPitchHeader, SquadPitchPlayer } from "../../../utils/squad-pitch";
 import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "../../live/entry/player-detail";
 import { indexDreamTeamById } from "../../summary/gameweek/dream-detail";
+import { getPlayerLiveStats } from "../../../services/live.service";
 import type { LivePlayerRow } from "../../../models/live";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import {
@@ -278,6 +279,9 @@ Page({
   _lifecycleRevision: 0,
   _dreamTeamLoadedEvent: 0,
   dreamTeamById: {} as Record<string, LivePlayerRow>,
+  _statPlayers: {} as Record<string, LivePlayerRow>,
+  _statsEvent: 0,
+  _playerSheetRequestId: 0,
   _deadlineRetryAttempts: 0,
 
   onLoad() {
@@ -865,6 +869,8 @@ Page({
     // consistent; it is below the fold and must not gate personal data.
     const summaryEvent = Number(supplement.summary?.event || 0);
     if (summaryEvent > 0) {
+      this._statsEvent = summaryEvent;
+      this._statPlayers = buildStatPlayerRows(supplement.summary);
       void this.loadDreamTeam(summaryEvent, forceRefresh);
     }
     await personalTask;
@@ -1083,10 +1089,15 @@ Page({
     const key = String(event.currentTarget.dataset.key || "");
     const targetId = Number(event.currentTarget.dataset.target || 0);
     if (!Number.isSafeInteger(targetId) || targetId <= 0) return;
-    // Web parity: highest score opens that entry's live points, player tiles
-    // open the player detail. The mini program "code" is the element id.
+    // Web parity: highest score opens that entry's live points; player tiles
+    // (top scorer, most captained) open the player detail card overlay.
     if (key === "highestScore") {
       goToLiveEntry(targetId);
+      return;
+    }
+    const player = this._statPlayers[key];
+    if (player) {
+      this.openPlayerSheet(player);
       return;
     }
     goToPlayerDetail(targetId);
@@ -1123,13 +1134,48 @@ Page({
     // overlay (PlayerDetailModal), not a page navigation.
     const player = this.dreamTeamById[String(event.detail?.playerId || "")];
     if (!player) return;
+    this.openPlayerSheet(player);
+  },
+
+  /**
+   * Open the player detail sheet with what the hosting card already knows,
+   * then lazily fill the full GW stat set (web useMatchPlayerDetail cadence:
+   * base row first, playerLive fetch second).
+   */
+  openPlayerSheet(player: LivePlayerRow) {
+    const requestId = ++this._playerSheetRequestId;
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player)
     });
+    const element = Number(player.element);
+    const eventId = this._statsEvent || this.data.dreamTeamEvent;
+    if (!element || !eventId) return;
+    void getPlayerLiveStats(element, eventId)
+      .then((stats) => {
+        if (
+          !this._pageVisible
+          || requestId !== this._playerSheetRequestId
+          || !this.data.playerDetailOpen
+          || !stats
+        ) return;
+        // Keep the card context (status badge, captain marks); fill stats only.
+        this.setData({
+          playerDetail: buildPlayerLiveDetail({
+            ...stats,
+            statusText: player.statusText,
+            playStatus: player.playStatus,
+            captain: player.captain,
+            viceCaptain: player.viceCaptain,
+            multiplier: player.multiplier
+          })
+        });
+      })
+      .catch(() => {});
   },
 
   onClosePlayerDetail() {
+    this._playerSheetRequestId += 1;
     this.setData({ playerDetailOpen: false });
   },
 
@@ -1384,8 +1430,50 @@ function clampFixtureGw(value: number, min: number): number {
   return Math.min(38, Math.max(min || 1, value || min || 1));
 }
 
-export function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {
-  if (!summary) {
+/**
+ * Base rows for the tappable player tiles (top scorer / most captained). The
+ * summary carries identity only; openPlayerSheet fills the full stat line via
+ * playerLive, mirroring the web modal's base-then-fetch flow.
+ */
+export function buildStatPlayerRows(
+  summary?: GameweekOverallSummary,
+): Record<string, LivePlayerRow> {
+  const rows: Record<string, LivePlayerRow> = {};
+  const top = summary?.topElementInfo;
+  const topPlayer = top?.player;
+  const topId = Number(topPlayer?.id || 0);
+  if (topId > 0) {
+    const team = topPlayer?.teamShortName || topPlayer?.team?.shortName || "";
+    rows.topScorer = {
+      element: topId,
+      name: topPlayer?.webName || "-",
+      webName: topPlayer?.webName || "-",
+      team,
+      teamShortName: team,
+      points: Number(top?.points) || 0,
+      totalPoints: Number(top?.points) || 0,
+      statusText: "最高分球员",
+      playStatus: 4
+    };
+  }
+  const captained = summary?.mostCaptainedPlayer;
+  const captainedId = Number(captained?.id || 0);
+  if (captainedId > 0) {
+    const team = captained?.teamShortName || "";
+    rows.viceCaptain = {
+      element: captainedId,
+      name: captained?.webName || "-",
+      webName: captained?.webName || "-",
+      team,
+      teamShortName: team,
+      statusText: "最多选择队长",
+      playStatus: 4
+    };
+  }
+  return rows;
+}
+
+export function mapHomeGameweekStats(summary?: GameweekOverallSummary): HomeStatRow[] {  if (!summary) {
     return [];
   }
 

@@ -77,7 +77,7 @@
 
     <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
       <view class="gw-stats-head">
-        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
+        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 总览</view>
       </view>
       <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
       <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
@@ -95,7 +95,7 @@
           <text class="gw-stat-value">{{item.value}}</text>
         </view>
       </view>
-      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 数据</view>
+      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 总览</view>
     </view>
 
     <view wx:if="{{hasDreamTeam}}" class="section card dream-card">

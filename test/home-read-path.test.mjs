@@ -6,6 +6,10 @@ const service = readFileSync(
   new URL("../miniprogram/services/home.service.ts", import.meta.url),
   "utf8"
 );
+const liveService = readFileSync(
+  new URL("../miniprogram/services/live.service.ts", import.meta.url),
+  "utf8"
+);
 const home = readFileSync(
   new URL("../miniprogram/pages/home/index/index.ts", import.meta.url),
   "utf8"
@@ -165,17 +169,38 @@ describe("home public read path", () => {
     );
     assert.ok(tapHandler, "onDreamPlayerTap handler exists");
     assert.match(tapHandler[0], /dreamTeamById\[String\(event\.detail\?\.playerId/);
-    assert.match(tapHandler[0], /buildPlayerLiveDetail\(player\)/);
-    assert.match(tapHandler[0], /playerDetailOpen: true/);
+    assert.match(tapHandler[0], /openPlayerSheet\(player\)/);
     assert.doesNotMatch(tapHandler[0], /goToPlayerDetail/);
     assert.match(home, /indexDreamTeamById\(pitch\.pitchPlayers, result\.players\)/);
     assert.match(home, /onClosePlayerDetail\(\) \{[\s\S]*?playerDetailOpen: false/);
   });
 
-  it("routes tappable GW stat tiles to entry and player pages", () => {
+  it("fills the sheet with the full playerLive stat set after opening", () => {
+    // Web useMatchPlayerDetail cadence: base row first, playerLive second, so
+    // thin card sources (homeGameweek dream team) still show DC/cards/saves.
+    const opener = home.match(/openPlayerSheet\(player: LivePlayerRow\) \{[\s\S]*?\n  \},/);
+    assert.ok(opener, "openPlayerSheet helper exists");
+    assert.match(opener[0], /buildPlayerLiveDetail\(player\)/);
+    assert.match(opener[0], /getPlayerLiveStats\(element, eventId\)/);
+    assert.match(opener[0], /buildPlayerLiveDetail\(\{[\s\S]*?\.\.\.stats/);
+    assert.match(liveService, /playerLive\(playerId: \$playerId, eventId: \$eventId\)/);
+    assert.match(liveService, /defensiveContribution totalPoints/);
+    assert.match(home, /onClosePlayerDetail\(\) \{\s*this\._playerSheetRequestId \+= 1/);
+  });
+
+  it("routes tappable GW stat tiles to entry live points and the player sheet", () => {
     assert.match(home, /targetId: Number\(summary\.highestScoringEntry\)/);
     assert.match(home, /targetId: Number\(summary\.mostCaptainedPlayer\?\.id\)/);
     assert.match(home, /key === "highestScore"[\s\S]*?goToLiveEntry/);
+    // Player tiles (top scorer / most captained) open the detail sheet with a
+    // base row built from the summary, not the thin standalone page.
+    const tapHandler = home.match(/onTapGameweekStat\(event[^)]*\) \{[\s\S]*?\n  \},/);
+    assert.ok(tapHandler, "onTapGameweekStat handler exists");
+    assert.match(tapHandler[0], /this\._statPlayers\[key\]/);
+    assert.match(tapHandler[0], /openPlayerSheet\(player\)/);
+    assert.match(home, /buildStatPlayerRows/);
+    assert.match(home, /statusText: "最高分球员"/);
+    assert.match(home, /statusText: "最多选择队长"/);
     assert.match(home, /onOpenGameweekStats[\s\S]*?routes\.summaryGameweek/);
   });
 
