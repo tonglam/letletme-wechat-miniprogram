@@ -867,6 +867,17 @@
   color: var(--ink);
 }
 
+/* Web TournamentTable parity: podium ranks stand out. */
+.board-row .col-rank.top3 {
+  color: var(--plum);
+  font-weight: 900;
+}
+
+.team-submeta {
+  font-size: 18rpx;
+  opacity: 0.85;
+}
+
 .col-team {
   min-width: 0;
   overflow: hidden;

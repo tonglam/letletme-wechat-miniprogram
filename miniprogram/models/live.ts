@@ -263,6 +263,10 @@ export interface LiveTournamentRow {
   toPlay?: number;
   rank?: number;
   overallRank?: number;
+  /** FPL tenths (1015 = £101.5m); present on the live-board pipeline. */
+  teamValue?: number;
+  /** Effective captain's live points (server value, or derived from picks). */
+  captainPoints?: number;
   picks?: LivePlayerRow[];
   searchText?: string;
   score?: LiveManagerScore;

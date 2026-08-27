@@ -85,7 +85,11 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
-import { formatAverageNumber } from "../../../utils/summary-format";
+import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
+import {
+  exportTournamentBoardShareImage,
+  presentTournamentBoardShareImage,
+} from "../../../utils/tournament-board-share-image";
 type SortKey =
   | "livePoints"
   | "liveNetPoints"
@@ -93,6 +97,7 @@ type SortKey =
   | "played"
   | "totalPoints"
   | "overallRank"
+  | "teamValue"
   | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
 
@@ -155,6 +160,9 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   chipCode: string;
   displayCaptain: string;
   playedText: string;
+  overallRankText: string;
+  teamValueText: string;
+  topRank: boolean;
   isMe: boolean;
   pinned: boolean;
   compared: boolean;
@@ -269,6 +277,7 @@ interface LiveTournamentData {
   compareRightPickCount: number;
   shareLabel: string;
   shareCopied: boolean;
+  shareImageBusy: boolean;
   shareSheetOpen: boolean;
   shareText: string;
 }
@@ -345,6 +354,8 @@ function boardSortOf(key: SortKey): LiveBoardSort {
       return "TOTAL_POINTS";
     case "overallRank":
       return "OVERALL_RANK";
+    case "teamValue":
+      return "TEAM_VALUE";
     case "entryName":
       return "ENTRY_NAME";
     case "livePoints":
@@ -457,6 +468,12 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const chip = textValue(row.chip, "无");
   const captain = textValue(row.captainName, "无队长");
   const chipCode = chipCodeOf(row.chip);
+  const captainPointsKnown =
+    typeof row.captainPoints === "number" && Number.isFinite(row.captainPoints);
+  const overallRankKnown =
+    typeof row.overallRank === "number" && row.overallRank > 0;
+  const teamValueKnown =
+    typeof row.teamValue === "number" && Number.isFinite(row.teamValue);
 
   return {
     ...row,
@@ -480,8 +497,16 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
       : "—",
     metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
     chipCode,
-    displayCaptain: captain && captain !== "无队长" ? `${captain} (C)` : "",
+    displayCaptain:
+      captain && captain !== "无队长"
+        ? `${captain} (C)${captainPointsKnown ? ` ${row.captainPoints}` : ""}`
+        : "",
     playedText: `${played}/${played + toPlay}`,
+    overallRankText: overallRankKnown ? formatRank(row.overallRank) : "",
+    teamValueText: teamValueKnown
+      ? `£${(numberValue(row.teamValue) / 10).toFixed(1)}m`
+      : "",
+    topRank: false,
     isMe: false,
     pinned: false,
     compared: false,
@@ -782,6 +807,8 @@ PerformancePage({
       { key: "transferCost", label: "扣分" },
       { key: "played", label: "出场" },
       { key: "totalPoints", label: "总分" },
+      { key: "overallRank", label: "总排" },
+      { key: "teamValue", label: "队值" },
     ],
     sortKey: "livePoints",
     sortDesc: true,
@@ -855,6 +882,7 @@ PerformancePage({
     compareRightPickCount: 0,
     shareLabel: "分享文字",
     shareCopied: false,
+    shareImageBusy: false,
     shareSheetOpen: false,
     shareText: "",
   } as LiveTournamentData,
@@ -1795,9 +1823,12 @@ PerformancePage({
     const compareIds = this.data.compareIds || [];
     const rows = [...byEntry.values()].map((row, index) => {
       const compared = compareIds.includes(numberValue(row.entry));
+      const visibleRank = numberValue(row.rank, index + 1);
       return {
         ...row,
-        visibleRank: numberValue(row.rank, index + 1),
+        visibleRank,
+        // Web TournamentTable highlights the podium ranks.
+        topRank: row.eventPointsKnown && visibleRank >= 1 && visibleRank <= 3,
         isMe: numberValue(row.entry) === viewerId,
         pinned: false,
         compared,
@@ -3426,6 +3457,51 @@ PerformancePage({
 
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
+  },
+
+  async onShareBoardImage() {
+    if (this.data.shareImageBusy) return;
+    const rows = this.data.displayedRows || [];
+    if (rows.length === 0) {
+      wx.showToast({ title: "还没有可分享的榜单", icon: "none" });
+      return;
+    }
+    this.setData({ shareImageBusy: true });
+    try {
+      const path = await exportTournamentBoardShareImage({
+        event: this.data.event,
+        tournamentName: this.data.selectedTournament?.name || "",
+        highestText: this.data.highestText,
+        averageText: this.data.averageText,
+        entriesText: this.data.entriesText,
+        rows: rows.map((row) => ({
+          rankText: row.eventPointsKnown
+            ? String(
+                numberValue(row.rank) > 0
+                  ? numberValue(row.rank)
+                  : numberValue(row.visibleRank),
+              )
+            : "—",
+          entryName: textValue(row.entryName, "-"),
+          metaLine: [row.playerName, row.displayCaptain]
+            .filter((part) => part && String(part).length > 0)
+            .join(" · "),
+          gwText: row.displayLive,
+          netText: row.displayNet,
+          totalText: row.displayTotal,
+          isMe: row.isMe === true,
+        })),
+      });
+      await presentTournamentBoardShareImage(path);
+    } catch (error) {
+      miniLogger.error(
+        "share-image.tournament",
+        error instanceof Error ? error.message : "failed",
+      );
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareImageBusy: false });
+    }
   },
 
   onChooseEntry() {

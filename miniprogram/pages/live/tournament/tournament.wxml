@@ -99,6 +99,10 @@
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
             <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
+          <view wx:if="{{!compareMode}}" class="tool-btn tool-btn-labeled {{shareImageBusy ? 'done' : ''}}" bindtap="onShareBoardImage" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+            <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
+          </view>
           <block wx:if="{{compareMode}}">
             <text wx:if="{{compareLoading}}" class="action-muted">对比加载中</text>
             <text wx:if="{{compareIds.length === 2}}" class="action" bindtap="onOpenCompareSheet" hover-class="hover-dim">对比</text>
@@ -141,7 +145,7 @@
               <image wx:if="{{item.compared}}" class="row-check-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             </view>
           </view>
-          <text class="col-rank">{{item.eventPointsKnown ? (item.rank > 0 ? item.rank : item.visibleRank) : '—'}}</text>
+          <text class="col-rank {{item.topRank ? 'top3' : ''}}">{{item.eventPointsKnown ? (item.rank > 0 ? item.rank : item.visibleRank) : '—'}}</text>
           <view class="col-team">
             <view class="team-line">
               <text class="team-name">{{item.entryName || '-'}}</text>
@@ -152,6 +156,11 @@
               <text wx:if="{{item.playerName && item.displayCaptain}}"> · </text>
               <text wx:if="{{item.displayCaptain}}">{{item.displayCaptain}}</text>
               <text wx:if="{{item.chipCode}}" class="chip-badge chip-{{item.chipCode}}">{{item.chipCode}}</text>
+            </view>
+            <view wx:if="{{item.overallRankText || item.teamValueText}}" class="team-meta team-submeta">
+              <text wx:if="{{item.overallRankText}}">总排 {{item.overallRankText}}</text>
+              <text wx:if="{{item.overallRankText && item.teamValueText}}"> · </text>
+              <text wx:if="{{item.teamValueText}}">队值 {{item.teamValueText}}</text>
             </view>
           </view>
           <text class="col-num col-played">{{item.playedText || '-'}}</text>
