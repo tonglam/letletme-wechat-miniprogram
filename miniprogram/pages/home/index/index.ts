@@ -22,12 +22,10 @@ import { buildPlayerLiveDetail, type PlayerLiveDetailView } from "../../live/ent
 import { indexDreamTeamById } from "../../summary/gameweek/dream-detail";
 import type { LivePlayerRow } from "../../../models/live";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
-import { formatGameweekShareText } from "../../../utils/gameweek-share";
 import {
   exportDeadlineShareImage,
   presentDeadlineShareImage,
 } from "../../../utils/deadline-share-image";
-import { copyShareText } from "../../../utils/live-share";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
@@ -72,7 +70,6 @@ interface HomeData {
   dreamPlayers: SquadPitchPlayer[];
   dreamHeader: Partial<SquadPitchHeader>;
   dreamShareBusy: boolean;
-  dreamShareCopied: boolean;
   playerDetailOpen: boolean;
   playerDetail: PlayerLiveDetailView | null;
   deadlineShareBusy: boolean;
@@ -219,7 +216,6 @@ Page({
     dreamPlayers: [],
     dreamHeader: {},
     dreamShareBusy: false,
-    dreamShareCopied: false,
     playerDetailOpen: false,
     playerDetail: null,
     deadlineShareBusy: false,
@@ -281,7 +277,6 @@ Page({
   _dreamTeamLoadedEvent: 0,
   dreamTeamById: {} as Record<string, LivePlayerRow>,
   _deadlineRetryAttempts: 0,
-  _dreamShareCopiedTimer: undefined as number | undefined,
 
   onLoad() {
     this._pageVisible = true;
@@ -412,7 +407,6 @@ Page({
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
-    this.clearDreamShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -431,7 +425,6 @@ Page({
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
     this.clearNoticeTimer();
-    this.clearDreamShareCopiedTimer();
     this._perfTracker?.disconnect();
   },
 
@@ -1174,45 +1167,6 @@ Page({
     }
   },
 
-  onCopyDreamShare() {
-    if (!this.data.hasDreamTeam) return;
-    const points = this.data.dreamPlayers.reduce(
-      (total, player) => total + (Number(player.score) || 0),
-      0,
-    );
-    const text = formatGameweekShareText({
-      event: this.data.dreamTeamEvent,
-      headlineStats: [],
-      mostRows: [],
-      chipRows: [],
-      dreamPlayers: this.data.dreamPlayers,
-      dreamPoints: points,
-      eliteRows: [],
-      transfersInRows: [],
-      transfersOutRows: [],
-    }, "dreamTeam");
-    void copyShareText(text).then((ok) => {
-      if (!ok) {
-        wx.showToast({ title: "复制失败", icon: "none" });
-        return;
-      }
-      this.setData({ dreamShareCopied: true });
-      if (this._dreamShareCopiedTimer !== undefined) {
-        clearTimeout(this._dreamShareCopiedTimer);
-      }
-      this._dreamShareCopiedTimer = setTimeout(() => {
-        this._dreamShareCopiedTimer = undefined;
-        this.setData({ dreamShareCopied: false });
-      }, 2000) as unknown as number;
-    });
-  },
-
-  clearDreamShareCopiedTimer() {
-    if (this._dreamShareCopiedTimer !== undefined) {
-      clearTimeout(this._dreamShareCopiedTimer);
-      this._dreamShareCopiedTimer = undefined;
-    }
-  },
 
   onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {
     const dateKey = String(event.currentTarget.dataset.key || "");

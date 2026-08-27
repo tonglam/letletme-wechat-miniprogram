@@ -42,12 +42,21 @@ test("every visible share action uses the canonical text or image label", () => 
         new RegExp(expected),
         `${path} ${handler} must use ${expected}`,
       );
+      // Share-image buttons always carry the image icon so every surface
+      // presents the same icon + label affordance.
+      if (expected === "分享图片") {
+        assert.match(
+          match[3],
+          /image\.svg/,
+          `${path} ${handler} must include the image.svg icon`,
+        );
+      }
       actions.push({ handler, path, expected });
     }
   }
 
-  assert.equal(actions.length, 26, "the complete set of visible share actions is covered");
-  assert.equal(actions.filter((action) => action.expected === "分享文字").length, 15);
+  assert.equal(actions.length, 25, "the complete set of visible share actions is covered");
+  assert.equal(actions.filter((action) => action.expected === "分享文字").length, 14);
   assert.equal(actions.filter((action) => action.expected === "分享图片").length, 11);
 });
 

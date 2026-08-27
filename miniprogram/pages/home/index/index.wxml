@@ -36,6 +36,7 @@
         </view>
         <view class="deadline-side">
           <view wx:if="{{utcDeadline}}" class="deadline-share {{deadlineShareBusy ? 'done' : ''}}" catchtap="onShareDeadlineImage" hover-class="hover-dim">
+            <image class="deadline-share-icon" src="/assets/icons/image.svg" mode="aspectFit" />
             <text class="deadline-share-label">{{deadlineShareBusy ? '生成中' : '分享图片'}}</text>
           </view>
           <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
@@ -111,16 +112,8 @@
               bindtap="onShareDreamPitch"
               hover-class="hover-dim"
             >
+              <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
               <text class="tool-label">{{dreamShareBusy ? '生成中' : '分享图片'}}</text>
-            </view>
-            <view
-              class="tool-btn tool-btn-labeled {{dreamShareCopied ? 'done' : ''}}"
-              bindtap="onCopyDreamShare"
-              hover-class="hover-dim"
-            >
-              <image wx:if="{{dreamShareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
-              <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{dreamShareCopied ? '已复制' : '分享文字'}}</text>
             </view>
           </view>
         </view>

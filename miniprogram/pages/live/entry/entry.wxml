@@ -112,6 +112,7 @@
           bindtap="onSharePitch"
           hover-class="hover-dim"
         >
+          <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
           <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
         </view>
       </view>

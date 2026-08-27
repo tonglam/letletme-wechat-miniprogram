@@ -142,12 +142,14 @@ describe("home public read path", () => {
     );
   });
 
-  it("renders the dream team on the shared squad pitch with share actions", () => {
+  it("renders the dream team on the shared squad pitch with share image action", () => {
     assert.match(homeJson, /squad-pitch/);
     assert.match(homeWxml, /<squad-pitch[\s\S]*?bind:playertap="onDreamPlayerTap"/);
     assert.match(home, /buildDreamTeamPitchState/);
     assert.match(home, /onShareDreamPitch[\s\S]*?exportPortraitShareImage[\s\S]*?presentSquadPitchShareImage/);
-    assert.match(home, /onCopyDreamShare[\s\S]*?formatGameweekShareText[\s\S]*?"dreamTeam"/);
+    // Image-only share: the dream card no longer copies share text.
+    assert.doesNotMatch(home, /onCopyDreamShare/);
+    assert.doesNotMatch(homeWxml, /onCopyDreamShare/);
   });
 
   it("opens the player detail sheet on dream player tap (web PlayerDetailModal)", () => {

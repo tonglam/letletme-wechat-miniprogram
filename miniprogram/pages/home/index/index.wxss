@@ -79,10 +79,16 @@
 .deadline-share {
   display: inline-flex;
   align-items: center;
+  gap: 8rpx;
   padding: 10rpx 20rpx;
   border: 1rpx solid var(--electric-a28);
   border-radius: 12rpx;
   background: var(--black-a25);
+}
+
+.deadline-share-icon {
+  width: 22rpx;
+  height: 22rpx;
 }
 
 .deadline-share-label {
