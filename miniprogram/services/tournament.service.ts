@@ -4,6 +4,7 @@ import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from 
 import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
 import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
+import { isOfficialH2HTournamentRow } from "../utils/official-h2h";
 
 const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -18,6 +19,8 @@ const GET_ENTRY_TOURNAMENTS = `
       knockoutMode
       knockoutStartedEventId
       knockoutEndedEventId
+      leagueType
+      rosterMode
     }
   }
 `;
@@ -327,6 +330,8 @@ interface EntryTournamentsResponse {
     knockoutMode?: string | null;
     knockoutStartedEventId?: number | null;
     knockoutEndedEventId?: number | null;
+    leagueType?: string | null;
+    rosterMode?: string | null;
   }[];
 }
 
@@ -717,12 +722,22 @@ export async function getEntryPointsRaceTournament(
   trace?: PageRequestTrace
 ): Promise<TournamentOption[]> {
   const rows = await readDirectory(entry, forceRefresh, trace);
+  // Points races plus official H2H leagues (web liveTournament.ts
+  // isOfficialH2HTournament) — the live page renders each kind differently.
   return rows
-    .filter((t) => !t.groupMode || t.groupMode === "POINTS_RACES")
+    .filter(
+      (t) =>
+        !t.groupMode ||
+        t.groupMode === "POINTS_RACES" ||
+        isOfficialH2HTournamentRow(t)
+    )
     .map((t) => ({
       id: Number(t.id),
       name: t.name,
-      participantCount: t.totalTeamNum ?? undefined
+      participantCount: t.totalTeamNum ?? undefined,
+      groupMode: t.groupMode,
+      leagueType: t.leagueType,
+      rosterMode: t.rosterMode
     }));
 }
 

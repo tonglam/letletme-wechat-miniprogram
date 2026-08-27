@@ -16,6 +16,9 @@
         <view class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事数据待就绪'}}</view>
       </view>
       <gw-picker wx:if="{{tournaments.length}}" compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+      <view wx:if="{{tournaments.length}}" class="tool-btn tool-btn-labeled detail-btn" bindtap="onOpenTournamentDetail" hover-class="hover-dim">
+        <text class="tool-label">详情</text>
+      </view>
     </view>
   </view>
 
@@ -53,6 +56,131 @@
       bind:retry="onRetry"
     />
 
+    <view wx:if="{{setupActive}}" class="section card setup-card">
+      <view class="setup-title">{{setupFailed ? '赛事设置失败' : '正在准备准确的积分榜'}}</view>
+      <view class="setup-desc">{{setupFailed ? '请联系赛事管理员处理；修复会复用已完成的数据，只处理缺失内容。' : '所有参赛球队的核心计分数据完整后，积分榜将自动开放。'}}</view>
+      <view wx:if="{{!setupFailed && setupPhaseText}}" class="setup-phase">{{setupPhaseText}}</view>
+      <view class="tool-btn tool-btn-labeled setup-retry" bindtap="onRetry" hover-class="hover-dim">
+        <text class="tool-label">{{setupFailed ? '重试' : '刷新进度'}}</text>
+      </view>
+    </view>
+
+    <block wx:elif="{{h2hActive}}">
+      <view wx:if="{{h2hViewerRankText}}" class="section stat-strip">
+        <view class="stat">
+          <text class="stat-label">我的排名</text>
+          <text class="stat-value">{{h2hViewerRankText}}</text>
+        </view>
+        <view class="stat">
+          <text class="stat-label">对战积分</text>
+          <text class="stat-value">{{h2hViewerMatchPointsText}}</text>
+        </view>
+        <view class="stat">
+          <text class="stat-label">战绩</text>
+          <text class="stat-value">{{h2hViewerRecordText}}</text>
+        </view>
+      </view>
+
+      <view class="section sort-tabs">
+        <view
+          wx:if="{{h2hShowStandings}}"
+          class="sort-tab {{h2hTab === 'standings' ? 'active' : ''}}"
+          data-tab="standings"
+          bindtap="onH2HTabTap"
+          hover-class="hover-dim"
+        >积分榜</view>
+        <view
+          class="sort-tab {{h2hTab === 'matches' ? 'active' : ''}}"
+          data-tab="matches"
+          bindtap="onH2HTabTap"
+          hover-class="hover-dim"
+        >本轮对阵</view>
+      </view>
+
+      <view wx:if="{{h2hTab === 'standings' && h2hShowStandings}}" class="section">
+        <app-empty-state
+          wx:if="{{h2hStandings.length === 0}}"
+          title="积分榜待发布"
+          description="官方分数可追溯后显示 H2H 积分榜"
+        />
+        <view wx:else class="board h2h-board">
+          <view class="board-head">
+            <text class="col-rank">#</text>
+            <text class="col-team">球队</text>
+            <text class="col-num col-record">战绩</text>
+            <text class="col-num col-pf">总得分</text>
+            <text class="col-num col-mp">积分</text>
+          </view>
+          <view
+            wx:for="{{h2hStandings}}"
+            wx:key="entryId"
+            class="board-row {{item.isMe ? 'me' : ''}}"
+            data-entry-id="{{item.entryId}}"
+            bindtap="onOpenEntry"
+            hover-class="hover-dim"
+          >
+            <text class="col-rank {{item.topRank ? 'top3' : ''}}">{{item.rankText}}</text>
+            <view class="col-team">
+              <view class="team-line">
+                <text class="team-name">{{item.entryName}}</text>
+                <text wx:if="{{item.isMe}}" class="me-badge">我</text>
+              </view>
+              <view class="team-meta">
+                <text wx:if="{{item.playerName}}">{{item.playerName}} · </text>
+                <text>已赛 {{item.playedText}}</text>
+              </view>
+            </view>
+            <text class="col-num col-record">{{item.recordText}}</text>
+            <text class="col-num col-pf">{{item.pointsForText}}</text>
+            <text class="col-num col-mp">{{item.matchPointsText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{h2hTab === 'matches'}}" class="section">
+        <view wx:if="{{h2hAwaitingSchedule}}" class="card h2h-await">正在等待 FPL 发布 GW{{event}} 本轮对阵。</view>
+        <app-empty-state
+          wx:elif="{{h2hMatches.length === 0}}"
+          title="暂无对阵"
+          description="赛程发布后显示本轮全部对阵"
+        />
+        <view wx:else class="h2h-match-list">
+          <view
+            wx:for="{{h2hMatches}}"
+            wx:key="key"
+            class="h2h-match {{item.involvesViewer ? 'viewer' : ''}}"
+          >
+            <view class="h2h-match-head">
+              <text class="h2h-match-order">{{item.orderText}}</text>
+              <text class="h2h-match-phase">{{item.phaseLabel}}</text>
+              <text wx:if="{{item.isBye}}" class="h2h-bye">轮空</text>
+              <text wx:if="{{item.involvesViewer}}" class="h2h-viewer-dot"></text>
+            </view>
+            <view class="h2h-match-body">
+              <view class="h2h-side">
+                <text class="h2h-side-name {{item.homeWon ? 'won' : ''}}">{{item.homeName}}</text>
+                <text wx:if="{{item.homePlayer}}" class="h2h-side-player">{{item.homePlayer}}</text>
+              </view>
+              <view class="h2h-score">
+                <block wx:if="{{item.hasScore}}">
+                  <text class="h2h-score-num {{item.homeWon ? 'won' : ''}}">{{item.homeScoreText}}</text>
+                  <text class="h2h-score-sep">—</text>
+                  <text class="h2h-score-num {{item.awayWon ? 'won' : ''}}">{{item.awayScoreText}}</text>
+                </block>
+                <text wx:else class="h2h-vs">对阵</text>
+              </view>
+              <view class="h2h-side h2h-side-away">
+                <text class="h2h-side-name {{item.awayWon ? 'won' : ''}}">{{item.awayName}}</text>
+                <text wx:if="{{item.awayPlayer}}" class="h2h-side-player">{{item.awayPlayer}}</text>
+              </view>
+            </view>
+            <view wx:if="{{item.tiebreakText}}" class="h2h-tiebreak">{{item.tiebreakText}}</view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:else>
     <view class="section stat-strip">
       <view class="stat">
         <text class="stat-label">最高</text>
@@ -172,6 +300,7 @@
         <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore" hover-class="hover-dim">再显示 20 队</view>
       </view>
     </view>
+    </block>
   </block>
 
   <view wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
@@ -397,6 +526,101 @@
       <view class="flt-foot">
         <view class="flt-done" bindtap="onCloseFilterSheet" hover-class="hover-dim">完成</view>
       </view>
+    </view>
+  </view>
+  <view wx:if="{{detailOpen}}" class="flt-root">
+    <view class="flt-mask" bindtap="onCloseTournamentDetail"></view>
+    <view class="flt-sheet">
+      <view class="flt-head">
+        <view class="flt-title">赛事信息</view>
+        <text class="flt-clear" bindtap="onCloseTournamentDetail" hover-class="hover-dim">关闭</text>
+      </view>
+      <scroll-view scroll-y class="flt-body">
+        <view wx:if="{{detailLoading}}" class="filter-options-status">正在加载赛事信息…</view>
+        <view wx:elif="{{detailError}}" class="filter-options-status error">{{detailError}}</view>
+        <block wx:else>
+          <view class="filter-section flt-first">
+            <view class="filter-section-head">
+              <text class="filter-section-title">概览</text>
+            </view>
+            <view class="detail-grid">
+              <view class="detail-item">
+                <text class="detail-label">创建者</text>
+                <text class="detail-value">{{detailCreator}}</text>
+              </view>
+              <view class="detail-item">
+                <text class="detail-label">联赛类型</text>
+                <text class="detail-value">{{detailLeagueTypeText}}</text>
+              </view>
+              <view class="detail-item">
+                <text class="detail-label">参赛球队数</text>
+                <text class="detail-value">{{detailParticipantCountText}}</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="filter-section">
+            <view class="filter-section-head">
+              <text class="filter-section-title">赛事规则</text>
+            </view>
+            <view class="detail-rules">
+              <view class="detail-rule">小组赛：{{detailGroupModeText}}</view>
+              <view class="detail-rule">每组球队数：{{detailGroupTeamNumText}}</view>
+              <view class="detail-rule">小组数：{{detailGroupNumText}}</view>
+              <view class="detail-rule">小组赛轮次：{{detailGroupEventsText}}</view>
+              <view class="detail-rule">淘汰赛：{{detailKnockoutModeText}}</view>
+              <block wx:if="{{detailKnockout}}">
+                <view class="detail-rule">淘汰赛球队数：{{detailKnockoutTeamNumText}}</view>
+                <view class="detail-rule">淘汰赛轮数：{{detailKnockoutRoundsText}}</view>
+                <view class="detail-rule">淘汰赛轮次：{{detailKnockoutEventsText}}</view>
+              </block>
+            </view>
+          </view>
+
+          <view class="filter-section">
+            <view class="filter-section-head">
+              <text class="filter-section-title">参赛名单</text>
+              <text class="filter-section-summary">{{detailRosterCountText}}</text>
+            </view>
+            <view wx:if="{{detailRosterUnavailable}}" class="roster-empty">参赛名单暂不可用</view>
+            <block wx:else>
+              <view wx:if="{{detailRosterSearchable}}" class="ownership-search">
+                <input
+                  class="ownership-search-input"
+                  placeholder="按球队或经理搜索…"
+                  placeholder-class="ownership-search-ph"
+                  value="{{detailRosterKeyword}}"
+                  confirm-type="search"
+                  bindinput="onDetailRosterSearchInput"
+                />
+              </view>
+              <view class="roster-list">
+                <view
+                  wx:for="{{detailRosterRows}}"
+                  wx:key="entryId"
+                  class="roster-row {{item.isMe ? 'me' : ''}}"
+                  data-entry-id="{{item.entryId}}"
+                  bindtap="onOpenDetailRosterEntry"
+                  hover-class="hover-dim"
+                >
+                  <view class="roster-names">
+                    <text class="roster-name">{{item.entryName}}</text>
+                    <text wx:if="{{item.isMe}}" class="me-badge">我</text>
+                  </view>
+                  <text wx:if="{{item.playerName}}" class="roster-player">{{item.playerName}}</text>
+                </view>
+                <view wx:if="{{detailRosterRows.length === 0}}" class="roster-empty">{{detailRosterKeyword ? '没有球队符合搜索条件。' : '暂无参赛名单'}}</view>
+              </view>
+              <view wx:if="{{detailRosterShownText}}" class="roster-foot">{{detailRosterShownText}}</view>
+              <view class="roster-actions">
+                <text wx:if="{{detailRosterMoreText}}" class="action" bindtap="onDetailRosterMore" hover-class="hover-dim">{{detailRosterMoreText}}</text>
+                <text wx:if="{{detailRosterAllText}}" class="action" bindtap="onDetailRosterAll" hover-class="hover-dim">{{detailRosterAllText}}</text>
+                <text wx:if="{{detailRosterCanCollapse}}" class="action-muted" bindtap="onDetailRosterCollapse" hover-class="hover-dim">收起</text>
+              </view>
+            </block>
+          </view>
+        </block>
+      </scroll-view>
     </view>
   </view>
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
