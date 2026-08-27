@@ -9,6 +9,15 @@
     </view>
     <gw-picker compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
   </view>
+  <data-status
+    wx:if="{{entryId && entryLookupMessage}}"
+    status="stale"
+    message="{{entryLookupMessage}}"
+    workload="interactive"
+    transient="{{false}}"
+    showRetry="{{entryLookupRetryable}}"
+    bind:retry="onRetry"
+  />
 
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">
     <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
@@ -39,7 +48,7 @@
       <view class="score-card scoreboard">
         <view class="score-top">
           <view class="score-identity">
-            <view class="score-team"><text user-select="{{true}}">{{entryName || '我的球队'}}</text></view>
+            <view class="score-team"><text user-select="{{true}}">{{entryName || (entryId ? ('Entry #' + entryId) : '我的球队')}}</text></view>
             <view wx:if="{{playerName}}" class="score-manager"><text user-select="{{true}}">{{playerName}}</text></view>
           </view>
           <view class="score-hero">
@@ -71,7 +80,7 @@
       <view class="score-card scoreboard">
         <view class="score-top">
           <view class="score-identity">
-            <view class="score-team"><text user-select="{{true}}">{{entryName || '我的球队'}}</text></view>
+            <view class="score-team"><text user-select="{{true}}">{{entryName || (entryId ? ('Entry #' + entryId) : '我的球队')}}</text></view>
             <view wx:if="{{playerName}}" class="score-manager"><text user-select="{{true}}">{{playerName}}</text></view>
           </view>
           <view class="score-hero">

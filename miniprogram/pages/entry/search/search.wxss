@@ -149,6 +149,28 @@
   margin: 28rpx 0 0;
 }
 
+.status-code {
+  margin-left: 8rpx;
+  font-size: 20rpx;
+  opacity: 0.78;
+}
+
+.lookup-retry {
+  min-width: 144rpx;
+  margin: 14rpx 0 0;
+  font-size: 22rpx;
+}
+
+.section-notice {
+  padding: 18rpx 22rpx;
+  border: 1rpx solid var(--warning-a45);
+  border-radius: 14rpx;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
 .hits-card {
   padding: 24rpx 28rpx;
 }

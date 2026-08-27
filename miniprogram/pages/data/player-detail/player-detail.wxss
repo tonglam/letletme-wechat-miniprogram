@@ -1,1 +1,87 @@
 /* Hero uses the global .scoreboard score-hero family — no page-local styles */
+
+.section-notice {
+  margin-top: 16rpx;
+  padding: 20rpx;
+  border: 1rpx solid var(--warning-a45);
+  border-radius: 16rpx;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.notice-title {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.notice-description {
+  margin-top: 6rpx;
+  color: var(--muted-ink);
+}
+
+.availability-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.availability-issue {
+  padding: 6rpx 12rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 999rpx;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.availability-issue-stale {
+  border-color: var(--warning-a45);
+  background: var(--warning-tint);
+}
+
+.availability-issue-fallback {
+  border-color: var(--line-strong);
+}
+
+.availability-issue-unavailable {
+  border-color: var(--danger-a35);
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+.notice-retry {
+  min-width: 160rpx;
+  margin: 16rpx 0 0;
+  padding: 10rpx 20rpx;
+  border: 1rpx solid var(--warning-a45);
+  border-radius: 12rpx;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.injury-notice {
+  margin-top: 16rpx;
+  padding: 20rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 16rpx;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.injury-status {
+  margin-top: 8rpx;
+  font-weight: 700;
+}
+
+.injury-stale {
+  margin-left: 10rpx;
+  color: var(--warning);
+  font-size: 20rpx;
+  font-weight: 600;
+}

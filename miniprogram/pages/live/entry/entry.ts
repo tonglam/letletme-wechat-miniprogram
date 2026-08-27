@@ -1,4 +1,5 @@
 import {
+  EntryLookupError,
   getEntryEventTransfers,
   getEntryInfo,
 } from "../../../services/entry.service";
@@ -58,6 +59,7 @@ import {
   type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import { entryPersistencePresentation } from "../../../utils/entry-lookup-presentation";
 
 interface SummaryTile {
   label: string;
@@ -118,6 +120,9 @@ interface LiveEntryData {
   maxGw: number;
   entryId?: number;
   entryName: string;
+  entryLookupStatus: string;
+  entryLookupMessage: string;
+  entryLookupRetryable: boolean;
   playerName: string;
   scoreState: string;
   scoreStatusText: string;
@@ -239,6 +244,9 @@ Page({
     maxGw: 0,
     entryId: 0,
     entryName: "",
+    entryLookupStatus: "",
+    entryLookupMessage: "",
+    entryLookupRetryable: false,
     playerName: "",
     scoreState: "UNAVAILABLE",
     scoreStatusText: "官方分数不可用",
@@ -774,19 +782,38 @@ Page({
 
   async loadEntryIdentity(entryId: number) {
     if (!entryId) {
-      this.setData({ entryName: "", playerName: "" });
+      this.setData({
+        entryName: "",
+        entryLookupStatus: "",
+        entryLookupMessage: "",
+        entryLookupRetryable: false,
+        playerName: ""
+      });
       return;
     }
     try {
       const entry = await getEntryInfo(entryId);
       if (this.data.entryId !== entryId) return;
+      const persistence = entryPersistencePresentation(entry.persistenceState);
       this.setData({
         entryName: entry.entryName || entry.teamName || "",
+        entryLookupStatus: "FOUND",
+        entryLookupMessage: persistence?.message ?? "",
+        entryLookupRetryable: persistence?.retryable ?? false,
         playerName: entry.playerName || "",
       });
-    } catch {
-      if (this.data.entryId === entryId)
-        this.setData({ entryName: "", playerName: "" });
+    } catch (error) {
+      if (this.data.entryId === entryId) {
+        const lookupError = error instanceof EntryLookupError ? error : null;
+        this.setData({
+          entryName: "",
+          entryLookupStatus: lookupError?.status ?? "UNAVAILABLE",
+          entryLookupMessage: lookupError?.message
+            ?? "当前无法确认球队数据，请稍后重试",
+          entryLookupRetryable: lookupError?.retryable ?? true,
+          playerName: "",
+        });
+      }
     }
   },
 
@@ -815,6 +842,9 @@ Page({
     this.setData({
       entryId: nextEntryId,
       entryName: "",
+      entryLookupStatus: "",
+      entryLookupMessage: "",
+      entryLookupRetryable: false,
       playerName: "",
       loading: false,
       refreshing: false,
@@ -1420,6 +1450,9 @@ Page({
       "pages/live/entry/entry",
       "refresh",
     );
+    if (this.data.entryId && this.data.entryLookupRetryable) {
+      void this.loadEntryIdentity(this.data.entryId);
+    }
     void this.runForcedRefresh(this.perfTracker);
   },
 

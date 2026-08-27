@@ -49,7 +49,15 @@
     </button>
   </view>
 
-  <view wx:if="{{error}}" class="live-refresh-error section">{{error}}</view>
+  <view wx:if="{{error}}" class="live-refresh-error section" role="alert">
+    <view>{{error}}<text wx:if="{{errorCode}}" class="status-code">（{{errorCode}}）</text></view>
+    <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重试查询</button>
+  </view>
+
+  <view wx:if="{{lookupNotice}}" class="section-notice section" role="status">
+    <view>{{lookupNotice}}</view>
+    <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重新保存</button>
+  </view>
 
   <view wx:if="{{searchHits.length}}" class="card hits-card section">
     <view class="field-label">匹配结果</view>

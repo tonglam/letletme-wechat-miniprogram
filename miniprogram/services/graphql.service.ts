@@ -743,18 +743,31 @@ function hasEmptyItemsPayload(data: unknown): boolean {
   });
 }
 
-/** Missing GetEntry rows must not become a sticky miss after a later FPL/sync hit. */
+/** Cache only authoritative contract results; transient/degraded states must be retried. */
 export function shouldCacheGraphQLData(
   operationName: string,
   data: unknown,
 ): boolean {
-  if (operationName !== "GetEntry") {
-    return true;
-  }
   if (!data || typeof data !== "object") {
     return false;
   }
-  return (data as { entry?: unknown }).entry != null;
+  if (operationName === "EntryLookup") {
+    const lookup = (data as { entryLookup?: Record<string, unknown> }).entryLookup;
+    return Boolean(
+      lookup
+      && lookup.status === "FOUND"
+      && lookup.entry != null
+      && lookup.source === "DATABASE"
+      && lookup.persistenceState === "NOT_REQUIRED"
+    );
+  }
+  if (operationName === "PlayerDetail") {
+    const detail = (data as {
+      playerDetail?: { dataAvailability?: { isFullyAuthoritative?: unknown } } | null;
+    }).playerDetail;
+    return detail == null || detail.dataAvailability?.isFullyAuthoritative === true;
+  }
+  return true;
 }
 
 export async function graphqlRead<T>(

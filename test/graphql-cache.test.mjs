@@ -29,7 +29,7 @@ import {
   httpErrorMessage,
 } from "../miniprogram/utils/request-error.ts";
 
-const query = "query OwnEntry($entryId: Int!) { entry(id: $entryId) { id } }";
+const query = "query EntryLookup($entryId: Int!) { entryLookup(id: $entryId) { status entry { id } } }";
 const variables = { entryId: 123 };
 
 test("separates public and authenticated GraphQL caches", () => {
@@ -198,9 +198,35 @@ test("only gateway failures are transient HTTP failures", () => {
   assert.equal(isTransientGraphQLStatus(401), false);
 });
 
-test("GetEntry misses are not cached", () => {
-  assert.equal(shouldCacheGraphQLData("GetEntry", { entry: null }), false);
-  assert.equal(shouldCacheGraphQLData("GetEntry", { entry: { id: 1 } }), true);
+test("EntryLookup caches only authoritative database hits", () => {
+  assert.equal(shouldCacheGraphQLData("EntryLookup", {
+    entryLookup: { status: "NOT_FOUND", entry: null, source: "FPL" },
+  }), false);
+  assert.equal(shouldCacheGraphQLData("EntryLookup", {
+    entryLookup: {
+      status: "FOUND",
+      entry: { id: 1 },
+      source: "FPL",
+      persistenceState: "QUEUED",
+    },
+  }), false);
+  assert.equal(shouldCacheGraphQLData("EntryLookup", {
+    entryLookup: {
+      status: "FOUND",
+      entry: { id: 1 },
+      source: "DATABASE",
+      persistenceState: "NOT_REQUIRED",
+    },
+  }), true);
+  assert.equal(shouldCacheGraphQLData("EntryLookup", {
+    entryLookup: { status: "UNAVAILABLE", entry: null },
+  }), false);
+  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
+    playerDetail: { dataAvailability: { isFullyAuthoritative: false } },
+  }), false);
+  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
+    playerDetail: { dataAvailability: { isFullyAuthoritative: true } },
+  }), true);
   assert.equal(
     shouldCacheGraphQLData("EntryLeagues", { entryLeagues: [] }),
     true,

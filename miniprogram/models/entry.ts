@@ -20,7 +20,20 @@ export interface EntryInfo {
   totalTransfers?: number;
   bank?: number;
   teamValue?: number;
+  lookupStatus?: EntryLookupStatus;
+  lookupSource?: EntryLookupSource | null;
+  persistenceState?: EntryPersistenceState | null;
 }
+
+export type EntryLookupStatus =
+  | "FOUND"
+  | "NOT_FOUND"
+  | "INVALID_ID"
+  | "SATURATED"
+  | "UNAVAILABLE";
+
+export type EntryLookupSource = "DATABASE" | "FPL";
+export type EntryPersistenceState = "NOT_REQUIRED" | "QUEUED" | "FAILED_RETRYABLE";
 
 export interface EntryHistory {
   event?: number;

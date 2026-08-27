@@ -28,6 +28,8 @@ const {
   TOURNAMENT_ENTRY_SQUADS_QUERY,
   TOURNAMENT_SELECTION_INDEX_QUERY
 } = await import("../miniprogram/services/live-board.service.ts");
+const { ENTRY_LOOKUP_QUERY } = await import("../miniprogram/services/entry.service.ts");
+const { PLAYER_DETAIL } = await import("../miniprogram/services/player.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
 
@@ -50,7 +52,9 @@ const operations = [
   ["GET_MY_FPL_COMPETITION_SEASON_PATH", GET_MY_FPL_COMPETITION_SEASON_PATH],
   ["ENTRY_LIVE_COMPETITION_BOARD_QUERY", ENTRY_LIVE_COMPETITION_BOARD_QUERY],
   ["TOURNAMENT_SELECTION_INDEX_QUERY", TOURNAMENT_SELECTION_INDEX_QUERY],
-  ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY]
+  ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY],
+  ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY],
+  ["PLAYER_DETAIL", PLAYER_DETAIL]
 ];
 
 async function loadSchema() {

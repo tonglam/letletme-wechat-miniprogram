@@ -100,7 +100,7 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   LiveSnapshotByEvent: { authMode: "public", cachePolicy: "live" },
   LiveMatchdayDesk: { authMode: "public", cachePolicy: "live" },
   LiveFixturePlayersBatch: { authMode: "public", cachePolicy: "live" },
-  GetEntry: { authMode: "session", cachePolicy: "reporting" },
+  EntryLookup: { authMode: "session", cachePolicy: "reporting" },
   SearchEntries: { authMode: "public", cachePolicy: "reporting" },
   OwnEntry: { authMode: "session", cachePolicy: "reporting" },
   EntryLeagues: { authMode: "session", cachePolicy: "reporting" },

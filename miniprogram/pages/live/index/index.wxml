@@ -15,6 +15,11 @@
     </view>
     <text class="strip-action">{{entryId ? '查看' : '选择'}}</text>
   </view>
+  <view wx:if="{{entryId && entryLookupMessage}}" class="entry-lookup-notice" role="status">
+    <view>{{entryLookupMessage}}</view>
+    <button wx:if="{{entryLookupRetryable}}" class="entry-lookup-action" bindtap="onRetryEntryIdentity">重试球队查询</button>
+    <button wx:else class="entry-lookup-action" bindtap="onChangeEntry">更换球队</button>
+  </view>
 
   <view wx:for="{{cards}}" wx:key="url" class="card live-card" data-url="{{item.url}}" bindtap="onOpenCard" hover-class="hover-dim">
     <view>

@@ -39,22 +39,7 @@ export const PLAYERS_FOR_PICKER_QUERY = `
 // query. Keep pagination intact while staying below that budget.
 export const PLAYER_PICKER_PAGE_LIMIT = 40;
 
-const PLAYER = `
-  query Player($id: Int!) {
-    player(id: $id) {
-      id
-      code
-      webName
-      team { name shortName }
-      position
-      price
-      totalPoints
-      selectedByPercent
-    }
-  }
-`;
-
-const PLAYER_DETAIL = `
+export const PLAYER_DETAIL = `
   query PlayerDetail($playerId: Int!, $eventId: Int!) {
     playerDetail(playerId: $playerId, eventId: $eventId) {
       id
@@ -64,6 +49,23 @@ const PLAYER_DETAIL = `
       elementTypeName
       price
       startPrice
+      injuryAvailability {
+        status
+        news
+        newsAdded
+        observedDate
+        capturedAt
+        chanceOfPlayingThisRound
+        chanceOfPlayingNextRound
+        stale
+      }
+      dataAvailability {
+        isFullyAuthoritative
+        market { state reasonCode revision sourceCheckedAt }
+        historicalTeam { state reasonCode revision sourceCheckedAt }
+        fixtures { state reasonCode revision sourceCheckedAt }
+        recentGameweeks { state reasonCode revision sourceCheckedAt }
+      }
       totalPoints
       selectedByPercent
       form
@@ -90,17 +92,6 @@ const PLAYER_DETAIL = `
   }
 `;
 
-interface GraphQLPlayer {
-  id: number;
-  code: number;
-  webName: string;
-  team: { name: string; shortName: string };
-  position: string;
-  price: number;
-  totalPoints: number;
-  selectedByPercent?: number | null;
-}
-
 interface GraphQLPickerPlayer {
   id: number;
   webName: string;
@@ -120,10 +111,6 @@ interface PlayersForPickerResponse {
   };
 }
 
-interface PlayerResponse {
-  player: GraphQLPlayer | null;
-}
-
 interface PlayerDetailResponse {
   playerDetail: {
     id: number;
@@ -132,7 +119,9 @@ interface PlayerDetailResponse {
     elementType: number;
     elementTypeName: string;
     price: number;
-    startPrice: number;
+    startPrice: number | null;
+    injuryAvailability: PlayerDetail["injuryAvailability"];
+    dataAvailability: PlayerDetail["dataAvailability"];
     totalPoints: number;
     selectedByPercent?: number | null;
     form?: number | null;
@@ -215,19 +204,6 @@ function currentSeason(explicitSeason?: string): string {
   return season;
 }
 
-function mapPlayer(player: GraphQLPlayer): PlayerOption {
-  return {
-    element: player.id,
-    code: player.id,
-    name: player.webName,
-    team: player.team.shortName || player.team.name,
-    teamName: player.team.name,
-    position: positionLabel(player.position),
-    price: player.price,
-    priceText: formatPrice(player.price)
-  };
-}
-
 function mapPickerPlayer(player: GraphQLPickerPlayer): PlayerOption {
   return {
     element: player.id,
@@ -244,11 +220,22 @@ function mapPickerPlayer(player: GraphQLPickerPlayer): PlayerOption {
   };
 }
 
-function mapPlayerDetail(player: GraphQLPlayer): PlayerDetail {
+function mapPlayerDetail(
+  player: NonNullable<PlayerDetailResponse["playerDetail"]>
+): PlayerDetail {
   return {
-    ...mapPlayer(player),
+    element: player.id,
+    code: player.id,
+    name: player.webName,
+    team: player.teamShortName,
+    position: player.elementTypeName,
+    price: player.price,
+    priceText: formatPrice(player.price),
+    injuryAvailability: player.injuryAvailability ?? null,
+    dataAvailability: player.dataAvailability,
     totalPoints: player.totalPoints,
-    selectedByPercent: player.selectedByPercent ?? undefined
+    selectedByPercent: player.selectedByPercent ?? undefined,
+    form: player.form ?? undefined
   };
 }
 
@@ -424,10 +411,13 @@ export async function getPlayerInfoByCode(
   trace?: import("./graphql.service").PageRequestTrace
 ): Promise<PlayerDetail> {
   const playerId = Number(code);
+  if (!Number.isSafeInteger(playerId) || playerId <= 0) {
+    throw new Error("球员 ID 无效，请返回后重试");
+  }
   const seasonName = currentSeason(season);
-  const data = await graphqlRequest<PlayerResponse>(
-    PLAYER,
-    { id: playerId },
+  const data = await graphqlRequest<PlayerDetailResponse>(
+    PLAYER_DETAIL,
+    { playerId, eventId: currentEventId() },
     {
       authMode: "public",
       cachePolicy: "reporting",
@@ -437,10 +427,10 @@ export async function getPlayerInfoByCode(
       trace
     }
   );
-  if (!data.player) {
+  if (!data.playerDetail) {
     throw new Error("没有找到这名球员，请返回后重试");
   }
-  return mapPlayerDetail(data.player);
+  return mapPlayerDetail(data.playerDetail);
 }
 
 export async function getPlayersByElementType(
@@ -463,34 +453,7 @@ export async function getPlayersByElementType(
 }
 
 export async function getPlayerDetailByElement(element: number): Promise<PlayerDetail> {
-  const data = await graphqlRequest<PlayerDetailResponse>(
-    PLAYER_DETAIL,
-    {
-      playerId: element,
-      eventId: currentEventId()
-    },
-    {
-      authMode: "public",
-      cachePolicy: "reporting",
-      cacheVariant: `season:${currentSeason()}`
-    }
-  );
-  const detail = data.playerDetail;
-  if (!detail) {
-    throw new Error("这名球员的详情暂时不可用，请稍后重试");
-  }
-
-  return {
-    element: detail.id,
-    code: detail.id,
-    name: detail.webName,
-    team: detail.teamShortName,
-    position: detail.elementTypeName,
-    price: detail.price,
-    totalPoints: detail.totalPoints,
-    selectedByPercent: detail.selectedByPercent ?? undefined,
-    form: detail.form ?? undefined
-  };
+  return getPlayerInfoByCode(element);
 }
 
 export async function getFilterPlayers(_season: string): Promise<PlayerFilterRow[]> {
