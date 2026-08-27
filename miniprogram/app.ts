@@ -11,6 +11,12 @@ import { purgeGraphQLStorageCache } from "./services/graphql.service";
 import { routes } from "./config/routes";
 import { recordLaunch } from "./utils/perf";
 import {
+  flushClientTelemetry,
+  recordClientAuthResult,
+  recordClientRuntimeError,
+  recordClientUpdateFailure,
+} from "./services/client-telemetry.service";
+import {
   commitEntryBinding,
   ensureAppContext,
 } from "./services/app-context.service";
@@ -90,6 +96,7 @@ App<IAppOption>({
         .then(() => updateManager.applyUpdate());
     });
     updateManager.onUpdateFailed(() => {
+      recordClientUpdateFailure();
       void wx.showModal({
         title: "更新失败",
         content: "当前版本无法继续访问，请检查网络后重新打开小程序。",
@@ -105,6 +112,7 @@ App<IAppOption>({
 
   onHide() {
     void flushPerfNow();
+    void flushClientTelemetry();
   },
 
   reportError(message: string) {
@@ -114,10 +122,12 @@ App<IAppOption>({
   },
 
   onError(error: string) {
+    recordClientRuntimeError();
     this.reportError(`[app] uncaught error: ${error}`);
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
+    recordClientRuntimeError();
     const reason = event?.reason;
     let message = "";
     if (reason instanceof Error) {
@@ -172,6 +182,7 @@ App<IAppOption>({
         })
         .finally(markAuthReady);
     } catch {
+      recordClientAuthResult("error");
       refreshWechatApiSession("cold_start_restore_failed")
         .then(() => this.revalidateSessionProfile())
         .catch(() => {

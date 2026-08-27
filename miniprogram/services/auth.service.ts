@@ -239,7 +239,10 @@ function requestMiniProgramApi(
           response.statusCode >= 300 ||
           !responseData?.success
         ) {
-          recordApi(`auth:${path}`, Date.now() - t0, false);
+          recordApi(`auth:${path}`, Date.now() - t0, false, {
+            statusCode: response.statusCode,
+            code: response.statusCode === 401 ? "UNAUTHENTICATED" : undefined,
+          });
           const message = authApiErrorMessage(
             response.statusCode,
             responseData?.error,
@@ -1184,6 +1187,7 @@ async function revokeSessionToken(token: string): Promise<boolean> {
           "auth:/session",
           Date.now() - t0,
           response.statusCode >= 200 && response.statusCode < 300,
+          { statusCode: response.statusCode },
         );
         if (response.statusCode >= 200 && response.statusCode < 300) {
           resolve(true);

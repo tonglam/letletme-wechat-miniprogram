@@ -55,6 +55,7 @@ export class PagePerformanceTracker {
   private observer?: WechatMiniprogram.IntersectionObserver;
   private visibleRecorded = false;
   private disconnected = false;
+  private secondaryCompletionExpected = false;
   private pendingSetDataAt?: number;
   private record: Omit<PagePerformanceRecord, "ts">;
 
@@ -90,11 +91,22 @@ export class PagePerformanceTracker {
   ): void {
     if (this.disconnected) return;
     this.record[field] = monotonicNow();
+    const finalCompletion = field === "secondaryCompleteAt" || field === "softFailureAt";
+    if (finalCompletion) this.secondaryCompletionExpected = false;
     this.updateCompleteAt();
-    this.flush();
+    this.flush(finalCompletion);
     if (field === "secondaryCompleteAt" || field === "softFailureAt") {
       this.finishRequestAttribution();
     }
+  }
+
+  /**
+   * Keep the primary viewport metric, but defer route_ready_ms until the
+   * caller marks the parallel/secondary work complete.
+   */
+  expectSecondaryCompletion(): void {
+    if (this.disconnected) return;
+    this.secondaryCompletionExpected = true;
   }
 
   countOperation(network: boolean): void {
@@ -121,7 +133,7 @@ export class PagePerformanceTracker {
         }
         this.record.primaryViewportVisibleAt = monotonicNow();
         this.updateCompleteAt();
-        this.flush();
+        this.flush(!this.secondaryCompletionExpected);
         observer.disconnect();
         if (this.observer === observer) this.observer = undefined;
         this.finishRequestAttribution();
@@ -149,7 +161,7 @@ export class PagePerformanceTracker {
     );
   }
 
-  private flush(): void {
-    recordPagePerformance(this.record);
+  private flush(routeReadyFinal = false): void {
+    recordPagePerformance(this.record, { routeReadyFinal });
   }
 }

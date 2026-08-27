@@ -29,7 +29,8 @@ test("price prediction uses the canonical GraphQL board and a public cache polic
   assert.match(service, /query GetPriceChangeBoard/);
   assert.match(service, /priceChangeBoard\s*\{/);
   assert.match(service, /cacheTtl:\s*5 \* MINUTE/);
-  assert.match(service, /LAST_GOOD_MAX_AGE_MS = DAY/);
+  assert.match(service, /LAST_GOOD_MAX_AGE_MS = HOUR/);
+  assert.match(service, /now - value\.savedAt >= LAST_GOOD_MAX_AGE_MS/);
   assert.match(cachePolicy, /GetPriceChangeBoard:\s*\{ authMode: "public"/);
   assert.match(service, /const START_PRICE_BATCH_SIZE = 2;/);
   assert.match(service, /startPrices\[String\(entry\.playerId\)\] = value\.startPrice;/);
