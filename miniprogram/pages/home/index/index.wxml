@@ -185,12 +185,12 @@
           {{predictionError}}
           <text class="action transfer-empty-retry" bindtap="onRetryPredictions" hover-class="hover-dim">重试</text>
         </view>
-        <view wx:elif="{{predictionLoaded && predictedRisers.length === 0 && predictedFallers.length === 0}}" class="transfer-empty-inline">暂无明确涨跌信号</view>
+        <view wx:elif="{{predictionLoaded && predictedRiseCount === 0 && predictedFallCount === 0}}" class="transfer-empty-inline">暂无明确涨跌信号</view>
         <view wx:else class="transfer-split">
           <view class="transfer-col">
-            <view class="transfer-col-head transfer-up">预计上涨（{{predictedRisers.length}}）</view>
-            <view wx:if="{{predictedRisers.length === 0}}" class="transfer-empty-inline">暂无上涨信号</view>
-            <view wx:for="{{predictedRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+            <view class="transfer-col-head transfer-up">预计上涨（{{predictedRiseCount}}）</view>
+            <view wx:if="{{predictedAllRisers.length === 0}}" class="transfer-empty-inline">暂无上涨信号</view>
+            <view wx:for="{{predictedAllRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -204,9 +204,9 @@
             </view>
           </view>
           <view class="transfer-col">
-            <view class="transfer-col-head transfer-down">预计下跌（{{predictedFallers.length}}）</view>
-            <view wx:if="{{predictedFallers.length === 0}}" class="transfer-empty-inline">暂无下跌信号</view>
-            <view wx:for="{{predictedFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+            <view class="transfer-col-head transfer-down">预计下跌（{{predictedFallCount}}）</view>
+            <view wx:if="{{predictedAllFallers.length === 0}}" class="transfer-empty-inline">暂无下跌信号</view>
+            <view wx:for="{{predictedAllFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>

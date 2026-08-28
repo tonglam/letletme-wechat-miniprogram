@@ -406,6 +406,12 @@ export interface MiniHomeMarketResult {
 export interface MiniHomePricePredictionResult {
   rises: HomeMarketMover[];
   falls: HomeMarketMover[];
+  /** Complete signal rows for sharing; the home card uses the capped arrays. */
+  allRises: HomeMarketMover[];
+  allFalls: HomeMarketMover[];
+  /** Total likely signals; the arrays below are capped teaser rows. */
+  riseCount: number;
+  fallCount: number;
   notice: string;
   /** ISO prediction-board fetch time (web likely-slide LocalUpdatedLabel). */
   fetchedAt: string;
@@ -678,14 +684,22 @@ export async function getMiniHomeMarket(
 export interface HomePredictionRows {
   rises: HomeMarketMover[];
   falls: HomeMarketMover[];
+  /** Complete sorted signal rows; home rendering uses the capped arrays above. */
+  allRises: HomeMarketMover[];
+  allFalls: HomeMarketMover[];
+  /** Total likely signals before the home teaser limit is applied. */
+  riseCount: number;
+  fallCount: number;
 }
 
 /**
- * Teaser rows from any prediction board (durable or live) — web
+ * Rows from any prediction board (durable or live) — web
  * buildHomePriceChangePredictionState parity: likely-to-change only, split by
- * progress sign, sorted by absolute progress, capped at the teaser limit.
- * Status text rides as a highlighted pill (statusLabel/statusTone), not as
- * meta text, mirroring the web LikelyPlayerRow badge.
+ * progress sign and sorted by absolute progress. The home card renders the
+ * complete allRises/allFalls lists (no teaser cap — vertical scroll handles
+ * the length); the capped arrays remain for the explore-style consumers.
+ * Status text rides as a highlighted pill
+ * (statusLabel/statusTone), mirroring the web LikelyPlayerRow badge.
  */
 export function mapHomePredictionRows(board: {
   players?: PriceChangePlayer[];
@@ -708,17 +722,21 @@ export function mapHomePredictionRows(board: {
     statusLabel: priceChangeStatusLabel(player.status),
     statusTone: priceChangeStatusTone(player.status),
   });
+  const rises = likely
+    .filter((player) => player.progressPercent > 0)
+    .sort(byProgress);
+  const falls = likely
+    .filter((player) => player.progressPercent < 0)
+    .sort(byProgress);
+  const riseRows = rises.map(mapRow);
+  const fallRows = falls.map(mapRow);
   return {
-    rises: likely
-      .filter((player) => player.progressPercent > 0)
-      .sort(byProgress)
-      .slice(0, HOME_TEASER_LIMIT)
-      .map(mapRow),
-    falls: likely
-      .filter((player) => player.progressPercent < 0)
-      .sort(byProgress)
-      .slice(0, HOME_TEASER_LIMIT)
-      .map(mapRow),
+    rises: riseRows.slice(0, HOME_TEASER_LIMIT),
+    falls: fallRows.slice(0, HOME_TEASER_LIMIT),
+    allRises: riseRows,
+    allFalls: fallRows,
+    riseCount: rises.length,
+    fallCount: falls.length,
   };
 }
 

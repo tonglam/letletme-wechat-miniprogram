@@ -15,7 +15,7 @@ import {
 import type { ShareCanvasContext } from "./live-match-share-image";
 
 export const HOME_MARKET_SHARE_WIDTH = 750;
-/** Service already caps teasers at 5; the canvas defends the same bound. */
+/** Default row cap for compact home-card shares; prediction shares may opt into all rows. */
 export const HOME_MARKET_SHARE_MAX_ROWS = 5;
 
 const BACKGROUND = "#f3f0f4";
@@ -47,6 +47,11 @@ export interface HomeMarketMoversShareInput {
   subtitle: string;
   upTitle: string;
   downTitle: string;
+  /** Optional totals when the visible rows are a capped teaser. */
+  upCount?: number;
+  downCount?: number;
+  /** Optional row limit; prediction shares pass their complete signal count. */
+  maxRows?: number;
   upRows: HomeMarketMoversShareRow[];
   downRows: HomeMarketMoversShareRow[];
 }
@@ -85,6 +90,8 @@ export interface HomeMarketMoversSharePlan extends HomeMarketSharePlanBase {
   kind: "movers";
   upTitle: string;
   downTitle: string;
+  upCount: number;
+  downCount: number;
   upRows: HomeMarketMoversShareRow[];
   downRows: HomeMarketMoversShareRow[];
 }
@@ -109,9 +116,18 @@ const WATCH_ROW_H = 84;
 export function buildHomeMarketMoversSharePlan(
   input: HomeMarketMoversShareInput,
 ): HomeMarketMoversSharePlan {
-  const upRows = input.upRows.slice(0, HOME_MARKET_SHARE_MAX_ROWS);
-  const downRows = input.downRows.slice(0, HOME_MARKET_SHARE_MAX_ROWS);
-  const rowCount = Math.max(upRows.length, downRows.length, 1);
+  const maxRows = Number.isFinite(input.maxRows)
+    ? Math.max(1, Math.floor(input.maxRows as number))
+    : HOME_MARKET_SHARE_MAX_ROWS;
+  const visibleUpRows = input.upRows.slice(0, maxRows);
+  const visibleDownRows = input.downRows.slice(0, maxRows);
+  const upCount = Number.isFinite(input.upCount)
+    ? Math.max(visibleUpRows.length, Math.floor(input.upCount as number))
+    : visibleUpRows.length;
+  const downCount = Number.isFinite(input.downCount)
+    ? Math.max(visibleDownRows.length, Math.floor(input.downCount as number))
+    : visibleDownRows.length;
+  const rowCount = Math.max(visibleUpRows.length, visibleDownRows.length, 1);
   return {
     kind: "movers",
     width: HOME_MARKET_SHARE_WIDTH,
@@ -120,8 +136,10 @@ export function buildHomeMarketMoversSharePlan(
     subtitle: input.subtitle,
     upTitle: input.upTitle,
     downTitle: input.downTitle,
-    upRows,
-    downRows,
+    upCount,
+    downCount,
+    upRows: visibleUpRows,
+    downRows: visibleDownRows,
   };
 }
 
@@ -181,7 +199,7 @@ export function drawHomeMarketSharePlan(
   ctx.fillStyle = MUTED;
   ctx.font = "700 22px sans-serif";
   const statsLine = plan.kind === "movers"
-    ? `${plan.upTitle} ${plan.upRows.length} · ${plan.downTitle} ${plan.downRows.length}`
+    ? `${plan.upTitle} ${plan.upCount} · ${plan.downTitle} ${plan.downCount}`
     : `共 ${plan.rows.length} 条出场状态更新`;
   ctx.fillText(statsLine, innerLeft, cardY + 38);
 
@@ -319,6 +337,8 @@ export function homeMarketShareCacheKey(plan: HomeMarketSharePlan): string {
       kind: plan.kind,
       title: plan.title,
       subtitle: plan.subtitle,
+      upCount: plan.upCount,
+      downCount: plan.downCount,
       up: plan.upRows.map((row) => [row.name, row.meta, row.changeText]),
       down: plan.downRows.map((row) => [row.name, row.meta, row.changeText]),
     });

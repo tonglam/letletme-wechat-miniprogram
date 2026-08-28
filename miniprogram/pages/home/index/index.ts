@@ -112,8 +112,10 @@ interface HomeData {
   marketShareBusy: boolean;
   priceShareBusy: boolean;
   fixtureShareBusy: boolean;
-  predictedRisers: HomeMarketMover[];
-  predictedFallers: HomeMarketMover[];
+  predictedAllRisers: HomeMarketMover[];
+  predictedAllFallers: HomeMarketMover[];
+  predictedRiseCount: number;
+  predictedFallCount: number;
   predictionNotice: string;
   predictionLoading: boolean;
   predictionError: string;
@@ -240,7 +242,7 @@ export function buildMarketUpdatedLabels(market: {
 /** Likely-view subtitle: prediction board fetch time, else the static copy. */
 export function predictionUpdatedLabel(fetchedAt: string): string {
   const fetched = formatLocalCapturedAt(fetchedAt);
-  return fetched ? `更新于 ${fetched}` : "按预测进度展示上涨和下跌各前 5 名。";
+  return fetched ? `更新于 ${fetched}` : "按预测进度展示全部涨跌信号。";
 }
 
 export function homePersonalLeaguesMatchEntry(
@@ -307,12 +309,14 @@ Page({
     marketOwnershipUpdated: "最新每日持有率变化",
     marketWatchUpdated: "更新于 —",
     priceTodayUpdated: "已记录的身价变化暂不可用。",
-    predictionUpdated: "按预测进度展示上涨和下跌各前 5 名。",
+    predictionUpdated: "按预测进度展示全部涨跌信号。",
     marketShareBusy: false,
     priceShareBusy: false,
     fixtureShareBusy: false,
-    predictedRisers: [],
-    predictedFallers: [],
+    predictedAllRisers: [],
+    predictedAllFallers: [],
+    predictedRiseCount: 0,
+    predictedFallCount: 0,
     predictionNotice: "",
     predictionLoading: false,
     predictionError: "",
@@ -368,6 +372,10 @@ Page({
   _durablePredictions: null as {
     rises: HomeMarketMover[];
     falls: HomeMarketMover[];
+    allRises: HomeMarketMover[];
+    allFalls: HomeMarketMover[];
+    riseCount: number;
+    fallCount: number;
     notice: string;
     fetchedAt: string;
   } | null,
@@ -1153,7 +1161,7 @@ Page({
   async loadPricePredictions(forceRefresh = false) {
     const requestId = ++this._priceRequestId;
     const hadRows =
-      this.data.predictedRisers.length > 0 || this.data.predictedFallers.length > 0;
+      this.data.predictedAllRisers.length > 0 || this.data.predictedAllFallers.length > 0;
     this.setData({
       predictionLoading: !hadRows,
       predictionError: "",
@@ -1162,8 +1170,10 @@ Page({
       const result = await getMiniHomePricePredictions(forceRefresh);
       if (!this._pageVisible || requestId !== this._priceRequestId) return;
       this.setData({
-        predictedRisers: result.rises,
-        predictedFallers: result.falls,
+        predictedAllRisers: result.allRises,
+        predictedAllFallers: result.allFalls,
+        predictedRiseCount: result.riseCount,
+        predictedFallCount: result.fallCount,
         predictionNotice: result.notice,
         predictionLoading: false,
         predictionError: "",
@@ -1173,6 +1183,10 @@ Page({
       this._durablePredictions = {
         rises: result.rises,
         falls: result.falls,
+        allRises: result.allRises,
+        allFalls: result.allFalls,
+        riseCount: result.riseCount,
+        fallCount: result.fallCount,
         notice: result.notice,
         fetchedAt: result.fetchedAt,
       };
@@ -1185,8 +1199,10 @@ Page({
             if (!this._pageVisible) return;
             const rows = mapHomePredictionRows(board);
             this.setData({
-              predictedRisers: rows.rises,
-              predictedFallers: rows.falls,
+              predictedAllRisers: rows.allRises,
+              predictedAllFallers: rows.allFalls,
+              predictedRiseCount: rows.riseCount,
+              predictedFallCount: rows.fallCount,
               predictionNotice: "",
               predictionUpdated: predictionUpdatedLabel(board.fetchedAt || ""),
             });
@@ -1196,8 +1212,10 @@ Page({
             const durable = this._durablePredictions;
             if (!durable) return;
             this.setData({
-              predictedRisers: durable.rises,
-              predictedFallers: durable.falls,
+              predictedAllRisers: durable.allRises,
+              predictedAllFallers: durable.allFalls,
+              predictedRiseCount: durable.riseCount,
+              predictedFallCount: durable.fallCount,
               predictionNotice: durable.notice,
               predictionUpdated: predictionUpdatedLabel(durable.fetchedAt),
             });
@@ -1422,7 +1440,7 @@ Page({
       return;
     }
     const rows = likely
-      ? this.data.predictedRisers.length + this.data.predictedFallers.length
+      ? this.data.predictedAllRisers.length + this.data.predictedAllFallers.length
       : this.data.priceRisers.length + this.data.priceFallers.length;
     if (rows === 0) {
       wx.showToast({ title: "暂无可分享的数据", icon: "none" });
@@ -1444,8 +1462,11 @@ Page({
               subtitle: this.data.predictionUpdated,
               upTitle: "预计上涨",
               downTitle: "预计下跌",
-              upRows: withStatus(this.data.predictedRisers),
-              downRows: withStatus(this.data.predictedFallers),
+              upCount: this.data.predictedRiseCount,
+              downCount: this.data.predictedFallCount,
+              maxRows: Math.max(this.data.predictedRiseCount, this.data.predictedFallCount),
+              upRows: withStatus(this.data.predictedAllRisers),
+              downRows: withStatus(this.data.predictedAllFallers),
             }
           : {
               title: "身价变化",
