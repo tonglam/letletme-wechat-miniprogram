@@ -22,6 +22,7 @@ import {
 import type { LivePlayerRow } from "../../../models/live";
 import {
   formatCompactNumber,
+  formatRank,
   formatPoints,
 } from "../../../utils/summary-format";
 import {
@@ -1611,7 +1612,7 @@ function mapApiDataToTeamStats(
     totalTransfersText: `总转会 ${formatNumber(eventResult.entry.totalTransfers)}`,
     overviewStats: [
       { label: "总分", value: String(eventResult.overallPoints) },
-      { label: "总排名", value: formatCompactNumber(eventResult.overallRank) },
+      { label: "总排名", value: formatRank(eventResult.overallRank) },
       { label: "阵容身价", value: formatMoney(eventResult.teamValue) },
       { label: "银行余额", value: formatMoney(eventResult.bank) },
     ],
@@ -1710,7 +1711,7 @@ function mapHistorySupportRows(
       chip: formatChip(item.eventChip),
       pointsText: formatPoints(item.eventPoints),
       netText: formatPoints(item.eventNetPoints),
-      rankText: formatCompactNumber(item.eventRank),
+      rankText: formatRank(item.eventRank),
     })),
     historyRows: sortedHistory.map(mapHistoryRow),
     seasonHistoryRows: [...history.history]
@@ -1922,7 +1923,7 @@ function mapHistoryRow(item: EntryHistoryItem): HistoryRow {
     captainPointsText: captain ? String(item.eventCaptainPoints ?? 0) : "",
     costText: cost > 0 ? `-${cost}` : "0",
     costBad: cost > 0,
-    rankText: formatCompactNumber(item.overallRank),
+    rankText: formatRank(item.overallRank),
   };
 }
 
@@ -1934,7 +1935,7 @@ export function mapSeasonHistoryRow(
     id: `season-${item.season}`,
     season: item.season,
     totalPoints: formatCompactNumber(item.totalPoints),
-    overallRank: formatCompactNumber(item.overallRank),
+    overallRank: formatRank(item.overallRank),
     pointsValue: item.totalPoints || 0,
     rankValue: item.overallRank || 0,
     current: isCurrentSeasonLabel(item.season, currentSeason),

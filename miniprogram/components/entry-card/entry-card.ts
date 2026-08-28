@@ -4,6 +4,7 @@ import {
   partitionHomeEntryLeagues
 } from "../../utils/entry-leagues";
 import { formatHomeH2HMatchup } from "../../utils/home-h2h";
+import { formatRank } from "../../utils/summary-format";
 import type { HomeH2HDisplay } from "../../utils/home-h2h";
 import {
   exportHomeLeaguesShareImage,
@@ -65,22 +66,6 @@ interface LeaguePanel {
 
 function formatNumber(value?: number): string {
   return typeof value === "number" ? String(value) : "-";
-}
-
-function formatRank(value?: number): string {
-  if (typeof value !== "number") {
-    return "-";
-  }
-
-  if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(1).replace(/\.0$/, "")}m`;
-  }
-
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
-  }
-
-  return String(value);
 }
 
 function formatCurrency(value?: number): string {

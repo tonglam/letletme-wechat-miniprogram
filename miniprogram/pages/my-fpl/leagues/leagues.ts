@@ -23,7 +23,7 @@ import {
 import {
   formatAverageMoney,
   formatAverageNumber,
-  formatCompactNumber,
+  formatRank,
   formatMoney,
   formatPoints,
 } from "../../../utils/summary-format";
@@ -1145,7 +1145,7 @@ PerformancePage({
         board?.fieldSize || 0,
         snapshot.entryCount || 0,
       ),
-      heroRank: formatCompactNumber(me?.tournamentOverallRank),
+      heroRank: formatRank(me?.tournamentOverallRank),
       heroRankSub: heroSubText(me),
       heroKicker: `截至第 ${snapshot.asOfEventId || this.data.event} 轮的积分榜`,
       meTiles: meSeasonTiles(
@@ -1611,7 +1611,7 @@ function heroSubText(me: TournamentEntryRankingSummary | undefined): string {
     }
   }
   if (me.overallRank) {
-    parts.push(`FPL 总排名 ${formatCompactNumber(me.overallRank)}`);
+    parts.push(`FPL 总排名 ${formatRank(me.overallRank)}`);
   }
   return parts.join(" · ");
 }
@@ -1631,7 +1631,7 @@ function meSeasonTiles(
     rank?: number | null,
   ): string => {
     const parts: string[] = [];
-    if (rank) parts.push(`赛事内第 ${formatCompactNumber(rank)} 名`);
+    if (rank) parts.push(`赛事内第 ${formatRank(rank)} 名`);
     const avg = avgByKey.get(key);
     if (avg !== null && avg !== undefined) {
       parts.push(`场均 ${metricAverageValueText(key, avg)}`);
@@ -1673,7 +1673,7 @@ function meSeasonTiles(
     const metaParts: string[] = [];
     if (me.tournamentOverallRank) {
       metaParts.push(
-        `赛事内第 ${formatCompactNumber(me.tournamentOverallRank)} 名`,
+        `赛事内第 ${formatRank(me.tournamentOverallRank)} 名`,
       );
     }
     if (fieldAverage !== null && fieldAverage !== undefined) {
@@ -1708,7 +1708,7 @@ function seasonBoardRow(
 ): BoardRow {
   return {
     entryId: row.entryId,
-    rankText: formatCompactNumber(row.rank),
+    rankText: formatRank(row.rank),
     moveText: "",
     moveTone: "",
     name: row.entryName || "-",
@@ -1717,7 +1717,7 @@ function seasonBoardRow(
     me: row.entryId === viewerEntryId,
     c1: formatPoints(row.overallPoints),
     c1Tone: "good",
-    c2: formatCompactNumber(row.overallRank),
+    c2: formatRank(row.overallRank),
     c3: formatMoney(row.teamValue),
     sortRank: num(row.rank, 999999),
     sortC1: num(row.overallPoints),
@@ -1749,7 +1749,7 @@ function gameweekBoardRow(
   const delta = prev && row.eventGroupRank ? prev - row.eventGroupRank : 0;
   return {
     entryId: row.entryId,
-    rankText: formatCompactNumber(row.eventGroupRank),
+    rankText: formatRank(row.eventGroupRank),
     // Web RankCell: green up / red down badge vs the previous gameweek.
     moveText: delta > 0 ? `▲${delta}` : delta < 0 ? `▼${-delta}` : "",
     moveTone: delta > 0 ? "good" : delta < 0 ? "bad" : "",
@@ -1776,9 +1776,9 @@ function movementText(
   if (!currentRank || !prevRank) return { meta: "", tone: "" };
   const delta = prevRank - currentRank;
   if (delta > 0)
-    return { meta: `上升 ${formatCompactNumber(delta)}`, tone: "good" };
+    return { meta: `上升 ${formatRank(delta)}`, tone: "good" };
   if (delta < 0)
-    return { meta: `下降 ${formatCompactNumber(-delta)}`, tone: "bad" };
+    return { meta: `下降 ${formatRank(-delta)}`, tone: "bad" };
   return { meta: "无变化", tone: "" };
 }
 
@@ -1800,7 +1800,7 @@ function gwPerformanceTiles(
   return [
     {
       label: "我的排名",
-      value: formatCompactNumber(mine?.eventGroupRank),
+      value: formatRank(mine?.eventGroupRank),
       meta: movement.meta,
       tone: movement.tone,
     },
@@ -1855,7 +1855,7 @@ function gwMovementRows(
       id: `${risers ? "up" : "down"}-${item.row.entryId}`,
       title: item.row.entryName || "-",
       meta: `#${item.prev} → #${item.current}`,
-      value: `${item.delta > 0 ? "+" : ""}${formatCompactNumber(item.delta)}`,
+      value: `${item.delta > 0 ? "+" : ""}${formatRank(item.delta)}`,
       tone: item.delta > 0 ? "good" : "bad",
     }));
 }

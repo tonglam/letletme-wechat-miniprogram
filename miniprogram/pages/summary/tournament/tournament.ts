@@ -10,7 +10,7 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import { storageKeys } from "../../../config/storage-keys";
 import { goToEntrySearch } from "../../../utils/navigation";
-import { compactJoin, formatCompactNumber, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
+import { compactJoin, formatMoney, formatPoints, formatRank } from "../../../utils/summary-format";
 import { getAppContextSnapshot } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -518,7 +518,7 @@ function mapTournamentSummaryData(
     { label: "本轮净分", value: formatPoints(currentRow?.eventNetPoints) },
     { label: "小组排名", value: formatRank(currentRow?.eventGroupRank) },
     { label: "赛事排名", value: formatRank(summary.tournamentOverallRank) },
-    { label: "总排名", value: formatCompactNumber(summary.overallRank ?? currentRow?.overallRank) },
+    { label: "总排名", value: formatRank(summary.overallRank ?? currentRow?.overallRank) },
     { label: "阵容身价", value: formatMoney(summary.teamValue ?? currentRow?.teamValue) }
   ].filter((item) => item.value !== "-");
 
@@ -561,7 +561,7 @@ function mapRankingRow(row: TournamentEventResult, index: number, entryId: numbe
     playerName: row.playerName || "",
     points: formatPoints(row.eventPoints),
     netPoints: formatPoints(row.eventNetPoints),
-    overallRank: formatCompactNumber(row.overallRank),
+    overallRank: formatRank(row.overallRank),
     chip: formatChip(row.eventChip),
     isMine: row.entryId === entryId
   };
