@@ -1094,14 +1094,12 @@ export async function graphqlRead<T>(
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
           forgetServedFromCache(responseIdentity.requestKey);
-        } else if (
-          producingSessionStillActive &&
-          policy.operationName === "PlayerDetail"
-        ) {
-          // A successful degraded response is authoritative about freshness:
-          // remove any older good value so the next read cannot present it as
-          // current. The degraded response itself remains request-scoped.
-          removeCacheEntry(
+		} else if (producingSessionStillActive && !cacheableData) {
+			// A successful response that cannot be shared is authoritative about
+			// freshness: remove any older good value so the next read cannot present
+			// it as current. The non-authoritative response itself remains
+			// request-scoped.
+			removeCacheEntry(
             responseIdentity.cacheKey,
             responseIdentity.requestKey,
           );
