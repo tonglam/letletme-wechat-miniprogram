@@ -306,6 +306,7 @@ Page({
   liveRefresh: null as LiveRefreshController | null,
   entryInfoLoader: getEntryInfo,
   entryIdentityRequestId: 0,
+  entryIdentityPending: false,
   probing: false,
   networkOnline: true,
   pageVisible: false,
@@ -316,6 +317,7 @@ Page({
   shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   resumeTransfersAfterShow: false,
   resumeLiveAfterShow: false,
+  resumeEntryIdentityAfterShow: false,
   resumeStartupAfterShow: false,
   startupPending: false,
   refreshContextPending: false,
@@ -480,6 +482,8 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    const resumeEntryIdentity = resumed && this.resumeEntryIdentityAfterShow;
+    this.resumeEntryIdentityAfterShow = false;
     if (resumed && !this.hasRouteEntry) {
       await waitForAuthoritativeFollow();
       if (!this.pageVisible) return;
@@ -487,6 +491,9 @@ Page({
     const activeEntryId = this.hasRouteEntry
       ? this.data.entryId
       : (currentFollowEntryId() ?? 0);
+    if (resumeEntryIdentity && activeEntryId === this.data.entryId && activeEntryId) {
+      void this.loadEntryIdentity(activeEntryId, true);
+    }
     if (
       resumed &&
       !this.resumeForcedRefreshAfterShow &&
@@ -646,6 +653,7 @@ Page({
 
   onHide() {
     const queuedLiveResume = this.resumeLiveAfterShow;
+    this.resumeEntryIdentityAfterShow = this.entryIdentityPending;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
     this.resumeStartupAfterShow =
       !this.resumeForcedRefreshAfterShow && this.startupPending;
@@ -662,6 +670,7 @@ Page({
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.entryIdentityRequestId += 1;
+    this.entryIdentityPending = false;
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
@@ -677,6 +686,7 @@ Page({
     this.pageVisible = false;
     this.liveRefresh?.dispose();
     this.resumeLiveAfterShow = false;
+    this.resumeEntryIdentityAfterShow = false;
     this.resumeTransfersAfterShow = false;
     this.resumeStartupAfterShow = false;
     this.resumeForcedRefreshAfterShow = false;
@@ -686,6 +696,7 @@ Page({
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
     this.entryIdentityRequestId += 1;
+    this.entryIdentityPending = false;
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
@@ -824,6 +835,7 @@ Page({
 
   async loadEntryIdentity(entryId: number, forceRefresh = false) {
     const requestId = ++this.entryIdentityRequestId;
+    this.entryIdentityPending = Boolean(entryId);
     if (!entryId) {
       this.setData({
         entryName: "",
@@ -878,6 +890,10 @@ Page({
             ?? "当前无法确认球队数据，请稍后重试",
           entryLookupRetryable: lookupError?.retryable ?? true,
         });
+      }
+    } finally {
+      if (requestId === this.entryIdentityRequestId) {
+        this.entryIdentityPending = false;
       }
     }
   },
