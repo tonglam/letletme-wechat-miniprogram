@@ -6,7 +6,7 @@ import {
   liveMatchShareCacheKey,
   liveMatchSharePixelRatio,
 } from "../miniprogram/utils/live-match-share-image";
-import { buildShareBrandLayout } from "../miniprogram/utils/share-image-brand";
+import { buildShareBrandSignature } from "../miniprogram/utils/share-image-brand";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -115,7 +115,7 @@ textOperations.forEach((text, index) => {
   if (text.includes("Palmer (CHE) 34")) lastEventText = index;
 });
 const firstBrandText = textOperations.findIndex(
-  (text) => text === "LetLetMe" || text === "stroke:LetLetMe",
+  (text) => text === "LetLetMe · letletme.top",
 );
 assert(lastEventText >= 0, "every planned event reaches the canvas");
 assert(firstBrandText > lastEventText, "watermark is painted after card content");
@@ -125,25 +125,14 @@ assertEqual(
   "readable signature is the final text layer",
 );
 
-const watermark = buildShareBrandLayout(plan.width, plan.height);
-const crops = [
-  { left: 0, top: 0, right: plan.width / 2, bottom: plan.height },
-  { left: plan.width / 2, top: 0, right: plan.width, bottom: plan.height },
-  { left: 0, top: 0, right: plan.width, bottom: plan.height / 2 },
-  { left: 0, top: plan.height / 2, right: plan.width, bottom: plan.height },
-];
-crops.forEach((crop) => {
-  assert(
-    watermark.tiles.some(
-      (tile) =>
-        tile.x >= crop.left &&
-        tile.x <= crop.right &&
-        tile.y >= crop.top &&
-        tile.y <= crop.bottom,
-    ),
-    "every sampled half-image crop keeps a LetLetMe tile",
-  );
-});
+const brandSignature = buildShareBrandSignature(plan.width, plan.height);
+assert(
+  brandSignature.x >= 0 &&
+    brandSignature.y >= 0 &&
+    brandSignature.x + brandSignature.width <= plan.width &&
+    brandSignature.y + brandSignature.height <= plan.height,
+  "brand signature fits the share image",
+);
 
 async function testCanvasFallback(): Promise<void> {
   (globalThis as { wx?: unknown }).wx = {};

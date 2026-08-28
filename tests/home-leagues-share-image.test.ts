@@ -146,7 +146,7 @@ textOperations.forEach((text, index) => {
   if (text.includes("联赛15")) lastRowText = index;
 });
 const firstBrandText = textOperations.findIndex(
-  (text) => text === "LetLetMe" || text === "stroke:LetLetMe",
+  (text) => text === "LetLetMe · letletme.top",
 );
 assert(lastRowText >= 0, "the last capped row reaches the canvas");
 assert(firstBrandText > lastRowText, "watermark is painted after the rows");

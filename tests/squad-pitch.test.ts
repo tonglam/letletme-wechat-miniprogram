@@ -20,7 +20,7 @@ import {
   shareExportPixelRatio,
   shareUsesPortraitLayout
 } from "../miniprogram/utils/squad-pitch-canvas";
-import { buildShareBrandLayout } from "../miniprogram/utils/share-image-brand";
+import { buildShareBrandSignature } from "../miniprogram/utils/share-image-brand";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -268,30 +268,13 @@ assert(watermark?.type === "watermark" && watermark.title === "LetLetMe", "LetLe
 assert(watermark?.type === "watermark" && watermark.url === "letletme.top", "letletme.top watermark");
 assert(Math.abs(plan.height / plan.width - 5 / 4) < 0.003, "bench share uses 4/5");
 
-const brandLayout = buildShareBrandLayout(plan.width, plan.height);
-assert(brandLayout.tiles.length >= 20, "watermark repeats across the complete share image");
+const brandSignature = buildShareBrandSignature(plan.width, plan.height);
+assert(brandSignature.x >= 0 && brandSignature.y >= 0, "brand signature stays inside the canvas");
 assert(
-  brandLayout.tiles.some((tile) => tile.x < plan.width * 0.25 && tile.y < plan.height * 0.25),
-  "watermark covers the top-left crop"
+  brandSignature.x + brandSignature.width <= plan.width &&
+    brandSignature.y + brandSignature.height <= plan.height,
+  "brand signature fits the share image"
 );
-assert(
-  brandLayout.tiles.some((tile) => tile.x > plan.width * 0.75 && tile.y > plan.height * 0.75),
-  "watermark covers the bottom-right crop"
-);
-for (const crop of [
-  { x: 0, y: 0, width: plan.width / 2, height: plan.height / 2 },
-  { x: plan.width / 2, y: 0, width: plan.width / 2, height: plan.height / 2 },
-  { x: 0, y: plan.height / 2, width: plan.width / 2, height: plan.height / 2 },
-  { x: plan.width / 2, y: plan.height / 2, width: plan.width / 2, height: plan.height / 2 }
-]) {
-  assert(
-    brandLayout.tiles.some((tile) => (
-      tile.x >= crop.x && tile.x <= crop.x + crop.width &&
-      tile.y >= crop.y && tile.y <= crop.y + crop.height
-    )),
-    "every half-image crop keeps a watermark"
-  );
-}
 assertEqual(shareExportPixelRatio(3), 2, "share export caps high-DPR devices at 2x");
 assertEqual(shareExportPixelRatio(0), 1, "share export normalizes missing DPR");
 

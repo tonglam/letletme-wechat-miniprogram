@@ -148,7 +148,7 @@ textOperations.forEach((text, index) => {
   if (text.includes("切尔西")) lastRowText = index;
 });
 const firstBrandText = textOperations.findIndex(
-  (text) => text === "LetLetMe" || text === "stroke:LetLetMe",
+  (text) => text === "LetLetMe · letletme.top",
 );
 assert(lastRowText >= 0, "the last fixture row reaches the canvas");
 assert(firstBrandText > lastRowText, "watermark is painted after the rows");
