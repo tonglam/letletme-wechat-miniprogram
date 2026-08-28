@@ -7,6 +7,7 @@ import {
   playerDataAvailabilityIssues,
   playerInjuryAvailabilityPresentation,
 } from "../miniprogram/utils/player-data-availability";
+import { downgradeStalePlayerDetailResponse } from "../miniprogram/services/player.service";
 
 const section = (state: PlayerDataState): PlayerDataSectionAvailability => ({
   state,
@@ -116,4 +117,41 @@ assertDeepEqual(
     stale: true,
   },
   "injury status remains separate from data authority",
+);
+
+const stalePlayer = downgradeStalePlayerDetailResponse({
+  playerDetail: {
+    injuryAvailability: { status: "a", stale: false },
+    dataAvailability: {
+      isFullyAuthoritative: true,
+      seasonStats: section("READY"),
+      market: section("EMPTY"),
+      historicalTeam: section("READY"),
+      fixtures: section("NOT_APPLICABLE"),
+      recentGameweeks: section("READY"),
+    },
+  } as never,
+});
+assertDeepEqual(
+  {
+    authoritative: stalePlayer.playerDetail?.dataAvailability.isFullyAuthoritative,
+    states: stalePlayer.playerDetail
+      ? [
+          stalePlayer.playerDetail.dataAvailability.seasonStats.state,
+          stalePlayer.playerDetail.dataAvailability.market.state,
+          stalePlayer.playerDetail.dataAvailability.historicalTeam.state,
+          stalePlayer.playerDetail.dataAvailability.fixtures.state,
+          stalePlayer.playerDetail.dataAvailability.recentGameweeks.state,
+        ]
+      : [],
+    reason: stalePlayer.playerDetail?.dataAvailability.market.reasonCode,
+    injuryStale: stalePlayer.playerDetail?.injuryAvailability?.stale,
+  },
+  {
+    authoritative: false,
+    states: ["STALE", "STALE", "STALE", "NOT_APPLICABLE", "STALE"],
+    reason: "CLIENT_STALE_CACHE",
+    injuryStale: true,
+  },
+  "stale cache fallback is rendered as non-authoritative",
 );

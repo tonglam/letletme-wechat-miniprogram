@@ -152,6 +152,45 @@ interface PlayerDetailResponse {
   } | null;
 }
 
+const CLIENT_STALE_CACHE_REASON = "CLIENT_STALE_CACHE";
+
+function stalePlayerDataSection(
+  section: PlayerDetail["dataAvailability"]["market"],
+): PlayerDetail["dataAvailability"]["market"] {
+  if (section.state !== "READY" && section.state !== "EMPTY") return section;
+  return {
+    ...section,
+    state: "STALE",
+    reasonCode: CLIENT_STALE_CACHE_REASON,
+  };
+}
+
+/** Preserve the cached payload while making its client-side staleness explicit. */
+export function downgradeStalePlayerDetailResponse(
+  data: PlayerDetailResponse,
+): PlayerDetailResponse {
+  const player = data.playerDetail;
+  if (!player) return data;
+  const availability = player.dataAvailability;
+  return {
+    ...data,
+    playerDetail: {
+      ...player,
+      injuryAvailability: player.injuryAvailability
+        ? { ...player.injuryAvailability, stale: true }
+        : null,
+      dataAvailability: {
+        isFullyAuthoritative: false,
+        seasonStats: stalePlayerDataSection(availability.seasonStats),
+        market: stalePlayerDataSection(availability.market),
+        historicalTeam: stalePlayerDataSection(availability.historicalTeam),
+        fixtures: stalePlayerDataSection(availability.fixtures),
+        recentGameweeks: stalePlayerDataSection(availability.recentGameweeks),
+      },
+    },
+  };
+}
+
 export interface PlayerPickerFilter {
   position?: "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD";
   teamId?: number;
@@ -446,6 +485,8 @@ export async function getPlayerInfoByCode(
       cacheVariant: `season:${seasonName}`,
       forceRefresh,
       trace,
+      mapStaleData: (staleData) =>
+        downgradeStalePlayerDetailResponse(staleData as PlayerDetailResponse),
     },
   );
   if (!data.playerDetail) {

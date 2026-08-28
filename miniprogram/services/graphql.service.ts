@@ -84,6 +84,8 @@ export interface GraphQLOptions {
   season?: string;
   cacheVariant?: string;
   trace?: PageRequestTrace | null;
+  /** Explicitly adapt cached data when a stale fallback is served. */
+  mapStaleData?: (data: unknown) => unknown;
 }
 
 export interface PageRequestTrace {
@@ -1244,6 +1246,9 @@ export async function graphqlRequest<T>(
   const result = await graphqlRead<T>(query, variables, options);
   if (result.errors.length > 0) {
     throw new GraphQLApplicationError(result.errors);
+  }
+  if (result.meta.stale && options?.mapStaleData) {
+    return options.mapStaleData(result.data) as T;
   }
   return result.data;
 }

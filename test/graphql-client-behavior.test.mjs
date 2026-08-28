@@ -197,6 +197,36 @@ test("stale fallback is limited to transient transport failures", async () => {
   await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
 });
 
+test("graphqlRequest explicitly maps stale fallback data before discarding metadata", async () => {
+  const runtime = installRuntime(success({ value: { authoritative: true } }));
+  const query = "query BehaviorMappedStale { value { authoritative } }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 1,
+    staleTtl: 60_000,
+  };
+
+  await graphqlRequest(query, {}, options);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  runtime.setHandler((request) =>
+    request.fail({ errMsg: "request:fail timeout" }),
+  );
+  const stale = await graphqlRequest(query, {}, {
+    ...options,
+    forceRefresh: true,
+    mapStaleData(data) {
+      return {
+        ...data,
+        value: { ...data.value, authoritative: false, stale: true },
+      };
+    },
+  });
+
+  assert.deepEqual(stale, {
+    value: { authoritative: false, stale: true },
+  });
+});
+
 test("session refresh network failure serves stale data without a second refresh", async () => {
   const runtime = installRuntime(success({ value: "last-good" }));
   const query = "query BehaviorSessionRefreshStale { value }";

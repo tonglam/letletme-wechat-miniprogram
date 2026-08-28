@@ -12,7 +12,11 @@ import type {
   LivePlayerRow,
   LiveSnapshotStatus,
 } from "../../../models/live";
-import type { EntryLookupStatus, EntryTransfer } from "../../../models/entry";
+import type {
+  EntryLookupStatus,
+  EntryPersistenceState,
+  EntryTransfer,
+} from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
 import {
   chipShareLabel,
@@ -61,6 +65,7 @@ import {
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import {
   entryPersistencePresentation,
+  entryPersistenceNeedsRevalidation,
   isDeterministicEntryIdentityFailure
 } from "../../../utils/entry-lookup-presentation";
 
@@ -126,6 +131,7 @@ interface LiveEntryData {
   entryLookupStatus: EntryLookupStatus | "";
   entryLookupMessage: string;
   entryLookupRetryable: boolean;
+  entryPersistenceState: EntryPersistenceState | "";
   playerName: string;
   scoreState: string;
   scoreStatusText: string;
@@ -250,6 +256,7 @@ Page({
     entryLookupStatus: "",
     entryLookupMessage: "",
     entryLookupRetryable: false,
+    entryPersistenceState: "" as EntryPersistenceState | "",
     playerName: "",
     scoreState: "UNAVAILABLE",
     scoreStatusText: "官方分数不可用",
@@ -297,6 +304,8 @@ Page({
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
   liveRefresh: null as LiveRefreshController | null,
+  entryInfoLoader: getEntryInfo,
+  entryIdentityRequestId: 0,
   probing: false,
   networkOnline: true,
   pageVisible: false,
@@ -421,7 +430,10 @@ Page({
           this.data.scoreNextRefreshAt,
           this.liveSnapshot?.nextRefreshAt,
         ) || null,
-      reload: () => this.loadData({ background: true, forceRefresh: true }),
+      reload: async () => {
+        await this.revalidateEntryPersistence();
+        return this.loadData({ background: true, forceRefresh: true });
+      },
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
@@ -470,6 +482,17 @@ Page({
     this.hasShown = true;
     if (resumed && !this.hasRouteEntry) {
       await waitForAuthoritativeFollow();
+      if (!this.pageVisible) return;
+    }
+    const activeEntryId = this.hasRouteEntry
+      ? this.data.entryId
+      : (currentFollowEntryId() ?? 0);
+    if (
+      resumed &&
+      !this.resumeForcedRefreshAfterShow &&
+      activeEntryId === this.data.entryId
+    ) {
+      await this.revalidateEntryPersistence();
       if (!this.pageVisible) return;
     }
     const previousEntryId = this.data.entryId;
@@ -638,6 +661,7 @@ Page({
     if (this.data.transfersLoading) this.setData({ transfersLoading: false });
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
+    this.entryIdentityRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
@@ -661,6 +685,7 @@ Page({
     this.forcedRefreshPending = false;
     this.liveRequestId += 1;
     this.transfersRequestId += 1;
+    this.entryIdentityRequestId += 1;
     this.liveRequest = null;
     this.liveRequestKey = "";
     this.liveRequestForced = false;
@@ -701,6 +726,8 @@ Page({
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
       tracker.mark("contextReadyAt");
+      await this.revalidateEntryPersistence(true);
+      if (!this.pageVisible || this.perfTracker !== tracker) return;
       await this.retryWithContext(
         {
           background: true,
@@ -783,38 +810,73 @@ Page({
     return this.loadData(options);
   },
 
-  async loadEntryIdentity(entryId: number) {
+  async revalidateEntryPersistence(forceRefresh = false) {
+    const entryId = this.data.entryId ?? 0;
+    if (
+      !entryId ||
+      (!forceRefresh &&
+        !entryPersistenceNeedsRevalidation(this.data.entryPersistenceState))
+    ) {
+      return;
+    }
+    await this.loadEntryIdentity(entryId, true);
+  },
+
+  async loadEntryIdentity(entryId: number, forceRefresh = false) {
+    const requestId = ++this.entryIdentityRequestId;
     if (!entryId) {
       this.setData({
         entryName: "",
         entryLookupStatus: "",
         entryLookupMessage: "",
         entryLookupRetryable: false,
+        entryPersistenceState: "",
         playerName: ""
       });
       return;
     }
     try {
-      const entry = await getEntryInfo(entryId);
-      if (this.data.entryId !== entryId) return;
+      const persistenceRevalidation = entryPersistenceNeedsRevalidation(
+        this.data.entryPersistenceState,
+      );
+      const entry = await this.entryInfoLoader(
+        entryId,
+        forceRefresh || persistenceRevalidation,
+      );
+      if (
+        this.data.entryId !== entryId ||
+        requestId !== this.entryIdentityRequestId
+      ) return;
       const persistence = entryPersistencePresentation(entry.persistenceState);
       this.setData({
         entryName: entry.entryName || entry.teamName || "",
         entryLookupStatus: "FOUND",
         entryLookupMessage: persistence?.message ?? "",
         entryLookupRetryable: persistence?.retryable ?? false,
+        entryPersistenceState: entry.persistenceState ?? "",
         playerName: entry.playerName || "",
       });
     } catch (error) {
-      if (this.data.entryId === entryId) {
+      if (
+        this.data.entryId === entryId &&
+        requestId === this.entryIdentityRequestId
+      ) {
         const lookupError = error instanceof EntryLookupError ? error : null;
+        const deterministic = isDeterministicEntryIdentityFailure(
+          lookupError?.status,
+        );
         this.setData({
-          entryName: "",
+          ...(deterministic
+            ? {
+                entryName: "",
+                entryPersistenceState: "" as const,
+                playerName: "",
+              }
+            : {}),
           entryLookupStatus: lookupError?.status ?? "UNAVAILABLE",
           entryLookupMessage: lookupError?.message
             ?? "当前无法确认球队数据，请稍后重试",
           entryLookupRetryable: lookupError?.retryable ?? true,
-          playerName: "",
         });
       }
     }
@@ -848,6 +910,7 @@ Page({
       entryLookupStatus: "",
       entryLookupMessage: "",
       entryLookupRetryable: false,
+      entryPersistenceState: "",
       playerName: "",
       loading: false,
       refreshing: false,
@@ -1453,9 +1516,6 @@ Page({
       "pages/live/entry/entry",
       "refresh",
     );
-    if (this.data.entryId && this.data.entryLookupRetryable) {
-      void this.loadEntryIdentity(this.data.entryId);
-    }
     void this.runForcedRefresh(this.perfTracker);
   },
 

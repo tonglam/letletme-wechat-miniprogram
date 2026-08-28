@@ -9,6 +9,7 @@ globalThis.Page = (definition) => {
 
 const entryModule = await import("../miniprogram/pages/live/entry/entry.ts");
 const entryPage = capturedPage;
+const { EntryLookupError } = await import("../miniprogram/services/entry.service.ts");
 
 capturedPage = undefined;
 const tournamentModule = await import("../miniprogram/pages/live/tournament/tournament.controller.ts");
@@ -95,6 +96,106 @@ test("entry preseason is a stable business empty state", () => {
     livePointsText: "—",
     totalText: "—"
   });
+});
+
+test("queued entry persistence revalidates and keeps confirmed identity on retryable failure", async () => {
+  const calls = [];
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      entryName: "Confirmed FC",
+      playerName: "Confirmed Manager",
+      entryLookupStatus: "FOUND",
+      entryPersistenceState: "QUEUED",
+    },
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    entryInfoLoader(entryId, forceRefresh) {
+      calls.push([entryId, forceRefresh]);
+      throw new EntryLookupError("UNAVAILABLE", true, "暂时不可用");
+    },
+  };
+
+  await entryPage.revalidateEntryPersistence.call(context);
+
+  assert.deepEqual(calls, [[123, true]]);
+  assert.equal(context.data.entryName, "Confirmed FC");
+  assert.equal(context.data.playerName, "Confirmed Manager");
+  assert.equal(context.data.entryPersistenceState, "QUEUED");
+  assert.equal(context.data.entryLookupStatus, "UNAVAILABLE");
+  assert.equal(context.data.entryLookupRetryable, true);
+});
+
+test("deterministic entry lookup failure clears the previously confirmed identity", async () => {
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      entryName: "Confirmed FC",
+      playerName: "Confirmed Manager",
+      entryLookupStatus: "FOUND",
+      entryPersistenceState: "FAILED_RETRYABLE",
+    },
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    entryInfoLoader() {
+      throw new EntryLookupError("NOT_FOUND", false, "不存在");
+    },
+  };
+
+  await entryPage.loadEntryIdentity.call(context, 123, true);
+
+  assert.equal(context.data.entryName, "");
+  assert.equal(context.data.playerName, "");
+  assert.equal(context.data.entryPersistenceState, "");
+  assert.equal(context.data.entryLookupStatus, "NOT_FOUND");
+});
+
+test("an older entry lookup failure cannot overwrite a newer confirmed identity", async () => {
+  let rejectFirst;
+  let callCount = 0;
+  const context = {
+    ...entryPage,
+    data: {
+      ...entryPage.data,
+      entryId: 123,
+      entryPersistenceState: "QUEUED",
+    },
+    entryIdentityRequestId: 0,
+    setData(update) {
+      Object.assign(this.data, update);
+    },
+    entryInfoLoader() {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise((_, reject) => {
+          rejectFirst = reject;
+        });
+      }
+      return Promise.resolve({
+        entryName: "Latest FC",
+        teamName: "Latest FC",
+        playerName: "Latest Manager",
+        persistenceState: "NOT_REQUIRED",
+      });
+    },
+  };
+
+  const first = entryPage.loadEntryIdentity.call(context, 123, true);
+  await Promise.resolve();
+  await entryPage.loadEntryIdentity.call(context, 123, true);
+  rejectFirst(new EntryLookupError("UNAVAILABLE", true, "旧请求失败"));
+  await first;
+
+  assert.equal(context.data.entryName, "Latest FC");
+  assert.equal(context.data.playerName, "Latest Manager");
+  assert.equal(context.data.entryPersistenceState, "NOT_REQUIRED");
+  assert.equal(context.data.entryLookupStatus, "FOUND");
 });
 
 test("entry NO_PICKS keeps polling when an unavailable score retains a retry deadline", () => {
