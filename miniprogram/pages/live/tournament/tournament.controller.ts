@@ -92,6 +92,10 @@ import {
   presentTournamentBoardShareImage,
 } from "../../../utils/tournament-board-share-image";
 import {
+  buildTournamentPickerState,
+  EMPTY_TOURNAMENT_PICKER_STATE,
+} from "../../../utils/tournament-picker-groups";
+import {
   exportTournamentH2HShareImage,
   presentTournamentH2HShareImage,
   type TournamentH2HShareMatchRow,
@@ -303,8 +307,17 @@ interface LiveTournamentData {
   entryId?: number;
   keyword: string;
   tournaments: TournamentOption[];
-  tournamentNames: string[];
-  selectedTournamentIndex: number;
+  classicTournaments: TournamentOption[];
+  h2hTournaments: TournamentOption[];
+  classicTournamentNames: string[];
+  h2hTournamentNames: string[];
+  selectedClassicIndex: number;
+  selectedH2HIndex: number;
+  classicPickerText: string;
+  h2hPickerText: string;
+  classicPickerActive: boolean;
+  h2hPickerActive: boolean;
+  hasDualTournamentKinds: boolean;
   selectedTournament: TournamentOption | null;
   rowCount: number;
   displayedRows: DisplayTournamentRow[];
@@ -1071,14 +1084,12 @@ PerformancePage({
     entryId: 0,
     keyword: "",
     tournaments: [],
-    tournamentNames: [],
-    selectedTournamentIndex: 0,
+    ...EMPTY_TOURNAMENT_PICKER_STATE,
     selectedTournament: null,
     rowCount: 0,
     displayedRows: [],
     sortOptions: [
       { key: "livePoints", label: "GW" },
-      { key: "liveNetPoints", label: "净分" },
       { key: "transferCost", label: "扣分" },
       { key: "played", label: "出场" },
       { key: "totalPoints", label: "总分" },
@@ -1496,7 +1507,7 @@ PerformancePage({
           ...(seasonChanged
             ? {
                 tournaments: [],
-                tournamentNames: [],
+                ...EMPTY_TOURNAMENT_PICKER_STATE,
                 selectedTournament: null,
                 ownershipTeamOptions: [],
                 ownershipTeamNames: [],
@@ -1715,7 +1726,7 @@ PerformancePage({
       tournamentListError: "",
       tournamentListErrorSuffix: "",
       tournaments: [],
-      tournamentNames: [],
+      ...EMPTY_TOURNAMENT_PICKER_STATE,
       selectedTournament: null,
       rowCount: 0,
       displayedRows: [],
@@ -1762,7 +1773,7 @@ PerformancePage({
         emptyDescription: "查找球队并设为我的球队后，即可加载实时赛事。",
         emptyActionText: "去选择球队",
         tournaments: [],
-        tournamentNames: [],
+        ...EMPTY_TOURNAMENT_PICKER_STATE,
         selectedTournament: null,
         rowCount: 0,
         displayedRows: [],
@@ -1806,7 +1817,7 @@ PerformancePage({
         this.clearH2HState();
         this.setData({
           tournaments: [],
-          tournamentNames: [],
+          ...EMPTY_TOURNAMENT_PICKER_STATE,
           selectedTournament: null,
           rowCount: 0,
           displayedRows: [],
@@ -1844,8 +1855,7 @@ PerformancePage({
       }
       this.setData({
         tournaments,
-        tournamentNames: tournaments.map((tournament) => tournament.name),
-        selectedTournamentIndex,
+        ...buildTournamentPickerState(tournaments, selectedTournament),
         selectedTournament,
         emptyState: "",
         ...(selectionChanged
@@ -3667,10 +3677,29 @@ PerformancePage({
     this.loadRows();
   },
 
-  onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const selectedTournamentIndex = Number(event.detail.value);
-    if (!Number.isFinite(selectedTournamentIndex)) return;
-    const selectedTournament = this.data.tournaments[selectedTournamentIndex];
+  onClassicTournamentChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+  ) {
+    this.onTournamentGroupChange(event, "classic");
+  },
+
+  onH2HTournamentChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+  ) {
+    this.onTournamentGroupChange(event, "h2h");
+  },
+
+  onTournamentGroupChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+    group: "classic" | "h2h",
+  ) {
+    const groupIndex = Number(event.detail.value);
+    if (!Number.isFinite(groupIndex)) return;
+    const groupTournaments =
+      group === "h2h"
+        ? this.data.h2hTournaments
+        : this.data.classicTournaments;
+    const selectedTournament = groupTournaments[groupIndex];
     if (!selectedTournament) return;
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
@@ -3678,8 +3707,8 @@ PerformancePage({
     this.cachedLiveStoredAt = undefined;
     clearTournamentBoard(this);
     this.setData({
-      selectedTournamentIndex,
       selectedTournament,
+      ...buildTournamentPickerState(this.data.tournaments, selectedTournament),
       rowCount: 0,
       displayedRows: [],
       hasData: false,

@@ -17,6 +17,28 @@ test("the live picker includes official H2H tournaments", () => {
   );
 });
 
+test("the picker splits classic and H2H leagues like the web", () => {
+  const template = source("miniprogram/pages/live/tournament/tournament.wxml");
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const groups = source("miniprogram/utils/tournament-picker-groups.ts");
+
+  // Web TournamentSelector: leagueType === "H2H" picks the 对战联赛 group,
+  // everything else stays 经典联赛.
+  assert.match(groups, /leagueType !== "H2H"/);
+  assert.match(groups, /leagueType === "H2H"/);
+  assert.match(groups, /选择积分联赛/);
+  assert.match(groups, /选择对战联赛/);
+  assert.match(template, /range="\{\{classicTournamentNames\}\}" value="\{\{selectedClassicIndex\}\}" bindchange="onClassicTournamentChange"/);
+  assert.match(template, /range="\{\{h2hTournamentNames\}\}" value="\{\{selectedH2HIndex\}\}" bindchange="onH2HTournamentChange"/);
+  // The single combined picker is gone.
+  assert.doesNotMatch(template, /onTournamentChange/);
+  // Both groups route through the same selection pipeline.
+  assert.match(controller, /onTournamentGroupChange\(event, "classic"\)/);
+  assert.match(controller, /onTournamentGroupChange\(event, "h2h"\)/);
+  assert.match(controller, /buildTournamentPickerState\(this\.data\.tournaments, selectedTournament\)/);
+  assert.match(controller, /buildTournamentPickerState\(tournaments, selectedTournament\)/);
+});
+
 test("the detail desk query selects kind, setup, participants and the H2H board", () => {
   const service = source("miniprogram/services/tournament-detail.service.ts");
 

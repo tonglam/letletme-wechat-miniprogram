@@ -6,13 +6,19 @@
 
   <view wx:if="{{emptyState !== 'preseason'}}" class="section toolbar">
     <view class="row">
-      <picker wx:if="{{tournaments.length}}" class="league-picker" mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
+      <picker wx:if="{{classicTournamentNames.length}}" class="league-picker" mode="selector" range="{{classicTournamentNames}}" value="{{selectedClassicIndex}}" bindchange="onClassicTournamentChange">
         <view class="league-switch">
-          <text class="league-name">{{selectedTournament.name || '请选择赛事'}}</text>
+          <text class="league-name {{classicPickerActive ? '' : 'league-name-empty'}}">{{classicPickerText}}</text>
           <text class="league-action">切换</text>
         </view>
       </picker>
-      <view wx:else>
+      <picker wx:if="{{h2hTournamentNames.length}}" class="league-picker" mode="selector" range="{{h2hTournamentNames}}" value="{{selectedH2HIndex}}" bindchange="onH2HTournamentChange">
+        <view class="league-switch">
+          <text class="league-name {{h2hPickerActive ? '' : 'league-name-empty'}}">{{h2hPickerText}}</text>
+          <text class="league-action">切换</text>
+        </view>
+      </picker>
+      <view wx:if="{{!tournaments.length}}">
         <view class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事数据待就绪'}}</view>
       </view>
       <gw-picker wx:if="{{tournaments.length}}" compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />

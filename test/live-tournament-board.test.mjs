@@ -14,6 +14,12 @@ test("tournament board shows overall rank, team value, captain points, podium ra
   assert.match(controller, /\{ key: "teamValue", label: "队值" \}/);
   assert.match(controller, /case "teamValue": return "TEAM_VALUE";/);
 
+  // The 净分 sort chip is dropped (the web has no net-points sort); the board
+  // 净 column and the compare-sheet 净分 row stay.
+  assert.doesNotMatch(controller, /\{ key: "liveNetPoints", label: "净分" \}/);
+  assert.match(template, /class="col-num">净</);
+  assert.match(template, /class="cmp-label">净分</);
+
   // Row display: captain points ride the (C) label; OR/TV have a sub-meta line.
   assert.match(controller, /captainPointsKnown \? ` \$\{row\.captainPoints\}`/);
   assert.match(controller, /overallRankText: overallRankKnown \? formatRank/);

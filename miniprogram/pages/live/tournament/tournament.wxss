@@ -42,6 +42,12 @@
   font-weight: 700;
 }
 
+/* Group placeholder (选择积分联赛 / 选择对战联赛) reads muted until the group owns the selection. */
+.league-name-empty {
+  color: var(--muted-ink);
+  font-weight: 600;
+}
+
 /* The caret carries the affordance — the text action would date the pill */
 .league-action {
   display: none;
