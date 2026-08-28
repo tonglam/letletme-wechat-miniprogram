@@ -237,6 +237,16 @@ page {
   font-weight: 800;
 }
 
+/* Icon-only buttons keep their busy/done cue as a dim. */
+.tool-btn.done {
+  opacity: 0.65;
+}
+
+/* Labeled buttons (分享文字 etc.) signal done through the label instead. */
+.tool-btn-labeled.done {
+  opacity: 1;
+}
+
 .tool-btn.done .tool-label {
   color: var(--green-ink);
 }

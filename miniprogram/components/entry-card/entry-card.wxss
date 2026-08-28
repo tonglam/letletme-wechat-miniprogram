@@ -140,17 +140,14 @@
 }
 
 .league-share-btn {
+  width: 52rpx;
   height: 52rpx;
-  padding: 0 16rpx;
+  padding: 0;
 }
 
 .league-share-btn .tool-icon {
   width: 26rpx;
   height: 26rpx;
-}
-
-.league-share-btn .tool-label {
-  font-size: 20rpx;
 }
 
 .entry-leagues-title-row {

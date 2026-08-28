@@ -37,7 +37,6 @@
         <view class="deadline-side">
           <view wx:if="{{utcDeadline}}" class="deadline-share {{deadlineShareBusy ? 'done' : ''}}" catchtap="onShareDeadlineImage" hover-class="hover-dim">
             <image class="deadline-share-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="deadline-share-label">{{deadlineShareBusy ? '生成中' : '分享图片'}}</text>
           </view>
           <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
         </view>
@@ -108,12 +107,11 @@
           <text class="live-pitch-label">梦之队</text>
           <view class="live-pitch-actions">
             <view
-              class="tool-btn tool-btn-labeled {{dreamShareBusy ? 'done' : ''}}"
+              class="tool-btn {{dreamShareBusy ? 'done' : ''}}"
               bindtap="onShareDreamPitch"
               hover-class="hover-dim"
             >
               <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{dreamShareBusy ? '生成中' : '分享图片'}}</text>
             </view>
           </view>
         </view>
@@ -136,9 +134,8 @@
         <view class="transfer-head-tools">
           <view wx:if="{{priceTab === 'today'}}" class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
           <view wx:else class="action section-link" catchtap="onOpenPricePredictions" hover-class="hover-dim">查看全部预测</view>
-          <view class="tool-btn tool-btn-labeled {{priceShareBusy ? 'done' : ''}}" catchtap="onSharePriceImage" hover-class="hover-dim">
+          <view class="tool-btn {{priceShareBusy ? 'done' : ''}}" catchtap="onSharePriceImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="tool-label">{{priceShareBusy ? '生成中' : '分享图片'}}</text>
           </view>
         </view>
       </view>
@@ -234,9 +231,8 @@
         </view>
         <view class="transfer-head-tools">
           <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
-          <view class="tool-btn tool-btn-labeled {{marketShareBusy ? 'done' : ''}}" catchtap="onShareMarketImage" hover-class="hover-dim">
+          <view class="tool-btn {{marketShareBusy ? 'done' : ''}}" catchtap="onShareMarketImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="tool-label">{{marketShareBusy ? '生成中' : '分享图片'}}</text>
           </view>
         </view>
       </view>
@@ -325,9 +321,8 @@
         </view>
         <view class="fixture-head-tools">
           <view class="fixture-live-link" bindtap="onOpenLiveMatches" hover-class="hover-dim">打开实时比赛</view>
-          <view class="tool-btn tool-btn-labeled {{fixtureShareBusy ? 'done' : ''}}" catchtap="onShareFixtureImage" hover-class="hover-dim">
+          <view class="tool-btn {{fixtureShareBusy ? 'done' : ''}}" catchtap="onShareFixtureImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="tool-label">{{fixtureShareBusy ? '生成中' : '分享图片'}}</text>
           </view>
           <view class="fixture-stepper">
             <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">

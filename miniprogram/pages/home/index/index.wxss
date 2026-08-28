@@ -79,26 +79,23 @@
 .deadline-share {
   display: inline-flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 10rpx 20rpx;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  padding: 0;
   border: 1rpx solid var(--electric-a28);
   border-radius: 12rpx;
   background: var(--black-a25);
+  box-sizing: border-box;
 }
 
 .deadline-share-icon {
-  width: 22rpx;
-  height: 22rpx;
+  width: 30rpx;
+  height: 30rpx;
 }
 
-.deadline-share-label {
-  color: var(--electric);
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.deadline-share.done .deadline-share-label {
-  color: var(--chalk-a60);
+.deadline-share.done {
+  opacity: 0.65;
 }
 
 .countdown {

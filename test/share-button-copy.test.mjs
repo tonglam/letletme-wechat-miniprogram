@@ -37,18 +37,29 @@ test("every visible share action uses the canonical text or image label", () => 
       const label = nestedLabel?.[1] ?? match[3];
       const path = relative(miniprogramRoot, file);
       const expected = expectedShareCopy(handler);
-      assert.match(
-        label,
-        new RegExp(expected),
-        `${path} ${handler} must use ${expected}`,
-      );
-      // Share-image buttons always carry the image icon so every surface
-      // presents the same icon + label affordance.
       if (expected === "分享图片") {
+        // Image shares are icon-only: the image.svg glyph is the whole
+        // affordance, and no surface reintroduces a text label.
+        assert.doesNotMatch(
+          match[3],
+          /分享图片/,
+          `${path} ${handler} stays icon-only (no 分享图片 label)`,
+        );
+        assert.doesNotMatch(
+          match[3],
+          /tool-label/,
+          `${path} ${handler} carries no tool-label text`,
+        );
         assert.match(
           match[3],
           /image\.svg/,
           `${path} ${handler} must include the image.svg icon`,
+        );
+      } else {
+        assert.match(
+          label,
+          new RegExp(expected),
+          `${path} ${handler} must use ${expected}`,
         );
       }
       actions.push({ handler, path, expected });

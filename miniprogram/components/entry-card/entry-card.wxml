@@ -23,9 +23,8 @@
             <text class="entry-leagues-count">{{classicPanel.total}}</text>
           </view>
           <view class="entry-leagues-head-actions">
-            <view class="tool-btn tool-btn-labeled league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="classic" hover-class="hover-dim">
+            <view class="tool-btn league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="classic" hover-class="hover-dim">
               <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
             </view>
             <text class="action" catchtap="onOpenAllLeagues">全部</text>
           </view>
@@ -52,9 +51,8 @@
             <text class="entry-leagues-count">{{h2hPanel.total}}</text>
           </view>
           <view class="entry-leagues-head-actions">
-            <view class="tool-btn tool-btn-labeled league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="h2h" hover-class="hover-dim">
+            <view class="tool-btn league-share-btn {{shareImageBusy ? 'done' : ''}}" catchtap="onShareLeagueImage" data-panel="h2h" hover-class="hover-dim">
               <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
             </view>
             <text class="action" catchtap="onOpenAllLeagues">全部</text>
           </view>

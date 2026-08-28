@@ -77,9 +77,10 @@
   right: 88rpx;
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  justify-content: center;
+  width: 48rpx;
   height: 48rpx;
-  padding: 0 18rpx;
+  padding: 0;
   border: 1rpx solid var(--electric-a28, rgba(0, 255, 133, 0.28));
   border-radius: 999rpx;
   background: var(--black-a25, rgba(0, 0, 0, 0.25));
@@ -91,14 +92,8 @@
   height: 22rpx;
 }
 
-.pls-share-label {
-  color: var(--electric);
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.pls-share.done .pls-share-label {
-  color: var(--chalk-a60, rgba(245, 241, 232, 0.6));
+.pls-share.done {
+  opacity: 0.65;
 }
 
 /* Position badge on the dark hero — solid pills, web market-position-badge palette */

@@ -96,12 +96,11 @@
           <text class="live-pitch-label">梦之队</text>
           <view class="live-pitch-actions">
             <view
-              class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+              class="tool-btn {{shareBusy ? 'done' : ''}}"
               bindtap="onShareDreamPitch"
               hover-class="hover-dim"
             >
               <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
             </view>
             <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'dreamTeam' ? 'done' : ''}}" data-share-kind="dreamTeam" bindtap="onCopyShare" hover-class="hover-dim">
               <image wx:if="{{shareCopiedKind === 'dreamTeam'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />

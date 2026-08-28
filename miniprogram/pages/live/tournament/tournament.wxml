@@ -120,9 +120,8 @@
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
             <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
-          <view class="tool-btn tool-btn-labeled {{shareImageBusy ? 'done' : ''}}" bindtap="onShareH2HImage" hover-class="hover-dim">
+          <view class="tool-btn {{shareImageBusy ? 'done' : ''}}" bindtap="onShareH2HImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
           </view>
         </view>
       </view>
@@ -293,9 +292,8 @@
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
             <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
-          <view wx:if="{{!compareMode}}" class="tool-btn tool-btn-labeled {{shareImageBusy ? 'done' : ''}}" bindtap="onShareBoardImage" hover-class="hover-dim">
+          <view wx:if="{{!compareMode}}" class="tool-btn {{shareImageBusy ? 'done' : ''}}" bindtap="onShareBoardImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareImageBusy ? '生成中' : '分享图片'}}</text>
           </view>
           <block wx:if="{{compareMode}}">
             <text wx:if="{{compareLoading}}" class="action-muted">对比加载中</text>
