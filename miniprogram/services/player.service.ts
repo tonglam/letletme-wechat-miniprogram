@@ -1,5 +1,9 @@
 import { graphqlRequest, type PageRequestTrace } from "./graphql.service";
-import type { PlayerDetail, PlayerFilterRow, PlayerOption } from "../models/player";
+import type {
+  PlayerDetail,
+  PlayerFilterRow,
+  PlayerOption,
+} from "../models/player";
 import { formatPrice } from "../utils/fpl";
 
 export const PLAYERS_FOR_PICKER_QUERY = `
@@ -61,6 +65,7 @@ export const PLAYER_DETAIL = `
       }
       dataAvailability {
         isFullyAuthoritative
+		seasonStats { state reasonCode revision sourceCheckedAt }
         market { state reasonCode revision sourceCheckedAt }
         historicalTeam { state reasonCode revision sourceCheckedAt }
         fixtures { state reasonCode revision sourceCheckedAt }
@@ -165,7 +170,8 @@ export type PlayerPickerSort =
   | "OWNERSHIP_DESC";
 
 /** Backend PlayerPickerOwnershipBand enum (players/schema.ts). */
-export type PlayerPickerOwnershipBand = "LE5" | "GT5_LE15" | "GT15_LE40" | "GT40";
+export type PlayerPickerOwnershipBand =
+  "LE5" | "GT5_LE15" | "GT15_LE40" | "GT40";
 
 export interface PlayerPickerPageOptions {
   search?: string;
@@ -189,7 +195,7 @@ function positionLabel(position: string): string {
     GOALKEEPER: "GKP",
     DEFENDER: "DEF",
     MIDFIELDER: "MID",
-    FORWARD: "FWD"
+    FORWARD: "FWD",
   };
   return labels[position] || position;
 }
@@ -199,7 +205,9 @@ function currentEventId(): number {
 }
 
 function currentSeason(explicitSeason?: string): string {
-  const season = String(explicitSeason || getApp<IAppOption>().globalData.season || "").trim();
+  const season = String(
+    explicitSeason || getApp<IAppOption>().globalData.season || "",
+  ).trim();
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   return season;
 }
@@ -214,14 +222,18 @@ function mapPickerPlayer(player: GraphQLPickerPlayer): PlayerOption {
     position: positionLabel(player.position),
     price: player.price,
     priceText: formatPrice(player.price),
-    totalPoints: typeof player.totalPoints === "number" ? player.totalPoints : undefined,
+    totalPoints:
+      typeof player.totalPoints === "number" ? player.totalPoints : undefined,
     form: typeof player.form === "number" ? player.form : undefined,
-    selectedByPercent: typeof player.selectedByPercent === "number" ? player.selectedByPercent : undefined
+    selectedByPercent:
+      typeof player.selectedByPercent === "number"
+        ? player.selectedByPercent
+        : undefined,
   };
 }
 
 function mapPlayerDetail(
-  player: NonNullable<PlayerDetailResponse["playerDetail"]>
+  player: NonNullable<PlayerDetailResponse["playerDetail"]>,
 ): PlayerDetail {
   return {
     element: player.id,
@@ -235,25 +247,32 @@ function mapPlayerDetail(
     dataAvailability: player.dataAvailability,
     totalPoints: player.totalPoints,
     selectedByPercent: player.selectedByPercent ?? undefined,
-    form: player.form ?? undefined
+    form: player.form ?? undefined,
   };
 }
 
 export async function getPlayersForPickerPage(
-  options: PlayerPickerPageOptions = {}
+  options: PlayerPickerPageOptions = {},
 ): Promise<PlayerPickerPageResult> {
-  const limit = Math.max(1, Math.min(PLAYER_PICKER_PAGE_LIMIT, Math.floor(options.limit || PLAYER_PICKER_PAGE_LIMIT)));
+  const limit = Math.max(
+    1,
+    Math.min(
+      PLAYER_PICKER_PAGE_LIMIT,
+      Math.floor(options.limit || PLAYER_PICKER_PAGE_LIMIT),
+    ),
+  );
   const search = String(options.search || "").trim();
-  const filter = options.filter && Object.keys(options.filter).length > 0
-    ? options.filter
-    : null;
+  const filter =
+    options.filter && Object.keys(options.filter).length > 0
+      ? options.filter
+      : null;
   const variables = {
     search: search || null,
     filter,
     sort: options.sort || "NAME_ASC",
     ownershipBand: options.ownershipBand || null,
     limit,
-    cursor: options.cursor ?? null
+    cursor: options.cursor ?? null,
   };
   const data = await graphqlRequest<PlayersForPickerResponse>(
     PLAYERS_FOR_PICKER_QUERY,
@@ -263,14 +282,14 @@ export async function getPlayersForPickerPage(
       cachePolicy: "player-picker",
       season: currentSeason(),
       forceRefresh: options.forceRefresh === true,
-      trace: options.trace
-    }
+      trace: options.trace,
+    },
   );
   const page = data.playersForPicker;
   return {
     items: (page?.items || []).map(mapPickerPlayer),
     nextCursor: page?.nextCursor ?? null,
-    totalCount: Number(page?.totalCount) || 0
+    totalCount: Number(page?.totalCount) || 0,
   };
 }
 
@@ -378,7 +397,7 @@ export async function getPlayerStatsDesk(
   eventId: number,
   horizon = 5,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<PlayerStatsDeskEntry[]> {
   const ids = playerIds.map(Number).filter(Number.isSafeInteger).slice(0, 2);
   if (!ids.length || !Number.isSafeInteger(eventId) || eventId <= 0) return [];
@@ -390,17 +409,19 @@ export async function getPlayerStatsDesk(
       cachePolicy: "player-picker",
       season: currentSeason(),
       forceRefresh,
-      trace
-    }
+      trace,
+    },
   );
   return (data.playerStatsDesk?.entries || []).map((entry) => ({
     playerId: entry.playerId,
     overview: entry.overview?.value ?? null,
-    ictIndex: entry.evidence?.value?.ictIndex ?? null
+    ictIndex: entry.evidence?.value?.ictIndex ?? null,
   }));
 }
 
-export async function getPlayerInfoByElement(element: number): Promise<PlayerDetail> {
+export async function getPlayerInfoByElement(
+  element: number,
+): Promise<PlayerDetail> {
   return getPlayerDetailByElement(element);
 }
 
@@ -408,7 +429,7 @@ export async function getPlayerInfoByCode(
   code: number | string,
   season?: string,
   forceRefresh = false,
-  trace?: import("./graphql.service").PageRequestTrace
+  trace?: import("./graphql.service").PageRequestTrace,
 ): Promise<PlayerDetail> {
   const playerId = Number(code);
   if (!Number.isSafeInteger(playerId) || playerId <= 0) {
@@ -424,8 +445,8 @@ export async function getPlayerInfoByCode(
       season: seasonName,
       cacheVariant: `season:${seasonName}`,
       forceRefresh,
-      trace
-    }
+      trace,
+    },
   );
   if (!data.playerDetail) {
     throw new Error("没有找到这名球员，请返回后重试");
@@ -435,29 +456,35 @@ export async function getPlayerInfoByCode(
 
 export async function getPlayersByElementType(
   elementType: number | string,
-  forceRefresh = false
+  forceRefresh = false,
 ): Promise<PlayerOption[]> {
   const positionByType: Record<string, PlayerPickerFilter["position"]> = {
     "1": "GOALKEEPER",
     "2": "DEFENDER",
     "3": "MIDFIELDER",
-    "4": "FORWARD"
+    "4": "FORWARD",
   };
   const position = positionByType[String(elementType)];
   const page = await getPlayersForPickerPage({
     filter: position ? { position } : undefined,
     limit: PLAYER_PICKER_PAGE_LIMIT,
-    forceRefresh
+    forceRefresh,
   });
   return page.items;
 }
 
-export async function getPlayerDetailByElement(element: number): Promise<PlayerDetail> {
+export async function getPlayerDetailByElement(
+  element: number,
+): Promise<PlayerDetail> {
   return getPlayerInfoByCode(element);
 }
 
-export async function getFilterPlayers(_season: string): Promise<PlayerFilterRow[]> {
-  const page = await getPlayersForPickerPage({ limit: PLAYER_PICKER_PAGE_LIMIT });
+export async function getFilterPlayers(
+  _season: string,
+): Promise<PlayerFilterRow[]> {
+  const page = await getPlayersForPickerPage({
+    limit: PLAYER_PICKER_PAGE_LIMIT,
+  });
   return page.items.map((player) => ({ ...player }));
 }
 
