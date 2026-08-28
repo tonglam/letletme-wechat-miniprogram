@@ -282,6 +282,125 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   return output;
 }
 
+/* ------------------------------------------------------------------------
+ * Provisional price-change live channel (backend feat(price-live) 3cac9cd,
+ * web lib/price-change-live-client.ts parity). The durable priceChangeBoard
+ * resolver never merges hot snapshots, so pages that want the provisional
+ * board must poll the cursor and fetch the live board explicitly.
+ * --------------------------------------------------------------------- */
+
+export type PriceChangeLiveState = "PROVISIONAL" | "DURABLE" | "UNAVAILABLE";
+
+export interface PriceChangeLiveCursor {
+  seasonCode: string;
+  revision: string | null;
+  sourceHash: string | null;
+  state: PriceChangeLiveState;
+  detectedAt: string | null;
+  fetchedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface PriceChangeLiveBoard {
+  revision: string;
+  sourceHash: string | null;
+  state: PriceChangeLiveState;
+  detectedAt: string | null;
+  expiresAt: string | null;
+  durablePublicationId: string | null;
+  board: PriceChangeBoard;
+}
+
+export const PRICE_CHANGE_LIVE_CURSOR_QUERY = `
+  query PriceChangeLiveCursor {
+    priceChangeLiveCursor {
+      seasonCode
+      revision
+      sourceHash
+      state
+      detectedAt
+      fetchedAt
+      expiresAt
+    }
+  }
+`;
+
+export const PRICE_CHANGE_LIVE_BOARD_QUERY = `
+  query PriceChangeLiveBoard($revision: String, $sourceHash: String) {
+    priceChangeLiveBoard(revision: $revision, sourceHash: $sourceHash) {
+      revision
+      sourceHash
+      state
+      detectedAt
+      expiresAt
+      durablePublicationId
+      board {
+        status
+        source
+        deadline
+        nextDeadlines
+        fetchedAt
+        staleAt
+        revision
+        expectedPlayerCount
+        observedPlayerCount
+        players {
+          playerId
+          playerCode
+          webName
+          teamId
+          teamName
+          teamShortName
+          position
+          currentPrice
+          selectedByPercent
+          progressPercent
+          hourlyRate
+          status
+          ownershipTrend
+          transfersInEvent
+          transfersOutEvent
+          lockedUntil
+          calibrating
+        }
+      }
+    }
+  }
+`;
+
+/** Cursor reads must never be cached — the poll cadence IS the freshness. */
+export async function getPriceChangeLiveCursor(): Promise<PriceChangeLiveCursor | null> {
+  try {
+    const read = await graphqlRead<{ priceChangeLiveCursor: PriceChangeLiveCursor | null }>(
+      PRICE_CHANGE_LIVE_CURSOR_QUERY,
+      {},
+      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+    );
+    if (read.errors.length > 0) return null;
+    return read.data.priceChangeLiveCursor ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** PROVISIONAL boards are pinned by revision + sourceHash; DURABLE reads pass none. */
+export async function getPriceChangeLiveBoard(
+  revision?: string | null,
+  sourceHash?: string | null,
+): Promise<PriceChangeLiveBoard | null> {
+  try {
+    const read = await graphqlRead<{ priceChangeLiveBoard: PriceChangeLiveBoard | null }>(
+      PRICE_CHANGE_LIVE_BOARD_QUERY,
+      { revision: revision || null, sourceHash: sourceHash || null },
+      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+    );
+    if (read.errors.length > 0) return null;
+    return read.data.priceChangeLiveBoard ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function getSquadStartPrices(input: {
   playerIds: readonly number[];
   eventId: number;

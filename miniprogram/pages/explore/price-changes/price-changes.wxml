@@ -23,6 +23,11 @@
     </view>
   </view>
 
+  <view wx:if="{{priceLiveProvisional}}" class="section live-provisional-strip" aria-role="status">
+    <text class="live-provisional-badge">即时更新</text>
+    <text class="live-provisional-text">官方身价变化已先行展示，正式数据正在同步确认。</text>
+  </view>
+
   <app-error-state id="perf-primary-content" wx:if="{{error && !hasBoard}}" message="{{error}}" workload="market" bind:retry="onRetry" />
   <app-loading wx:elif="{{loading && !hasBoard}}" text="加载身价预测" />
 

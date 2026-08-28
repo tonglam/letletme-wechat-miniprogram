@@ -9,7 +9,8 @@ import {
   getMiniHomeMarket,
   getMiniHomePersonalLeagues,
   getMiniHomePricePredictions,
-  getMiniHomeSupplement
+  getMiniHomeSupplement,
+  mapHomePredictionRows
 } from "../../../services/home.service";
 import type {
   HomeAvailabilityRow,
@@ -33,6 +34,7 @@ import {
   exportHomeMarketWatchShareImage,
   presentHomeMarketShareImage,
 } from "../../../utils/home-market-share-image";
+import { PriceChangeLivePoller } from "../../../utils/price-change-live";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
 import type { GameweekOverallSummary, SummaryChipPlay } from "../../../models/summary";
@@ -352,6 +354,17 @@ Page({
   _statPlayers: {} as Record<string, LivePlayerRow>,
   _statsEvent: 0,
   _playerSheetRequestId: 0,
+  // Price live channel (web usePriceChangeLiveUpdates on the home card). The
+  // poller is created lazily with the first prediction load; the durable
+  // projection is kept so onReset can restore it when a provisional snapshot
+  // expires or is withdrawn.
+  _priceLivePoller: null as PriceChangeLivePoller | null,
+  _durablePredictions: null as {
+    rises: HomeMarketMover[];
+    falls: HomeMarketMover[];
+    notice: string;
+    fetchedAt: string;
+  } | null,
   _deadlineRetryAttempts: 0,
 
   onLoad() {
@@ -362,6 +375,9 @@ Page({
 
   async onShow() {
     this._pageVisible = true;
+    // The price live poller only resumes after the first prediction load —
+    // polling with the "unavailable" seed would fetch a board nobody sees.
+    if (this._durablePredictions) this._priceLivePoller?.start();
     const resumed = this._hasShown;
     this._hasShown = true;
     if (!resumed) return;
@@ -482,6 +498,8 @@ Page({
     this._refreshRequestId += 1;
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
+    this._priceLivePoller?.stop();
+    this._priceLivePoller = null;
     this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
@@ -500,6 +518,7 @@ Page({
     this._refreshRequestId += 1;
     this.stopCountdown();
     this.stopFixtureLiveRefresh();
+    this._priceLivePoller?.stop();
     this.clearNoticeTimer();
     this._perfTracker?.disconnect();
   },
@@ -1145,6 +1164,42 @@ Page({
         predictionLoaded: true,
         predictionUpdated: predictionUpdatedLabel(result.fetchedAt),
       });
+      this._durablePredictions = {
+        rises: result.rises,
+        falls: result.falls,
+        notice: result.notice,
+        fetchedAt: result.fetchedAt,
+      };
+      // Seed and start the live channel (web HomePriceChangeCarousel
+      // usePriceChangeLiveUpdates — the home card passes no durable board and
+      // restores its server projection via onReset).
+      if (!this._priceLivePoller) {
+        this._priceLivePoller = new PriceChangeLivePoller({
+          onUpdate: (board) => {
+            if (!this._pageVisible) return;
+            const rows = mapHomePredictionRows(board);
+            this.setData({
+              predictedRisers: rows.rises,
+              predictedFallers: rows.falls,
+              predictionNotice: "",
+              predictionUpdated: predictionUpdatedLabel(board.fetchedAt || ""),
+            });
+          },
+          onReset: () => {
+            if (!this._pageVisible) return;
+            const durable = this._durablePredictions;
+            if (!durable) return;
+            this.setData({
+              predictedRisers: durable.rises,
+              predictedFallers: durable.falls,
+              predictionNotice: durable.notice,
+              predictionUpdated: predictionUpdatedLabel(durable.fetchedAt),
+            });
+          },
+        });
+      }
+      this._priceLivePoller.updateSeed(result.seed);
+      this._priceLivePoller.start();
     } catch (error) {
       if (!this._pageVisible || requestId !== this._priceRequestId) return;
       this.setData({
@@ -1369,6 +1424,13 @@ Page({
     }
     this.setData({ priceShareBusy: true });
     try {
+      // The share image has no pill element, so prediction rows fold the
+      // status label back into the meta line.
+      const withStatus = (rows: HomeMarketMover[]) =>
+        rows.map((row) => ({
+          ...row,
+          meta: row.statusLabel ? `${row.meta} · ${row.statusLabel}` : row.meta,
+        }));
       const path = await exportHomeMarketMoversShareImage(
         likely
           ? {
@@ -1376,8 +1438,8 @@ Page({
               subtitle: this.data.predictionUpdated,
               upTitle: "预计上涨",
               downTitle: "预计下跌",
-              upRows: this.data.predictedRisers,
-              downRows: this.data.predictedFallers,
+              upRows: withStatus(this.data.predictedRisers),
+              downRows: withStatus(this.data.predictedFallers),
             }
           : {
               title: "身价变化",

@@ -3,7 +3,12 @@ import {
   getPriceChangeBoard,
   getPriceChangePersonalContext,
   EMPTY_PRICE_CHANGE_BOARD,
+  type PriceChangeLiveState,
 } from "../../../services/price-change.service";
+import {
+  PriceChangeLivePoller,
+  type PriceChangeLiveSeed,
+} from "../../../utils/price-change-live";
 import {
   ensureAppContext,
 } from "../../../services/app-context.service";
@@ -93,6 +98,14 @@ function formatStoredAt(value?: number): string {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${minutes}`;
 }
 
+function boardSeed(board: PriceChangeBoard): PriceChangeLiveSeed {
+  return {
+    revision: board.revision,
+    deadline: board.deadline,
+    nextDeadlines: board.nextDeadlines || [],
+  };
+}
+
 function boardStatusView(board: PriceChangeBoard): {
   label: string;
   className: string;
@@ -159,6 +172,8 @@ PerformancePage({
     hasBoard: false,
     boardStatusLabel: "加载中",
     boardStatusClass: "board-loading",
+    /** PROVISIONAL live-channel badge (web instantUpdate strip). */
+    priceLiveProvisional: false,
     noticeStatus: "",
     noticeMessage: "",
     storedAtText: "",
@@ -208,6 +223,7 @@ PerformancePage({
   refreshPending: false,
   resumeForceRefresh: false,
   lastSuccessfulLoadAt: 0,
+  livePoller: null as PriceChangeLivePoller | null,
   refreshTimer: 0 as unknown as ReturnType<typeof setInterval>,
   countdownTimer: 0 as unknown as ReturnType<typeof setInterval>,
 
@@ -223,12 +239,18 @@ PerformancePage({
     this.pageVisible = true;
     this.loadPending = false;
     this.lastSuccessfulLoadAt = 0;
+    // Per-instance poller (the DevTools definition clone shares free fields).
+    this.livePoller = new PriceChangeLivePoller({
+      onUpdate: (board, state) => this.applyLiveBoard(board, state),
+      onReset: (state) => this.resetLiveBoard(state),
+    });
     await this.loadData("load");
   },
 
   async onShow() {
     this.pageVisible = true;
     this.startTimers();
+    this.livePoller?.start();
     const resumed = this.hasShown;
     this.hasShown = true;
     const refreshExpired = this.lastSuccessfulLoadAt > 0
@@ -242,6 +264,7 @@ PerformancePage({
   onHide() {
     this.pageVisible = false;
     this.stopTimers();
+    this.livePoller?.stop();
     // onHide invalidates every in-flight request below. Preserve both an
     // explicit refresh and the first board load so onShow cannot strand the
     // page in its loading shell after the ignored request settles.
@@ -257,6 +280,8 @@ PerformancePage({
   onUnload() {
     this.pageVisible = false;
     this.stopTimers();
+    this.livePoller?.stop();
+    this.livePoller = null;
     this.loadPending = false;
     this.refreshPending = false;
     this.resumeForceRefresh = false;
@@ -357,6 +382,10 @@ PerformancePage({
       this.syncSortOptions();
       this.applyView(true);
       this.startTimers();
+      // Seed the live channel from the durable board (web usePriceChangeLiveBoard).
+      this.setData({ priceLiveProvisional: false });
+      this.livePoller?.updateSeed(boardSeed(board), board);
+      if (this.pageVisible) this.livePoller?.start();
     } catch (error) {
       if (!isActive()) return;
       if (hadBoard) {
@@ -380,6 +409,35 @@ PerformancePage({
         this.setData({ loading: false, refreshing: false });
       }
     }
+  },
+
+  /**
+   * Live channel update (web usePriceChangeLiveBoard onUpdate): swap the board,
+   * refresh the header views, and re-render. A DURABLE update means the
+   * provisional snapshot was reconciled; PROVISIONAL shows the 即时更新 strip.
+   */
+  applyLiveBoard(board: PriceChangeBoard, state: PriceChangeLiveState) {
+    if (!this.pageVisible) return;
+    this.board = board;
+    this.lastSuccessfulLoadAt = Date.now();
+    const status = boardStatusView(board);
+    this.setData({
+      hasBoard: board.players.length > 0,
+      boardStatusLabel: status.label,
+      boardStatusClass: status.className,
+      deadlineText: board.deadline ? formatDeadline(board.deadline) : "—",
+      countdownText: formatCountdownText(board.deadline),
+      observedPlayerCount: board.observedPlayerCount,
+      expectedPlayerCount: board.expectedPlayerCount,
+      priceLiveProvisional: state === "PROVISIONAL",
+    });
+    this.applyView(true);
+  },
+
+  /** The channel lost its revision and no durable board is held — clear the badge. */
+  resetLiveBoard(state: PriceChangeLiveState) {
+    if (!this.pageVisible) return;
+    this.setData({ priceLiveProvisional: state === "PROVISIONAL" });
   },
 
   applyView(resetPage = false) {

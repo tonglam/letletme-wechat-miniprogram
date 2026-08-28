@@ -303,6 +303,30 @@
   background: var(--danger);
 }
 
+/* Prediction status pill — web LikelyPlayerRow Badge parity: rise green,
+   fall red, otherwise muted. */
+.transfer-status-pill {
+  display: inline-block;
+  margin-top: 10rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.transfer-status-up {
+  background: var(--accent-tint);
+  color: var(--green-ink);
+}
+
+.transfer-status-down {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
 /* Dream team — same squad-pitch rendering as the gameweek summary page */
 .dream-pitch-section {
   width: 100%;

@@ -7,6 +7,7 @@ import {
   formatPredictionPercent,
   isLikelyToChange,
   priceChangeStatusLabel,
+  priceChangeStatusTone,
 } from "../utils/price-change";
 import type { PriceChangePlayer } from "../models/price-change";
 import type { GameweekOverallSummary } from "../models/summary";
@@ -363,6 +364,9 @@ export interface HomeMarketMover {
   rising: boolean;
   /** Prediction rows only: |progressPercent| capped at 100 for the bar. */
   progressPct?: number;
+  /** Prediction rows only: highlighted status pill (web LikelyPlayerRow badge). */
+  statusLabel?: string;
+  statusTone?: "up" | "down" | "neutral";
 }
 
 export interface HomeAvailabilityRow {
@@ -405,6 +409,12 @@ export interface MiniHomePricePredictionResult {
   notice: string;
   /** ISO prediction-board fetch time (web likely-slide LocalUpdatedLabel). */
   fetchedAt: string;
+  /** Durable board identity for the live-channel poller (web liveSeed). */
+  seed: {
+    revision: string;
+    deadline: string | null;
+    nextDeadlines: string[];
+  };
 }
 
 const AVAILABILITY_STATUS: Record<string, string> = {
@@ -665,15 +675,21 @@ export async function getMiniHomeMarket(
   };
 }
 
-export async function getMiniHomePricePredictions(
-  forceRefresh = false,
-  trace?: PageRequestTrace | null,
-): Promise<MiniHomePricePredictionResult> {
+export interface HomePredictionRows {
+  rises: HomeMarketMover[];
+  falls: HomeMarketMover[];
+}
 
-  const read = await getPriceChangeBoard(forceRefresh, trace ?? undefined);
-  const board = read.board;
-  // Web parity: likely-to-change only, split by progress sign, sorted by
-  // absolute progress, capped at the teaser limit.
+/**
+ * Teaser rows from any prediction board (durable or live) — web
+ * buildHomePriceChangePredictionState parity: likely-to-change only, split by
+ * progress sign, sorted by absolute progress, capped at the teaser limit.
+ * Status text rides as a highlighted pill (statusLabel/statusTone), not as
+ * meta text, mirroring the web LikelyPlayerRow badge.
+ */
+export function mapHomePredictionRows(board: {
+  players?: PriceChangePlayer[];
+}): HomePredictionRows {
   const likely = (board.players || []).filter(
     (player) =>
       isLikelyToChange(player) && Number.isFinite(player.progressPercent),
@@ -685,16 +701,13 @@ export async function getMiniHomePricePredictions(
     name: player.webName || "-",
     team: player.teamShortName || "-",
     position: shortPosition(player.position),
-    meta: `${formatTenthsOrDash(player.currentPrice)} · ${priceChangeStatusLabel(player.status)}`,
+    meta: formatTenthsOrDash(player.currentPrice),
     changeText: formatPredictionPercent(player.progressPercent),
     rising: player.progressPercent > 0,
     progressPct: Math.min(100, Math.abs(Number(player.progressPercent) || 0)),
+    statusLabel: priceChangeStatusLabel(player.status),
+    statusTone: priceChangeStatusTone(player.status),
   });
-  const notice = board.status === "PARTIAL"
-    ? "预测数据不完整，仅供参考"
-    : board.status === "STALE" || read.cacheStale || read.usedLastGood
-      ? "显示为最近一次成功的预测数据"
-      : "";
   return {
     rises: likely
       .filter((player) => player.progressPercent > 0)
@@ -706,8 +719,31 @@ export async function getMiniHomePricePredictions(
       .sort(byProgress)
       .slice(0, HOME_TEASER_LIMIT)
       .map(mapRow),
+  };
+}
+
+export async function getMiniHomePricePredictions(
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<MiniHomePricePredictionResult> {
+
+  const read = await getPriceChangeBoard(forceRefresh, trace ?? undefined);
+  const board = read.board;
+  const notice = board.status === "PARTIAL"
+    ? "预测数据不完整，仅供参考"
+    : board.status === "STALE" || read.cacheStale || read.usedLastGood
+      ? "显示为最近一次成功的预测数据"
+      : "";
+  return {
+    ...mapHomePredictionRows(board),
     notice,
     fetchedAt: String(board.fetchedAt || ""),
+    // Seed for the live-channel poller (web HomePriceChangeDesk liveSeed).
+    seed: {
+      revision: board.revision,
+      deadline: board.deadline,
+      nextDeadlines: board.nextDeadlines || [],
+    },
   };
 }
 

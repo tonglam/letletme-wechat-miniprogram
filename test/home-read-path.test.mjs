@@ -173,6 +173,21 @@ describe("home public read path", () => {
     );
   });
 
+  it("highlights prediction statuses as pills on the trends view", () => {
+    // Web LikelyPlayerRow Badge parity: status is a colored pill, not meta text.
+    assert.match(service, /statusLabel: priceChangeStatusLabel\(player\.status\)/);
+    assert.match(service, /statusTone: priceChangeStatusTone\(player\.status\)/);
+    assert.match(
+      homeWxml,
+      /transfer-status-pill transfer-status-\{\{item\.statusTone \|\| 'neutral'\}\}">\{\{item\.statusLabel\}\}/,
+    );
+    assert.match(
+      service,
+      /meta: formatTenthsOrDash\(player\.currentPrice\)/,
+      "prediction meta carries the price only",
+    );
+  });
+
   it("keeps recorded price rows under the market failure retention rule", () => {
     assert.match(
       home,

@@ -175,11 +175,16 @@ test("home first viewport order matches the web: deadline, personal desk, GW sta
       fixtures > market,
     "web order: deadline, personal desk, GW stats, dream team, transfer desk, fixtures last",
   );
-  // Two market cards mirror the web HomeMarketCarousel + HomePriceChangeCarousel.
+  // Two market cards mirror the web HomePriceChangeCarousel + HomeMarketCarousel,
+  // stacked price-first per the page owner's direction (身价变化 above 持有率变化).
   assert.match(template, /持有率变化/);
   assert.match(template, /出场状态观察/);
   assert.match(template, /身价变化/);
   assert.match(template, /涨跌趋势/);
+  assert.ok(
+    template.indexOf("涨跌趋势") < template.indexOf("持有率变化"),
+    "the price card stacks above the ownership card",
+  );
   assert.match(template, /打开市场/);
   assert.match(template, /查看全部预测/);
   assert.match(template, /持有上升/);

@@ -92,6 +92,17 @@ export function priceChangeStatusLabel(status: PriceChangePredictionStatus): str
   return STATUS_LABELS[status];
 }
 
+export type PriceChangeStatusTone = "up" | "down" | "neutral";
+
+/** Web predictionStatusClass parity: RISE → green, FALL → red, else muted. */
+export function priceChangeStatusTone(
+  status: PriceChangePredictionStatus,
+): PriceChangeStatusTone {
+  if (status.includes("RISE")) return "up";
+  if (status.includes("FALL")) return "down";
+  return "neutral";
+}
+
 /** Web parity: likely squad, other likely, remaining squad, then the pool. */
 export function priceChangeRelevanceScore(
   player: PriceChangePlayer,
