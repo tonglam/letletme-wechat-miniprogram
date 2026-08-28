@@ -116,6 +116,45 @@ test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", asyn
   assert.ok(Array.from(runtime.storage.keys()).some((key) => key.startsWith("gql:v2:public:")));
 });
 
+test("degraded PlayerDetail refresh evicts the previous authoritative cache", async () => {
+  let callCount = 0;
+  const runtime = installRuntime((options) => {
+    callCount += 1;
+    options.success({
+      statusCode: 200,
+      data: {
+        data: {
+          playerDetail: {
+            dataAvailability: {
+              isFullyAuthoritative: callCount === 1,
+            },
+          },
+        },
+      },
+    });
+  });
+  const query = `query PlayerDetail($playerId: Int!) {
+    playerDetail(playerId: $playerId) {
+      dataAvailability { isFullyAuthoritative }
+    }
+  }`;
+
+  const first = await graphqlRead(query, { playerId: 1 }, publicReporting);
+  assert.equal(first.meta.source, "network");
+
+  const degraded = await graphqlRead(query, { playerId: 1 }, {
+    ...publicReporting,
+    forceRefresh: true,
+  });
+  assert.equal(degraded.meta.source, "network");
+  assert.equal(degraded.data.playerDetail.dataAvailability.isFullyAuthoritative, false);
+
+  const next = await graphqlRead(query, { playerId: 1 }, publicReporting);
+  assert.equal(next.meta.source, "network");
+  assert.equal(next.data.playerDetail.dataAvailability.isFullyAuthoritative, false);
+  assert.equal(runtime.requests.length, 3);
+});
+
 test("startup cleanup removes legacy, invalid, expired, and oldest excess rows", () => {
   const runtime = installRuntime(success({ value: 1 }));
   const now = 1_000_000;

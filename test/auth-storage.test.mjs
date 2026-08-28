@@ -1092,6 +1092,7 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
           "gql:v2:public:shared",
           "gql:v2:session:private",
           "gql:legacy",
+          "api-profile-v2",
           "live-board:last-good:entry-live-board-v1:session:2026:1:123:7",
         ],
       }),
@@ -1111,6 +1112,7 @@ test("sign-out clears account caches without deleting public GraphQL data", () =
     );
     assert.equal(removed.includes("api-session-token"), true);
     assert.equal(removed.includes("api-session-expires-at"), true);
+    assert.equal(removed.includes("api-profile-v2"), true);
     assert.equal(removed.includes("entry"), false);
     assert.equal(removed.includes("data-selections-tournamentId"), false);
     assert.equal(globalData.entryId, 123);

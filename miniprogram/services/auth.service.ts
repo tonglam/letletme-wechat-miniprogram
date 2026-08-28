@@ -23,6 +23,10 @@ import {
   type MiniProgramPersistenceResult,
 } from "../utils/auth-observability";
 
+// Retained solely to remove credentials written by pre-hard-cut builds. The
+// current contract never reads or migrates this key.
+const RETIRED_API_PROFILE_STORAGE_KEY = "api-profile-v2";
+
 export type MiniProgramEntrySource = "MINI" | "WEB";
 
 export interface MiniProgramProfile {
@@ -635,6 +639,7 @@ export function clearApiSession(): void {
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
     storageKeys.apiProfile,
+    RETIRED_API_PROFILE_STORAGE_KEY,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
@@ -676,6 +681,7 @@ export function clearSessionCredentials(): void {
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
     storageKeys.apiProfile,
+    RETIRED_API_PROFILE_STORAGE_KEY,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);

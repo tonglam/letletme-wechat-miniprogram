@@ -40,6 +40,7 @@ import {
   hashKey,
   readCacheEntry,
   recordServedFromCache,
+  removeCacheEntry,
   writeCacheEntry,
   type CacheEntry,
 } from "./graphql-cache";
@@ -1069,10 +1070,14 @@ export async function graphqlRead<T>(
         const producingSessionStillActive =
           policy.authMode === "public" ||
           response.token === getApiSessionToken();
+        const cacheableData = shouldCacheGraphQLData(
+          policy.operationName,
+          response.body.data,
+        );
 
         if (
           producingSessionStillActive &&
-          shouldCacheGraphQLData(policy.operationName, response.body.data)
+          cacheableData
         ) {
           const freshUntil = resolveFreshUntil(
             response.body.data,
@@ -1089,6 +1094,17 @@ export async function graphqlRead<T>(
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
           forgetServedFromCache(responseIdentity.requestKey);
+        } else if (
+          producingSessionStillActive &&
+          policy.operationName === "PlayerDetail"
+        ) {
+          // A successful degraded response is authoritative about freshness:
+          // remove any older good value so the next read cannot present it as
+          // current. The degraded response itself remains request-scoped.
+          removeCacheEntry(
+            responseIdentity.cacheKey,
+            responseIdentity.requestKey,
+          );
         }
       }
 
