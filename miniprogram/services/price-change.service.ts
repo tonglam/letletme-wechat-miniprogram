@@ -5,6 +5,7 @@ import {
 } from "./graphql.service";
 import { currentMyFplEntryId } from "../utils/follow";
 import { storageKeys } from "../config/storage-keys";
+import { recordLastGoodAge } from "./client-telemetry.service";
 import type {
   PersonalPriceState,
   PriceChangeBoard,
@@ -21,8 +22,8 @@ import {
 } from "../utils/price-change";
 
 const MINUTE = 60 * 1000;
-const DAY = 24 * 60 * MINUTE;
-const LAST_GOOD_MAX_AGE_MS = DAY;
+const HOUR = 60 * MINUTE;
+const LAST_GOOD_MAX_AGE_MS = HOUR;
 const START_PRICE_BATCH_SIZE = 2;
 
 export const PRICE_CHANGE_BOARD_QUERY = `
@@ -184,21 +185,23 @@ export function isPersistablePriceChangeBoard(value: unknown): value is PriceCha
 }
 
 function persistLastGoodBoard(board: PriceChangeBoard): void {
-  if (!isPersistablePriceChangeBoard(board)) return;
+	if (!isPersistablePriceChangeBoard(board)) return;
   const fetchedAt = board.fetchedAt ? Date.parse(board.fetchedAt) : NaN;
   const savedAt = Number.isFinite(fetchedAt) ? fetchedAt : Date.now();
-  try {
-    wx.setStorageSync(storageKeys.lastPriceChangeBoard, { savedAt, board });
+	try {
+		purgeLegacyLastGoodBoard();
+		wx.setStorageSync(storageKeys.lastPriceChangeBoard, { savedAt, board });
   } catch {
     // Persistent last-good is an enhancement; the GraphQL cache still applies.
   }
 }
 
 export function readLastGoodPriceChangeBoard(now = Date.now()): StoredPriceChangeBoard | null {
-  try {
-    const value = wx.getStorageSync(storageKeys.lastPriceChangeBoard) as unknown;
+	try {
+		purgeLegacyLastGoodBoard();
+		const value = wx.getStorageSync(storageKeys.lastPriceChangeBoard) as unknown;
     if (!isRecord(value) || typeof value.savedAt !== "number") return null;
-    if (now - value.savedAt > LAST_GOOD_MAX_AGE_MS || now < value.savedAt - MINUTE) {
+    if (now - value.savedAt >= LAST_GOOD_MAX_AGE_MS || now < value.savedAt - MINUTE) {
       wx.removeStorageSync(storageKeys.lastPriceChangeBoard);
       return null;
     }
@@ -209,9 +212,18 @@ export function readLastGoodPriceChangeBoard(now = Date.now()): StoredPriceChang
   }
 }
 
+function purgeLegacyLastGoodBoard(): void {
+	try {
+		wx.removeStorageSync(storageKeys.legacyLastPriceChangeBoard);
+	} catch {
+		// Cache migration is best effort; the v2 key is the only key ever read.
+	}
+}
+
 function lastGoodPriceChangeBoardRead(): PriceChangeBoardRead | null {
   const lastGood = readLastGoodPriceChangeBoard();
   if (!lastGood) return null;
+  recordLastGoodAge(Math.max(0, Date.now() - lastGood.savedAt));
   return {
     board: { ...lastGood.board, status: "STALE" },
     cacheStale: true,
@@ -231,14 +243,16 @@ export async function getPriceChangeBoard(
       {
         authMode: "public",
         cachePolicy: "market",
-        cacheTtl: 5 * MINUTE,
-        staleTtl: DAY,
-        cacheVariant: "price-change-board:v1",
+		cacheTtl: 5 * MINUTE,
+		// graphqlRead adds staleTtl to freshUntil. Subtract the fresh
+		// window so the hard one-hour age is not accidentally 65 minutes.
+		staleTtl: HOUR - 5 * MINUTE,
+		cacheVariant: "price-change-board:v2",
         forceRefresh,
         trace,
         getCacheExpiry: (data) => {
           const response = data as PriceChangeBoardResponse | undefined;
-          return Date.now() + (response?.priceChangeBoard?.status === "UNAVAILABLE" ? MINUTE : 5 * MINUTE);
+			return Date.now() + (response?.priceChangeBoard?.status === "UNAVAILABLE" ? MINUTE : 5 * MINUTE);
         },
       },
     );

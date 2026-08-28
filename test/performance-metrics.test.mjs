@@ -152,6 +152,47 @@ test("page session classifies only the first load as cold and completion cannot 
   clearPerf();
 });
 
+test("route-ready telemetry waits for an explicitly expected secondary completion", () => {
+  const previousRandom = Math.random;
+  const previousWx = globalThis.wx;
+  const telemetryKey = "client-telemetry:queue:v1";
+  storage.delete(telemetryKey);
+  globalThis.wx = {
+    ...previousWx,
+    setStorageSync: (key, value) => storage.set(key, value),
+    removeStorageSync: (key) => storage.delete(key),
+  };
+  Math.random = () => 0;
+  try {
+    clearPerf();
+    let callback;
+    const observer = {
+      relativeToViewport() { return this; },
+      observe(_selector, next) { callback = next; },
+      disconnect() {}
+    };
+    const tracker = new PagePerformanceTracker(
+      { createIntersectionObserver: () => observer },
+      "pages/test/secondary-boundary",
+      "warm-enter"
+    );
+    tracker.expectSecondaryCompletion();
+    tracker.observePrimary();
+    callback({ intersectionRatio: 1 });
+    assert.equal(storage.get(telemetryKey), undefined);
+
+    tracker.mark("secondaryCompleteAt");
+    const telemetry = storage.get(telemetryKey);
+    assert.equal(telemetry.samples.length, 1);
+    assert.equal(telemetry.samples[0].metric, "route_ready_ms");
+    assert.equal(telemetry.samples[0].result, "ok");
+  } finally {
+    Math.random = previousRandom;
+    globalThis.wx = previousWx;
+    clearPerf();
+  }
+});
+
 test("summary rejects invalid durations and resolves the first cold primary boundary", () => {
   assert.equal(finiteDuration(Number.NaN), null);
   assert.equal(finiteDuration(Number.POSITIVE_INFINITY), null);

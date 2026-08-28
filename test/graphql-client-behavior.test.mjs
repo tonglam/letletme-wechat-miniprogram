@@ -34,6 +34,10 @@ function installRuntime(handler) {
     },
     showToast: () => undefined,
     request: (options) => {
+      if (options.url.endsWith("/api/miniprogram/telemetry")) {
+        options.success?.({ statusCode: 202, data: { accepted: true } });
+        return;
+      }
       requests.push(options);
       requestHandler(options);
     }
