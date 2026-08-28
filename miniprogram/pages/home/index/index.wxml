@@ -325,6 +325,10 @@
         </view>
         <view class="fixture-head-tools">
           <view class="fixture-live-link" bindtap="onOpenLiveMatches" hover-class="hover-dim">打开实时比赛</view>
+          <view class="tool-btn tool-btn-labeled {{fixtureShareBusy ? 'done' : ''}}" catchtap="onShareFixtureImage" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+            <text class="tool-label">{{fixtureShareBusy ? '生成中' : '分享图片'}}</text>
+          </view>
           <view class="fixture-stepper">
             <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">
               <text decode="{{true}}">&lt;</text>

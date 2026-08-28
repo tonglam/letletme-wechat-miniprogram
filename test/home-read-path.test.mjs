@@ -164,6 +164,23 @@ describe("home public read path", () => {
     assert.match(image, /drawShareBranding/);
   });
 
+  it("shares the fixtures card as a whole-gameweek image", () => {
+    assert.match(homeWxml, /catchtap="onShareFixtureImage"/);
+    const handler = home.match(/async onShareFixtureImage\(\) \{[\s\S]*?\n  \},/);
+    assert.ok(handler, "onShareFixtureImage handler exists");
+    assert.match(handler[0], /exportHomeFixtureShareImage/);
+    assert.match(handler[0], /presentHomeFixtureShareImage/);
+    // The image shares every day of the selected gameweek, not just the
+    // visible day tab.
+    assert.match(handler[0], /days: this\.data\.fixtureDays|days,/);
+    const image = readFileSync(
+      new URL("../miniprogram/utils/home-fixture-share-image.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(image, /export function buildHomeFixtureSharePlan/);
+    assert.match(image, /drawShareBranding/);
+  });
+
   it("loads the prediction board lazily from the trends tab only", () => {
     assert.match(home, /onSelectPriceTab[\s\S]*?tab === "likely"[\s\S]*?loadPricePredictions/);
     assert.match(home, /getMiniHomePricePredictions/);

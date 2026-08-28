@@ -34,6 +34,10 @@ import {
   exportHomeMarketWatchShareImage,
   presentHomeMarketShareImage,
 } from "../../../utils/home-market-share-image";
+import {
+  exportHomeFixtureShareImage,
+  presentHomeFixtureShareImage,
+} from "../../../utils/home-fixture-share-image";
 import { PriceChangeLivePoller } from "../../../utils/price-change-live";
 import type { Fixture } from "../../../models/common";
 import type { EntryInfo } from "../../../models/entry";
@@ -107,6 +111,7 @@ interface HomeData {
   predictionUpdated: string;
   marketShareBusy: boolean;
   priceShareBusy: boolean;
+  fixtureShareBusy: boolean;
   predictedRisers: HomeMarketMover[];
   predictedFallers: HomeMarketMover[];
   predictionNotice: string;
@@ -305,6 +310,7 @@ Page({
     predictionUpdated: "按预测进度展示上涨和下跌各前 5 名。",
     marketShareBusy: false,
     priceShareBusy: false,
+    fixtureShareBusy: false,
     predictedRisers: [],
     predictedFallers: [],
     predictionNotice: "",
@@ -1458,6 +1464,34 @@ Page({
     }
   },
 
+
+  // Image-only share on the fixtures card, same affordance as the market
+  // cards (web MatchesSection has no share action — this is mini-only). The
+  // image covers the whole selected gameweek grouped by day; the day tabs are
+  // in-card pagination, not separate shareable views.
+  async onShareFixtureImage() {
+    if (this.data.fixtureShareBusy) return;
+    const days = this.data.fixtureDays;
+    const total = days.reduce((sum, day) => sum + day.rows.length, 0);
+    if (total === 0) {
+      wx.showToast({ title: "暂无可分享的数据", icon: "none" });
+      return;
+    }
+    this.setData({ fixtureShareBusy: true });
+    try {
+      const gw = this.data.selectedFixtureGw || this.data.nextGw;
+      const path = await exportHomeFixtureShareImage({
+        title: "近期赛程",
+        subtitle: `GW${gw}${this.data.fixtureLive ? " · 直播中" : ""}`,
+        days,
+      });
+      await presentHomeFixtureShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ fixtureShareBusy: false });
+    }
+  },
 
   onSelectFixtureDay(event: WechatMiniprogram.TouchEvent) {
     const dateKey = String(event.currentTarget.dataset.key || "");
