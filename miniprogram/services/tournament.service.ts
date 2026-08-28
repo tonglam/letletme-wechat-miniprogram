@@ -7,7 +7,7 @@ import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
 
 const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
-    entryTournaments(entryId: $entryId) {
+    entryParticipatingTournaments(entryId: $entryId) {
       id
       name
       groupMode
@@ -316,7 +316,7 @@ const GET_TOURNAMENT_SELECTION_STATS = `
 `;
 
 interface EntryTournamentsResponse {
-  entryTournaments: {
+  entryParticipatingTournaments: {
     id: number;
     name: string;
     groupMode?: string | null;
@@ -366,7 +366,7 @@ export async function readEntryTournamentDirectory(
       || "赛事目录暂时不可用，请稍后重试"
     );
   }
-  return { data: result.data.entryTournaments || [], meta: result.meta };
+  return { data: result.data.entryParticipatingTournaments || [], meta: result.meta };
 }
 
 function currentSeason(): string {
@@ -726,11 +726,7 @@ export async function getEntryPointsRaceTournament(
     }));
 }
 
-/**
- * Unfiltered compatibility read for the Competitions section (plan §5.1):
- * every object the entry participates in, legacy fields intact for the
- * adapter. Filtering for a specific surface stays with that surface.
- */
+/** Read the complete participating-tournament directory for the entry. */
 export async function getEntryAllTournaments(
   entry: number,
   forceRefresh = false,

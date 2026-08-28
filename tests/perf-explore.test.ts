@@ -25,10 +25,10 @@ const store = new Map<string, unknown>();
 };
 
 function testRoundTrip(): void {
-  recordExploreVisit({ surface: "overview", contractSource: "compat", durationBucket: "<500ms" });
+  recordExploreVisit({ surface: "overview", contractSource: "canonical", durationBucket: "<500ms" });
   recordExploreVisit({
     surface: "fixtures",
-    contractSource: "compat",
+    contractSource: "canonical",
     eventId: 12,
     horizon: 5,
     cacheOutcome: "last-good",
@@ -45,14 +45,14 @@ function testRoundTrip(): void {
 
 function testRingBufferCap(): void {
   for (let i = 0; i < 105; i += 1) {
-    recordExploreVisit({ surface: "fixtures", contractSource: "compat" });
+    recordExploreVisit({ surface: "fixtures", contractSource: "canonical" });
   }
   assertEqual(getPerf().exploreVisits?.length, 100, "visits are capped at 100");
   clearPerf();
 }
 
 function testNoIdentityInRecord(): void {
-  recordExploreVisit({ surface: "overview", contractSource: "compat" });
+  recordExploreVisit({ surface: "overview", contractSource: "canonical" });
   const visit = getPerf().exploreVisits?.[0];
   assert(visit !== undefined, "visit exists");
   // High-level design §16: full search text is never logged, and entity

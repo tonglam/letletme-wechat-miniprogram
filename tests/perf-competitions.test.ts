@@ -28,12 +28,12 @@ function testRoundTrip(): void {
   recordCompetitionVisit({
     surface: "list",
     principalState: "READY",
-    contractSource: "compat",
+    contractSource: "canonical",
     listCountBucket: "2-5",
     cacheOutcome: "fresh",
     durationBucket: "<500ms"
   });
-  recordCompetitionVisit({ surface: "list", contractSource: "compat", handoffActionType: "CREATE_COMPETITION" });
+  recordCompetitionVisit({ surface: "list", contractSource: "canonical", handoffActionType: "CREATE_COMPETITION" });
   const visits = getPerf().competitionVisits;
   assertEqual(visits?.length, 2, "two visits are stored");
   assertEqual(visits?.[0].listCountBucket, "2-5", "count bucket round-trips");
@@ -44,14 +44,14 @@ function testRoundTrip(): void {
 
 function testRingBufferCap(): void {
   for (let i = 0; i < 105; i += 1) {
-    recordCompetitionVisit({ surface: "list", contractSource: "compat" });
+    recordCompetitionVisit({ surface: "list", contractSource: "canonical" });
   }
   assertEqual(getPerf().competitionVisits?.length, 100, "visits are capped at 100");
   clearPerf();
 }
 
 function testNoCompetitionIdentityInRecord(): void {
-  recordCompetitionVisit({ surface: "list", contractSource: "compat", listCountBucket: "1" });
+  recordCompetitionVisit({ surface: "list", contractSource: "canonical", listCountBucket: "1" });
   const visit = getPerf().competitionVisits?.[0];
   assert(visit !== undefined, "visit exists");
   assert(!("competitionId" in visit), "competition IDs never enter a record");
