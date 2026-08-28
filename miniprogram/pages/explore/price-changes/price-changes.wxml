@@ -51,7 +51,9 @@
         </view>
         <view class="guide-actions">
           <text class="action" hover-class="hover-dim" bindtap="onExplain">怎么看</text>
-          <text class="action" hover-class="hover-dim" bindtap="onCopyShare">分享文字</text>
+          <view class="tool-btn" hover-class="hover-dim" bindtap="onCopyShare">
+            <image class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
+          </view>
         </view>
       </view>
 

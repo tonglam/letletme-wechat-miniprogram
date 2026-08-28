@@ -14,11 +14,11 @@ function filesWithExtension(directory, extension) {
   });
 }
 
-function expectedShareCopy(handler) {
-  return /(?:Pitch|Image)/.test(handler) ? "分享图片" : "分享文字";
+function expectedShareIcon(handler) {
+  return /(?:Pitch|Image)/.test(handler) ? "image" : "copy";
 }
 
-test("every visible share action uses the canonical text or image label", () => {
+test("every visible share action is an icon-only button", () => {
   const actions = [];
 
   for (const file of filesWithExtension(miniprogramRoot, ".wxml")) {
@@ -31,44 +31,32 @@ test("every visible share action uses the canonical text or image label", () => 
       const handler = match[2];
       if (!/^on(?:Copy.*Share|Share)/.test(handler)) continue;
 
-      const nestedLabel = match[3].match(
-        /<text\b[^>]*class="[^"]*\btool-label\b[^"]*"[^>]*>([\s\S]*?)<\/text>/,
-      );
-      const label = nestedLabel?.[1] ?? match[3];
       const path = relative(miniprogramRoot, file);
-      const expected = expectedShareCopy(handler);
-      if (expected === "分享图片") {
-        // Image shares are icon-only: the image.svg glyph is the whole
-        // affordance, and no surface reintroduces a text label.
-        assert.doesNotMatch(
-          match[3],
-          /分享图片/,
-          `${path} ${handler} stays icon-only (no 分享图片 label)`,
-        );
-        assert.doesNotMatch(
-          match[3],
-          /tool-label/,
-          `${path} ${handler} carries no tool-label text`,
-        );
-        assert.match(
-          match[3],
-          /image\.svg/,
-          `${path} ${handler} must include the image.svg icon`,
-        );
-      } else {
-        assert.match(
-          label,
-          new RegExp(expected),
-          `${path} ${handler} must use ${expected}`,
-        );
-      }
-      actions.push({ handler, path, expected });
+      const icon = expectedShareIcon(handler);
+      // Share actions are icon-only: the copy/image glyph is the whole
+      // affordance, and no surface reintroduces a text label.
+      assert.doesNotMatch(
+        match[3],
+        /分享文字|分享图片/,
+        `${path} ${handler} stays icon-only (no share text label)`,
+      );
+      assert.doesNotMatch(
+        match[3],
+        /tool-label/,
+        `${path} ${handler} carries no tool-label text`,
+      );
+      assert.match(
+        match[3],
+        new RegExp(`${icon}\\.svg`),
+        `${path} ${handler} must include the ${icon}.svg icon`,
+      );
+      actions.push({ handler, path, icon });
     }
   }
 
   assert.equal(actions.length, 28, "the complete set of visible share actions is covered");
-  assert.equal(actions.filter((action) => action.expected === "分享文字").length, 14);
-  assert.equal(actions.filter((action) => action.expected === "分享图片").length, 14);
+  assert.equal(actions.filter((action) => action.icon === "copy").length, 14);
+  assert.equal(actions.filter((action) => action.icon === "image").length, 14);
 });
 
 test("legacy share-button labels cannot return", () => {

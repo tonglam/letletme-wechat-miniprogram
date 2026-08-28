@@ -53,14 +53,13 @@
           <view class="status-pill">{{match.statusText}}</view>
           <view class="match-card-actions">
             <view
-              class="tool-btn tool-btn-labeled {{copiedMatchId === match.matchId ? 'done' : ''}}"
+              class="tool-btn {{copiedMatchId === match.matchId ? 'done' : ''}}"
               data-matchid="{{match.matchId}}"
               catchtap="onCopyMatchShare"
               hover-class="hover-dim"
             >
               <image wx:if="{{copiedMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享文字'}}</text>
             </view>
             <view
               class="tool-btn {{sharingImageMatchId === match.matchId ? 'on' : ''}} {{sharedImageMatchId === match.matchId ? 'done' : ''}}"

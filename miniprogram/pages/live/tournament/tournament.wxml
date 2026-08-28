@@ -115,10 +115,9 @@
 
       <view class="section h2h-share-row">
         <view class="result-actions">
-          <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyH2HShare" hover-class="hover-dim">
+          <view class="tool-btn {{shareCopied ? 'done' : ''}}" bindtap="onCopyH2HShare" hover-class="hover-dim">
             <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
           <view class="tool-btn {{shareImageBusy ? 'done' : ''}}" bindtap="onShareH2HImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
@@ -287,10 +286,9 @@
         <view wx:if="{{compareMode}}" class="compare-hint">{{compareHint}}</view>
         <view wx:else class="result-count">{{displayedRows.length}} / {{filteredCount}} 支 · 共 {{rowCount}}</view>
         <view class="result-actions">
-          <view class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+          <view class="tool-btn {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
           </view>
           <view wx:if="{{!compareMode}}" class="tool-btn {{shareImageBusy ? 'done' : ''}}" bindtap="onShareBoardImage" hover-class="hover-dim">
             <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
