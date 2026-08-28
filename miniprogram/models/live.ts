@@ -120,6 +120,11 @@ export interface LiveEffectiveLineupRow {
   isViceCaptain?: boolean;
 }
 
+export type LiveEntryAvailability =
+  | "READY"
+  | "NO_PICKS"
+  | "LINEUP_UNAVAILABLE";
+
 export interface LivePlayerRow {
   element?: number;
   teamId?: number;
@@ -183,7 +188,7 @@ export interface LivePlayerRow {
 }
 
 export interface LiveEntryResult {
-	availability?: "READY" | "NO_PICKS";
+	availability?: LiveEntryAvailability;
 	entry?: number;
 	event?: number;
 	entryName?: string;

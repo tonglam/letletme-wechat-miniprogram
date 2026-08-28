@@ -1,4 +1,5 @@
 import type { PriceChangePlayer } from "../miniprogram/models/price-change";
+import { mapHomePredictionRows } from "../miniprogram/services/home.service";
 import {
   buildPersonalPurchasePrices,
   buildPriceChangeViewRow,
@@ -61,6 +62,25 @@ function player(
 }
 
 scenario("price change prediction parity", () => {
+  scenario("keeps total signal counts separate from capped home teaser rows", () => {
+    const board = [
+      player(1, { status: "VERY_LIKELY_RISE", progressPercent: 131 }),
+      player(2, { status: "VERY_LIKELY_FALL", progressPercent: -175 }),
+      player(3, { status: "VERY_LIKELY_FALL", progressPercent: -150 }),
+      player(4, { status: "LIKELY_FALL", progressPercent: -120 }),
+      player(5, { status: "VERY_LIKELY_FALL", progressPercent: -110 }),
+      player(6, { status: "VERY_LIKELY_FALL", progressPercent: -105 }),
+      player(7, { status: "VERY_LIKELY_FALL", progressPercent: -100 }),
+    ];
+    const rows = mapHomePredictionRows({ players: board });
+    assert.equal(rows.riseCount, 1);
+    assert.equal(rows.fallCount, 6);
+    assert.equal(rows.rises.length, 1);
+    assert.equal(rows.falls.length, 5);
+    assert.equal(rows.allRises.length, 1);
+    assert.equal(rows.allFalls.length, 6);
+  });
+
   scenario("prioritizes likely squad players in the default web sort", () => {
     const players = [
       player(4, { progressPercent: 98 }),

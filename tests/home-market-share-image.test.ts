@@ -61,6 +61,41 @@ assertEqual(
   "columns are capped",
 );
 assertEqual(moversPlan.downRows.length, 1, "short column passes through");
+assertEqual(moversPlan.upCount, 5, "missing up count defaults to visible rows");
+assertEqual(moversPlan.downCount, 1, "missing down count defaults to visible rows");
+
+const cappedPredictionPlan = buildHomeMarketMoversSharePlan({
+  ...moversInput,
+  upTitle: "预计上涨",
+  downTitle: "预计下跌",
+  upRows: moversInput.upRows.slice(0, 1),
+  downRows: moversInput.upRows.slice(0, 5).map((row, index) => ({
+    ...row,
+    name: `Faller${index + 1}`,
+    rising: false,
+  })),
+  upCount: 1,
+  downCount: 16,
+});
+assertEqual(cappedPredictionPlan.upRows.length, 1, "prediction share keeps visible up rows");
+assertEqual(cappedPredictionPlan.downRows.length, 5, "prediction share respects its requested row cap");
+assertEqual(cappedPredictionPlan.downCount, 16, "prediction share preserves total down count");
+
+const fullPredictionPlan = buildHomeMarketMoversSharePlan({
+  ...moversInput,
+  upTitle: "预计上涨",
+  downTitle: "预计下跌",
+  maxRows: 16,
+  upCount: 1,
+  downCount: 16,
+  upRows: moversInput.upRows.slice(0, 1),
+  downRows: Array.from({ length: 16 }, (_, index) => ({
+    ...moversInput.upRows[index % moversInput.upRows.length],
+    name: `FullFaller${index + 1}`,
+    rising: false,
+  })),
+});
+assertEqual(fullPredictionPlan.downRows.length, 16, "full prediction share includes all signal rows");
 
 const emptyMoversPlan = buildHomeMarketMoversSharePlan({
   ...moversInput,
@@ -120,6 +155,11 @@ assert(
   "row changes invalidate the image cache",
 );
 assert(
+  homeMarketShareCacheKey(cappedPredictionPlan) !==
+    homeMarketShareCacheKey({ ...cappedPredictionPlan, downCount: 15 }),
+  "prediction count changes invalidate the image cache",
+);
+assert(
   homeMarketShareCacheKey(watchPlan) !== homeMarketShareCacheKey(moversPlan),
   "plan kinds never share a cache entry",
 );
@@ -164,6 +204,17 @@ assert(lastRowText >= 0, "the last capped row reaches the canvas");
 assert(firstBrandText > lastRowText, "watermark is painted after the rows");
 assert(textOperations.includes("上涨"), "column title reaches the canvas");
 assert(textOperations.includes("+0.1"), "change text reaches the canvas");
+
+textOperations.length = 0;
+drawHomeMarketSharePlan(context as never, cappedPredictionPlan);
+assert(textOperations.includes("预计上涨 1 · 预计下跌 16"), "share stats use total prediction counts");
+
+textOperations.length = 0;
+drawHomeMarketSharePlan(context as never, fullPredictionPlan);
+assert(
+  textOperations.some((text) => text.includes("FullFaller16")),
+  "full prediction share paints the last signal row",
+);
 
 textOperations.length = 0;
 drawHomeMarketSharePlan(context as never, emptyMoversPlan);

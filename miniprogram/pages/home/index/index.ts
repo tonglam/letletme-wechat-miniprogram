@@ -46,7 +46,10 @@ import { routes } from "../../../config/routes";
 import { goToEntrySearch, goToLiveEntry, goToPlayerDetail, navigateTo } from "../../../utils/navigation";
 import { formatCalendarDayLabel, formatCountdown, formatLocalCapturedAt, getDeadlineDiffMs } from "../../../utils/date";
 import type { CountdownParts } from "../../../utils/date";
-import { waitForAuthoritativeFollow } from "../../../utils/follow";
+import {
+  currentFollowEntryId,
+  waitForAuthoritativeFollow,
+} from "../../../utils/follow";
 import { recordHomeFixtureTiming, recordRenderCommit } from "../../../utils/perf";
 import {
   ensureAppContext,
@@ -131,6 +134,8 @@ interface HomeData {
   countdown: CountdownParts;
   noticeText: string;
   noticeClosed: boolean;
+  /** True when a viewer entry id is bound, even if its detail read failed. */
+  hasEntryBinding: boolean;
   accountLinked: boolean;
   accountLinkReady: boolean;
 }
@@ -168,6 +173,77 @@ const FIXTURE_LIVE_REFRESH_MS = 30 * 1000;
 /** Web parity: the fixture stepper can browse every gameweek, not just future ones. */
 const MIN_FIXTURE_GW = 1;
 export const NOTICE_AUTO_CLOSE_MS = 5 * 1000;
+
+type CoreFixtureRead = Awaited<ReturnType<typeof readCoreEventFixtureSchedule>>;
+
+interface HomeFixtureSelection {
+  event: number;
+  read: CoreFixtureRead;
+}
+
+function positiveFixtureGw(value: number | null | undefined): number {
+  const event = Number(value);
+  return Number.isSafeInteger(event) && event > 0 ? event : 0;
+}
+
+/** The fixture desk follows the live event; only preseason falls back to next. */
+export function resolveHomeFixtureEvent(
+  currentGw: number | null | undefined,
+  displayGw: number | null | undefined,
+  nextGw: number | null | undefined
+): number {
+  return positiveFixtureGw(currentGw)
+    || positiveFixtureGw(displayGw)
+    || positiveFixtureGw(nextGw)
+    || MIN_FIXTURE_GW;
+}
+
+/** Move the compact desk to the next GW only after the current GW is settled. */
+export function shouldAdvanceHomeFixtureEvent(
+  fixtures: readonly Pick<Fixture, "finished">[],
+  currentGw: number | null | undefined,
+  nextGw: number | null | undefined
+): boolean {
+  const current = positiveFixtureGw(currentGw);
+  const next = positiveFixtureGw(nextGw);
+  return current > 0
+    && next > current
+    && fixtures.length > 0
+    && fixtures.every((fixture) => fixture.finished === true);
+}
+
+async function readHomeFixtureSelection(
+  requestedEvent: number,
+  currentGw: number,
+  nextGw: number,
+  season: string,
+  forceRefresh: boolean,
+  trace: PageRequestTrace | null,
+  allowAutoAdvance: boolean
+): Promise<HomeFixtureSelection> {
+  const current = await readCoreEventFixtureSchedule(requestedEvent, season, {
+    forceRefresh,
+    trace
+  });
+  if (
+    allowAutoAdvance
+    && requestedEvent === currentGw
+    && shouldAdvanceHomeFixtureEvent(current.data, currentGw, nextGw)
+  ) {
+    try {
+      const next = await readCoreEventFixtureSchedule(nextGw, season, {
+        forceRefresh,
+        trace
+      });
+      // Do not replace a settled round with an unpublished/empty next round.
+      if (next.data.length > 0) return { event: nextGw, read: next };
+    } catch {
+      // The settled current round remains the safe fallback when the next
+      // round is not available yet.
+    }
+  }
+  return { event: requestedEvent, read: current };
+}
 
 /** Exponential post-deadline retry with a five-minute ceiling (doubles every two attempts). */
 export function deadlineRetryDelayMs(completedAttempts: number): number {
@@ -332,6 +408,7 @@ Page({
     countdown: formatCountdown(0),
     noticeText: "",
     noticeClosed: false,
+    hasEntryBinding: false,
     accountLinked: false,
     accountLinkReady: false
   } as HomeData,
@@ -355,6 +432,7 @@ Page({
   _resumeRefreshOnShow: false,
   _activeRefreshDeadlineTriggered: false,
   _resumeFixtureGwOnShow: false,
+  _fixtureGwUserSelected: false,
   _resumeRefreshDeadlineTriggered: false,
   _refreshRequestId: 0,
   _hasShown: false,
@@ -567,8 +645,15 @@ Page({
     try {
       const fixtureLoadStartedAt = Date.now();
       const fixtureRequestStartedAt = Date.now();
-      const fixtureGw = clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, MIN_FIXTURE_GW);
-      const currentGw = app.globalData.gw;
+      const currentGw = Number(app.globalData.currentGw) || 0;
+      const displayGw = Number(app.globalData.gw) || 0;
+      const nextGw = Number(app.globalData.nextGw) || 0;
+      const fixtureGw = this._fixtureGwUserSelected && this.data.selectedFixtureGw
+        ? clampFixtureGw(this.data.selectedFixtureGw, MIN_FIXTURE_GW)
+        : clampFixtureGw(
+          resolveHomeFixtureEvent(currentGw, displayGw, nextGw),
+          MIN_FIXTURE_GW
+        );
       const hadFixtureRows = this.data.fixtureCount > 0 && this.data.selectedFixtureGw === fixtureGw;
       await this.syncAppState({
         loading: !this._initialLoadDone && !hadFixtureRows,
@@ -594,11 +679,16 @@ Page({
           }
         : null;
       tracker?.mark("primaryRequestStartAt");
-      const fixtureTask = readCoreEventFixtureSchedule(
+      const fixtureTask = readHomeFixtureSelection(
         fixtureGw,
+        currentGw,
+        nextGw,
         String(app.globalData.season || ""),
-        { forceRefresh, trace }
-      ).then((read) => ({
+        forceRefresh,
+        trace,
+        !this._fixtureGwUserSelected
+      ).then(({ event, read }) => ({
+        event,
         fixtures: read.data,
         failed: false,
         stale: read.meta.stale,
@@ -606,6 +696,7 @@ Page({
       })).catch((error) => {
         fixtureError = error instanceof Error ? error.message : "赛程加载失败";
         return {
+          event: fixtureGw,
           fixtures: hadFixtureRows ? null : [] as Fixture[],
           failed: true,
           stale: hadFixtureRows,
@@ -647,6 +738,8 @@ Page({
       const fixtureCommitStartedAt = Date.now();
       await new Promise<void>((resolve) => {
         this.setData({
+          selectedFixtureGw: fixtureResult.event,
+          fixtureEmptyPast: fixtureResult.event < (currentGw || nextGw || MIN_FIXTURE_GW),
           ...(fixtureResult.fixtures === null
             ? {}
             : fixtureDeskState(fixtureResult.fixtures)),
@@ -807,7 +900,8 @@ Page({
       priceError: "",
       marketUnavailable: false,
       gameweekStatsError: "",
-      entryError: ""
+      entryError: "",
+      hasEntryBinding: Boolean(currentFollowEntryId()),
     });
     const personalTask = (async (): Promise<void> => {
       if (!getApiSessionToken()) {
@@ -817,7 +911,11 @@ Page({
         await waitForAuthoritativeFollow();
       }
       if (!isActiveSecondary()) return;
-      const entryId = app.globalData.entryId;
+      // The bound id is the viewer authority. Do not infer binding from the
+      // display object: a failed detail read leaves `entry` empty and must not
+      // turn an already-bound team into a "去选择" CTA.
+      const entryId = currentFollowEntryId();
+      this.setData({ hasEntryBinding: Boolean(entryId) });
       if (!entryId) {
         this.setData({
           entry: {},
@@ -859,6 +957,7 @@ Page({
             const personal = await getMiniHomePersonalLeagues(
               forceRefresh,
               leagueTrace,
+              currentGw,
             );
             if (homePersonalLeaguesMatchEntry(loadedEntry, personal)) {
               allLeagues = personal.leagues;
@@ -997,6 +1096,8 @@ Page({
   startSecondaryData() {
     const requestId = ++this._loadRequestId;
     const snapshot = getAppContextSnapshot();
+    const app = getApp<IAppOption>();
+    const currentGw = Number(app.globalData.currentGw) || 0;
     const tracker = this._perfTracker ?? null;
     const trace: PageRequestTrace | null = tracker && snapshot
       ? {
@@ -1008,7 +1109,7 @@ Page({
       : null;
     void this.loadSecondaryData(
       requestId,
-      getApp<IAppOption>().globalData.gw,
+      currentGw,
       false,
       trace,
       tracker
@@ -1018,6 +1119,14 @@ Page({
   syncAppState(extra: Partial<HomeData> = {}): Promise<void> {
     const app = getApp<IAppOption>();
     const utcDeadline = app.globalData.utcDeadline;
+    const defaultFixtureGw = resolveHomeFixtureEvent(
+      app.globalData.currentGw,
+      app.globalData.gw,
+      app.globalData.nextGw
+    );
+    const selectedFixtureGw = this._fixtureGwUserSelected && this.data.selectedFixtureGw
+      ? this.data.selectedFixtureGw
+      : defaultFixtureGw;
     // A freshly advanced deadline resets the post-deadline backoff ladder.
     if (
       utcDeadline
@@ -1031,7 +1140,7 @@ Page({
       currentGw: app.globalData.currentGw,
       nextGw: app.globalData.nextGw,
       minFixtureGw: MIN_FIXTURE_GW,
-      selectedFixtureGw: clampFixtureGw(this.data.selectedFixtureGw || app.globalData.nextGw, MIN_FIXTURE_GW),
+      selectedFixtureGw: clampFixtureGw(selectedFixtureGw, MIN_FIXTURE_GW),
       deadline: app.globalData.deadline,
       utcDeadline,
       deadlinePassed: Boolean(utcDeadline) && getDeadlineDiffMs(utcDeadline) <= 0,
@@ -1531,6 +1640,7 @@ Page({
 
     const nextGw = Math.max(this.data.minFixtureGw || this.data.nextGw, this.data.selectedFixtureGw - 1);
     if (nextGw !== this.data.selectedFixtureGw) {
+      this._fixtureGwUserSelected = true;
       this.loadFixtureGw(nextGw);
     }
   },
@@ -1542,12 +1652,16 @@ Page({
 
     const nextGw = Math.min(38, this.data.selectedFixtureGw + 1);
     if (nextGw !== this.data.selectedFixtureGw) {
+      this._fixtureGwUserSelected = true;
       this.loadFixtureGw(nextGw);
     }
   },
 
   async loadFixtureGw(event: number, forceRefresh = false, silent = false) {
     const requestId = ++this._fixtureGwRequestId;
+    const app = getApp<IAppOption>();
+    const currentGw = Number(app.globalData.currentGw) || 0;
+    const nextGw = Number(app.globalData.nextGw) || 0;
     if (!silent) {
       this.setData({
         fixtureLoading: true,
@@ -1562,14 +1676,22 @@ Page({
       });
     }
     try {
-      const read = await readCoreEventFixtureSchedule(
+      const selection = await readHomeFixtureSelection(
         event,
-        getApp<IAppOption>().globalData.season,
-        { forceRefresh }
+        currentGw,
+        nextGw,
+        String(app.globalData.season || ""),
+        forceRefresh,
+        null,
+        !this._fixtureGwUserSelected
       );
-      if (!this._pageVisible || requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      if (!this._pageVisible || requestId !== this._fixtureGwRequestId) return;
+      const selectedEvent = selection.event;
+      const read = selection.read;
       const staleStoredAt = read.meta.stale ? read.meta.storedAt || null : null;
       this.setData({
+        selectedFixtureGw: selectedEvent,
+        fixtureEmptyPast: selectedEvent < (currentGw || nextGw || MIN_FIXTURE_GW),
         ...fixtureDeskState(read.data),
         fixtureStoredAt: read.meta.storedAt || Date.now(),
         fixtureStaleStoredAt: staleStoredAt,
@@ -1578,7 +1700,7 @@ Page({
         this.syncFixtureLiveRefresh();
       });
     } catch (error) {
-      if (!this._pageVisible || requestId !== this._fixtureGwRequestId || event !== this.data.selectedFixtureGw) return;
+      if (!this._pageVisible || requestId !== this._fixtureGwRequestId) return;
       if (silent) return; // Keep showing the last good rows on a failed background tick.
       this.setData({
         ...emptyFixtureDesk(),
@@ -1588,7 +1710,7 @@ Page({
         fixtureError: error instanceof Error ? error.message : "赛程加载失败"
       });
     } finally {
-      if (!silent && this._pageVisible && requestId === this._fixtureGwRequestId && event === this.data.selectedFixtureGw) {
+      if (!silent && this._pageVisible && requestId === this._fixtureGwRequestId) {
         this.setData({ fixtureLoading: false });
       }
     }
@@ -1689,11 +1811,26 @@ export function groupHomeFixturesByDay(
       tabLabel: bucket.tabLabel,
       rows: bucket.rows
     }));
-  const today = localDateKey(now);
-  const selectedDayKey = days.some((day) => day.dateKey === today)
-    ? today
-    : (days[0]?.dateKey || "");
+  const selectedDayKey = resolvePreferredHomeFixtureDayKey(days, now);
   return { days, selectedDayKey };
+}
+
+/** Select today's matchday, then the next upcoming day, then the last day. */
+export function resolvePreferredHomeFixtureDayKey(
+  days: readonly Pick<HomeFixtureDay, "dateKey">[],
+  now = new Date()
+): string {
+  const today = localDateKey(now);
+  const todayDay = days.find((day) => day.dateKey === today);
+  if (todayDay) return todayDay.dateKey;
+
+  const nextDay = days.find((day) => day.dateKey !== "tbd" && day.dateKey > today);
+  if (nextDay) return nextDay.dateKey;
+
+  const scheduledDays = days.filter((day) => day.dateKey !== "tbd");
+  return scheduledDays[scheduledDays.length - 1]?.dateKey
+    || days[0]?.dateKey
+    || "";
 }
 
 function fixtureDeskState(fixtures: Fixture[]): Pick<HomeData, "fixtureDays" | "selectedFixtureDayKey" | "selectedDayRows" | "fixtureCount" | "fixtureLive"> {

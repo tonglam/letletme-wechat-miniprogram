@@ -7,8 +7,10 @@
           <view class="score-manager">{{activeMode === 'daily' ? '每日市场动态 · 涨跌榜' : '球员历史'}}</view>
         </view>
         <view wx:if="{{activeMode === 'daily'}}" class="score-hero">
-          <view class="score-label">上涨</view>
-          <view class="score">{{loading && riseChanges.length === 0 ? '-' : riseChanges.length}}</view>
+          <view class="score-label">{{dailySettlementState === 'SETTLED' ? '上涨' : '待结算'}}</view>
+          <view wx:if="{{dailySettlementState !== 'SETTLED' && riseChanges.length === 0 && fallChanges.length === 0}}" class="score">-</view>
+          <view wx:elif="{{loading && riseChanges.length === 0}}" class="score">-</view>
+          <view wx:else class="score">{{riseChanges.length}}</view>
         </view>
       </view>
     </view>
@@ -40,11 +42,11 @@
     <app-loading wx:elif="{{loading}}" text="加载市场动态" />
     <block wx:else>
     <view wx:if="{{error}}" class="inline-error">{{error}}，当前保留已有数据</view>
-    <view wx:if="{{riseChanges.length === 0 && fallChanges.length === 0}}" class="section card">
+      <view wx:if="{{riseChanges.length === 0 && fallChanges.length === 0}}" class="section card">
       <app-empty-state
-        eyebrow="当日无变动"
-        title="{{changeDate}} 没有球员调价"
-        description="这是正常情况；有新的涨跌时会显示在这里"
+        eyebrow="{{dailyEmptyEyebrow}}"
+        title="{{dailyEmptyTitle}}"
+        description="{{dailyEmptyDescription}}"
         actionText="重新加载"
         bind:action="onRetry"
       />

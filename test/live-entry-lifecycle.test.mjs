@@ -122,8 +122,11 @@ test("live entry projects auto-subs and captain promotion like the web", () => {
 test("live entry retries a first-sync empty pick list with backoff", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(page, /EMPTY_PICKS_RETRY_DELAYS_MS = \[1500, 3000, 7000, 12000\]/);
-  assert.match(page, /rawRoster\.length === 0 && eventId === \(this\.liveSnapshot\?\.eventId \?\? currentLiveEventId\(\)\)/);
+  assert.match(page, /result\.availability === "READY" && rawRoster\.length === 0 && eventId === \(this\.liveSnapshot\?\.eventId \?\? currentLiveEventId\(\)\)/);
   assert.match(page, /if \(keepLoadingForEmptyPicksRetry\) this\.setData\(\{ loading: true \}\)/);
+  assert.match(page, /result\.availability === "LINEUP_UNAVAILABLE"/);
+  assert.match(page, /本轮阵容数据暂不可用，请稍后重试/);
+  assert.match(page, /this\.liveRequestKey && this\.liveRequestKey !== requestKey/);
 });
 
 test("player detail sheet shows expected-goals stats from the calc payload", () => {

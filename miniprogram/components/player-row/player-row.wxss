@@ -77,7 +77,7 @@
 .autosub-badge.autosub-out {
   border-color: var(--danger);
   background: var(--danger);
-  color: #ffffff;
+  color: var(--card);
 }
 
 .autosub-badge.autosub-predicted {

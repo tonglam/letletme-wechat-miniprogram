@@ -5,6 +5,7 @@ import {
 } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 import type {
+  LiveEntryAvailability,
   LiveEntryResult,
   LiveMatch,
   LivePlayerRow,
@@ -232,7 +233,7 @@ interface GraphQLPickListItem {
 
 interface CalcLivePointsByEntryResponse {
   calcLivePointsByEntry: {
-    availability: "READY" | "NO_PICKS";
+    availability: LiveEntryAvailability;
     snapshot: LiveSnapshotStatus | null;
     entry: number;
     event: number;

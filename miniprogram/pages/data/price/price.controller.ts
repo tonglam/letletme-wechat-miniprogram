@@ -32,6 +32,11 @@ import { formatPriceMovementShareText } from "../../../utils/explore-share";
 import { formatCompactNumber } from "../../../utils/summary-format";
 import { formatPrice } from "../../../utils/fpl";
 import {
+  formatPricePickerDate,
+  getDailyPriceEmptyState,
+  type DailyPriceEmptyState,
+} from "../../../utils/daily-price-settlement";
+import {
   nextRequestRevision,
   isCurrentRevision,
   observeSoftTimeout,
@@ -90,6 +95,10 @@ interface PricePageData {
   playersErrorWorkload: "home" | "player-stats";
   historyError: string;
   changeDate: string;
+  dailySettlementState: DailyPriceEmptyState["dailySettlementState"];
+  dailyEmptyEyebrow: string;
+  dailyEmptyTitle: string;
+  dailyEmptyDescription: string;
   players: PlayerOption[];
   filteredPlayers: PlayerOption[];
   filteredPlayerCount: number;
@@ -442,13 +451,6 @@ const POSITION_OPTIONS: FilterOption[] = [
   { label: "FWD", value: "FORWARD" },
 ];
 
-function formatPickerDate(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function sortByChangeDateDesc(
   left: PlayerValueChange,
   right: PlayerValueChange,
@@ -582,6 +584,9 @@ function ownershipDateOptions(latestDate: string | null | undefined): string[] {
   });
 }
 
+const initialChangeDate = formatPricePickerDate();
+const initialDailyEmptyState = getDailyPriceEmptyState(initialChangeDate);
+
 Page({
   data: {
     activeMode: "daily",
@@ -595,7 +600,8 @@ Page({
     playersError: "",
     playersErrorWorkload: "home",
     historyError: "",
-    changeDate: formatPickerDate(),
+    changeDate: initialChangeDate,
+    ...initialDailyEmptyState,
     players: [],
     filteredPlayers: [],
     filteredPlayerCount: 0,
@@ -954,8 +960,10 @@ Page({
   onDateChange(event: WechatMiniprogram.PickerChange) {
     this.startDailyRefreshTrace();
     this.clearShareCopiedTimer();
+    const changeDate = String(event.detail.value);
     this.setData({
-      changeDate: String(event.detail.value),
+      changeDate,
+      ...getDailyPriceEmptyState(changeDate),
       riseChanges: [],
       fallChanges: [],
       staleMessage: "",
@@ -987,6 +995,7 @@ Page({
     const revision = nextRequestRevision(this.dailyRequestOwner, "daily");
     this.dailyRequestForceRefresh = forceRefresh;
     const changeDate = this.data.changeDate;
+    const dailyEmptyState = getDailyPriceEmptyState(changeDate);
     const hasRows =
       this.data.riseChanges.length > 0 || this.data.fallChanges.length > 0;
     const tracker = this.perfTracker;
@@ -995,6 +1004,7 @@ Page({
       refreshing: hasRows,
       error: "",
       staleMessage: "",
+      ...dailyEmptyState,
     });
     tracker?.mark("primaryRequestStartAt");
     const context = getAppContextSnapshot();
@@ -1035,6 +1045,7 @@ Page({
       tracker?.mark("primaryResponseAt");
       await setDataAsync(this, {
         ...splitChanges(read.data),
+        ...getDailyPriceEmptyState(changeDate),
         error: "",
         staleMessage:
           read.meta.stale && read.meta.storedAt

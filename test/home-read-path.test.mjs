@@ -62,12 +62,14 @@ describe("home public read path", () => {
   it("refreshes the viewer before reading personal home data", () => {
     assert.match(
       home,
-      /loadSecondaryData\([\s\S]*?await waitForAuthoritativeFollow\(\);[\s\S]*?const entryId = app\.globalData\.entryId/,
+      /loadSecondaryData\([\s\S]*?await waitForAuthoritativeFollow\(\);[\s\S]*?const entryId = currentFollowEntryId\(\)/,
     );
     assert.match(
       home,
-      /const entryId = app\.globalData\.entryId;[\s\S]*?if \(!entryId\) \{[\s\S]*?entry: \{\},[\s\S]*?leagues: \[\],[\s\S]*?entryError: ""[\s\S]*?return;/,
+      /const entryId = currentFollowEntryId\(\);[\s\S]*?if \(!entryId\) \{[\s\S]*?entry: \{\},[\s\S]*?leagues: \[\],[\s\S]*?entryError: ""[\s\S]*?return;/,
     );
+    assert.match(home, /hasEntryBinding: Boolean\(currentFollowEntryId\(\)\)/);
+    assert.match(homeWxml, /wx:if="\{\{!hasEntryBinding\}\}" class="section bind-team"/);
   });
 
   it("clears retained leagues when the authoritative viewer changes", () => {

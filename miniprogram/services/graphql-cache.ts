@@ -133,6 +133,20 @@ export function forgetServedFromCache(requestKey: string): void {
   servedFromCache.delete(requestKey);
 }
 
+/**
+ * Remove one request's cache entry from both memory and persistent storage.
+ *
+ * This is deliberately narrower than the session-wide purge: a successful
+ * but non-authoritative response must invalidate the previous authoritative
+ * value for the same request without evicting unrelated data.
+ */
+export function removeCacheEntry(cacheKey: string, requestKey: string): void {
+  memoryCache.delete(cacheKey);
+  forgetServedFromCache(requestKey);
+  try { wx.removeStorageSync(cacheKey); } catch {}
+  ensureStorageIndex().delete(cacheKey);
+}
+
 function isV2Entry(value: unknown, requestKey: string): value is CacheEntry {
   const entry = value as Partial<CacheEntry> | undefined;
   return Boolean(

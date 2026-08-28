@@ -5,6 +5,7 @@ import test from "node:test";
 globalThis.Page = globalThis.Page || ((definition) => definition);
 
 const homeModule = await import("../miniprogram/pages/home/index/index.ts");
+const homeServiceModule = await import("../miniprogram/services/home.service.ts");
 
 const source = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -44,10 +45,15 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     /getEntryLeagueInfo/,
   );
   assert.match(page, /getMiniHomePersonalLeagues/);
+  assert.match(
+    page,
+    /startSecondaryData\(\)[\s\S]*const currentGw = Number\(app\.globalData\.currentGw\) \|\| 0[\s\S]*loadSecondaryData\([\s\S]*currentGw,/,
+  );
   assert.match(page, /homePersonalLeaguesMatchEntry/);
   const homeService = source("miniprogram/services/home.service.ts");
   assert.match(homeService, /const viewerEntryId = currentMyFplEntryId\(\)/);
-  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{viewerEntryId\}`/);
+  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{viewerEntryId\}:event:\$\{eventCacheScope\}`/);
+  assert.match(homeService, /homePersonalDeskMatchesEvent\(desk\.leagueRanks \|\| \[\], expectedEventId\)/);
   assert.match(homeService, /homePersonalDesk \{\s+entryId\s+state/);
   assert.match(homeService, /deskEntryId !== viewerEntryId/);
   assert.match(homeService, /entryId: deskEntryId/);
@@ -149,6 +155,30 @@ test("home accepts a personal league desk only for the same entry id", () => {
       { entryId: 6953, entryName: "Same name", playerName: "Same manager" },
     ),
     false,
+  );
+});
+
+test("home rejects an H2H desk from a different current gameweek", () => {
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "H2H", h2hMatchup: { eventId: 2 } }],
+      2,
+    ),
+    true,
+  );
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "H2H", h2hMatchup: { eventId: 1 } }],
+      2,
+    ),
+    false,
+  );
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "CLASSIC", h2hMatchup: null }],
+      2,
+    ),
+    true,
   );
 });
 
@@ -265,6 +295,43 @@ test("groupHomeFixturesByDay buckets by local date and prefers today", () => {
   assert.equal(grouped.days[0].rows[1].centerLabel, "2-1");
   assert.equal(grouped.days[0].rows[1].finished, true);
   assert.match(grouped.days[0].rows[0].centerLabel, /^\d{2}:\d{2}$/);
+});
+
+test("home fixture event stays on current GW until it settles", () => {
+  assert.equal(homeModule.resolveHomeFixtureEvent(2, 2, 3), 2);
+  assert.equal(homeModule.resolveHomeFixtureEvent(0, 1, 1), 1);
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent(
+      [{ finished: true }, { finished: true }],
+      2,
+      3,
+    ),
+    true,
+  );
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent(
+      [{ finished: true }, { finished: false }],
+      2,
+      3,
+    ),
+    false,
+  );
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent([], 2, 3),
+    false,
+  );
+});
+
+test("home fixture day selection prefers the next day across a gap", () => {
+  const days = [{ dateKey: "2026-08-29" }, { dateKey: "2026-08-31" }];
+  assert.equal(
+    homeModule.resolvePreferredHomeFixtureDayKey(days, new Date(2026, 7, 30, 12, 0)),
+    "2026-08-31",
+  );
+  assert.equal(
+    homeModule.resolvePreferredHomeFixtureDayKey(days, new Date(2026, 8, 1, 12, 0)),
+    "2026-08-31",
+  );
 });
 
 test("home secondary completion stays on the navigation tracker that started it", () => {

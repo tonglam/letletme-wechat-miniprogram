@@ -39,6 +39,7 @@ import {
   hashKey,
   readCacheEntry,
   recordServedFromCache,
+  removeCacheEntry,
   writeCacheEntry,
   type CacheEntry,
 } from "./graphql-cache";
@@ -739,18 +740,25 @@ function hasEmptyItemsPayload(data: unknown): boolean {
   });
 }
 
-/** Missing GetEntry rows must not become a sticky miss after a later FPL/sync hit. */
+/** Cache only authoritative contract results; transient/degraded states must be retried. */
 export function shouldCacheGraphQLData(
   operationName: string,
   data: unknown,
 ): boolean {
-  if (operationName !== "GetEntry") {
-    return true;
-  }
   if (!data || typeof data !== "object") {
     return false;
   }
-  return (data as { entry?: unknown }).entry != null;
+  if (operationName !== "EntryLookup") {
+    return true;
+  }
+  const lookup = (data as { entryLookup?: Record<string, unknown> }).entryLookup;
+  return Boolean(
+    lookup
+    && lookup.status === "FOUND"
+    && lookup.entry != null
+    && lookup.source === "DATABASE"
+    && lookup.persistenceState === "NOT_REQUIRED"
+  );
 }
 
 export async function graphqlRead<T>(
@@ -1057,10 +1065,14 @@ export async function graphqlRead<T>(
         const producingSessionStillActive =
           policy.authMode === "public" ||
           response.token === getApiSessionToken();
+        const cacheableData = shouldCacheGraphQLData(
+          policy.operationName,
+          response.body.data,
+        );
 
         if (
           producingSessionStillActive &&
-          shouldCacheGraphQLData(policy.operationName, response.body.data)
+          cacheableData
         ) {
           const freshUntil = resolveFreshUntil(
             response.body.data,
@@ -1077,6 +1089,15 @@ export async function graphqlRead<T>(
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
           forgetServedFromCache(responseIdentity.requestKey);
+        } else if (producingSessionStillActive && !cacheableData) {
+          // A successful response that cannot be shared is authoritative about
+          // freshness: remove any older good value so the next read cannot
+          // present it as current. The non-authoritative response stays
+          // request-scoped.
+          removeCacheEntry(
+            responseIdentity.cacheKey,
+            responseIdentity.requestKey,
+          );
         }
       }
 

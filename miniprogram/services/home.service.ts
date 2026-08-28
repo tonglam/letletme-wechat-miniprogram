@@ -154,18 +154,26 @@ function rootError(errors: GraphQLErrorInfo[], root: string): string {
 export async function getMiniHomePersonalLeagues(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
+  currentGw = 0,
 ): Promise<MiniHomePersonalLeaguesResult> {
   const viewerEntryId = currentMyFplEntryId();
   if (!viewerEntryId) {
     throw new Error("请先选择要查看的 FPL 球队");
   }
+  const expectedEventId = Number(currentGw);
+  const eventCacheScope = Number.isSafeInteger(expectedEventId) && expectedEventId > 0
+    ? String(expectedEventId)
+    : "auto";
   const result = await graphqlRead<MiniHomePersonalLeaguesResponse>(
     MINI_HOME_PERSONAL_LEAGUES_QUERY,
     {},
     {
       authMode: "session",
       cachePolicy: "reporting",
-      cacheVariant: `home-personal:entry:${viewerEntryId}`,
+      // The GraphQL desk resolves H2H against the current event. Keep a
+      // separate client cache value per event so a GW1 desk cannot survive
+      // the context rollover and appear on the GW2 home page.
+      cacheVariant: `home-personal:entry:${viewerEntryId}:event:${eventCacheScope}`,
       forceRefresh,
       trace,
     },
@@ -194,6 +202,9 @@ export async function getMiniHomePersonalLeagues(
   ) {
     throw new Error("首页联赛数据与当前查看球队不一致");
   }
+  if (!homePersonalDeskMatchesEvent(desk.leagueRanks || [], expectedEventId)) {
+    throw new Error("首页联赛数据与当前比赛轮次不一致");
+  }
   const mismatchedViewer = (desk.leagueRanks || []).some((league) => {
     const viewerId = Number(league.h2hMatchup?.viewer?.entryId);
     return Number.isSafeInteger(viewerId)
@@ -220,6 +231,23 @@ export async function getMiniHomePersonalLeagues(
       h2hMatchup: league.h2hMatchup ?? null,
     })),
   };
+}
+
+/** Do not render a cached H2H matchup from a different current gameweek. */
+export function homePersonalDeskMatchesEvent(
+  leagues: ReadonlyArray<{
+    leagueType: string;
+    h2hMatchup?: Pick<HomeH2HMatchup, "eventId"> | null;
+  }>,
+  currentGw: number,
+): boolean {
+  if (!Number.isSafeInteger(currentGw) || currentGw <= 0) return true;
+  return leagues.every((league) => {
+    if (String(league.leagueType).toUpperCase() !== "H2H" || !league.h2hMatchup) {
+      return true;
+    }
+    return Number(league.h2hMatchup.eventId) === currentGw;
+  });
 }
 
 const HOME_TEASER_LIMIT = 5;
@@ -560,7 +588,8 @@ function mapPriceChanges(
     (item) => Number(item.change) !== 0 && item.player,
   );
   const rawDate = String(changes?.[0]?.changeDate || "");
-  const mapRow = (item: MarketPriceChange): HomeMarketMover => {    const change = Number(item.change) || 0;
+  const mapRow = (item: MarketPriceChange): HomeMarketMover => {
+    const change = Number(item.change) || 0;
     return {
       id: String(item.player.playerId),
       name: item.player.webName || "-",

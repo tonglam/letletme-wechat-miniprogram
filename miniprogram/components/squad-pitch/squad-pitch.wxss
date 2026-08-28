@@ -202,7 +202,7 @@
   padding: 0 4rpx;
   border: 2rpx solid transparent;
   border-radius: 6rpx;
-  font-size: 16rpx;
+  font-size: 18rpx;
   font-weight: 800;
   line-height: 1;
   box-sizing: border-box;
@@ -217,7 +217,7 @@
 .squad-autosub.out {
   border-color: var(--danger);
   background: var(--danger);
-  color: #ffffff;
+  color: var(--card);
 }
 
 .squad-autosub.predicted {

@@ -5,7 +5,7 @@
     <text class="notice-text">{{noticeText}}</text>
     <view class="notice-close" catchtap="onCloseNotice">×</view>
   </view>
-  <view wx:if="{{!pos.hasTeam(entry)}}" class="section bind-team">
+  <view wx:if="{{!hasEntryBinding}}" class="section bind-team">
     <view class="bind-strip" bindtap="onChangeEntry" hover-class="hover-dim">
       <view>
         <view class="bind-kicker">选择我的球队</view>
