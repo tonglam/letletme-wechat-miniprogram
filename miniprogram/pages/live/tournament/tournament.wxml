@@ -347,9 +347,7 @@
               <text class="team-name">{{item.entryName || '-'}}</text>
               <text wx:if="{{item.isMe}}" class="me-badge">我</text>
             </view>
-            <view wx:if="{{item.playerName || item.displayCaptain || item.chipCode}}" class="team-meta">
-              <text wx:if="{{item.playerName}}">{{item.playerName}}</text>
-              <text wx:if="{{item.playerName && item.displayCaptain}}"> · </text>
+            <view wx:if="{{item.displayCaptain || item.chipCode}}" class="team-meta">
               <text wx:if="{{item.displayCaptain}}">{{item.displayCaptain}}</text>
               <text wx:if="{{item.chipCode}}" class="chip-badge chip-{{item.chipCode}}">{{item.chipCode}}</text>
             </view>

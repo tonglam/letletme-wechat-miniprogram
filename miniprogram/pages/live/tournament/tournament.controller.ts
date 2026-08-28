@@ -657,12 +657,14 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     chipCode,
     displayCaptain:
       captain && captain !== "无队长"
-        ? `${captain} (C)${captainPointsKnown ? ` ${row.captainPoints}` : ""}`
+        ? `${captain} (C)${captainPointsKnown ? ` ${row.captainPoints}分` : ""}`
         : "",
     playedText: `${played}/${played + toPlay}`,
     overallRankText: overallRankKnown ? formatRank(row.overallRank) : "",
     teamValueText: teamValueKnown
-      ? `£${(numberValue(row.teamValue) / 10).toFixed(1)}m`
+      // The live-board payload exposes squad value in £m already (web
+      // formatTeamMoney parity) — no /10 rescale here.
+      ? `£${numberValue(row.teamValue).toFixed(1)}m`
       : "",
     topRank: false,
     isMe: false,

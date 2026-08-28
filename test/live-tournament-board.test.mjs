@@ -20,10 +20,14 @@ test("tournament board shows overall rank, team value, captain points, podium ra
   assert.match(template, /class="col-num">净</);
   assert.match(template, /class="cmp-label">净分</);
 
-  // Row display: captain points ride the (C) label; OR/TV have a sub-meta line.
-  assert.match(controller, /captainPointsKnown \? ` \$\{row\.captainPoints\}`/);
+  // Row display: manager name is dropped; captain points ride the (C) label
+  // with a 分 suffix; OR/TV have a sub-meta line.
+  assert.match(template, /wx:if="\{\{item\.displayCaptain \|\| item\.chipCode\}\}" class="team-meta"/);
+  assert.match(controller, /captainPointsKnown \? ` \$\{row\.captainPoints\}分`/);
   assert.match(controller, /overallRankText: overallRankKnown \? formatRank/);
   assert.match(controller, /teamValueText: teamValueKnown/);
+  // teamValue arrives in £m already (web formatTeamMoney) — no /10 rescale.
+  assert.doesNotMatch(controller, /teamValue\) \/ 10/);
   assert.match(template, /总排 \{\{item\.overallRankText\}\}/);
   assert.match(template, /队值 \{\{item\.teamValueText\}\}/);
 
