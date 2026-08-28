@@ -12,7 +12,7 @@ import type {
   LivePlayerRow,
   LiveSnapshotStatus,
 } from "../../../models/live";
-import type { EntryTransfer } from "../../../models/entry";
+import type { EntryLookupStatus, EntryTransfer } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
 import {
   chipShareLabel,
@@ -59,7 +59,10 @@ import {
   type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
-import { entryPersistencePresentation } from "../../../utils/entry-lookup-presentation";
+import {
+  entryPersistencePresentation,
+  isDeterministicEntryIdentityFailure
+} from "../../../utils/entry-lookup-presentation";
 
 interface SummaryTile {
   label: string;
@@ -120,7 +123,7 @@ interface LiveEntryData {
   maxGw: number;
   entryId?: number;
   entryName: string;
-  entryLookupStatus: string;
+  entryLookupStatus: EntryLookupStatus | "";
   entryLookupMessage: string;
   entryLookupRetryable: boolean;
   playerName: string;
@@ -1454,6 +1457,16 @@ Page({
       void this.loadEntryIdentity(this.data.entryId);
     }
     void this.runForcedRefresh(this.perfTracker);
+  },
+
+  onEntryLookupAction() {
+    if (this.data.entryLookupRetryable) {
+      this.onRetry();
+      return;
+    }
+    if (isDeterministicEntryIdentityFailure(this.data.entryLookupStatus)) {
+      this.onChooseEntry();
+    }
   },
 
   onChooseEntry() {

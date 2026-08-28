@@ -48,3 +48,23 @@ export function entryPersistencePresentation(
       };
   }
 }
+
+export function entryPersistenceNeedsRevalidation(
+  state: EntryPersistenceState | "" | null | undefined
+): boolean {
+  return state === "QUEUED" || state === "FAILED_RETRYABLE";
+}
+
+export function isDeterministicEntryIdentityFailure(
+  status: EntryLookupStatus | "" | null | undefined
+): boolean {
+  return status === "INVALID_ID" || status === "NOT_FOUND";
+}
+
+export function hasMatchingEntryPreview(
+  hasPreview: boolean,
+  previewEntryId: number,
+  requestedEntryId: number
+): boolean {
+  return hasPreview && previewEntryId > 0 && previewEntryId === requestedEntryId;
+}

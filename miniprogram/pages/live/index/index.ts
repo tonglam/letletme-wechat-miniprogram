@@ -4,7 +4,11 @@ import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
 import { EntryLookupError, getEntryInfo } from "../../../services/entry.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
-import { entryPersistencePresentation } from "../../../utils/entry-lookup-presentation";
+import type { EntryPersistenceState } from "../../../models/entry";
+import {
+  entryPersistenceNeedsRevalidation,
+  entryPersistencePresentation
+} from "../../../utils/entry-lookup-presentation";
 
 /** Live index warm-show skip window (aligned with home/leagues at 60s; team is 5 min). */
 export const LIVE_INDEX_REVALIDATE_MS = 60 * 1000;
@@ -31,6 +35,7 @@ PerformancePage({
     entryLookupStatus: "",
     entryLookupMessage: "",
     entryLookupRetryable: false,
+    entryPersistenceState: "" as EntryPersistenceState | "",
     event: 0,
     currentGw: 0,
     cards: [
@@ -126,20 +131,33 @@ PerformancePage({
     let entryLookupRetryable = entryChanged
       ? false
       : Boolean(this.data.entryLookupRetryable);
-    if (entryId && (!entryName || forceEntryLookup)) {
+    let entryPersistenceState: EntryPersistenceState | "" = entryChanged
+      ? ""
+      : this.data.entryPersistenceState || "";
+    const persistenceRevalidation = entryPersistenceNeedsRevalidation(
+      entryPersistenceState
+    );
+    if (entryId && (!entryName || forceEntryLookup || persistenceRevalidation)) {
       try {
-        const entry = await getEntryInfo(entryId, forceEntryLookup);
+        const entry = await getEntryInfo(
+          entryId,
+          forceEntryLookup || persistenceRevalidation
+        );
         const persistence = entryPersistencePresentation(entry.persistenceState);
         entryName = entry.entryName || entry.teamName || "";
         entryLookupStatus = "FOUND";
         entryLookupMessage = persistence?.message ?? "";
         entryLookupRetryable = persistence?.retryable ?? false;
+        entryPersistenceState = entry.persistenceState ?? "";
       } catch (error) {
-        entryName = "";
         if (error instanceof EntryLookupError) {
           entryLookupStatus = error.status;
           entryLookupMessage = error.message;
           entryLookupRetryable = error.retryable;
+          if (!error.retryable) {
+            entryName = "";
+            entryPersistenceState = "";
+          }
         } else {
           entryLookupStatus = "UNAVAILABLE";
           entryLookupMessage = "当前无法确认球队数据，请稍后重试";
@@ -155,6 +173,7 @@ PerformancePage({
       entryLookupStatus: entryId ? entryLookupStatus : "",
       entryLookupMessage: entryId ? entryLookupMessage : "",
       entryLookupRetryable: entryId ? entryLookupRetryable : false,
+      entryPersistenceState: entryId ? entryPersistenceState : "",
       event: app.globalData.gw,
       currentGw: app.globalData.currentGw || 0
     });

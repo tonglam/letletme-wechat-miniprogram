@@ -340,6 +340,27 @@ test("entry lookup results are guarded by request generation and input identity"
   );
 });
 
+test("entry persistence recovery keeps valid UI state actionable", () => {
+  const landing = source("miniprogram/pages/live/index/index.ts");
+  const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
+  const liveEntryTemplate = source("miniprogram/pages/live/entry/entry.wxml");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+
+  assert.match(landing, /entryPersistenceNeedsRevalidation/);
+  assert.match(
+    landing,
+    /getEntryInfo\(\s*entryId,\s*forceEntryLookup \|\| persistenceRevalidation/,
+  );
+  assert.match(search, /hasMatchingEntryPreview/);
+  assert.match(
+    search,
+    /preservePreview && retryable \? \{\} : emptyEntryPreviewData\(\)/,
+  );
+  assert.match(liveEntry, /isDeterministicEntryIdentityFailure/);
+  assert.match(liveEntryTemplate, /retryText="\{\{entryLookupRetryable \? '重试球队查询' : '更换球队'\}\}"/);
+  assert.match(liveEntryTemplate, /bind:retry="onEntryLookupAction"/);
+});
+
 test("tournament status reports only rows actually retained", () => {
   const tournament = source(
     "miniprogram/pages/live/tournament/tournament.controller.ts",

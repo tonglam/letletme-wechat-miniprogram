@@ -15,8 +15,9 @@
     message="{{entryLookupMessage}}"
     workload="interactive"
     transient="{{false}}"
-    showRetry="{{entryLookupRetryable}}"
-    bind:retry="onRetry"
+    showRetry="{{entryLookupRetryable || entryLookupStatus === 'NOT_FOUND' || entryLookupStatus === 'INVALID_ID'}}"
+    retryText="{{entryLookupRetryable ? '重试球队查询' : '更换球队'}}"
+    bind:retry="onEntryLookupAction"
   />
 
   <view wx:if="{{error && !hasData && !emptyState && !noPicks}}" id="perf-primary-content">

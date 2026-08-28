@@ -1,7 +1,10 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { EntryLookupError, getEntryInfo, searchEntries } from "../../../services/entry.service";
 import type { EntryInfo, EntrySearchResult } from "../../../models/entry";
-import { entryPersistencePresentation } from "../../../utils/entry-lookup-presentation";
+import {
+  entryPersistencePresentation,
+  hasMatchingEntryPreview
+} from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
@@ -48,6 +51,27 @@ interface EntrySearchData {
   previewOverallRank: string;
   isCurrentEntry: boolean;
   searchHits: EntryNameHit[];
+}
+
+function emptyEntryPreviewData(): Pick<
+  EntrySearchData,
+  | "hasPreview"
+  | "previewEntryId"
+  | "previewTitle"
+  | "previewSubtitle"
+  | "previewTotalPoints"
+  | "previewOverallRank"
+  | "isCurrentEntry"
+> {
+  return {
+    hasPreview: false,
+    previewEntryId: 0,
+    previewTitle: "",
+    previewSubtitle: "",
+    previewTotalPoints: "-",
+    previewOverallRank: "-",
+    isCurrentEntry: false
+  };
 }
 
 PerformancePage({
@@ -121,13 +145,7 @@ PerformancePage({
       errorCode: "",
       canRetryLookup: false,
       lookupNotice: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      ...emptyEntryPreviewData(),
       searchHits: []
     });
   },
@@ -156,6 +174,11 @@ PerformancePage({
 
   async lookupByEntryId(entryId: number) {
     const requestId = ++this.lookupRequestId;
+    const preservePreview = hasMatchingEntryPreview(
+      this.data.hasPreview,
+      this.data.previewEntryId,
+      entryId
+    );
 
     this.setData({
       loading: true,
@@ -164,13 +187,7 @@ PerformancePage({
       errorCode: "",
       canRetryLookup: false,
       lookupNotice: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      ...(preservePreview ? {} : emptyEntryPreviewData()),
       searchHits: []
     });
     try {
@@ -189,10 +206,12 @@ PerformancePage({
       if (requestId !== this.lookupRequestId) {
         return;
       }
+      const retryable = error instanceof EntryLookupError ? error.retryable : true;
       this.setData({
         error: error instanceof Error ? error.message : "当前无法确认球队数据，请稍后重试",
         errorCode: error instanceof EntryLookupError ? error.status : "UNAVAILABLE",
-        canRetryLookup: error instanceof EntryLookupError ? error.retryable : true
+        canRetryLookup: retryable,
+        ...(preservePreview && retryable ? {} : emptyEntryPreviewData())
       });
     } finally {
       if (requestId === this.lookupRequestId) {
@@ -210,13 +229,7 @@ PerformancePage({
       errorCode: "",
       canRetryLookup: false,
       lookupNotice: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      ...emptyEntryPreviewData(),
       searchHits: []
     });
     try {
