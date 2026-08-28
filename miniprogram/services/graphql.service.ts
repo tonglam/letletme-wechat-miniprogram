@@ -84,7 +84,7 @@ export interface GraphQLOptions {
   season?: string;
   cacheVariant?: string;
   trace?: PageRequestTrace | null;
-  /** Explicitly adapt cached data when a stale fallback is served. */
+  /** Explicitly map cached data when a stale result is served. */
   mapStaleData?: (data: unknown) => unknown;
 }
 
@@ -240,16 +240,9 @@ export function hasGraphQLCode(error: unknown, code: string): boolean {
   );
 }
 
-/**
- * Legacy GraphQL deployments returned FORBIDDEN for an absent viewer entry.
- * Callers must use this only on the My FPL entry-scoped surface; a generic
- * FORBIDDEN elsewhere remains a real authorization failure.
- */
+/** Identifies the canonical missing-viewer-entry response on My FPL surfaces. */
 export function isViewerEntryAuthorizationError(error: unknown): boolean {
-  return (
-    hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED") ||
-    hasGraphQLCode(error, "FORBIDDEN")
-  );
+  return hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED");
 }
 
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([

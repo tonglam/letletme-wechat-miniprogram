@@ -45,9 +45,6 @@ export interface MiniProgramProfile {
   wechatLinked: boolean;
 }
 
-type RawMiniProgramProfile = Partial<MiniProgramProfile> &
-  Pick<MiniProgramProfile, "id">;
-
 interface ApiSession {
   token: string;
   expiresAt: string;
@@ -60,13 +57,12 @@ interface ApiResponse {
   success: boolean;
   requestId?: string;
   error?: string;
-  contractVersion?: number;
-  authenticated?: boolean;
+  contractVersion?: 2;
+  authenticated?: true;
   webAccountLinked?: boolean;
-  linked?: boolean;
   token?: string;
   expiresAt?: string;
-  profile?: RawMiniProgramProfile;
+  profile?: unknown;
 }
 
 type MiniProgramApiMethod = "GET" | "POST" | "PUT" | "DELETE";
@@ -303,63 +299,58 @@ function readLocalEntryId(): number | null {
   }
 }
 
-function normalizeProfile(
-  profile: RawMiniProgramProfile,
-  webAccountLinkedFallback = false,
-): MiniProgramProfile {
-  const verifiedEntryId = profile.fplEntryVerifiedAt
-    ? positiveEntryId(profile.webVerifiedEntryId ?? profile.fplEntryId)
-    : positiveEntryId(profile.webVerifiedEntryId);
-  const followEntryId = positiveEntryId(profile.followEntryId);
-  const explicitEffectiveEntryId = positiveEntryId(profile.effectiveEntryId);
-  const effectiveEntryId =
-    explicitEffectiveEntryId ?? followEntryId ?? verifiedEntryId;
-  const effectiveEntrySource =
-    profile.effectiveEntrySource === "MINI" ||
-    profile.effectiveEntrySource === "WEB"
-      ? profile.effectiveEntrySource
-      : effectiveEntryId === followEntryId
-        ? "MINI"
-        : effectiveEntryId === verifiedEntryId
-          ? "WEB"
-          : null;
-  const webAccountLinked =
-    typeof profile.webAccountLinked === "boolean"
-      ? profile.webAccountLinked
-      : webAccountLinkedFallback;
-  return {
-    id: profile.id,
-    name: profile.name ?? null,
-    email: profile.email ?? null,
-    emailVerified: profile.emailVerified === true,
-    image: profile.image ?? null,
-    createdAt: profile.createdAt ?? "",
-    accountMode: webAccountLinked ? "WEB_LINKED" : "MINI_ONLY",
-    webAccountLinked,
-    followEntryId,
-    webVerifiedEntryId: verifiedEntryId,
-    effectiveEntryId,
-    effectiveEntrySource,
-    entryConflict: profile.entryConflict === true,
-    fplEntryId: verifiedEntryId,
-    fplEntryBoundAt: profile.fplEntryBoundAt ?? null,
-    fplEntryVerifiedAt: profile.fplEntryVerifiedAt ?? null,
-    wechatLinked: true,
-  };
+function isCanonicalProfile(value: unknown): value is MiniProgramProfile {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const profile = value as Record<string, unknown>;
+  const nullableEntryId = (candidate: unknown): boolean =>
+    candidate === null || positiveEntryId(candidate) !== null;
+  const nullableString = (candidate: unknown): boolean =>
+    candidate === null || typeof candidate === "string";
+  return (
+    typeof profile.id === "string" && profile.id.length > 0 &&
+    nullableString(profile.name) &&
+    nullableString(profile.email) &&
+    typeof profile.emailVerified === "boolean" &&
+    nullableString(profile.image) &&
+    typeof profile.createdAt === "string" && profile.createdAt.length > 0 &&
+    (profile.accountMode === "MINI_ONLY" || profile.accountMode === "WEB_LINKED") &&
+    typeof profile.webAccountLinked === "boolean" &&
+    nullableEntryId(profile.followEntryId) &&
+    nullableEntryId(profile.webVerifiedEntryId) &&
+    nullableEntryId(profile.effectiveEntryId) &&
+    (profile.effectiveEntrySource === null ||
+      profile.effectiveEntrySource === "MINI" ||
+      profile.effectiveEntrySource === "WEB") &&
+    typeof profile.entryConflict === "boolean" &&
+    nullableEntryId(profile.fplEntryId) &&
+    nullableString(profile.fplEntryBoundAt) &&
+    nullableString(profile.fplEntryVerifiedAt) &&
+    profile.wechatLinked === true
+  );
+}
+
+function normalizeProfile(profile: MiniProgramProfile): MiniProgramProfile {
+  return { ...profile };
 }
 
 function asSession(response: ApiResponse): ApiSession {
-  if (!response.token || !response.expiresAt || !response.profile) {
+  if (
+    response.contractVersion !== 2 ||
+    response.authenticated !== true ||
+    typeof response.webAccountLinked !== "boolean" ||
+    typeof response.token !== "string" ||
+    !response.token ||
+    typeof response.expiresAt !== "string" ||
+    !response.expiresAt ||
+    !isCanonicalProfile(response.profile)
+  ) {
     throw new Error("登录响应不完整，请重新进入小程序");
   }
   return {
     token: response.token,
     expiresAt: response.expiresAt,
     requestId: response.requestId,
-    profile: normalizeProfile(
-      response.profile,
-      response.webAccountLinked ?? response.linked === true,
-    ),
+    profile: normalizeProfile(response.profile),
   };
 }
 
@@ -463,8 +454,8 @@ function readEncryptedSessionToken(): Promise<string | null> {
 async function persistEncryptedSessionToken(
   token: string,
 ): Promise<MiniProgramPersistenceResult> {
-  // Remove a legacy synchronous value before writing the encrypted row. If
-  // encryption is unavailable or fails, the session remains memory-only.
+  // The session credential is persisted only in the platform-encrypted store.
+  // If encryption is unavailable or fails, the session remains memory-only.
   try {
     wx.removeStorageSync(storageKeys.apiSessionToken);
   } catch {}
@@ -506,7 +497,7 @@ export function getLastSessionCredentialState(): SessionCredentialState {
   return lastSessionCredentialState;
 }
 
-/** Restores an encrypted credential and upgrades legacy plaintext in place. */
+/** Restores the canonical encrypted credential. */
 export async function restoreApiSessionCredentials(): Promise<void> {
   try {
     await ensureRevocationQueueRestored();
@@ -518,11 +509,8 @@ export async function restoreApiSessionCredentials(): Promise<void> {
     const expiresAt = wx.getStorageSync(storageKeys.apiSessionExpiresAt) as
       | string
       | undefined;
-    const legacyToken = wx.getStorageSync(storageKeys.apiSessionToken) as
-      | string
-      | undefined;
     const encryptedToken = await readEncryptedSessionToken();
-    const token = encryptedToken || legacyToken || "";
+    const token = encryptedToken || "";
 
     if (!isStoredSessionUsable(token, expiresAt || "")) {
       const restoreState = token ? "expired" : "missing";
@@ -535,17 +523,7 @@ export async function restoreApiSessionCredentials(): Promise<void> {
 
     sessionMemory = { token, expiresAt: expiresAt || "" };
     lastSessionRestoreState = "restored";
-    lastSessionCredentialState = encryptedToken ? "encrypted" : "memory_only";
-    if (legacyToken) {
-      const persisted = await persistEncryptedSessionToken(token);
-      lastSessionCredentialState =
-        persisted.outcome === "encrypted" ? "encrypted" : "memory_only";
-      if (persisted.outcome !== "encrypted") {
-        try {
-          wx.removeStorageSync(storageKeys.apiSessionExpiresAt);
-        } catch {}
-      }
-    }
+    lastSessionCredentialState = "encrypted";
   } catch (error) {
     lastSessionRestoreState = "restore_failed";
     lastSessionCredentialState = "restore_failed";
@@ -656,7 +634,7 @@ export function clearApiSession(): void {
     storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
-    storageKeys.apiProfileV2,
+    storageKeys.apiProfile,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
@@ -697,7 +675,7 @@ export function clearSessionCredentials(): void {
     storageKeys.apiProfileFplEntryId,
     storageKeys.apiProfileEmail,
     storageKeys.apiProfileCheckedAt,
-    storageKeys.apiProfileV2,
+    storageKeys.apiProfile,
   ].forEach((key) => {
     try {
       wx.removeStorageSync(key);
@@ -798,30 +776,19 @@ function clearPendingEntryChoice(expected?: StoredPendingEntryChoice): void {
   } catch {}
 }
 
-function hasInitializedMiniProgramProfile(): boolean {
-  try {
-    return wx.getStorageSync(storageKeys.apiProfileV2Initialized) === true;
-  } catch {
-    return false;
-  }
-}
-
 export function getStoredMiniProgramProfile(): MiniProgramProfile | null {
   if (!getApiSessionToken()) return null;
   try {
-    const value = wx.getStorageSync(storageKeys.apiProfileV2) as unknown;
-    if (!value || typeof value !== "object" || !("id" in value)) return null;
-    const id = (value as { id?: unknown }).id;
-    if (typeof id !== "string" || !id) return null;
-    return normalizeProfile(value as RawMiniProgramProfile);
+    const value = wx.getStorageSync(storageKeys.apiProfile) as unknown;
+    if (!isCanonicalProfile(value)) return null;
+    return normalizeProfile(value);
   } catch {
     return null;
   }
 }
 
 function persistMiniProgramProfile(profile: MiniProgramProfile): void {
-  wx.setStorageSync(storageKeys.apiProfileV2, profile);
-  wx.setStorageSync(storageKeys.apiProfileV2Initialized, true);
+  wx.setStorageSync(storageKeys.apiProfile, profile);
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
   wx.setStorageSync(
     storageKeys.apiProfileFplEntryId,
@@ -854,18 +821,6 @@ function storeReceivedProfile(
   reason: "restore" | "login" | "logout" | "rebind" | "token-rotation",
 ): MiniProgramProfile {
   const previousProfile = getStoredMiniProgramProfile();
-  const previousEntryId = readLocalEntryId();
-  if (
-    !hasInitializedMiniProgramProfile() &&
-    readPendingFollowEntry() === undefined &&
-    previousEntryId &&
-    profile.followEntryId === null
-  ) {
-    // One-time upgrade for existing installs: their local follow predates the
-    // standalone account table, so queue it before the first v2 profile can
-    // replace the local pointer with a Web-linked entry.
-    writePendingFollowEntry(previousEntryId);
-  }
   const pendingFollow = readPendingFollowEntry();
   const storedProfile =
     pendingFollow === undefined
@@ -1439,13 +1394,10 @@ export function getPendingSessionRefresh(): Promise<ApiSession> | null {
 }
 
 function profileFromResponse(response: ApiResponse): MiniProgramProfile {
-  if (!response.profile) {
+  if (!isCanonicalProfile(response.profile)) {
     throw new Error("账户响应不完整，请稍后重试");
   }
-  return normalizeProfile(
-    response.profile,
-    response.webAccountLinked ?? response.profile.webAccountLinked === true,
-  );
+  return normalizeProfile(response.profile);
 }
 
 async function requestAuthenticatedProfile(

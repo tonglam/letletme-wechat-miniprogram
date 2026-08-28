@@ -32,6 +32,16 @@ function installRuntime(handler) {
       storage.delete(key);
       success?.({});
     },
+    canIUse: (schema) =>
+      schema === "setStorage.object.encrypt" ||
+      schema === "getStorage.object.encrypt",
+    getStorage: ({ key, success, fail }) => {
+      if (storage.has(key)) {
+        success?.({ data: storage.get(key), errMsg: "getStorage:ok" });
+      } else {
+        fail?.({ errMsg: "getStorage:fail data not found" });
+      }
+    },
     showToast: () => undefined,
     request: (options) => {
       if (options.url.endsWith("/api/miniprogram/telemetry")) {
@@ -296,12 +306,22 @@ test("session retry re-keys the in-flight request for the refreshed token", asyn
           expiresAt: "2099-01-01T00:00:00.000Z",
           profile: {
             id: "refreshed-account",
+            name: null,
+            email: null,
+            emailVerified: false,
+            image: null,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            accountMode: "MINI_ONLY",
             followEntryId: 202,
             effectiveEntryId: 202,
             effectiveEntrySource: "MINI",
             webAccountLinked: false,
             entryConflict: false,
+            webVerifiedEntryId: null,
             wechatLinked: true,
+            fplEntryId: null,
+            fplEntryBoundAt: null,
+            fplEntryVerifiedAt: null,
           },
         },
       });
@@ -360,6 +380,39 @@ test("session retry joins a request already running under the refreshed token", 
   let firstRequest;
   let secondRequest;
   const runtime = installRuntime((request) => {
+    if (request.url.endsWith("/wechat/login")) {
+      request.success({
+        statusCode: 200,
+        data: {
+          success: true,
+          contractVersion: 2,
+          authenticated: true,
+          webAccountLinked: false,
+          token: "session-b",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          profile: {
+            id: "refreshed-account",
+            name: null,
+            email: null,
+            emailVerified: false,
+            image: null,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            accountMode: "MINI_ONLY",
+            webAccountLinked: false,
+            followEntryId: null,
+            webVerifiedEntryId: null,
+            effectiveEntryId: null,
+            effectiveEntrySource: null,
+            entryConflict: false,
+            fplEntryId: null,
+            fplEntryBoundAt: null,
+            fplEntryVerifiedAt: null,
+            wechatLinked: true,
+          },
+        },
+      });
+      return;
+    }
     graphQLRequests += 1;
     if (graphQLRequests === 1) {
       firstRequest = request;
@@ -371,6 +424,7 @@ test("session retry joins a request already running under the refreshed token", 
     }
     request.fail({ errMsg: "unexpected duplicate GraphQL request" });
   });
+  globalThis.wx.login = ({ success }) => success({ code: "refresh-code" });
   clearSessionCredentials();
   runtime.storage.set("api-session-token", "session-a");
   runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");

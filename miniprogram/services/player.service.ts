@@ -198,7 +198,7 @@ export interface PlayerPickerFilter {
   maxPrice?: number;
 }
 
-/** Backend PlayerPickerSort enum (players/schema.ts). NAME_ASC preserves legacy caller behavior. */
+/** Backend PlayerPickerSort enum (players/schema.ts). */
 export type PlayerPickerSort =
   | "AUTO"
   | "NAME_ASC"

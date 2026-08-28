@@ -41,7 +41,6 @@ const {
   clearAllLiveBoardLastGood,
   clearOtherLiveBoardLastGood,
   getEntryLiveCompetitionBoardPage,
-  isLiveBoardSchemaUnavailableError,
   liveBoardLastGoodKey,
   parseLiveBoardPage,
   readLiveBoardLastGood,
@@ -49,7 +48,6 @@ const {
 } = await import("../miniprogram/services/live-board.service.ts");
 const {
   GraphQLApplicationError,
-  GraphQLTransportError,
   purgeGraphQLStorageCache
 } = await import("../miniprogram/services/graphql.service.ts");
 
@@ -278,7 +276,7 @@ test("one transient failure retries once after a 400-800ms jitter", async () => 
   assert.deepEqual(delays, [600]);
 });
 
-test("auth, business, and 429 failures do not auto-retry or use legacy fallback", async () => {
+test("auth, business, and 429 failures do not auto-retry or use fallback", async () => {
   for (const scenario of [
     {
       response: (options) =>
@@ -311,7 +309,7 @@ test("auth, business, and 429 failures do not auto-retry or use legacy fallback"
         { sleepImpl: async () => assert.fail("must not retry") }
       ),
       (error) => {
-        assert.equal(isLiveBoardSchemaUnavailableError(error), false);
+        assert.ok(error);
         return true;
       }
     );
@@ -319,23 +317,23 @@ test("auth, business, and 429 failures do not auto-retry or use legacy fallback"
   }
 });
 
-test("only GraphQL validation or a missing new field enables legacy fallback", () => {
-  assert.equal(
-    isLiveBoardSchemaUnavailableError(
-      new GraphQLApplicationError([
-        {
-          message: 'Cannot query field "entryLiveCompetitionBoard" on type "Query".',
-          extensions: { code: "GRAPHQL_VALIDATION_FAILED" }
-        }
-      ])
-    ),
-    true
+test("canonical board validation errors are surfaced without a legacy reader", async () => {
+  installRuntime((options) =>
+    options.success({
+      statusCode: 200,
+      data: {
+        errors: [
+          {
+            message: 'Cannot query field "entryLiveCompetitionBoard" on type "Query".',
+            extensions: { code: "GRAPHQL_VALIDATION_FAILED" },
+          },
+        ],
+      },
+    }),
   );
-  assert.equal(
-    isLiveBoardSchemaUnavailableError(
-      new GraphQLTransportError("数据加载超时，请稍后重试", true)
-    ),
-    false
+  await assert.rejects(
+    getEntryLiveCompetitionBoardPage({ entryId: 123, tournamentId: 7, eventId: 1 }),
+    GraphQLApplicationError,
   );
 });
 
@@ -531,14 +529,34 @@ test("sharing lazily reads every lightweight page with one locked revision", asy
     },
     loadedSeason: "2026",
     pageVisible: true,
-    usingLegacyBoard: false,
     _submittedKeyword: "",
     boardControlRequestId: 1,
     committedBoardControlRequestId: 1,
     boardPage: validPage(),
     shareRows: [{ entry: 123 }],
-    currentBoardScope: capturedPage.currentBoardScope,
-    buildBoardVariables: capturedPage.buildBoardVariables
+    currentBoardScope: () => ({
+      sessionKey: "session",
+      season: "2026",
+      eventId: 1,
+      entryId: 123,
+      tournamentId: 7,
+    }),
+    buildBoardVariables: (page = 1, expectedBoardRevision = null) => ({
+      entryId: 123,
+      tournamentId: 7,
+      eventId: 1,
+      ref: null,
+      page,
+      pageSize: 20,
+      sort: "EVENT_POINTS",
+      direction: "DESC",
+      search: null,
+      chips: [],
+      captainPlayerIds: [],
+      ownership: null,
+      teamCountRules: [],
+      expectedBoardRevision,
+    })
   };
 
   const rows = await capturedPage.collectBoardShareRows.call(context);
@@ -574,14 +592,34 @@ test("sharing stops when board controls change between page requests", async () 
     },
     loadedSeason: "2026",
     pageVisible: true,
-    usingLegacyBoard: false,
     _submittedKeyword: "",
     boardControlRequestId: 1,
     committedBoardControlRequestId: 1,
     boardPage: validPage(),
     shareRows: [{ entry: 123 }],
-    currentBoardScope: capturedPage.currentBoardScope,
-    buildBoardVariables: capturedPage.buildBoardVariables
+    currentBoardScope: () => ({
+      sessionKey: "session",
+      season: "2026",
+      eventId: 1,
+      entryId: 123,
+      tournamentId: 7,
+    }),
+    buildBoardVariables: (page = 1, expectedBoardRevision = null) => ({
+      entryId: 123,
+      tournamentId: 7,
+      eventId: 1,
+      ref: null,
+      page,
+      pageSize: 20,
+      sort: "EVENT_POINTS",
+      direction: "DESC",
+      search: null,
+      chips: [],
+      captainPlayerIds: [],
+      ownership: null,
+      teamCountRules: [],
+      expectedBoardRevision,
+    })
   };
 
   await assert.rejects(

@@ -53,27 +53,13 @@ test("tournament preseason is a stable business empty state", () => {
   });
 });
 
-test("legacy tournament boards keep team exposure rules during paged recovery", async () => {
-  const calls = [];
-  const context = {
-    data: {
-      ...tournamentPage.data,
-      event: 1,
-      selectedTournament: { id: 7, participantCount: 10 },
-      teamExposureRules: [
-        { teamShortName: "ARS", name: "Arsenal", count: 2 }
-      ]
-    },
-    usingLegacyBoard: true,
-    loadLegacyRows(options) {
-      calls.push(options);
-      return Promise.resolve();
-    }
-  };
-
-  await tournamentPage.loadRows.call(context, { forceRefresh: true });
-
-  assert.deepEqual(calls, [{ forceRefresh: true }]);
+test("tournament rows use the canonical paged board only", () => {
+  const source = readFileSync(
+    new URL("../miniprogram/pages/live/tournament/tournament.controller.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /usingLegacyBoard|loadLegacyRows|entryLiveCompetitionsDesk/);
+  assert.match(source, /getEntryLiveCompetitionBoardPage/);
 });
 
 test("entry preseason is a stable business empty state", () => {

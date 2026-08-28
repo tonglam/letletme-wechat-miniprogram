@@ -36,7 +36,7 @@ assertBoolean(
 assertBoolean(
   isLiveSquadPitchStarter({ squadPosition: 12, multiplier: 1 }),
   false,
-  "slot fallback keeps positions 12-15 on the bench",
+  "canonical squad slots keep positions 12-15 on the bench",
 );
 assertBoolean(
   isLiveSquadPitchStarter({ pickActive: "false" as unknown as boolean, multiplier: 0 }),

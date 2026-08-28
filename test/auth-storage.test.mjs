@@ -30,6 +30,30 @@ beforeEach(() => {
   acknowledgeDiagnosticDisclosure();
 });
 
+function canonicalProfile(overrides = {}) {
+  const webAccountLinked = overrides.webAccountLinked === true;
+  return {
+    id: "mini-account",
+    name: null,
+    email: null,
+    emailVerified: false,
+    image: null,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    accountMode: webAccountLinked ? "WEB_LINKED" : "MINI_ONLY",
+    webAccountLinked,
+    followEntryId: null,
+    webVerifiedEntryId: null,
+    effectiveEntryId: null,
+    effectiveEntrySource: null,
+    entryConflict: false,
+    fplEntryId: null,
+    fplEntryBoundAt: null,
+    fplEntryVerifiedAt: null,
+    wechatLinked: true,
+    ...overrides,
+  };
+}
+
 test("standalone viewer entry stays separate from optional Web ownership", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
@@ -69,7 +93,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
         webAccountLinked: true,
         token: "verified-entry-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: {
+        profile: canonicalProfile({
           id: "profile",
           name: null,
           email: null,
@@ -82,7 +106,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
           fplEntryId: 6953,
           fplEntryVerifiedAt: "2026-08-23T00:00:00.000Z",
           wechatLinked: true,
-        },
+        }),
       },
     });
     await refresh;
@@ -104,7 +128,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
         webAccountLinked: true,
         token: "verified-entry-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: {
+        profile: canonicalProfile({
           id: "profile",
           name: null,
           email: null,
@@ -117,7 +141,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
           fplEntryId: 7001,
           fplEntryVerifiedAt: "2026-08-23T01:00:00.000Z",
           wechatLinked: true,
-        },
+        }),
       },
     });
     await rebind;
@@ -139,7 +163,7 @@ test("standalone viewer entry stays separate from optional Web ownership", async
   }
 });
 
-test("standalone account migrates, replays, and preserves its team across Web unlink", async () => {
+test("standalone account keeps an explicitly saved team across Web unlink", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const storage = new Map([["entry", 8743559]]);
@@ -152,7 +176,7 @@ test("standalone account migrates, replays, and preserves its team across Web un
   let deferProfile = false;
   let deferredProfileRequest;
 
-  const profile = () => ({
+  const profile = () => canonicalProfile({
     id: "mini-account",
     name: webAccountLinked ? "Web user" : null,
     email: webAccountLinked ? "web@example.com" : null,
@@ -243,11 +267,12 @@ test("standalone account migrates, replays, and preserves its team across Web un
     });
     await refresh;
 
+    assert.equal(await saveMiniProgramFollowEntry(8743559), true);
     await synchronizeMiniProgramAccount();
     assert.equal(
       serverFollowEntryId,
       8743559,
-      "legacy local selection is uploaded once",
+      "the explicit follow mutation is uploaded",
     );
     assert.equal(currentMyFplEntryId(), 8743559);
     assert.equal(storage.has("pending-follow-entry-v1"), false);
@@ -323,7 +348,7 @@ test("an exact Mini/Web team conflict prompts once and closes to Mini by default
   let serverChoice = null;
   let modalCount = 0;
 
-  const profile = () => ({
+  const profile = () => canonicalProfile({
     id: "conflict-account",
     email: "web@example.com",
     webAccountLinked: true,
@@ -430,7 +455,9 @@ test("an already-resolved app auth gate keeps the standalone viewer entry", asyn
       getStorageSync: (key) => storage.get(key),
       setStorageSync: (key, value) => storage.set(key, value),
       removeStorageSync: (key) => storage.delete(key),
-      canIUse: () => false,
+      canIUse: () => true,
+      getStorage: ({ success }) =>
+        success({ data: "restored-account-token", errMsg: "getStorage:ok" }),
     };
     globalThis.getApp = () => ({
       authReady: Promise.resolve(),
@@ -465,12 +492,11 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
   const storage = new Map([
     ["api-session-token", "freshness-token"],
     ["api-session-expires-at", "2099-01-01T00:00:00.000Z"],
-    ["api-profile-v2-initialized", true],
     ["api-profile-checked-at", now - 30_000],
     ["entry", 101],
     [
-      "api-profile-v2",
-      {
+      "api-profile",
+      canonicalProfile({
         id: "freshness-profile",
         followEntryId: 101,
         effectiveEntryId: 101,
@@ -480,7 +506,7 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
         emailVerified: false,
         entryConflict: false,
         wechatLinked: true,
-      },
+      }),
     ],
   ]);
   const globalData = { entryId: 101 };
@@ -492,7 +518,9 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
       getStorageSync: (key) => storage.get(key),
       setStorageSync: (key, value) => storage.set(key, value),
       removeStorageSync: (key) => storage.delete(key),
-      canIUse: () => false,
+      canIUse: () => true,
+      getStorage: ({ success }) =>
+        success({ data: "freshness-token", errMsg: "getStorage:ok" }),
       request: (options) => {
         assert.match(options.url, /\/profile$/);
         assert.equal(options.header.Authorization, "Bearer freshness-token");
@@ -501,7 +529,7 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
           statusCode: 200,
           data: {
             success: true,
-            profile: {
+            profile: canonicalProfile({
               id: "freshness-profile",
               followEntryId: 202,
               effectiveEntryId: 202,
@@ -511,7 +539,7 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
               emailVerified: false,
               entryConflict: false,
               wechatLinked: true,
-            },
+            }),
           },
         });
       },
@@ -520,10 +548,9 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
     clearSessionCredentials();
     storage.set("api-session-token", "freshness-token");
     storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");
-    storage.set("api-profile-v2-initialized", true);
     storage.set("api-profile-checked-at", now - 30_000);
     storage.set("entry", 101);
-    storage.set("api-profile-v2", {
+    storage.set("api-profile", canonicalProfile({
       id: "freshness-profile",
       followEntryId: 101,
       effectiveEntryId: 101,
@@ -533,7 +560,7 @@ test("profile freshness gates warm reads and merges concurrent profile sync", as
       emailVerified: false,
       entryConflict: false,
       wechatLinked: true,
-    });
+    }));
 
     await restoreApiSessionCredentials();
     await ensureMiniProgramAccountFresh();
@@ -582,7 +609,7 @@ test("profile sync discards a response from a superseded session", async () => {
   let deferredProfileRequest;
   let profileRequestCount = 0;
 
-  const profile = (id, entryId, webAccountLinked = false) => ({
+  const profile = (id, entryId, webAccountLinked = false) => canonicalProfile({
     id,
     email: webAccountLinked ? "b@example.com" : null,
     webAccountLinked,
@@ -704,7 +731,7 @@ test("profile sync reuses the response from a same-session 401 retry", async () 
   let loginRequest;
   let profileRequestCount = 0;
 
-  const profile = (id, entryId) => ({
+  const profile = (id, entryId) => canonicalProfile({
     id,
     email: null,
     webAccountLinked: false,
@@ -815,7 +842,7 @@ test("pending follow replay accepts the session-retried mutation response", asyn
   let profileRequestCount = 0;
   let serverFollowEntryId = 101;
 
-  const profile = (entryId) => ({
+  const profile = (entryId) => canonicalProfile({
     id: "account",
     email: null,
     webAccountLinked: false,
@@ -940,7 +967,7 @@ test("profile sync stops after logout instead of restoring a session", async () 
   let deferredProfileRequest;
   let profileRequestCount = 0;
 
-  const profile = (id, entryId) => ({
+  const profile = (id, entryId) => canonicalProfile({
     id,
     email: null,
     webAccountLinked: false,
@@ -1187,7 +1214,9 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
       getStorageSync: () => undefined,
       setStorageSync: () => undefined,
       removeStorageSync: () => undefined,
-      canIUse: () => false,
+      canIUse: () => true,
+      getStorage: ({ success }) =>
+        success({ data: "token-before-confirm", errMsg: "getStorage:ok" }),
       login: (options) => {
         loginSuccess = options.success;
       },
@@ -1217,14 +1246,14 @@ test("logout revokes a credential issued by an in-flight refresh", async () => {
         webAccountLinked: false,
         token: "issued-during-logout",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: {
+        profile: canonicalProfile({
           id: "profile",
           name: null,
           email: null,
           fplEntryId: null,
           fplEntryVerifiedAt: null,
           wechatLinked: true,
-        },
+        }),
       },
     });
 
@@ -1290,7 +1319,7 @@ test("logout does not let delayed encrypted persistence restore a session", asyn
         webAccountLinked: false,
         token: "delayed-persistence-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: { id: "profile", webAccountLinked: false },
+        profile: canonicalProfile({ id: "profile" }),
       },
     });
     await new Promise((resolve) => setImmediate(resolve));
@@ -1360,14 +1389,14 @@ test("logout revokes a displaced refresh credential when email confirmation fail
         webAccountLinked: false,
         token: "rotated-before-confirm-failure",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: {
+        profile: canonicalProfile({
           id: "profile",
           name: null,
           email: null,
           fplEntryId: null,
           fplEntryVerifiedAt: null,
           wechatLinked: true,
-        },
+        }),
       },
     });
     await new Promise((resolve) => setImmediate(resolve));
@@ -1429,16 +1458,19 @@ test("duplicate email confirmations share the first in-flight request", async ()
       statusCode: 200,
       data: {
         success: true,
+        contractVersion: 2,
+        authenticated: true,
+        webAccountLinked: true,
         token: "confirmed-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
-        profile: {
+        profile: canonicalProfile({
           id: "profile",
           name: null,
           email: "fpl@example.com",
           fplEntryId: null,
           fplEntryVerifiedAt: null,
           wechatLinked: true,
-        },
+        }),
       },
     });
 
@@ -1470,7 +1502,9 @@ test("email confirmation is rejected while logout is in flight", async () => {
             : undefined,
       setStorageSync: () => undefined,
       removeStorageSync: () => undefined,
-      canIUse: () => false,
+      canIUse: () => true,
+      getStorage: ({ success }) =>
+        success({ data: "token-before-confirm", errMsg: "getStorage:ok" }),
       login: (options) => loginCallbacks.push(options.success),
       request: (options) => {
         if (options.method === "DELETE") deleteRequest = options;
@@ -1496,7 +1530,7 @@ test("email confirmation is rejected while logout is in flight", async () => {
   }
 });
 
-test("legacy plaintext session tokens migrate to encrypted storage", async () => {
+test("plaintext session tokens are rejected without migration", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
   const removed = [];
@@ -1523,10 +1557,8 @@ test("legacy plaintext session tokens migrate to encrypted storage", async () =>
 
     await restoreApiSessionCredentials();
 
-    assert.equal(getApiSessionToken(), "legacy-token");
-    assert.equal(encryptedWrite.key, "api-session-token");
-    assert.equal(encryptedWrite.encrypt, true);
-    assert.equal(encryptedWrite.data, "legacy-token");
+    assert.equal(getApiSessionToken(), null);
+    assert.equal(encryptedWrite, undefined);
     assert.equal(removed.includes("api-session-token"), true);
     clearSessionCredentials();
   } finally {
@@ -1546,15 +1578,15 @@ test("linked snapshot surfaces stored display email until credentials clear", as
       getStorageSync: (key) => {
         if (key === "api-session-expires-at") return "2099-01-01T00:00:00.000Z";
         if (key === "api-profile-email") return "fpl@example.com";
-        if (key === "api-profile-v2")
-          return {
+        if (key === "api-profile")
+          return canonicalProfile({
             id: "mini-profile",
             email: "fpl@example.com",
             webAccountLinked: true,
             followEntryId: 6953,
             effectiveEntryId: 6953,
             effectiveEntrySource: "MINI",
-          };
+          });
         return undefined;
       },
       canIUse: () => true,

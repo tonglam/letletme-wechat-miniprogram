@@ -366,15 +366,8 @@ test("tournament status reports only rows actually retained", () => {
     "miniprogram/pages/live/tournament/tournament.controller.ts",
   );
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
-  assert.match(tournament, /this\.retainedRowCount = retainedRows\.length/);
-  assert.match(
-    tournament,
-    /this\.officialTraceableEntries = combinedTournamentTraceableEntries\(\s*liveResult\.traceableEntries,\s*retainedRows,\s*liveResult\.totalEntries/,
-  );
-  assert.match(
-    tournament,
-    /combinedTournamentTraceableScoreStates\(\s*liveResult\.traceableScoreStates,\s*retainedRows/,
-  );
+  assert.match(tournament, /retainedRowCount/);
+  assert.match(tournament, /options\.lastGood \? rows\.length : 0/);
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
   assert.doesNotMatch(tournament, /overallRank: row\.overallRank \?\? row\.rank/);
@@ -563,15 +556,15 @@ test("tournament row requests are principal- and season-generation guarded", () 
   );
   assert.match(
     tournament,
-    /const entryId = this\.data\.entryId[\s\S]*const requestKey = `\$\{entryId\}:/,
+    /const variables = this\.buildBoardVariables\(\);[\s\S]*const requestKey = `board:\$\{JSON\.stringify\(variables\)\}:/,
   );
   assert.match(
     tournament,
-    /await getLivePointsByTournamentSnapshot[\s\S]*restartForPrincipalChange\(entryId\)/,
+    /await getEntryLiveCompetitionBoardPage[\s\S]*restartForPrincipalChange\(variables\.entryId\)/,
   );
   assert.match(
     tournament,
-    /catch \(error\)[\s\S]*restartForPrincipalChange\(entryId\)/,
+    /catch \(error\)[\s\S]*restartForPrincipalChange\(variables\.entryId\)/,
   );
 });
 
