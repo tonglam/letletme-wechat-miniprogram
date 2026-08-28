@@ -1,38 +1,73 @@
-import type { EntryHistory, EntryInfo, EntryLeague, EntrySearchResult, EntryTransfer } from "../models/entry";
+import type {
+  EntryHistory,
+  EntryInfo,
+  EntryLeague,
+  EntryLookupSource,
+  EntryLookupStatus,
+  EntryPersistenceState,
+  EntrySearchResult,
+  EntryTransfer
+} from "../models/entry";
+import { entryLookupPresentation } from "../utils/entry-lookup-presentation";
 import { graphqlRequest } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 
 // Documents here are not shared with summary.service: field selections differ
 // (and live vs history cache variants). Merging would change query hashes.
 
-const GET_ENTRY = `
-  query GetEntry($id: Int!) {
-    entry(id: $id) {
-      id
-      entryName
-      playerName
-      region
-      overallPoints
-      overallRank
-      bank
-      teamValue
-      totalTransfers
+export const ENTRY_LOOKUP_QUERY = `
+  query EntryLookup($id: Int!) {
+    entryLookup(id: $id) {
+      status
+      retryable
+      source
+      persistenceState
+      entry {
+        id
+        entryName
+        playerName
+        region
+        overallPoints
+        overallRank
+        bank
+        teamValue
+        totalTransfers
+      }
     }
   }
 `;
 
+export type { EntryLookupSource, EntryLookupStatus, EntryPersistenceState } from "../models/entry";
+
 interface GetEntryResponse {
-  entry: {
-    id: number;
-    entryName: string;
-    playerName: string;
-    region?: string | null;
-    overallPoints?: number | null;
-    overallRank?: number | null;
-    bank?: number | null;
-    teamValue?: number | null;
-    totalTransfers?: number | null;
-  } | null;
+  entryLookup: {
+    status: EntryLookupStatus;
+    retryable: boolean;
+    source?: EntryLookupSource | null;
+    persistenceState?: EntryPersistenceState | null;
+    entry: {
+      id: number;
+      entryName: string;
+      playerName: string;
+      region?: string | null;
+      overallPoints?: number | null;
+      overallRank?: number | null;
+      bank?: number | null;
+      teamValue?: number | null;
+      totalTransfers?: number | null;
+    } | null;
+  };
+}
+
+export class EntryLookupError extends Error {
+  constructor(
+    readonly status: EntryLookupStatus,
+    readonly retryable: boolean,
+    message: string,
+  ) {
+    super(message);
+    this.name = "EntryLookupError";
+  }
 }
 
 const GET_ENTRY_LEAGUES = `
@@ -129,7 +164,7 @@ interface EntryEventResultResponse {
   entryEventResult: EntryEventResult | null;
 }
 
-function mapGraphQLEntry(entry: GetEntryResponse["entry"]): EntryInfo | undefined {
+function mapGraphQLEntry(entry: GetEntryResponse["entryLookup"]["entry"]): EntryInfo | undefined {
   if (!entry) {
     return undefined;
   }
@@ -205,16 +240,30 @@ export async function getEntryInfo(
   forceRefresh = false,
   trace?: PageRequestTrace | null
 ): Promise<EntryInfo> {
-  const data = await graphqlRequest<GetEntryResponse>(GET_ENTRY, { id: entry }, {
+  const data = await graphqlRequest<GetEntryResponse>(ENTRY_LOOKUP_QUERY, { id: entry }, {
     cachePolicy: "reporting",
     forceRefresh,
     trace
   });
-  const result = mapGraphQLEntry(data.entry);
-  if (!result) {
-    throw new Error("没有找到这个 FPL 球队，请检查 Entry ID");
+  const lookup = data.entryLookup;
+  const result = mapGraphQLEntry(lookup?.entry ?? null);
+  if (lookup?.status !== "FOUND" || !result) {
+    const status = lookup?.status ?? "UNAVAILABLE";
+    const presentation = entryLookupPresentation(status);
+    throw new EntryLookupError(
+      status,
+      typeof lookup?.retryable === "boolean"
+        ? lookup.retryable
+        : presentation?.retryable ?? true,
+      presentation?.message ?? "当前无法确认球队数据，请稍后重试",
+    );
   }
-  return result;
+  return {
+    ...result,
+    lookupStatus: lookup.status,
+    lookupSource: lookup.source ?? null,
+    persistenceState: lookup.persistenceState ?? null
+  };
 }
 
 export async function getEntryLeagueInfo(

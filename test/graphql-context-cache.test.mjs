@@ -32,7 +32,7 @@ test("season-scoped operations fail before network when season is unresolved", a
     /赛季信息/
   );
   await assert.rejects(
-    graphqlRead("query GetEntry($id: Int!) { entry(id: $id) { id } }", { id: 1 }, { cachePolicy: "reporting" }),
+    graphqlRead("query EntryLookup($id: Int!) { entryLookup(id: $id) { status entry { id } } }", { id: 1 }, { cachePolicy: "reporting" }),
     /赛季信息/
   );
   assert.equal(requests.length, 0);

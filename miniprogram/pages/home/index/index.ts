@@ -1,7 +1,7 @@
 import {
   readCoreEventFixtureSchedule
 } from "../../../services/fixture.service";
-import { getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.service";
+import { EntryLookupError, getEntryInfo, getEntryLeagueInfo } from "../../../services/entry.service";
 import type { EntryLeague } from "../../../models/entry";
 import { awaitLinkedAccountSnapshot, getApiSessionToken } from "../../../services/auth.service";
 import {
@@ -40,6 +40,7 @@ interface HomeData {
   fixtureStaleStoredAt: number | null;
   error: string;
   entryError: string;
+  entryErrorRetryable: boolean;
   priceError: string;
   marketUnavailable: boolean;
   gameweekStatsError: string;
@@ -147,6 +148,7 @@ Page({
     fixtureStaleStoredAt: null,
     error: "",
     entryError: "",
+    entryErrorRetryable: false,
     priceError: "",
     marketUnavailable: false,
     gameweekStatsError: "",
@@ -386,6 +388,7 @@ Page({
         fixtureError: "",
         fixtureStaleMessage: "",
         entryError: "",
+        entryErrorRetryable: false,
         selectedFixtureGw: fixtureGw,
         minFixtureGw: app.globalData.nextGw
       });
@@ -609,7 +612,8 @@ Page({
       priceError: "",
       marketUnavailable: false,
       gameweekStatsError: "",
-      entryError: ""
+      entryError: "",
+      entryErrorRetryable: false
     });
     const personalTask = (async (): Promise<void> => {
       if (!getApiSessionToken()) {
@@ -624,7 +628,8 @@ Page({
         this.setData({
           entry: {},
           leagues: [],
-          entryError: ""
+          entryError: "",
+          entryErrorRetryable: false
         });
         return;
       }
@@ -643,11 +648,15 @@ Page({
         this.setData({
           entry,
           entryError: "",
+          entryErrorRetryable: false,
           ...(previousEntryId !== nextEntryId ? { leagues: [] } : {}),
         });
       } catch (error) {
         if (isActiveSecondary()) {
-          this.setData({ entryError: error instanceof Error ? error.message : "球队信息加载失败" });
+          this.setData({
+            entryError: error instanceof Error ? error.message : "球队信息加载失败",
+            entryErrorRetryable: error instanceof EntryLookupError ? error.retryable : true
+          });
         }
       }
       // Load all leagues in a single request, then update UI once

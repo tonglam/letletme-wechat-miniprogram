@@ -1,0 +1,157 @@
+import type {
+  PlayerAvailability,
+  PlayerDataSectionAvailability,
+  PlayerDataState,
+} from "../miniprogram/models/player";
+import {
+  playerDataAvailabilityIssues,
+  playerInjuryAvailabilityPresentation,
+} from "../miniprogram/utils/player-data-availability";
+import { downgradeStalePlayerDetailResponse } from "../miniprogram/services/player.service";
+
+const section = (state: PlayerDataState): PlayerDataSectionAvailability => ({
+  state,
+});
+
+function assertDeepEqual(
+  actual: unknown,
+  expected: unknown,
+  message: string,
+): void {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(
+      `${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+for (const state of ["READY", "EMPTY", "NOT_APPLICABLE"] as const) {
+  assertDeepEqual(
+    playerDataAvailabilityIssues({
+      isFullyAuthoritative: true,
+      seasonStats: section(state),
+      market: section(state),
+      historicalTeam: section(state),
+      fixtures: section(state),
+      recentGameweeks: section(state),
+    }),
+    [],
+    `${state} is authoritative`,
+  );
+}
+
+assertDeepEqual(
+  playerDataAvailabilityIssues(undefined),
+  [
+    {
+      section: "player",
+      sectionLabel: "球员数据",
+      state: "UNAVAILABLE",
+      stateLabel: "不可用",
+      tone: "unavailable",
+    },
+  ],
+  "missing availability fails closed",
+);
+
+assertDeepEqual(
+  playerDataAvailabilityIssues({
+    isFullyAuthoritative: false,
+    seasonStats: section("READY"),
+    market: section("STALE"),
+    historicalTeam: section("FALLBACK"),
+    fixtures: section("UNAVAILABLE"),
+    recentGameweeks: section("EMPTY"),
+  }).map((issue) => [issue.sectionLabel, issue.stateLabel, issue.tone]),
+  [
+    ["市场", "已过期", "stale"],
+    ["历史球队", "已降级", "fallback"],
+    ["赛程", "不可用", "unavailable"],
+  ],
+  "degraded states remain distinct",
+);
+
+assertDeepEqual(
+  playerDataAvailabilityIssues({
+    isFullyAuthoritative: false,
+    seasonStats: section("READY"),
+    market: section("READY"),
+    historicalTeam: section("EMPTY"),
+    fixtures: section("NOT_APPLICABLE"),
+    recentGameweeks: section("READY"),
+  }),
+  [
+    {
+      section: "player",
+      sectionLabel: "球员数据",
+      state: "UNAVAILABLE",
+      stateLabel: "不可用",
+      tone: "unavailable",
+    },
+  ],
+  "inconsistent aggregate fails closed",
+);
+
+assertDeepEqual(
+  playerDataAvailabilityIssues({
+    isFullyAuthoritative: false,
+    seasonStats: section("UNAVAILABLE"),
+    market: section("READY"),
+    historicalTeam: section("EMPTY"),
+    fixtures: section("READY"),
+    recentGameweeks: section("READY"),
+  }).map((issue) => [issue.sectionLabel, issue.stateLabel, issue.tone]),
+  [["赛季数据", "不可用", "unavailable"]],
+  "season aggregate failure stays independent from recent gameweeks",
+);
+
+assertDeepEqual(
+  playerInjuryAvailabilityPresentation({
+    status: "d",
+    news: "75% chance of playing",
+    stale: true,
+  } as PlayerAvailability),
+  {
+    statusLabel: "出场存疑",
+    news: "75% chance of playing",
+    stale: true,
+  },
+  "injury status remains separate from data authority",
+);
+
+const stalePlayer = downgradeStalePlayerDetailResponse({
+  playerDetail: {
+    injuryAvailability: { status: "a", stale: false },
+    dataAvailability: {
+      isFullyAuthoritative: true,
+      seasonStats: section("READY"),
+      market: section("EMPTY"),
+      historicalTeam: section("READY"),
+      fixtures: section("NOT_APPLICABLE"),
+      recentGameweeks: section("READY"),
+    },
+  } as never,
+});
+assertDeepEqual(
+  {
+    authoritative: stalePlayer.playerDetail?.dataAvailability.isFullyAuthoritative,
+    states: stalePlayer.playerDetail
+      ? [
+          stalePlayer.playerDetail.dataAvailability.seasonStats.state,
+          stalePlayer.playerDetail.dataAvailability.market.state,
+          stalePlayer.playerDetail.dataAvailability.historicalTeam.state,
+          stalePlayer.playerDetail.dataAvailability.fixtures.state,
+          stalePlayer.playerDetail.dataAvailability.recentGameweeks.state,
+        ]
+      : [],
+    reason: stalePlayer.playerDetail?.dataAvailability.market.reasonCode,
+    injuryStale: stalePlayer.playerDetail?.injuryAvailability?.stale,
+  },
+  {
+    authoritative: false,
+    states: ["STALE", "STALE", "STALE", "NOT_APPLICABLE", "STALE"],
+    reason: "CLIENT_STALE_CACHE",
+    injuryStale: true,
+  },
+  "stale cache fallback is rendered as non-authoritative",
+);

@@ -119,7 +119,7 @@
           wx:for="{{rows}}"
           wx:key="playerId"
           class="prediction-card"
-          data-code="{{item.playerCode}}"
+          data-player-id="{{item.playerId}}"
           bindtap="onOpenPlayer"
           hover-class="prediction-card-hover"
         >

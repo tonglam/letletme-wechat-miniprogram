@@ -7,7 +7,7 @@ const source = (path) => readFileSync(path, "utf8");
 test("tournament context recovery retains the originating directory trace", () => {
   const service = source("miniprogram/services/tournament.service.ts");
 
-  assert.match(service, /async function readDirectory[\s\S]*?ensureAppContext\(\{[\s\S]*?forceRefresh: forceRefresh \|\| !season,\s+trace\s+\}\)/);
+  assert.match(service, /async function readDirectory[\s\S]*?ensureAppContext\(\{[\s\S]*?forceRefresh: forceRefresh \|\| !season,\s+trace,?\s+\}\)/);
 });
 
 test("Price abandons a superseded cold continuation after context resolution", () => {

@@ -53,8 +53,7 @@ App<IAppOption>({
   async onLaunch() {
     const launchStart = Date.now();
     this.installMandatoryUpdateGuard();
-    // Older builds persisted openid even though the current session contract
-    // does not consume it. Remove the legacy identifier during migration.
+    // The current session contract does not consume a standalone openid.
     wx.removeStorageSync("openid");
     this.globalData.entryId = getEntryId();
     commitEntryBinding(this.globalData.entryId || null, "restore");
@@ -159,8 +158,7 @@ App<IAppOption>({
     };
     try {
       await requestDiagnosticDisclosure();
-      // Restore only through WeChat's encrypted asynchronous storage. Legacy
-      // plaintext is migrated before any GraphQL request can read the token.
+      // Restore only through WeChat's encrypted asynchronous storage.
       await restoreApiSessionCredentials();
       this.globalData.entryId = getEntryId();
       commitEntryBinding(this.globalData.entryId || null, "restore");

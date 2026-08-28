@@ -59,7 +59,7 @@
 
     <view wx:if="{{pos.hasTeam(entry) || entryError}}" class="section">
       <block wx:if="{{entryError}}">
-        <app-error-state message="{{entryError}}" workload="interactive" bind:retry="onRetry" />
+        <app-error-state message="{{entryError}}" workload="interactive" showRetry="{{entryErrorRetryable}}" bind:retry="onRetry" />
         <view class="action section-link account-link-hint" role="button" bindtap="onChangeEntry" hover-class="hover-dim">更换球队</view>
       </block>
       <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" bind:openleagues="onOpenLeagues" />

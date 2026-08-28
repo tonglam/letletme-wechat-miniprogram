@@ -15,13 +15,48 @@ export interface PlayerOption {
   statText?: string;
 }
 
-export interface PlayerDetail extends Omit<PlayerOption, "totalPoints" | "selectedByPercent" | "form"> {
+export interface PlayerDetail extends Omit<
+  PlayerOption,
+  "totalPoints" | "selectedByPercent" | "form"
+> {
   totalPoints?: number;
   selectedByPercent?: string | number;
   form?: string | number;
+  injuryAvailability: PlayerAvailability | null;
+  dataAvailability: PlayerDetailDataAvailability;
 }
 
-export interface PlayerFilterRow extends PlayerDetail {
+export type PlayerDataState =
+  "READY" | "EMPTY" | "STALE" | "FALLBACK" | "UNAVAILABLE" | "NOT_APPLICABLE";
+
+export interface PlayerAvailability {
+  status: string;
+  news?: string | null;
+  newsAdded?: string | null;
+  observedDate?: string | null;
+  capturedAt?: string | null;
+  chanceOfPlayingThisRound?: number | null;
+  chanceOfPlayingNextRound?: number | null;
+  stale?: boolean | null;
+}
+
+export interface PlayerDataSectionAvailability {
+  state: PlayerDataState;
+  reasonCode?: string | null;
+  revision?: string | null;
+  sourceCheckedAt?: string | null;
+}
+
+export interface PlayerDetailDataAvailability {
+  isFullyAuthoritative: boolean;
+  seasonStats: PlayerDataSectionAvailability;
+  market: PlayerDataSectionAvailability;
+  historicalTeam: PlayerDataSectionAvailability;
+  fixtures: PlayerDataSectionAvailability;
+  recentGameweeks: PlayerDataSectionAvailability;
+}
+
+export interface PlayerFilterRow extends PlayerOption {
   goals?: number;
   assists?: number;
   cleanSheets?: number;

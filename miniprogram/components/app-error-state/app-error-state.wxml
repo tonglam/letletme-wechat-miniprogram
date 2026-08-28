@@ -8,6 +8,6 @@
   <view class="error-eyebrow">{{eyebrow || '加载未完成'}}</view>
   <view class="error-message">{{displayMessage}}</view>
   <view class="error-description">{{description || '请稍后重试，当前页面不会丢失已有内容。'}}</view>
-  <button class="error-action btn-primary {{retryDisabled ? 'is-disabled' : ''}}" disabled="{{retryDisabled}}" hover-class="hover-dim" bindtap="onRetry">{{retryButtonText}}</button>
+  <button wx:if="{{showRetry}}" class="error-action btn-primary {{retryDisabled ? 'is-disabled' : ''}}" disabled="{{retryDisabled}}" hover-class="hover-dim" bindtap="onRetry">{{retryButtonText}}</button>
   <view wx:if="{{reportText}}" class="error-report" hover-class="hover-dim" bindtap="onReport">{{reportText}}</view>
 </view>

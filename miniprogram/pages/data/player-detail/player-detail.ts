@@ -1,6 +1,12 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getPlayerInfoByCode } from "../../../services/player.service";
 import type { PlayerDetail } from "../../../models/player";
+import {
+  playerInjuryAvailabilityPresentation,
+  playerDataAvailabilityIssues,
+  type PlayerDataAvailabilityIssue,
+  type PlayerInjuryAvailabilityPresentation
+} from "../../../utils/player-data-availability";
 import { routes } from "../../../config/routes";
 import { setPageTitle } from "../../../utils/navigation";
 import { ensureAppContext } from "../../../services/app-context.service";
@@ -18,7 +24,9 @@ PerformancePage({
     code: "",
     season: "",
     player: undefined as PlayerDetail | undefined,
-    metrics: [] as Array<{ label: string; value: string }>
+    metrics: [] as Array<{ label: string; value: string }>,
+    dataAvailabilityIssues: [] as PlayerDataAvailabilityIssue[],
+    injuryAvailability: null as PlayerInjuryAvailabilityPresentation | null
   },
 
   routeSeason: "",
@@ -71,8 +79,14 @@ PerformancePage({
   },
 
   async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
-        if (!this.data.code) {
-      this.setData({ loading: false, error: "", emptyState: true });
+    if (!this.data.code) {
+      this.setData({
+        loading: false,
+        error: "",
+        emptyState: true,
+        dataAvailabilityIssues: [],
+        injuryAvailability: null
+      });
       return;
     }
 
@@ -89,7 +103,14 @@ PerformancePage({
       trigger,
       forceReason: forceRefresh ? "user-refresh" : undefined
     });
-    this.setData({ loading: true, error: "", errorWorkload: "home", emptyState: false });
+    this.setData({
+      loading: true,
+      error: "",
+      errorWorkload: "home",
+      emptyState: false,
+      dataAvailabilityIssues: [],
+      injuryAvailability: null
+    });
     try {
       let season = this.routeSeason;
       try {
@@ -105,7 +126,12 @@ PerformancePage({
       this.setData({ season, errorWorkload: "interactive" });
       const player = await getPlayerInfoByCode(this.data.code, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
-      this.setData({ player, metrics: buildPlayerMetrics(player) });
+      this.setData({
+        player,
+        metrics: buildPlayerMetrics(player),
+        dataAvailabilityIssues: playerDataAvailabilityIssues(player.dataAvailability),
+        injuryAvailability: playerInjuryAvailabilityPresentation(player.injuryAvailability)
+      });
       setPageTitle(player.name || "球员详情");
     } catch (error) {
       if (!isActiveRequest()) return;
