@@ -1,11 +1,15 @@
 import { graphqlRead, graphqlRequest } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
-import type { KnockoutOption, TournamentOption, TournamentSelectionStats } from "../models/tournament";
+import type {
+  KnockoutOption,
+  TournamentOption,
+  TournamentSelectionStats,
+} from "../models/tournament";
 import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
 import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
 
-const GET_ENTRY_TOURNAMENTS = `
+export const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
     entryParticipatingTournaments(entryId: $entryId) {
       id
@@ -342,7 +346,7 @@ export interface EntryTournament extends Omit<TournamentOption, "id"> {
 export async function readEntryTournamentDirectory(
   entryId: number,
   season: string,
-  options: ServiceReadOptions = {}
+  options: ServiceReadOptions = {},
 ): Promise<DomainRead<EntryTournamentRow[]>> {
   if (!Number.isSafeInteger(entryId) || entryId <= 0) {
     throw new Error("Entry ID 无效");
@@ -357,27 +361,34 @@ export async function readEntryTournamentDirectory(
       cachePolicy: "reporting",
       cacheVariant: `season:${season}`,
       forceRefresh: options.forceRefresh,
-      trace: options.trace
-    }
+      trace: options.trace,
+    },
   );
   if (result.errors.length > 0) {
     throw new Error(
-      result.errors.map((error) => error.message).filter(Boolean).join("; ")
-      || "赛事目录暂时不可用，请稍后重试"
+      result.errors
+        .map((error) => error.message)
+        .filter(Boolean)
+        .join("; ") || "赛事目录暂时不可用，请稍后重试",
     );
   }
-  return { data: result.data.entryParticipatingTournaments || [], meta: result.meta };
+  return {
+    data: result.data.entryParticipatingTournaments || [],
+    meta: result.meta,
+  };
 }
 
 function currentSeason(): string {
-  return getAppContextSnapshot()?.season
-    || String(getApp<IAppOption>().globalData.season || "");
+  return (
+    getAppContextSnapshot()?.season ||
+    String(getApp<IAppOption>().globalData.season || "")
+  );
 }
 
 async function readDirectory(
   entry: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<EntryTournamentRow[]> {
   const snapshot = getAppContextSnapshot();
   let season = currentSeason();
@@ -389,11 +400,13 @@ async function readDirectory(
       // season-only unresolved snapshot otherwise keeps fallback GW1 reads
       // behind AppContext's retry backoff after the backend has recovered.
       forceRefresh: forceRefresh || !season,
-      trace
+      trace,
     });
     season = context.season;
   }
-  return (await readEntryTournamentDirectory(entry, season, { forceRefresh, trace })).data;
+  return (
+    await readEntryTournamentDirectory(entry, season, { forceRefresh, trace })
+  ).data;
 }
 
 export interface TournamentEventResult {
@@ -485,7 +498,8 @@ interface TournamentSelectionStatsResponse {
   tournamentSelectionStats: TournamentSelectionStats | null;
 }
 
-export type MyFplReviewState = "PRESEASON" | "PENDING" | "READY" | "EMPTY" | "UNAVAILABLE";
+export type MyFplReviewState =
+  "PRESEASON" | "PENDING" | "READY" | "EMPTY" | "UNAVAILABLE";
 
 export interface MyFplReviewContext {
   season: string;
@@ -596,12 +610,12 @@ export async function getMyFplCompetitionsDesk(
   tournamentId: number | null = null,
   eventId: number | null = null,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<MyFplCompetitionsDesk> {
   return graphqlRequest<{ myFplCompetitionsDesk: MyFplCompetitionsDesk }>(
     GET_MY_FPL_COMPETITIONS_DESK,
     { tournamentId, eventId },
-    { cachePolicy: "reporting", forceRefresh, trace }
+    { cachePolicy: "reporting", forceRefresh, trace },
   ).then((data) => data.myFplCompetitionsDesk);
 }
 
@@ -612,12 +626,12 @@ export async function getMyFplCompetitionBoard(
   pageSize = 100,
   search = "",
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<MyFplCompetitionBoard> {
   return graphqlRequest<{ myFplCompetitionBoard: MyFplCompetitionBoard }>(
     GET_MY_FPL_COMPETITION_BOARD,
     { tournamentId, eventId, page, pageSize, search: search || null },
-    { cachePolicy: "reporting", forceRefresh, trace }
+    { cachePolicy: "reporting", forceRefresh, trace },
   ).then((data) => data.myFplCompetitionBoard);
 }
 
@@ -625,7 +639,7 @@ const MY_FPL_BOARD_PAGE_SIZE = 100;
 const MY_FPL_BOARD_PAGE_CONCURRENCY = 4;
 
 export function mergeMyFplCompetitionBoardPages(
-  pages: readonly MyFplCompetitionBoard[]
+  pages: readonly MyFplCompetitionBoard[],
 ): MyFplCompetitionBoard {
   const first = pages[0];
   if (!first) throw new Error("赛事榜单没有返回分页数据");
@@ -649,7 +663,7 @@ export async function getCompleteMyFplCompetitionBoard(
   tournamentId: number,
   eventId: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<MyFplCompetitionBoard> {
   const first = await getMyFplCompetitionBoard(
     tournamentId,
@@ -658,37 +672,45 @@ export async function getCompleteMyFplCompetitionBoard(
     MY_FPL_BOARD_PAGE_SIZE,
     "",
     forceRefresh,
-    trace
+    trace,
   );
   const totalPages = Math.max(1, Number(first.totalPages) || 1);
   if (totalPages === 1) return mergeMyFplCompetitionBoardPages([first]);
 
   const pages: MyFplCompetitionBoard[] = [first];
-  for (let start = 2; start <= totalPages; start += MY_FPL_BOARD_PAGE_CONCURRENCY) {
+  for (
+    let start = 2;
+    start <= totalPages;
+    start += MY_FPL_BOARD_PAGE_CONCURRENCY
+  ) {
     const pageNumbers = Array.from(
-      { length: Math.min(MY_FPL_BOARD_PAGE_CONCURRENCY, totalPages - start + 1) },
-      (_, index) => start + index
+      {
+        length: Math.min(MY_FPL_BOARD_PAGE_CONCURRENCY, totalPages - start + 1),
+      },
+      (_, index) => start + index,
     );
-    const batch = await Promise.all(pageNumbers.map((page) =>
-      getMyFplCompetitionBoard(
-        tournamentId,
-        eventId,
-        page,
-        MY_FPL_BOARD_PAGE_SIZE,
-        "",
-        forceRefresh,
-        trace
-      )
-    ));
+    const batch = await Promise.all(
+      pageNumbers.map((page) =>
+        getMyFplCompetitionBoard(
+          tournamentId,
+          eventId,
+          page,
+          MY_FPL_BOARD_PAGE_SIZE,
+          "",
+          forceRefresh,
+          trace,
+        ),
+      ),
+    );
     for (let index = 0; index < batch.length; index += 1) {
       const page = batch[index];
       const expectedPage = pageNumbers[index];
       if (
-        page.page !== expectedPage
-        || page.eventId !== first.eventId
-        || page.totalPages !== first.totalPages
-        || page.totalRows !== first.totalRows
-        || page.fieldSize !== first.fieldSize
+        page.page !== expectedPage ||
+        page.eventId !== first.eventId ||
+        page.totalPages !== first.totalPages ||
+        page.totalRows !== first.totalRows ||
+        page.fieldSize !== first.fieldSize
       ) {
         throw new Error("赛事榜单在分页加载期间已更新，请重试");
       }
@@ -702,19 +724,21 @@ export async function getMyFplCompetitionSeasonPath(
   tournamentId: number,
   throughEventId: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<MyFplCompetitionSeasonPath> {
-  return graphqlRequest<{ myFplCompetitionSeasonPath: MyFplCompetitionSeasonPath }>(
+  return graphqlRequest<{
+    myFplCompetitionSeasonPath: MyFplCompetitionSeasonPath;
+  }>(
     GET_MY_FPL_COMPETITION_SEASON_PATH,
     { tournamentId, throughEventId },
-    { cachePolicy: "reporting", forceRefresh, trace }
+    { cachePolicy: "reporting", forceRefresh, trace },
   ).then((data) => data.myFplCompetitionSeasonPath);
 }
 
 export async function getEntryPointsRaceTournament(
   entry: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<TournamentOption[]> {
   const rows = await readDirectory(entry, forceRefresh, trace);
   return rows
@@ -722,7 +746,7 @@ export async function getEntryPointsRaceTournament(
     .map((t) => ({
       id: Number(t.id),
       name: t.name,
-      participantCount: t.totalTeamNum ?? undefined
+      participantCount: t.totalTeamNum ?? undefined,
     }));
 }
 
@@ -730,7 +754,7 @@ export async function getEntryPointsRaceTournament(
 export async function getEntryAllTournaments(
   entry: number,
   forceRefresh = false,
-  trace?: PageRequestTrace | null
+  trace?: PageRequestTrace | null,
 ): Promise<EntryTournamentRow[]> {
   return readDirectory(entry, forceRefresh, trace ?? undefined);
 }
@@ -738,7 +762,7 @@ export async function getEntryAllTournaments(
 export async function getEntrySummaryTournaments(
   entry: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<EntryTournament[]> {
   const rows = await readDirectory(entry, forceRefresh, trace);
   return rows
@@ -751,11 +775,13 @@ export async function getEntrySummaryTournaments(
       groupStartedEventId: t.groupStartedEventId,
       groupEndedEventId: t.groupEndedEventId,
       state: t.state,
-      participantCount: t.totalTeamNum ?? undefined
+      participantCount: t.totalTeamNum ?? undefined,
     }));
 }
 
-export async function getEntryKnockoutTournament(entry: number): Promise<KnockoutOption[]> {
+export async function getEntryKnockoutTournament(
+  entry: number,
+): Promise<KnockoutOption[]> {
   const rows = await readDirectory(entry);
   return rows
     .filter((t) => t.knockoutMode && t.knockoutMode !== "NO_KNOCKOUT")
@@ -763,7 +789,7 @@ export async function getEntryKnockoutTournament(entry: number): Promise<Knockou
       id: t.id,
       name: t.name,
       startGw: t.knockoutStartedEventId ?? undefined,
-      endGw: t.knockoutEndedEventId ?? undefined
+      endGw: t.knockoutEndedEventId ?? undefined,
     }));
 }
 
@@ -774,11 +800,15 @@ export async function loadTournamentSeasonPath(
   toGw: number,
   forceRefresh = false,
   trace?: PageRequestTrace,
-  onBatch?: (pages: Array<{ gameweek: number; rows: TournamentEventResult[] }>) => boolean | void
-): Promise<Array<{
-  gameweek: number;
-  rows: TournamentEventResult[];
-}>> {
+  onBatch?: (
+    pages: Array<{ gameweek: number; rows: TournamentEventResult[] }>,
+  ) => boolean | void,
+): Promise<
+  Array<{
+    gameweek: number;
+    rows: TournamentEventResult[];
+  }>
+> {
   const start = Math.max(1, Math.min(fromGw, toGw));
   const end = Math.max(start, toGw);
   const events: number[] = [];
@@ -787,10 +817,21 @@ export async function loadTournamentSeasonPath(
   const concurrency = 4;
   for (let offset = 0; offset < events.length; offset += concurrency) {
     const batch = events.slice(offset, offset + concurrency);
-    const pages = await Promise.all(batch.map(async (eventId) => {
-      const payload = await getTournamentSummary(tournamentId, eventId, entryId, forceRefresh, trace);
-      return { gameweek: eventId, rows: payload.tournamentEventResults || [] };
-    }));
+    const pages = await Promise.all(
+      batch.map(async (eventId) => {
+        const payload = await getTournamentSummary(
+          tournamentId,
+          eventId,
+          entryId,
+          forceRefresh,
+          trace,
+        );
+        return {
+          gameweek: eventId,
+          rows: payload.tournamentEventResults || [],
+        };
+      }),
+    );
     out.push(...pages);
     if (onBatch && onBatch(out) === false) return out;
   }
@@ -802,25 +843,31 @@ export async function getTournamentSummary(
   eventId: number,
   entryId: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<TournamentSummaryPayload> {
-  return graphqlRequest<TournamentSummaryResponse>(GET_TOURNAMENT_SUMMARY, { tournamentId, eventId, entryId }, {
-    cachePolicy: "reporting",
-    forceRefresh,
-    trace
-  });
+  return graphqlRequest<TournamentSummaryResponse>(
+    GET_TOURNAMENT_SUMMARY,
+    { tournamentId, eventId, entryId },
+    {
+      cachePolicy: "reporting",
+      forceRefresh,
+      trace,
+    },
+  );
 }
 
 export async function getTournamentSeasonSnapshot(
   tournamentId: number,
   eventId: number,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<TournamentSeasonSnapshot | null> {
-  const data = await graphqlRequest<{ tournamentSeasonSnapshot: TournamentSeasonSnapshot | null }>(
+  const data = await graphqlRequest<{
+    tournamentSeasonSnapshot: TournamentSeasonSnapshot | null;
+  }>(
     GET_TOURNAMENT_SEASON_SNAPSHOT,
     { tournamentId, eventId },
-    { cachePolicy: "reporting", forceRefresh, trace }
+    { cachePolicy: "reporting", forceRefresh, trace },
   );
   return data.tournamentSeasonSnapshot;
 }
@@ -830,12 +877,16 @@ export async function getTournamentSelectionStats(
   eventId: number,
   limit = 10,
   forceRefresh = false,
-  trace?: PageRequestTrace
+  trace?: PageRequestTrace,
 ): Promise<TournamentSelectionStats | null> {
-  const data = await graphqlRequest<TournamentSelectionStatsResponse>(GET_TOURNAMENT_SELECTION_STATS, {
-    tournamentId,
-    eventId,
-    limit
-  }, { cachePolicy: "reporting", forceRefresh, trace });
+  const data = await graphqlRequest<TournamentSelectionStatsResponse>(
+    GET_TOURNAMENT_SELECTION_STATS,
+    {
+      tournamentId,
+      eventId,
+      limit,
+    },
+    { cachePolicy: "reporting", forceRefresh, trace },
+  );
   return data.tournamentSelectionStats;
 }

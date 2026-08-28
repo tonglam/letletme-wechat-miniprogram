@@ -66,7 +66,7 @@ import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
 import {
   entryPersistencePresentation,
   entryPersistenceNeedsRevalidation,
-  isDeterministicEntryIdentityFailure
+  isDeterministicEntryIdentityFailure,
 } from "../../../utils/entry-lookup-presentation";
 
 interface SummaryTile {
@@ -483,7 +483,6 @@ Page({
     const resumed = this.hasShown;
     this.hasShown = true;
     const resumeEntryIdentity = resumed && this.resumeEntryIdentityAfterShow;
-    this.resumeEntryIdentityAfterShow = false;
     if (resumed && !this.hasRouteEntry) {
       await waitForAuthoritativeFollow();
       if (!this.pageVisible) return;
@@ -491,7 +490,12 @@ Page({
     const activeEntryId = this.hasRouteEntry
       ? this.data.entryId
       : (currentFollowEntryId() ?? 0);
-    if (resumeEntryIdentity && activeEntryId === this.data.entryId && activeEntryId) {
+    if (
+      resumeEntryIdentity &&
+      activeEntryId === this.data.entryId &&
+      activeEntryId
+    ) {
+      this.resumeEntryIdentityAfterShow = false;
       void this.loadEntryIdentity(activeEntryId, true);
     }
     if (
@@ -543,7 +547,8 @@ Page({
       const eventContextChanged =
         seasonChanged || (nextEventId > 0 && nextEventId !== this.data.maxGw);
       const restartAfterContext = async (): Promise<boolean> => {
-        if (!this.restartForPrincipalChange(previousEntryId, false)) return false;
+        if (!this.restartForPrincipalChange(previousEntryId, false))
+          return false;
         if (this.data.event > 0) {
           this.liveRefresh?.sync();
           await this.loadData({ includeTransfers: true, forceRefresh: true });
@@ -653,7 +658,8 @@ Page({
 
   onHide() {
     const queuedLiveResume = this.resumeLiveAfterShow;
-    this.resumeEntryIdentityAfterShow = this.entryIdentityPending;
+    this.resumeEntryIdentityAfterShow =
+      this.resumeEntryIdentityAfterShow || this.entryIdentityPending;
     this.resumeForcedRefreshAfterShow = this.forcedRefreshPending;
     this.resumeStartupAfterShow =
       !this.resumeForcedRefreshAfterShow && this.startupPending;
@@ -843,7 +849,7 @@ Page({
         entryLookupMessage: "",
         entryLookupRetryable: false,
         entryPersistenceState: "",
-        playerName: ""
+        playerName: "",
       });
       return;
     }
@@ -858,7 +864,8 @@ Page({
       if (
         this.data.entryId !== entryId ||
         requestId !== this.entryIdentityRequestId
-      ) return;
+      )
+        return;
       const persistence = entryPersistencePresentation(entry.persistenceState);
       this.setData({
         entryName: entry.entryName || entry.teamName || "",
@@ -886,8 +893,8 @@ Page({
               }
             : {}),
           entryLookupStatus: lookupError?.status ?? "UNAVAILABLE",
-          entryLookupMessage: lookupError?.message
-            ?? "当前无法确认球队数据，请稍后重试",
+          entryLookupMessage:
+            lookupError?.message ?? "当前无法确认球队数据，请稍后重试",
           entryLookupRetryable: lookupError?.retryable ?? true,
         });
       }
