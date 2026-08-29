@@ -2591,6 +2591,10 @@ PerformancePage({
     this.detailDeskKey = "";
     this.detailRequestId += 1;
     this.detailRequestKey = "";
+    // A superseded detail request skips clearing detailLoading in its finally
+    // block (the generation check). Clear it here so the next cached-path
+    // open does not return with a stale "loading" flag.
+    this.setData({ detailLoading: false });
   },
 
   async loadH2HDesk(options: LiveTournamentLoadOptions = {}): Promise<void> {

@@ -72,3 +72,15 @@ test("tournament detail sheet drops stale responses from a previous selection", 
   // Switching modes/tournaments invalidates a pending detail request.
   assert.match(controller, /this\.detailRequestId \+= 1;/);
 });
+
+test("clearH2HState resets detailLoading when invalidating a pending detail request", () => {
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+
+  // When clearH2HState invalidates an in-flight detail request, it must
+  // also clear detailLoading — otherwise the next cached-path open returns
+  // with the flag stuck at true ("正在加载赛事信息…").
+  assert.match(
+    controller,
+    /clearH2HState\(\)[\s\S]*?this\.detailRequestId \+= 1;[\s\S]*?this\.setData\(\{ detailLoading: false \}\)/,
+  );
+});
