@@ -1242,6 +1242,8 @@ PerformancePage({
   h2hMatchupDeskItem: null as EntryOfficialH2HMatchupsItem | null,
   detailDesk: null as TournamentDetailDesk | null,
   detailDeskKey: "",
+  detailRequestId: 0,
+  detailRequestKey: "",
   detailParticipants: [] as TournamentParticipantRow[],
   detailRosterVisible: TOURNAMENT_ROSTER_PREVIEW,
 
@@ -2587,6 +2589,12 @@ PerformancePage({
     this.h2hMatchupDeskItem = null;
     this.detailDesk = null;
     this.detailDeskKey = "";
+    this.detailRequestId += 1;
+    this.detailRequestKey = "";
+    // A superseded detail request skips clearing detailLoading in its finally
+    // block (the generation check). Clear it here so the next cached-path
+    // open does not return with a stale "loading" flag.
+    this.setData({ detailLoading: false });
   },
 
   async loadH2HDesk(options: LiveTournamentLoadOptions = {}): Promise<void> {
@@ -2631,6 +2639,15 @@ PerformancePage({
         // way (TournamentClient no-revision fallback).
         this.clearH2HState();
         this.setData({ ...emptyH2HViewState() });
+        // The LIVE_POINTS desk still has tournament info (roster, creator,
+        // etc.). Preserve it so the detail sheet can be cached for a later
+        // open; if the sheet is already open, reapply to avoid leaving it
+        // empty after clearH2HState wiped detailDesk.
+        this.detailDesk = desk;
+        this.detailDeskKey = String(tournamentId);
+        if (this.data.detailOpen) {
+          this.applyDetailDesk(desk);
+        }
         await this.loadRows(options);
         return;
       }
@@ -2906,7 +2923,12 @@ PerformancePage({
       this.applyDetailDesk(cached);
       return;
     }
-    if (this.data.detailLoading) return;
+    // A pending request only dedupes a reopen of the SAME tournament; a
+    // different selection supersedes it (its late response is dropped by the
+    // generation check below) and must start its own load.
+    if (this.data.detailLoading && this.detailRequestKey === key) return;
+    const requestId = ++this.detailRequestId;
+    this.detailRequestKey = key;
     this.setData({ detailLoading: true });
     try {
       const desk = await getTournamentDetailDesk(
@@ -2919,19 +2941,25 @@ PerformancePage({
           trigger: "load",
         }),
       );
+      // Stale responses must not commit under the currently displayed
+      // tournament (sheet reopened for another selection mid-request).
+      if (requestId !== this.detailRequestId) return;
       if (!this.pageVisible || !this.data.detailOpen) return;
       if (!desk) throw new Error("赛事详情暂时不可用，请稍后重试");
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
     } catch (error) {
+      if (requestId !== this.detailRequestId) return;
       if (!this.pageVisible || !this.data.detailOpen) return;
       this.setData({
         detailError:
           error instanceof Error ? error.message : "赛事详情加载失败",
       });
     } finally {
-      if (this.pageVisible) this.setData({ detailLoading: false });
+      if (this.pageVisible && requestId === this.detailRequestId) {
+        this.setData({ detailLoading: false });
+      }
     }
   },
 
