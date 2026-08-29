@@ -5,7 +5,7 @@
     <text class="notice-text">{{noticeText}}</text>
     <view class="notice-close" catchtap="onCloseNotice">×</view>
   </view>
-  <view wx:if="{{!pos.hasTeam(entry)}}" class="section bind-team">
+  <view wx:if="{{!hasEntryBinding}}" class="section bind-team">
     <view class="bind-strip" bindtap="onChangeEntry" hover-class="hover-dim">
       <view>
         <view class="bind-kicker">选择我的球队</view>
@@ -34,9 +34,18 @@
           <view class="deadline-label">下一轮截止</view>
           <view class="deadline-time">{{deadline || '等待赛程更新'}}</view>
         </view>
-        <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
+        <view class="deadline-side">
+          <view wx:if="{{utcDeadline}}" class="deadline-share {{deadlineShareBusy ? 'done' : ''}}" catchtap="onShareDeadlineImage" hover-class="hover-dim">
+            <image class="deadline-share-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+          </view>
+          <view wx:if="{{nextGw}}" class="gw-pill-dark">GW{{nextGw}}</view>
+        </view>
       </view>
-      <view wx:if="{{utcDeadline}}" class="countdown">
+      <view wx:if="{{deadlinePassed}}" class="deadline-live">
+        <text class="deadline-live-tag">LIVE</text>
+        <text class="deadline-live-text">GW{{nextGw}} 进行中 · 等待官方数据更新</text>
+      </view>
+      <view wx:elif="{{utcDeadline}}" class="countdown">
         <view class="countdown-item">
           <text class="countdown-value">{{countdown.days}}</text>
           <text class="countdown-label">天</text>
@@ -65,22 +74,182 @@
       <entry-card wx:else entry="{{entry}}" leagues="{{leagues}}" rich="{{true}}" bind:change="onChangeEntry" bind:open="onOpenEntry" bind:openleagues="onOpenLeagues" />
     </view>
 
+    <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
+      <view class="gw-stats-head">
+        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 总览</view>
+      </view>
+      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+      <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
+      <view class="gw-stats-grid">
+        <view
+          wx:for="{{gameweekStats}}"
+          wx:key="key"
+          class="gw-stat-item {{item.targetId ? 'gw-stat-tappable' : ''}}"
+          data-key="{{item.key}}"
+          data-target="{{item.targetId}}"
+          catchtap="onTapGameweekStat"
+          hover-class="{{item.targetId ? 'hover-dim' : ''}}"
+        >
+          <text class="gw-stat-label">{{item.label}}</text>
+          <text class="gw-stat-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:if="{{gameweekStats.length > 0}}" class="action section-link transfer-more" catchtap="onOpenGameweekStats" hover-class="hover-dim">查看完整 GW 总览</view>
+    </view>
+
+    <view wx:if="{{hasDreamTeam}}" class="section card dream-card">
+      <view class="gw-stats-head">
+        <view class="section-title">本周最佳阵容</view>
+        <view class="section-subtitle">GW{{dreamTeamEvent}} · 点球员看详情</view>
+      </view>
+      <view class="dream-pitch-section">
+        <view class="live-pitch-bar">
+          <text class="live-pitch-label">梦之队</text>
+          <view class="live-pitch-actions">
+            <view
+              class="tool-btn {{dreamShareBusy ? 'done' : ''}}"
+              bindtap="onShareDreamPitch"
+              hover-class="hover-dim"
+            >
+              <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+            </view>
+          </view>
+        </view>
+        <squad-pitch
+          id="home-dream-pitch"
+          players="{{dreamPlayers}}"
+          header="{{dreamHeader}}"
+          benchBoost="{{false}}"
+          bind:playertap="onDreamPlayerTap"
+        />
+      </view>
+    </view>
+
     <view class="section card transfer-desk">
       <view class="transfer-head">
         <view>
-        <view class="section-title">市场动态</view>
-          <view class="section-subtitle">{{marketCoverage}}</view>
+        <view class="section-title">{{priceTab === 'today' ? '身价变化' : '涨跌趋势'}}</view>
+          <view class="section-subtitle">{{priceTab === 'today' ? priceTodayUpdated : predictionUpdated}}</view>
         </view>
-        <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
+        <view class="transfer-head-tools">
+          <view wx:if="{{priceTab === 'today'}}" class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
+          <view wx:else class="action section-link" catchtap="onOpenPricePredictions" hover-class="hover-dim">查看全部预测</view>
+          <view class="tool-btn {{priceShareBusy ? 'done' : ''}}" catchtap="onSharePriceImage" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+      <view class="tab-strip market-tabs">
+        <view class="tab-item {{priceTab === 'today' ? 'tab-active' : ''}}" data-tab="today" catchtap="onSelectPriceTab" hover-class="hover-dim">身价变化</view>
+        <view class="tab-item {{priceTab === 'likely' ? 'tab-active' : ''}}" data-tab="likely" catchtap="onSelectPriceTab" hover-class="hover-dim">涨跌趋势</view>
+      </view>
+
+      <block wx:if="{{priceTab === 'today'}}">
+        <view wx:if="{{priceRisers.length === 0 && priceFallers.length === 0}}" class="transfer-empty-inline">{{priceChangesState === 'UNAVAILABLE' ? '身价数据暂时不可用' : '今日暂无身价变动'}}</view>
+        <view wx:else class="transfer-split">
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-up">上涨（{{priceRisers.length}}）</view>
+            <view wx:if="{{priceRisers.length === 0}}" class="transfer-empty-inline">暂无上涨</view>
+            <view wx:for="{{priceRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-up">{{item.changeText}}</text>
+            </view>
+          </view>
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-down">下跌（{{priceFallers.length}}）</view>
+            <view wx:if="{{priceFallers.length === 0}}" class="transfer-empty-inline">暂无下跌</view>
+            <view wx:for="{{priceFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+              </view>
+              <text class="transfer-delta transfer-down">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view wx:if="{{predictionNotice}}" class="transfer-note">{{predictionNotice}}</view>
+        <view wx:if="{{predictionLoading}}" class="section-status">身价预测加载中</view>
+        <view wx:elif="{{predictionError}}" class="transfer-empty">
+          {{predictionError}}
+          <text class="action transfer-empty-retry" bindtap="onRetryPredictions" hover-class="hover-dim">重试</text>
+        </view>
+        <view wx:elif="{{predictionLoaded && predictedRiseCount === 0 && predictedFallCount === 0}}" class="transfer-empty-inline">暂无明确涨跌信号</view>
+        <view wx:else class="transfer-split">
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-up">预计上涨（{{predictedRiseCount}}）</view>
+            <view wx:if="{{predictedAllRisers.length === 0}}" class="transfer-empty-inline">暂无上涨信号</view>
+            <view wx:for="{{predictedAllRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+                <view class="transfer-progress"><view class="transfer-progress-fill {{item.rising ? 'transfer-progress-up' : 'transfer-progress-down'}}" style="width: {{item.progressPct || 0}}%"></view></view>
+                <view wx:if="{{item.statusLabel}}" class="transfer-status-pill transfer-status-{{item.statusTone || 'neutral'}}">{{item.statusLabel}}</view>
+              </view>
+              <text class="transfer-delta transfer-up">{{item.changeText}}</text>
+            </view>
+          </view>
+          <view class="transfer-col">
+            <view class="transfer-col-head transfer-down">预计下跌（{{predictedFallCount}}）</view>
+            <view wx:if="{{predictedAllFallers.length === 0}}" class="transfer-empty-inline">暂无下跌信号</view>
+            <view wx:for="{{predictedAllFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
+              <view class="transfer-player">
+                <view class="transfer-name-line">
+                  <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
+                  <text class="transfer-name">{{item.name}}</text>
+                </view>
+                <text class="transfer-meta">{{item.team}} · {{item.meta}}</text>
+                <view class="transfer-progress"><view class="transfer-progress-fill {{item.rising ? 'transfer-progress-up' : 'transfer-progress-down'}}" style="width: {{item.progressPct || 0}}%"></view></view>
+                <view wx:if="{{item.statusLabel}}" class="transfer-status-pill transfer-status-{{item.statusTone || 'neutral'}}">{{item.statusLabel}}</view>
+              </view>
+              <text class="transfer-delta transfer-down">{{item.changeText}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section card transfer-desk">
+      <view class="transfer-head">
+        <view>
+        <view class="section-title">{{pulseTab === 'ownership' ? '持有率变化' : '出场状态观察'}}</view>
+          <view class="section-subtitle">{{pulseTab === 'ownership' ? marketOwnershipUpdated : marketWatchUpdated}}</view>
+        </view>
+        <view class="transfer-head-tools">
+          <view class="action section-link" catchtap="onOpenPriceChanges" hover-class="hover-dim">打开市场</view>
+          <view class="tool-btn {{marketShareBusy ? 'done' : ''}}" catchtap="onShareMarketImage" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+      <view class="tab-strip market-tabs">
+        <view class="tab-item {{pulseTab === 'ownership' ? 'tab-active' : ''}}" data-tab="ownership" catchtap="onSelectPulseTab" hover-class="hover-dim">持有率</view>
+        <view class="tab-item {{pulseTab === 'watch' ? 'tab-active' : ''}}" data-tab="watch" catchtap="onSelectPulseTab" hover-class="hover-dim">出场观察</view>
       </view>
       <data-status wx:if="{{priceError}}" status="stale" message="{{priceError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-      <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && availabilityRows.length === 0 && !marketUnavailable}}" class="section-status">转会台加载中</view>
+
+      <block wx:if="{{pulseTab === 'ownership'}}">
+      <view wx:if="{{supplementLoading && marketLeadRows.length === 0 && marketRisers.length === 0 && !marketUnavailable}}" class="section-status">转会台加载中</view>
       <block wx:else>
         <view wx:if="{{marketMode === 'ownership'}}" class="transfer-split">
           <view class="transfer-col">
             <view class="transfer-col-head transfer-up">持有上升</view>
             <view wx:if="{{marketRisers.length === 0}}" class="transfer-empty-inline">今日暂无持有率上升</view>
-            <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{marketRisers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -94,7 +263,7 @@
           <view class="transfer-col">
             <view class="transfer-col-head transfer-down">持有下降</view>
             <view wx:if="{{marketFallers.length === 0}}" class="transfer-empty-inline">今日暂无持有率下降</view>
-            <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row">
+            <view wx:for="{{marketFallers}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
               <view class="transfer-player">
                 <view class="transfer-name-line">
                   <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -108,7 +277,7 @@
         </view>
         <view wx:elif="{{marketLeadRows.length > 0}}" class="transfer-lead">
           <view class="transfer-col-head">{{marketLeadTitle}}</view>
-          <view wx:for="{{marketLeadRows}}" wx:key="id" class="transfer-row">
+          <view wx:for="{{marketLeadRows}}" wx:key="id" class="transfer-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
             <view class="transfer-player">
               <view class="transfer-name-line">
                 <text wx:if="{{item.position}}" class="pos-badge {{pos.cls(item.position)}}">{{item.position}}</text>
@@ -123,11 +292,15 @@
           市场动态暂时无法加载
           <text class="action transfer-empty-retry" bindtap="onRetry" hover-class="hover-dim">重试</text>
         </view>
-        <view wx:elif="{{marketMode === 'empty' && availabilityRows.length === 0}}" class="transfer-empty">今日无可计算的每日持有率变化</view>
+        <view wx:elif="{{marketMode === 'empty'}}" class="transfer-empty">{{ownershipState === 'UNAVAILABLE' ? '市场数据暂时不可用' : '今日无可计算的每日持有率变化'}}</view>
+      </block>
+      </block>
 
-        <view wx:if="{{availabilityRows.length > 0}}" class="transfer-watch">
-          <view class="transfer-col-head">出场状态观察</view>
-          <view wx:for="{{availabilityRows}}" wx:key="id" class="watch-row">
+      <block wx:else>
+        <view wx:if="{{supplementLoading && availabilityRows.length === 0 && !marketUnavailable}}" class="section-status">出场状态加载中</view>
+        <view wx:elif="{{availabilityRows.length === 0}}" class="transfer-empty">{{availabilityState === 'UNAVAILABLE' ? '出场状态暂时不可用' : '暂无出场状态更新'}}</view>
+        <view wx:else class="transfer-watch">
+          <view wx:for="{{availabilityRows}}" wx:key="id" class="watch-row" data-id="{{item.id}}" catchtap="onTapMarketPlayer" hover-class="hover-dim">
             <view class="watch-top">
               <text class="transfer-name">{{item.name}}</text>
               <text class="watch-status watch-{{item.statusKey}}">{{item.status}}</text>
@@ -139,28 +312,18 @@
       </block>
     </view>
 
-    <view wx:if="{{supplementLoading || gameweekStats.length > 0}}" class="section card gw-stats-card">
-      <view class="gw-stats-head">
-        <view class="section-title">GW{{currentGw || nextGw || gw || '-'}} 数据</view>
-      </view>
-      <data-status wx:if="{{gameweekStatsError}}" status="stale" message="{{gameweekStatsError}}" workload="market" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-      <view wx:if="{{supplementLoading && gameweekStats.length === 0}}" class="section-status">GW 数据加载中</view>
-      <view class="gw-stats-grid">
-        <view wx:for="{{gameweekStats}}" wx:key="key" class="gw-stat-item">
-          <text class="gw-stat-label">{{item.label}}</text>
-          <text class="gw-stat-value">{{item.value}}</text>
-        </view>
-      </view>
-    </view>
-
     <view id="perf-primary-fixtures" class="section card fixture-card">
       <view class="fixture-head">
         <view class="fixture-head-copy">
           <view class="section-title">近期赛程</view>
           <view wx:if="{{selectedFixtureGw || nextGw}}" class="gw-pill-dark">GW{{selectedFixtureGw || nextGw}}</view>
+          <view wx:if="{{fixtureLive}}" class="fixture-live-pill">直播中</view>
         </view>
         <view class="fixture-head-tools">
           <view class="fixture-live-link" bindtap="onOpenLiveMatches" hover-class="hover-dim">打开实时比赛</view>
+          <view class="tool-btn {{fixtureShareBusy ? 'done' : ''}}" catchtap="onShareFixtureImage" hover-class="hover-dim">
+            <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
+          </view>
           <view class="fixture-stepper">
             <view class="fixture-arrow {{selectedFixtureGw <= minFixtureGw ? 'fixture-arrow-disabled' : ''}}" catchtap="onPreviousFixtureGw" hover-class="hover-dim">
               <text decode="{{true}}">&lt;</text>
@@ -177,8 +340,8 @@
         <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetryFixtures" />
         <app-empty-state
           wx:if="{{fixtureCount === 0}}"
-          title="GW{{selectedFixtureGw || nextGw}} 赛程还没公布"
-          description="官方赛程发布后会自动显示在这里"
+          title="{{fixtureEmptyPast ? 'GW' + (selectedFixtureGw || nextGw) + ' 暂无赛程数据' : 'GW' + (selectedFixtureGw || nextGw) + ' 赛程还没公布'}}"
+          description="{{fixtureEmptyPast ? '该轮数据暂未收录' : '官方赛程发布后会自动显示在这里'}}"
           actionText="重新加载"
           bind:action="onRetryFixtures"
         />
@@ -195,7 +358,7 @@
           </view>
           <view wx:for="{{selectedDayRows}}" wx:key="id" class="fixture-row">
             <text class="fixture-team home-team">{{item.homeName}}</text>
-            <view class="fixture-board {{item.finished ? 'is-score' : ''}}">{{item.centerLabel}}</view>
+            <view class="fixture-board {{item.finished ? 'is-score' : ''}} {{item.live ? 'is-score is-live' : ''}}">{{item.centerLabel}}</view>
             <text class="fixture-team away-team">{{item.awayName}}</text>
           </view>
           <view class="fixture-tz">时间按本机时区</view>
@@ -204,5 +367,6 @@
     </view>
 
   </block>
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayerDetail" />
   <bottomNavBar active="home" />
 </view>

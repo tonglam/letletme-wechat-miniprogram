@@ -49,7 +49,23 @@ test("tournament preseason is a stable business empty state", () => {
     filteredCount: 0,
     lastUpdated: "",
     scoreStatusText: "正在确认官方分数",
-    scoreNextRefreshAt: ""
+    scoreNextRefreshAt: "",
+    h2hActive: false,
+    h2hTab: "standings",
+    h2hShowStandings: true,
+    h2hStandings: [],
+    h2hMatches: [],
+    h2hAwaitingSchedule: false,
+    h2hViewerRankText: "",
+    h2hViewerMatchPointsText: "",
+    h2hViewerRecordText: "",
+    h2hMatchups: [],
+    h2hMatchupsLoading: false,
+    h2hMatchupsLoaded: false,
+    h2hMatchupsFailed: false,
+    setupActive: false,
+    setupFailed: false,
+    setupPhases: []
   });
 });
 
@@ -1209,6 +1225,7 @@ test("tournament principal changes clear old lists before restarting", () => {
     rowsRequest: Promise.resolve(),
     rowsRequestKey: "old:33:",
     liveRefresh: { stop() { calls.push("stop"); } },
+    clearH2HState() { calls.push("h2h-clear"); },
     setData(update) { Object.assign(this.data, update); },
     loadTournaments(forceRefresh) { calls.push(`load:${forceRefresh}`); }
   };
@@ -1222,8 +1239,9 @@ test("tournament principal changes clear old lists before restarting", () => {
   assert.equal(context.data.compareOpen, false);
   assert.equal(context.data.filterSheetOpen, false);
   assert.equal(context.data.shareSheetOpen, false);
+  assert.equal(context.data.h2hActive, false);
   assert.equal(context.rowsRequestId, 5);
-  assert.deepEqual(calls, ["stop", "load:true"]);
+  assert.deepEqual(calls, ["stop", "h2h-clear", "load:true"]);
 });
 
 test("renders pending transfers and partial tournament rows honestly", () => {

@@ -64,13 +64,25 @@ export function numberValue(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+/**
+ * Rank displays follow the web's zh-CN compact notation
+ * (format.number(rank, { notation: "compact" })): 1234 → "1234",
+ * 12345 → "1.2万", 123456 → "12万", 1234567 → "123万".
+ * Rank 0/negatives are unknown and render as "-".
+ */
 export function formatRank(value: unknown): string {
   const number = numberValue(value);
-  if (number === undefined) {
+  if (number === undefined || number <= 0) {
     return "-";
   }
 
-  return number.toLocaleString();
+  if (number < 10000) {
+    return String(number);
+  }
+
+  const wan = number / 10000;
+  const rounded = wan < 10 ? Math.round(wan * 10) / 10 : Math.round(wan);
+  return `${rounded}万`;
 }
 
 export function formatPoints(value: unknown): string {

@@ -99,6 +99,8 @@ export interface LiveManagerScore {
   source?: LiveManagerScoreSource;
   state?: LiveManagerScoreState;
   eventPointSemantics?: string;
+  /** Server-materialized effective XI: authoritative active/captain/sub state. */
+  effectiveLineup?: LiveEffectiveLineupRow[];
   revision?: string | null;
   checkedAt?: string | null;
   upstreamUpdatedAt?: string | null;
@@ -107,6 +109,21 @@ export interface LiveManagerScore {
   reconciliation?: string;
   reasonCodes?: string[];
 }
+
+export interface LiveEffectiveLineupRow {
+  elementId: number;
+  position: number;
+  effectiveMultiplier?: number;
+  pickActive?: boolean;
+  autoSub?: boolean;
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
+}
+
+export type LiveEntryAvailability =
+  | "READY"
+  | "NO_PICKS"
+  | "LINEUP_UNAVAILABLE";
 
 export interface LivePlayerRow {
   element?: number;
@@ -128,6 +145,9 @@ export interface LivePlayerRow {
   multiplier?: number;
   captain?: boolean;
   viceCaptain?: boolean;
+  /** Raw pick flags (captain = original armband, before any auto-captain promotion). */
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
   pickActive?: boolean;
   autoSub?: boolean;
   playStatus?: number;
@@ -143,6 +163,23 @@ export interface LivePlayerRow {
   ownGoals?: number;
   penaltiesSaved?: number;
   penaltiesMissed?: number;
+  /** GW fixture lifecycle flags from the calc pipeline (auto-sub projection). */
+  isGwStarted?: boolean;
+  isGwFinished?: boolean;
+  isPlayed?: boolean;
+  bgw?: boolean;
+  starts?: boolean;
+  expectedGoals?: number;
+  expectedAssists?: number;
+  expectedGoalInvolvements?: number;
+  expectedGoalsConceded?: number;
+  /** Auto-sub annotation: OFFICIAL_IN/OUT or PREDICTED_IN/OUT, plus partner. */
+  autoSubRole?: string;
+  autoSubPartnerName?: string;
+  /** Badge display parts derived from autoSubRole (WXML has no string methods). */
+  autoSubArrow?: "" | "↑" | "↓";
+  autoSubIncoming?: boolean;
+  autoSubPredicted?: boolean;
   statusText?: string;
   roleText?: string;
   pointsText?: string;
@@ -151,7 +188,7 @@ export interface LivePlayerRow {
 }
 
 export interface LiveEntryResult {
-	availability?: "READY" | "NO_PICKS";
+	availability?: LiveEntryAvailability;
 	entry?: number;
 	event?: number;
 	entryName?: string;
@@ -231,6 +268,10 @@ export interface LiveTournamentRow {
   toPlay?: number;
   rank?: number;
   overallRank?: number;
+  /** FPL tenths (1015 = £101.5m); present on the live-board pipeline. */
+  teamValue?: number;
+  /** Effective captain's live points (server value, or derived from picks). */
+  captainPoints?: number;
   picks?: LivePlayerRow[];
   searchText?: string;
   score?: LiveManagerScore;

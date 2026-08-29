@@ -29,6 +29,9 @@ export interface TournamentLiveGraphQLRow {
   played: number;
   toPlay: number;
   captainName: string;
+  /** Live-board pipeline only; the legacy desk leaves both undefined. */
+  teamValue?: number | null;
+  captainPoints?: number | null;
   score?: LiveManagerScore;
   pickList?: Array<{
     element: number;
@@ -235,12 +238,38 @@ function searchText(row: LiveTournamentRow): string {
   ].filter((value) => value !== undefined && value !== null && value !== "").join(" ").toLowerCase();
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Web parity (liveEntries): once the score is FINAL the armband may have moved
+ * via auto-sub, so the multiplier>=2 pick is the effective captain; before
+ * that the flagged captain is authoritative.
+ */
+export function effectiveTournamentCaptainPoints(
+  picks: readonly LivePlayerRow[],
+  scoreState: string | undefined,
+): number | undefined {
+  const flagged = picks.find((pick) => pick.captain);
+  const effective =
+    scoreState === "FINAL"
+      ? (picks.find((pick) => (pick.multiplier || 0) >= 2) ?? flagged)
+      : flagged;
+  const points = effective?.totalPoints ?? effective?.points;
+  return typeof points === "number" && Number.isFinite(points)
+    ? points
+    : undefined;
+}
+
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
     const officialScore = traceableOfficialManagerScore(row.score);
     const officialEventPoints = officialManagerEventPoints(officialScore);
     const officialNetPoints = officialManagerNetPoints(officialScore);
     const officialTotal = officialManagerTotalPoints(officialScore);
+    const picks = (row.pickList || []).map(mapTournamentPick);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
@@ -255,10 +284,17 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       toPlay: row.toPlay,
       captainName: row.captainName,
       chip: row.chip || undefined,
+      // The score carries the official overall rank; the desk row's own
+      // overallRank is a flat standings rank and must not leak in here (the
+      // live-board pipeline re-adds its trustworthy value downstream).
       overallRank: officialScore?.overallRank ?? undefined,
+      teamValue: finiteNumber(row.teamValue),
+      captainPoints:
+        finiteNumber(row.captainPoints) ??
+        effectiveTournamentCaptainPoints(picks, officialScore?.state),
       score: officialScore,
       scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
-      picks: (row.pickList || []).map(mapTournamentPick)
+      picks
     };
     return {
       ...mapped,

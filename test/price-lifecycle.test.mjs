@@ -18,7 +18,7 @@ test("price page keeps date identity and stale state while team directory remain
   assert.match(page, /!this\.pageActive \|\| !isCurrentRevision/);
   const successCommit = page.slice(page.indexOf("const read = await readTask"), page.indexOf("} catch", page.indexOf("const read = await readTask")));
   assert.match(successCommit, /if \(!this\.pageActive \|\| !isCurrentRevision\(this\.dailyRequestOwner, "daily", revision\)\) return/);
-  assert.match(page, /\.\.\.splitChanges\(read\.data\),\s*error: ""/);
+  assert.match(page, /\.\.\.splitChanges\(read\.data\),[\s\S]*?error: ""/);
   assert.doesNotMatch(page, /Promise\.all\([^)]*readPlayerValueByDate[^)]*getTeamList/);
 });
 

@@ -12,13 +12,13 @@
 
     <view class="status-tabs">
       <view
-        wx:for="{{statusOptions}}"
+        wx:for="{{statusTabs}}"
         wx:key="key"
         class="status-tab {{status === item.key ? 'active' : ''}}"
         data-status="{{item.key}}"
         bindtap="onStatusTap"
         hover-class="hover-dim"
-      >{{item.label}}</view>
+      >{{item.label}} <text class="status-tab-count">{{item.count}}</text></view>
     </view>
   </block>
 
@@ -53,24 +53,22 @@
           <view class="status-pill">{{match.statusText}}</view>
           <view class="match-card-actions">
             <view
-              class="tool-btn tool-btn-labeled {{copiedMatchId === match.matchId ? 'done' : ''}}"
+              class="tool-btn {{copiedMatchId === match.matchId ? 'done' : ''}}"
               data-matchid="{{match.matchId}}"
               catchtap="onCopyMatchShare"
               hover-class="hover-dim"
             >
               <image wx:if="{{copiedMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{copiedMatchId === match.matchId ? '已复制' : '分享文字'}}</text>
             </view>
             <view
-              class="tool-btn tool-btn-labeled {{sharingImageMatchId === match.matchId ? 'on' : ''}} {{sharedImageMatchId === match.matchId ? 'done' : ''}}"
+              class="tool-btn {{sharingImageMatchId === match.matchId ? 'on' : ''}} {{sharedImageMatchId === match.matchId ? 'done' : ''}}"
               data-matchid="{{match.matchId}}"
               catchtap="onShareMatchImage"
               hover-class="hover-dim"
             >
               <image wx:if="{{sharedImageMatchId === match.matchId}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
-              <text class="tool-label">{{sharingImageMatchId === match.matchId ? '生成中' : sharedImageMatchId === match.matchId ? '已打开' : '分享图片'}}</text>
             </view>
           </view>
         </view>
@@ -206,7 +204,7 @@
   <view class="match-share-slot">
     <canvas type="2d" id="live-match-share-canvas" class="match-share-canvas"></canvas>
   </view>
-  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <player-live-sheet show="{{playerDetailOpen}}" detail="{{playerDetail}}" shareable="{{true}}" shareBusy="{{playerShareBusy}}" bind:close="onClosePlayer" bind:shareimage="onSharePlayerImage" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

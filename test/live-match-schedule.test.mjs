@@ -14,8 +14,8 @@ test("Live Matches paints Core schedule before an optional overlay", () => {
   assert.match(page, /liveWindowSnapshot\?\.eventId \?\? this\.targetEventId/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
-  assert.match(page, /await readCoreEventFixtureSchedule[\s\S]*const activeStatus = this\.data\.status[\s\S]*filterMatches\(core, activeStatus\)/);
-  assert.match(page, /await getLiveMatchByStatusSnapshot[\s\S]*const overlayStatus = this\.data\.status[\s\S]*filterMatches\(this\.coreMatches, overlayStatus\)/);
+  assert.match(page, /await readCoreEventFixtureSchedule[\s\S]*const activeStatus = this\.resolveActiveStatus\(core\)[\s\S]*filterMatches\(core, activeStatus\)/);
+  assert.match(page, /await getLiveMatchByStatusSnapshot[\s\S]*const overlayStatus = this\.resolveActiveStatus\(this\.coreMatches\)[\s\S]*filterMatches\(this\.coreMatches, overlayStatus\)/);
 });
 
 test("preseason uses displayEvent schedule without a Live overlay", () => {
@@ -82,6 +82,44 @@ test("Live Match surfaces a stale Core fixture fallback", () => {
   assert.match(template, /fixtureStaleMessage[\s\S]*status="stale"/);
 });
 
+test("live match tabs follow web content preference and carry per-tab counts", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  // Web parity (getPreferredLiveMatchesTab): without a stored/user choice the
+  // active tab follows the content; an explicit tap or stored value wins.
+  assert.match(page, /preferredLiveMatchTab/);
+  assert.match(page, /resolveActiveStatus\(matches: LiveMatch\[\]\)[\s\S]*this\.statusFromStorage \|\| matches\.length === 0/);
+  assert.match(page, /onStatusTap\([\s\S]*this\.statusFromStorage = true[\s\S]*wx\.setStorageSync/);
+  assert.match(page, /if \(isValidStatus\(storedStatus\)\) \{ this\.statusFromStorage = true/);
+  // Per-tab counts come from the same bucketing as the filter.
+  assert.match(page, /countLiveMatchTabs/);
+  assert.match(page, /statusTabs: buildStatusTabs\(core\)/);
+  assert.match(page, /statusTabs: buildStatusTabs\(this\.coreMatches\)/);
+  assert.match(template, /wx:for="\{\{statusTabs\}\}"/);
+  assert.match(template, /status-tab-count">\{\{item\.count\}\}/);
+});
+
+test("settled desk surfaces next-event fixtures like the web fallback", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const service = source("miniprogram/services/live.service.ts");
+  // Web parity (selectLiveMatchEvent): a fully finished event yields the
+  // not-started tab to the next event's fixtures from the desk snapshot.
+  assert.match(page, /appendNextEventRows\( mergeLiveOverlay\(core, liveResult\.data\), liveResult\.data, \)/);
+  assert.match(page, /match\.statusText \? match : normalizeMatch\(match, "not_start"\)/);
+  assert.match(service, /nextFixtures \{[\s\S]*homeTeamShortName[\s\S]*awayTeamShortName/);
+  assert.match(service, /homeTeamShortName: match\.homeTeamShortName \?\? undefined/);
+});
+
+test("live match player sheet offers image share like the web modal", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  assert.match(template, /player-live-sheet[^>]*shareable="\{\{true\}\}"/);
+  assert.match(template, /bind:shareimage="onSharePlayerImage"/);
+  assert.match(page, /async onSharePlayerImage\(\)[\s\S]*exportPlayerLiveShareImage\(\{[\s\S]*presentPlayerLiveShareImage\(path\)/);
+  // The share card eyebrow carries the fixture label, not an entry name.
+  assert.match(page, /playerDetailMatchLabel = match/);
+});
+
 test("every live match card exposes image share beside text share", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const template = source("miniprogram/pages/live/match/match.wxml");
@@ -96,5 +134,11 @@ test("every live match card exposes image share beside text share", () => {
   assert.match(page, /presentLiveMatchShareImage\(path\)/);
   assert.match(page, /queryLiveMatchShareCanvas\(this\)/);
   assert.match(template, /id="live-match-share-canvas"/);
-  assert.match(presenter, /needShowEntrance: true/);
+  // needShowEntrance is category-whitelisted; passing it fails the whole
+  // share call for ineligible categories, so it must stay out.
+  assert.doesNotMatch(presenter, /needShowEntrance:/);
+  assert.match(presenter, /fail: \(err\)/);
+  // Dismissing the share panel is a cancel, not a failure — no album fallback.
+  assert.match(presenter, /\/cancel\/\.test\(err\.errMsg/);
+  assert.match(presenter, /saveToAlbum\(path\)/);
 });

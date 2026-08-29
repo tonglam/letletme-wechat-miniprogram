@@ -38,6 +38,7 @@
           <image class="squad-kit" src="{{player.kitSrc}}" mode="widthFix" />
           <view wx:if="{{player.marker === 'C'}}" class="squad-marker captain">C</view>
           <view wx:elif="{{player.marker === 'V'}}" class="squad-marker vice">V</view>
+          <view wx:if="{{player.autoSubArrow}}" class="squad-autosub {{player.autoSubIncoming ? 'in' : 'out'}} {{player.autoSubPredicted ? 'predicted' : ''}}">{{player.autoSubArrow}}</view>
         </view>
         <view class="squad-nameplate">
           <view class="squad-name"><text class="squad-name-text">{{player.webName}}</text></view>
@@ -75,6 +76,7 @@
         <text class="squad-bench-label">{{item.label}}</text>
         <text class="squad-bench-name">{{item.webName}}</text>
         <text class="squad-bench-line">{{item.scoreText}}</text>
+        <view wx:if="{{item.autoSubArrow}}" class="squad-autosub bench {{item.autoSubIncoming ? 'in' : 'out'}} {{item.autoSubPredicted ? 'predicted' : ''}}">{{item.autoSubArrow}}</view>
       </view>
     </view>
   </view>

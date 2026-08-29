@@ -35,4 +35,7 @@ export interface EntryTournamentRow {
   knockoutMode?: string | null;
   knockoutStartedEventId?: number | null;
   knockoutEndedEventId?: number | null;
+  /** Kind detection inputs (web isOfficialH2HTournament needs both). */
+  leagueType?: string | null;
+  rosterMode?: string | null;
 }

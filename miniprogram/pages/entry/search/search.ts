@@ -7,6 +7,7 @@ import {
 } from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
+import { formatRank } from "../../../utils/summary-format";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
 
@@ -379,7 +380,7 @@ function mapPreviewData(entry: EntryInfo, fallbackEntryId: number): Partial<Entr
     previewTitle: title,
     previewSubtitle: player ? `${player} #${entryId}` : `#${entryId}`,
     previewTotalPoints: entry.totalPoints === undefined ? "-" : String(entry.totalPoints),
-    previewOverallRank: entry.overallRank === undefined ? "-" : String(entry.overallRank),
+    previewOverallRank: formatRank(entry.overallRank),
     isCurrentEntry: getApp<IAppOption>().globalData.entryId === entryId
   };
 }
@@ -403,6 +404,6 @@ function toNameHit(hit: EntrySearchResult): EntryNameHit {
     entryName: hit.entryName || hit.teamName || `球队 #${entryId}`,
     playerName: hit.playerName || "",
     totalPoints: hit.totalPoints === undefined ? "-" : String(hit.totalPoints),
-    overallRank: hit.overallRank === undefined ? "-" : String(hit.overallRank)
+    overallRank: formatRank(hit.overallRank)
   };
 }

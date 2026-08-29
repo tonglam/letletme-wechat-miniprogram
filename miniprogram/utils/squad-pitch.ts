@@ -6,6 +6,8 @@
  * here — missing names/positions drop the pick, missing kits use a placeholder.
  */
 
+import { devicePlatform } from "./system-info";
+
 export type SquadPosition = "GKP" | "DEF" | "MID" | "FWD";
 
 export type SquadTeamCode =
@@ -43,6 +45,9 @@ export interface SquadPitchPlayer {
   fixture?: string;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
+  /** Auto-sub badge role (OFFICIAL_IN/OUT, PREDICTED_IN/OUT) for live pages. */
+  autoSubRole?: string;
+  autoSubPartnerName?: string;
 }
 
 export interface SquadPitchHeader {
@@ -75,6 +80,8 @@ export interface SquadPitchPickInput {
   totalPoints?: number | null;
   isCaptain?: boolean | null;
   isViceCaptain?: boolean | null;
+  autoSubRole?: string | null;
+  autoSubPartnerName?: string | null;
   againstShortName?: string | null;
   wasHome?: boolean | string | number | null;
 }
@@ -113,6 +120,10 @@ export interface SquadPitchRowView {
 export interface SquadPitchPlayerView extends SquadPitchPlayer {
   kitSrc: string;
   marker: "" | "C" | "V";
+  /** Auto-sub badge display parts (derived here; WXML has no string methods). */
+  autoSubArrow: "" | "↑" | "↓";
+  autoSubIncoming: boolean;
+  autoSubPredicted: boolean;
 }
 
 export interface SquadPitchBenchView extends SquadPitchPlayerView {
@@ -151,7 +162,7 @@ export const SQUAD_PITCH_CDN_BASE = "https://letletme.top/images/squad-pitch";
 
 function squadPitchAssetBase(): string {
   try {
-    if (wx.getSystemInfoSync().platform === "devtools") return "/assets/squad-pitch";
+    if (devicePlatform() === "devtools") return "/assets/squad-pitch";
   } catch {
     // Node tests and missing wx resolve to the published CDN path.
   }
@@ -276,6 +287,10 @@ export function toSquadPitchPlayer(
     isCaptain: Boolean(apiPick.isCaptain),
     isViceCaptain: Boolean(apiPick.isViceCaptain)
   };
+  if (apiPick.autoSubRole) player.autoSubRole = String(apiPick.autoSubRole);
+  if (apiPick.autoSubPartnerName) {
+    player.autoSubPartnerName = String(apiPick.autoSubPartnerName);
+  }
   const squadPosition = resolveSquadSlot(apiPick.position);
   if (squadPosition !== undefined) player.squadPosition = squadPosition;
   return player;
@@ -341,6 +356,8 @@ export interface SquadPitchRowInput {
   isCaptain?: boolean;
   viceCaptain?: boolean;
   isViceCaptain?: boolean;
+  autoSubRole?: string;
+  autoSubPartnerName?: string;
   statusText?: string;
 }
 
@@ -472,6 +489,8 @@ export function toSquadPitchPlayerFromRow(row: SquadPitchRowInput): SquadPitchPl
     totalPoints: typeof score === "number" ? score : Number(score),
     isCaptain: row.isCaptain ?? row.captain,
     isViceCaptain: row.isViceCaptain ?? row.viceCaptain,
+    autoSubRole: row.autoSubRole,
+    autoSubPartnerName: row.autoSubPartnerName,
     ...fixtureFromStatusText(row.statusText)
   }, id);
 }
@@ -574,10 +593,17 @@ export function formatSquadPitchHeaderView(
 }
 
 export function toPlayerView(player: SquadPitchPlayer): SquadPitchPlayerView {
+  // Kept inline (instead of importing live-auto-subs) to avoid a module cycle:
+  // live-auto-subs already imports isBenchBoostChip from this module.
+  const role = player.autoSubRole || "";
+  const incoming = role.endsWith("_IN");
   return {
     ...player,
     kitSrc: kitAsset(player.teamCode),
-    marker: player.isCaptain ? "C" : player.isViceCaptain ? "V" : ""
+    marker: player.isCaptain ? "C" : player.isViceCaptain ? "V" : "",
+    autoSubArrow: role ? (incoming ? "↑" : "↓") : "",
+    autoSubIncoming: incoming,
+    autoSubPredicted: role.startsWith("PREDICTED_")
   };
 }
 

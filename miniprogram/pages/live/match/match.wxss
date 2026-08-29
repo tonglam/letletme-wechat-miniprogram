@@ -85,6 +85,13 @@
   box-shadow: 0 2rpx 6rpx var(--plum-a8);
 }
 
+.status-tab-count {
+  font-size: 18rpx;
+  font-weight: 700;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
 .match-content {
   margin-bottom: 24rpx;
 }

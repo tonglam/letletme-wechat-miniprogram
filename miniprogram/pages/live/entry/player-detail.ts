@@ -95,6 +95,13 @@ function statRow(label: string, value: number): PlayerLiveStatRow {
   return { label, value: String(value), muted: value === 0 };
 }
 
+/** Expected-goals family — fractional, shown with two decimals like the web. */
+function expectedStatRow(label: string, value: unknown): PlayerLiveStatRow | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return { label, value: parsed.toFixed(2), muted: parsed === 0 };
+}
+
 function formatPoints(points: number): string {
   return points > 0 ? `+${points}` : String(points);
 }
@@ -207,6 +214,16 @@ function matchStatRows(player: LivePlayerRow, position: string): PlayerLiveStatR
     rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("零封", cleanSheets), statRow("防守贡献", defensiveContribution));
   } else {
     rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("防守贡献", defensiveContribution));
+  }
+  // Expected-goals family (web parity): xG/xA for everyone, xGC where tracked.
+  for (const expected of [
+    expectedStatRow("xG", player.expectedGoals),
+    expectedStatRow("xA", player.expectedAssists),
+    position === "GKP" || position === "DEF"
+      ? expectedStatRow("xGC", player.expectedGoalsConceded)
+      : null,
+  ]) {
+    if (expected) rows.push(expected);
   }
   rows.push(statRow("黄牌", yellowCards), statRow("红牌", redCards), statRow("奖励分", bonus));
   if (ownGoals > 0) rows.push(statRow("乌龙", ownGoals));

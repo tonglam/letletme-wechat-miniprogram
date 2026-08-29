@@ -4,6 +4,7 @@ import { getApiSessionToken } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import type { EntryInfo } from "../../../models/entry";
 import { goToEntrySearch } from "../../../utils/navigation";
+import { formatRank } from "../../../utils/summary-format";
 import {
   capturePageRequestTrace,
   type PageRequestTrace
@@ -16,6 +17,7 @@ interface EntryProfileData {
   emptyState: boolean;
   entryId?: number;
   entry: EntryInfo;
+  overallRankText: string;
 }
 
 PerformancePage({
@@ -25,7 +27,8 @@ PerformancePage({
     errorRetryable: false,
     emptyState: false,
     entryId: 0,
-    entry: {}
+    entry: {},
+    overallRankText: ""
   } as EntryProfileData,
 
   pageVisible: false,
@@ -136,7 +139,8 @@ PerformancePage({
         error: "",
         errorRetryable: false,
         emptyState: true,
-        entry: {}
+        entry: {},
+        overallRankText: ""
       });
       return;
     }
@@ -156,7 +160,7 @@ PerformancePage({
     try {
       const entry = await getEntryInfo(entryId, forceRefresh, trace);
       if (!isActiveRequest()) return;
-      this.setData({ entry });
+      this.setData({ entry, overallRankText: formatRank(entry.overallRank) });
     } catch (error) {
       if (!isActiveRequest()) return;
       this.setData({

@@ -1,4 +1,5 @@
 import type { LivePlayerRow } from "../../../models/live";
+import { autoSubBadge } from "../../../utils/live-auto-subs";
 
 function numberValue(value: unknown, fallback = 0): number {
   const parsed = Number(value);
@@ -172,6 +173,8 @@ export function normalizePlayer(player: LivePlayerRow): LivePlayerRow {
       ? player
       : { ...player, pickActive: normalizedPickActive };
 
+  const badge = autoSubBadge(normalizedPlayer.autoSubRole);
+
   return {
     ...normalizedPlayer,
     name: normalizedPlayer.name || normalizedPlayer.webName,
@@ -182,6 +185,9 @@ export function normalizePlayer(player: LivePlayerRow): LivePlayerRow {
     pointsText: `${points}`,
     metaText: metaParts.join(" · "),
     statusText: statusText(normalizedPlayer),
-    statusClass: statusClass(normalizedPlayer)
+    statusClass: statusClass(normalizedPlayer),
+    autoSubArrow: badge.arrow,
+    autoSubIncoming: badge.incoming,
+    autoSubPredicted: badge.predicted,
   };
 }

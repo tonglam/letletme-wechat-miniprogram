@@ -86,4 +86,25 @@ assertEqual(salah.name, "Salah", "api elite name");
 assertEqual(salah.statRows.find((row) => row.label === "进球")?.value, "2", "api elite goals");
 assertEqual(salah.bpsText, "52", "api elite bps");
 
+// defensiveContribution / goalsConceded must flow from the summary queries into
+// the sheet (web match-stats parity: DC thresholds and goals-conceded rows).
+const dcRows = [{
+  id: 21,
+  webName: "Gabriel",
+  teamShortName: "ARS",
+  position: "DEFENDER",
+  totalPoints: 8,
+  minutes: 90,
+  cleanSheets: 1,
+  goalsConceded: 0,
+  defensiveContribution: 14,
+  bonus: 2,
+  bps: 41
+}];
+const dcPitch = buildDreamTeamPitchState(dcRows, 3);
+const dcById = indexDreamTeamById(dcPitch.pitchPlayers, dcRows);
+const gabriel = buildPlayerLiveDetail(dcById[dcPitch.pitchPlayers[0].id]);
+assertEqual(gabriel.statRows.find((row) => row.label === "防守贡献")?.value, "14", "dream DC stat row");
+assertEqual(gabriel.breakdownRows.some((row) => row.label === "防守贡献" && row.pointsText === "+2"), true, "dream DC breakdown +2");
+
 console.log("gameweek-dream-detail tests passed");

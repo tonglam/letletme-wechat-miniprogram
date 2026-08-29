@@ -10,13 +10,15 @@ const {
 } = await import("../miniprogram/services/live.service.ts");
 
 test("live matchday query uses only the published match summary fields", () => {
+  // Team short names ride along for the next-event fixture rows (the web desk
+  // selects them too); everything else stays the minimal published set.
   assert.equal(
     (LIVE_MATCHES_QUERY.match(/homeTeamShortName/g) || []).length,
-    0,
+    2,
   );
   assert.equal(
     (LIVE_MATCHES_QUERY.match(/awayTeamShortName/g) || []).length,
-    0,
+    2,
   );
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 2);
   assert.match(LIVE_MATCHES_QUERY, /matches\s*\{[\s\S]*minutes[\s\S]*started/);
@@ -53,8 +55,10 @@ test("live match mapping carries the authoritative fixture minutes", () => {
     eventId: 1,
     homeTeamId: 1,
     homeTeamName: "Home",
+    homeTeamShortName: "HOM",
     awayTeamId: 2,
     awayTeamName: "Away",
+    awayTeamShortName: null,
     homeScore: 2,
     awayScore: 0,
     kickoffTime: "2026-08-21T19:00:00.000Z",
@@ -66,8 +70,8 @@ test("live match mapping carries the authoritative fixture minutes", () => {
 
   assert.equal(mapped.minutes, 48);
   assert.equal(mapped.playStatus, "playing");
-  assert.equal("homeTeamShortName" in mapped, false);
-  assert.equal("awayTeamShortName" in mapped, false);
+  assert.equal(mapped.homeTeamShortName, "HOM");
+  assert.equal(mapped.awayTeamShortName, undefined);
 });
 
 test("live match mapping presents provisional completion without mutating the contract", () => {

@@ -36,10 +36,9 @@
         <view wx:if="{{headlineStats.length}}" class="card summary-list-card">
           <view class="list-heading-row">
             <view class="section-heading">本轮概览</view>
-            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'headline' ? 'done' : ''}}" data-share-kind="headline" bindtap="onCopyShare" hover-class="hover-dim">
+            <view class="tool-btn {{shareCopiedKind === 'headline' ? 'done' : ''}}" data-share-kind="headline" bindtap="onCopyShare" hover-class="hover-dim">
               <image wx:if="{{shareCopiedKind === 'headline'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareCopiedKind === 'headline' ? '已复制' : '分享文字'}}</text>
             </view>
           </view>
           <view class="headline-card">
@@ -53,10 +52,9 @@
         <view wx:if="{{mostRows.length}}" class="card most-card">
           <view class="list-heading-row">
             <view class="section-heading">本轮之最</view>
-            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'most' ? 'done' : ''}}" data-share-kind="most" bindtap="onCopyShare" hover-class="hover-dim">
+            <view class="tool-btn {{shareCopiedKind === 'most' ? 'done' : ''}}" data-share-kind="most" bindtap="onCopyShare" hover-class="hover-dim">
               <image wx:if="{{shareCopiedKind === 'most'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareCopiedKind === 'most' ? '已复制' : '分享文字'}}</text>
             </view>
           </view>
           <view wx:for="{{mostRows}}" wx:key="label" class="most-row">
@@ -67,10 +65,9 @@
         <view wx:if="{{chipRows.length}}" class="card chip-card">
           <view class="list-heading-row">
             <view class="section-heading">开卡情况</view>
-            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'chips' ? 'done' : ''}}" data-share-kind="chips" bindtap="onCopyShare" hover-class="hover-dim">
+            <view class="tool-btn {{shareCopiedKind === 'chips' ? 'done' : ''}}" data-share-kind="chips" bindtap="onCopyShare" hover-class="hover-dim">
               <image wx:if="{{shareCopiedKind === 'chips'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareCopiedKind === 'chips' ? '已复制' : '分享文字'}}</text>
             </view>
           </view>
           <view wx:for="{{chipRows}}" wx:key="id" class="chip-row">
@@ -96,16 +93,15 @@
           <text class="live-pitch-label">梦之队</text>
           <view class="live-pitch-actions">
             <view
-              class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+              class="tool-btn {{shareBusy ? 'done' : ''}}"
               bindtap="onShareDreamPitch"
               hover-class="hover-dim"
             >
-              <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+              <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
             </view>
-            <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'dreamTeam' ? 'done' : ''}}" data-share-kind="dreamTeam" bindtap="onCopyShare" hover-class="hover-dim">
+            <view class="tool-btn {{shareCopiedKind === 'dreamTeam' ? 'done' : ''}}" data-share-kind="dreamTeam" bindtap="onCopyShare" hover-class="hover-dim">
               <image wx:if="{{shareCopiedKind === 'dreamTeam'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
               <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-              <text class="tool-label">{{shareCopiedKind === 'dreamTeam' ? '已复制' : '分享文字'}}</text>
             </view>
           </view>
         </view>
@@ -130,10 +126,9 @@
       <block wx:else>
         <view class="list-heading-row">
           <view class="section-heading">高分榜</view>
-          <view class="tool-btn tool-btn-labeled {{shareCopiedKind === 'elite' ? 'done' : ''}}" data-share-kind="elite" bindtap="onCopyShare" hover-class="hover-dim">
+          <view class="tool-btn {{shareCopiedKind === 'elite' ? 'done' : ''}}" data-share-kind="elite" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopiedKind === 'elite'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopiedKind === 'elite' ? '已复制' : '分享文字'}}</text>
           </view>
         </view>
         <view
@@ -163,10 +158,9 @@
             <text class="flow-arrow flow-arrow-in">↓</text>
             <text class="flow-title flow-title-in">转入最多</text>
           </view>
-          <view wx:if="{{transfersInRows.length}}" class="tool-btn tool-btn-labeled {{shareCopiedKind === 'transfersIn' ? 'done' : ''}}" data-share-kind="transfersIn" bindtap="onCopyShare" hover-class="hover-dim">
+          <view wx:if="{{transfersInRows.length}}" class="tool-btn {{shareCopiedKind === 'transfersIn' ? 'done' : ''}}" data-share-kind="transfersIn" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopiedKind === 'transfersIn'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopiedKind === 'transfersIn' ? '已复制' : '分享文字'}}</text>
           </view>
         </view>
         <view class="flow-body">
@@ -187,10 +181,9 @@
             <text class="flow-arrow flow-arrow-out">↑</text>
             <text class="flow-title flow-title-out">转出最多</text>
           </view>
-          <view wx:if="{{transfersOutRows.length}}" class="tool-btn tool-btn-labeled {{shareCopiedKind === 'transfersOut' ? 'done' : ''}}" data-share-kind="transfersOut" bindtap="onCopyShare" hover-class="hover-dim">
+          <view wx:if="{{transfersOutRows.length}}" class="tool-btn {{shareCopiedKind === 'transfersOut' ? 'done' : ''}}" data-share-kind="transfersOut" bindtap="onCopyShare" hover-class="hover-dim">
             <image wx:if="{{shareCopiedKind === 'transfersOut'}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-            <text class="tool-label">{{shareCopiedKind === 'transfersOut' ? '已复制' : '分享文字'}}</text>
           </view>
         </view>
         <view class="flow-body">

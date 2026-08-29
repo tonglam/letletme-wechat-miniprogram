@@ -72,3 +72,26 @@ test("runtime pitch assets are rasterized abstract kits, not official FPL art", 
   assert.match(adapter, /kits\/\$\{teamCode\}\.png/);
   assert.match(adapter, /kits\/DEFAULT\.png/);
 });
+
+test("deprecated getSystemInfoSync stays behind the system-info helper", () => {
+  // wx.getSystemInfoSync is deprecated; first-party code must read
+  // pixelRatio/platform through utils/system-info (getWindowInfo/getDeviceInfo
+  // with a short-circuited legacy fallback). Sanctioned direct callers:
+  // system-info itself, mini-chart's pre-existing inline pattern, and the
+  // auth-observability fallback gated on missing getDeviceInfo fields.
+  const files = [
+    "miniprogram/utils/squad-pitch.ts",
+    "miniprogram/components/squad-pitch/squad-pitch.ts",
+    "miniprogram/utils/deadline-share-image.ts",
+    "miniprogram/utils/live-match-share-image.ts",
+    "miniprogram/pages/live/match/match.ts",
+  ];
+  for (const file of files) {
+    assert.doesNotMatch(source(file), /wx\.getSystemInfoSync/, file);
+  }
+  const adapter = source("miniprogram/utils/squad-pitch.ts");
+  assert.match(adapter, /devicePlatform\(\) === "devtools"/);
+  const helper = source("miniprogram/utils/system-info.ts");
+  assert.match(helper, /getWindowInfo/);
+  assert.match(helper, /getDeviceInfo/);
+});

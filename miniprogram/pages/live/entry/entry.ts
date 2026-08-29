@@ -44,6 +44,10 @@ import {
 } from "../../../utils/follow";
 import { normalizePlayer, splitLiveSquadPlayers } from "./player";
 import {
+  applyLiveAutoSubProjection,
+  deriveLiveAutoSubProjection,
+} from "../../../utils/live-auto-subs";
+import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView,
 } from "./player-detail";
@@ -63,6 +67,10 @@ import {
   type SquadPitchPlayer,
 } from "../../../utils/squad-pitch";
 import { presentSquadPitchShareImage } from "../../../utils/squad-pitch-canvas";
+import {
+  exportPlayerLiveShareImage,
+  presentPlayerLiveShareImage,
+} from "../../../utils/player-live-share-image";
 import {
   entryPersistencePresentation,
   entryPersistenceNeedsRevalidation,
@@ -160,6 +168,7 @@ interface LiveEntryData {
   shareCopied: boolean;
   shareSheetOpen: boolean;
   shareText: string;
+  playerShareBusy: boolean;
   pitchPlayers: SquadPitchPlayer[];
   pitchBench: SquadPitchPlayer[];
   pitchHeader: SquadPitchHeader | null;
@@ -204,6 +213,12 @@ function firstRefreshDeadline(...values: unknown[]): string {
   }
   return "";
 }
+
+// First-sync race (web parity): the calc can answer READY before picks
+// materialize — retry with backoff instead of flashing an empty squad.
+const EMPTY_PICKS_RETRY_DELAYS_MS = [1500, 3000, 7000, 12000];
+const LIVE_LINEUP_UNAVAILABLE_ERROR =
+  "本轮阵容数据暂不可用，请稍后重试";
 
 function captainDisplayName(
   players: Array<{
@@ -285,6 +300,7 @@ Page({
     shareCopied: false,
     shareSheetOpen: false,
     shareText: "",
+    playerShareBusy: false,
     pitchPlayers: [],
     pitchBench: [],
     pitchHeader: null,
@@ -301,6 +317,7 @@ Page({
   liveForcedFollowupTrackNavigation: false,
   liveRequestId: 0,
   transfersRequestId: 0,
+  emptyPicksRetryCount: 0,
   liveSnapshot: null as LiveSnapshotStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
   liveRefresh: null as LiveRefreshController | null,
@@ -386,6 +403,7 @@ Page({
     const entryId = this.hasRouteEntry
       ? this.routeEntryId
       : (followedEntry ?? 0);
+    this.emptyPicksRetryCount = 0;
     this.setData({
       event: currentGw,
       maxGw: currentGw,
@@ -563,6 +581,7 @@ Page({
         this.liveRefresh?.stop();
         this.liveSnapshot = null;
         this.cachedLiveStoredAt = undefined;
+        this.emptyPicksRetryCount = 0;
         if (seasonChanged) {
           // A new season can reuse the same numeric GW, so entry:event is
           // not enough to distinguish pending score/transfer work. Detach
@@ -927,6 +946,7 @@ Page({
     this.liveForcedFollowup = null;
     this.liveForcedFollowupIncludeTransfers = false;
     this.liveForcedFollowupTrackNavigation = false;
+    this.emptyPicksRetryCount = 0;
     this.setData({
       entryId: nextEntryId,
       entryName: "",
@@ -1057,6 +1077,11 @@ Page({
       return this.liveRequest;
     }
 
+    // A settled request clears liveRequestKey. Do not reset the retry budget
+    // on every deferred request, or a READY/empty response will retry forever.
+    if (this.liveRequestKey && this.liveRequestKey !== requestKey) {
+      this.emptyPicksRetryCount = 0;
+    }
     const requestId = this.liveRequestId + 1;
     this.liveRequestId = requestId;
     const background = options.background === true && this.data.hasData;
@@ -1077,6 +1102,7 @@ Page({
     );
     this.loadTransfersAfterLive = options.includeTransfers === true;
 
+    let keepLoadingForEmptyPicksRetry = false;
     const request = (async () => {
       try {
         navigationTracker?.mark("primaryRequestStartAt");
@@ -1108,7 +1134,74 @@ Page({
 
         const result = liveResult.data;
         navigationTracker?.mark("primaryResponseAt");
+        if (result.availability === "LINEUP_UNAVAILABLE") {
+          this.emptyPicksRetryCount = 0;
+          this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
+          this.cachedLiveStoredAt = liveResult.servedStoredAt;
+          const scoreNextRefreshAt = firstRefreshDeadline(
+            result.score?.nextRefreshAt,
+            result.scoreNextRefreshAt,
+            liveResult.snapshot?.nextRefreshAt,
+            this.liveSnapshot?.eventId === eventId
+              ? this.liveSnapshot.nextRefreshAt
+              : undefined,
+          );
+          const retainExisting = background && this.data.hasData;
+          this.setData(
+            {
+              ...(retainExisting
+                ? {}
+                : {
+                    hasData: false,
+                    noPicks: false,
+                    total: 0,
+                    livePoints: 0,
+                    livePointsText: "—",
+                    totalText: "—",
+                    netPoints: 0,
+                    netPointsKnown: false,
+                    transferCost: 0,
+                    transferCostKnown: false,
+                    captainText: "-",
+                    chipText: "无",
+                    playedText: "-",
+                    summaryTiles: [],
+                    starters: [],
+                    bench: [],
+                    managers: [],
+                    transfers: [],
+                    ...emptyLiveOverlayState(),
+                    ...emptyLivePitchState(),
+                  }),
+              entryName: result.entryName || this.data.entryName || "",
+              playerName: result.playerName || this.data.playerName || "",
+              scoreState: result.score?.state || "UNAVAILABLE",
+              scoreStatusText: managerScoreStatusText(result.score),
+              scoreDetailText: "阵容同步中",
+              scoreNextRefreshAt,
+              error: LIVE_LINEUP_UNAVAILABLE_ERROR,
+              errorWorkload: "gameweek" as const,
+              transfersLoading: false,
+              transfersError: "",
+              lastUpdated: liveResult.servedStoredAt
+                ? formatTime(new Date(liveResult.servedStoredAt))
+                : this.data.lastUpdated,
+            },
+            () => {
+              navigationTracker?.mark("primarySetDataAt");
+              wx.nextTick(() => navigationTracker?.observePrimary());
+            },
+          );
+          this.loadTransfersAfterLive = false;
+          // The response explicitly says the lineup is unavailable. Waiting
+          // for a future snapshot here would recreate the endless spinner;
+          // the error state offers a bounded, user-controlled retry instead.
+          this.liveRefresh?.stop();
+          this.syncDisplayState();
+          return;
+        }
         if (result.availability === "NO_PICKS") {
+          this.emptyPicksRetryCount = 0;
           const officialEventPoints = result.score?.eventPoints;
           const headlinePoints = numberValue(officialEventPoints);
           const netPointsKnown = result.score?.netEventPoints != null;
@@ -1210,9 +1303,41 @@ Page({
           this.syncDisplayState();
           return;
         }
-        const players = (result.players || result.pickList || []).map(
-          normalizePlayer,
+        const rawRoster = result.players || result.pickList || [];
+        if (
+          result.availability === "READY" &&
+          rawRoster.length === 0 &&
+          eventId === (this.liveSnapshot?.eventId ?? currentLiveEventId()) &&
+          this.emptyPicksRetryCount < EMPTY_PICKS_RETRY_DELAYS_MS.length
+        ) {
+          const delay = EMPTY_PICKS_RETRY_DELAYS_MS[this.emptyPicksRetryCount];
+          this.emptyPicksRetryCount += 1;
+          keepLoadingForEmptyPicksRetry = true;
+          setTimeout(() => {
+            if (!this.pageVisible || requestId !== this.liveRequestId) return;
+            void this.loadData({ forceRefresh: true, includeTransfers: false });
+          }, delay);
+          return;
+        }
+        this.emptyPicksRetryCount = 0;
+        const rawPlayers = rawRoster;
+        const rawFieldPlayers = rawPlayers.filter(
+          (player) => numberValue(player.elementType) !== 5,
         );
+        // Web parity: derive auto-subs and captain promotion from the server
+        // lineup (or live minutes pre-final) before rows/pitch are built.
+        const autoSubProjection = deriveLiveAutoSubProjection({
+          chip: result.chip,
+          pickList: rawFieldPlayers,
+          score: result.score,
+          snapshot: liveResult.snapshot,
+        });
+        const players = [
+          ...applyLiveAutoSubProjection(rawFieldPlayers, autoSubProjection),
+          ...rawPlayers.filter(
+            (player) => numberValue(player.elementType) === 5,
+          ),
+        ].map(normalizePlayer);
         const managers = players.filter(
           (player) => numberValue(player.elementType) === 5,
         );
@@ -1273,7 +1398,9 @@ Page({
             netPointsKnown,
             transferCost,
             transferCostKnown,
-            captainText: captainDisplayName(players, result.captainName),
+            captainText:
+              autoSubProjection.captainPromotion?.playerInName ??
+              captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
             summaryTiles: [
@@ -1332,6 +1459,7 @@ Page({
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
+        this.emptyPicksRetryCount = 0;
         this.setData({
           error: error instanceof Error ? error.message : "实时积分加载失败",
         });
@@ -1341,6 +1469,9 @@ Page({
       } finally {
         if (this.pageVisible && requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });
+          // A scheduled empty-pickList retry re-arms the loading state so the
+          // page keeps the skeleton instead of flashing an empty squad.
+          if (keepLoadingForEmptyPicksRetry) this.setData({ loading: true });
           this.syncDisplayState();
         }
       }
@@ -1420,6 +1551,12 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.data.entryId) return false;
+    if (
+      !this.data.hasData &&
+      this.data.error === LIVE_LINEUP_UNAVAILABLE_ERROR
+    ) {
+      return false;
+    }
     const hasManagerRetry = hasRefreshDeadline(
       firstRefreshDeadline(
         this.data.scoreNextRefreshAt,
@@ -1510,6 +1647,7 @@ Page({
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
     this.cachedLiveStoredAt = undefined;
+    this.emptyPicksRetryCount = 0;
     // Detach both the rendered rows and any in-flight transfer read from the
     // previous GW before the new score response can make the page visible.
     this.transfersRequestId += 1;
@@ -1586,6 +1724,24 @@ Page({
     this.setData({
       playerDetailOpen: false,
     });
+  },
+
+  async onSharePlayerImage() {
+    const detail = this.data.playerDetail;
+    if (this.data.playerShareBusy || !detail) return;
+    this.setData({ playerShareBusy: true });
+    try {
+      const path = await exportPlayerLiveShareImage({
+        detail,
+        event: this.data.event,
+        entryName: this.data.entryName,
+      });
+      await presentPlayerLiveShareImage(path);
+    } catch {
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ playerShareBusy: false });
+    }
   },
 
   async onSharePitch() {

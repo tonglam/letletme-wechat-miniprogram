@@ -68,11 +68,69 @@
   font-size: 24rpx;
 }
 
+.deadline-side {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+/* Countdown share — dark-card companion to the light-card .tool-btn */
+.deadline-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  padding: 0;
+  border: 1rpx solid var(--electric-a28);
+  border-radius: 12rpx;
+  background: var(--black-a25);
+  box-sizing: border-box;
+}
+
+.deadline-share-icon {
+  width: 30rpx;
+  height: 30rpx;
+}
+
+.deadline-share.done {
+  opacity: 0.65;
+}
+
 .countdown {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12rpx;
   margin-top: 28rpx;
+}
+
+.deadline-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+  margin-top: 28rpx;
+  min-height: 104rpx;
+  border: 1rpx solid var(--danger-a30);
+  border-radius: 12rpx;
+  background: var(--danger-tint);
+}
+
+.deadline-live-tag {
+  padding: 4rpx 14rpx;
+  border-radius: 8rpx;
+  background: var(--danger);
+  color: var(--chalk);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.deadline-live-text {
+  color: var(--danger);
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .countdown-item {
@@ -195,6 +253,108 @@
 
 .transfer-head .section-title {
   margin-bottom: 6rpx;
+}
+
+/* Card-head action row: section link + image share (web renderAction row). */
+.transfer-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-shrink: 0;
+}
+
+.market-tabs {
+  margin-bottom: 20rpx;
+}
+
+.transfer-note {
+  margin: -4rpx 0 12rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.transfer-more {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
+/* Prediction rows — web LikelyPlayerRow progress bar */
+.transfer-progress {
+  margin-top: 8rpx;
+  height: 6rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: var(--track);
+}
+
+.transfer-progress-fill {
+  height: 100%;
+  border-radius: 999rpx;
+}
+
+.transfer-progress-up {
+  background: var(--green-ink);
+}
+
+.transfer-progress-down {
+  background: var(--danger);
+}
+
+/* Prediction status pill — web LikelyPlayerRow Badge parity: rise green,
+   fall red, otherwise muted. */
+.transfer-status-pill {
+  display: inline-block;
+  margin-top: 10rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.transfer-status-up {
+  background: var(--accent-tint);
+  color: var(--green-ink);
+}
+
+.transfer-status-down {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+/* Dream team — same squad-pitch rendering as the gameweek summary page */
+.dream-pitch-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.dream-pitch-section squad-pitch {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.live-pitch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.live-pitch-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.live-pitch-label {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
 }
 
 .transfer-empty,
@@ -369,6 +529,19 @@
   box-sizing: border-box;
 }
 
+.gw-stat-tappable {
+  position: relative;
+}
+
+.gw-stat-tappable::after {
+  content: "›";
+  position: absolute;
+  top: 14rpx;
+  right: 20rpx;
+  color: var(--chalk-a60);
+  font-size: 26rpx;
+}
+
 /* Odd counts: last tile spans the full row so the band stays balanced */
 .gw-stat-item:last-of-type:nth-child(odd) {
   grid-column: 1 / -1;
@@ -511,6 +684,23 @@
   font-size: 24rpx;
   font-weight: 800;
   box-sizing: border-box;
+}
+
+.fixture-board.is-live {
+  border-color: var(--danger-a30);
+  color: var(--danger);
+}
+
+.fixture-live-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 16rpx;
+  border: 1rpx solid var(--danger-a30);
+  border-radius: 8rpx;
+  background: var(--danger-tint);
+  color: var(--danger);
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .fixture-tz {

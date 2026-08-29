@@ -70,6 +70,32 @@
   opacity: 0.7;
 }
 
+/* Sheet share action — sits left of the close button on the dark hero */
+.pls-share {
+  position: absolute;
+  top: 24rpx;
+  right: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  padding: 0;
+  border: 1rpx solid var(--electric-a28, rgba(0, 255, 133, 0.28));
+  border-radius: 999rpx;
+  background: var(--black-a25, rgba(0, 0, 0, 0.25));
+  box-sizing: border-box;
+}
+
+.pls-share-icon {
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.pls-share.done {
+  opacity: 0.65;
+}
+
 /* Position badge on the dark hero — solid pills, web market-position-badge palette */
 .pls-hero .pos-badge {
   padding: 2rpx 12rpx;
@@ -129,27 +155,9 @@
   font-size: 22rpx;
 }
 
-.pls-hero-pts {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  padding-right: 56rpx;
-}
-
-.pls-hero-pts-label {
-  color: var(--chalk-a60);
-  font-size: 18rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-}
-
-.pls-hero-pts-value {
+/* Points pill — same pill shape as bonus/BPS, value keeps the hero green */
+.pls-pts-value {
   color: var(--electric);
-  font-size: 56rpx;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.05;
 }
 
 /* BPS / bonus pills on the dark band */

@@ -24,7 +24,7 @@
         </view>
         <view class="metric-card">
           <text class="metric-label">总排名</text>
-          <text class="metric-value">{{entry.overallRank || '-'}}</text>
+          <text class="metric-value">{{overallRankText || '-'}}</text>
         </view>
       </view>
     </view>

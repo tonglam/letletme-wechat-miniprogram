@@ -4,6 +4,10 @@ export interface TournamentOption {
   participantCount?: number;
   startGw?: number;
   endGw?: number;
+  /** Kind-detection inputs; only the live-tournament picker populates them. */
+  groupMode?: string | null;
+  leagueType?: string | null;
+  rosterMode?: string | null;
 }
 
 export interface KnockoutOption extends TournamentOption {

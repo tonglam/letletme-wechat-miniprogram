@@ -81,11 +81,26 @@ export interface PriceChangeViewRow {
   sellingPriceText: string;
 }
 
-function isLikelyToChange(player: PriceChangePlayer): boolean {
+export function isLikelyToChange(player: PriceChangePlayer): boolean {
   return player.status === "VERY_LIKELY_RISE"
     || player.status === "LIKELY_RISE"
     || player.status === "LIKELY_FALL"
     || player.status === "VERY_LIKELY_FALL";
+}
+
+export function priceChangeStatusLabel(status: PriceChangePredictionStatus): string {
+  return STATUS_LABELS[status];
+}
+
+export type PriceChangeStatusTone = "up" | "down" | "neutral";
+
+/** Web predictionStatusClass parity: RISE → green, FALL → red, else muted. */
+export function priceChangeStatusTone(
+  status: PriceChangePredictionStatus,
+): PriceChangeStatusTone {
+  if (status.includes("RISE")) return "up";
+  if (status.includes("FALL")) return "down";
+  return "neutral";
 }
 
 /** Web parity: likely squad, other likely, remaining squad, then the pool. */

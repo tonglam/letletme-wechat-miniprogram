@@ -116,6 +116,51 @@ test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", asyn
   assert.ok(Array.from(runtime.storage.keys()).some((key) => key.startsWith("gql:v2:public:")));
 });
 
+test("uncacheable EntryLookup refresh evicts the previous authoritative result", async () => {
+  let callCount = 0;
+  const runtime = installRuntime((options) => {
+    callCount += 1;
+    options.success({
+      statusCode: 200,
+      data: {
+        data: {
+          entryLookup: callCount === 1
+            ? {
+                status: "FOUND",
+                retryable: false,
+                source: "DATABASE",
+                persistenceState: "NOT_REQUIRED",
+                entry: { id: 123 },
+              }
+            : {
+                status: "UNAVAILABLE",
+                retryable: true,
+                source: null,
+                persistenceState: null,
+                entry: null,
+              },
+        },
+      },
+    });
+  });
+  const query = "query EntryLookup($id: Int!) { entryLookup(id: $id) { status entry { id } } }";
+  const options = { ...publicReporting, cacheVariant: "entry:123" };
+
+  const first = await graphqlRead(query, { id: 123 }, options);
+  assert.equal(first.meta.source, "network");
+  const degraded = await graphqlRead(query, { id: 123 }, {
+    ...options,
+    forceRefresh: true,
+  });
+  assert.equal(degraded.meta.source, "network");
+  assert.equal(degraded.data.entryLookup.status, "UNAVAILABLE");
+
+  const next = await graphqlRead(query, { id: 123 }, options);
+  assert.equal(next.meta.source, "network");
+  assert.equal(next.data.entryLookup.status, "UNAVAILABLE");
+  assert.equal(runtime.requests.length, 3);
+});
+
 test("degraded PlayerDetail refresh evicts the previous authoritative cache", async () => {
   let callCount = 0;
   const runtime = installRuntime((options) => {

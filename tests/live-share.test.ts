@@ -3,7 +3,8 @@ import {
   copyShareText,
   formatLiveEntryShareText,
   formatLiveMatchShareText,
-  formatLiveTournamentShareText
+  formatLiveTournamentShareText,
+  formatOfficialH2HShareText
 } from "../miniprogram/utils/live-share";
 import { resetPrivacyAuthorizationForTests } from "../miniprogram/utils/privacy";
 
@@ -90,6 +91,53 @@ if (tableText.includes("Tong W ·") || tableText.includes("出场")) {
   throw new Error("tournament rows stay concise: no manager, no played count");
 }
 assertIncludes(tableText, "tournamentId=2", "tournament url");
+
+// --- official H2H share copy (web OfficialH2HCompetitionView builders) ---
+const h2hStandingsText = formatOfficialH2HShareText({
+  kind: "standings",
+  gameweek: 5,
+  tournamentName: "WhoamI Cup",
+  tournamentId: 9,
+  standings: [
+    { rankText: "1", entryName: "Dream Team FC", matchPointsText: "15", pointsForText: "512" },
+    { rankText: "—", entryName: "Pending FC", matchPointsText: "0", pointsForText: "0" }
+  ]
+});
+assertIncludes(h2hStandingsText, "# WhoamI Cup · GW5 对战总览", "h2h standings title");
+assertIncludes(h2hStandingsText, "对战积分榜:", "h2h standings section");
+assertIncludes(
+  h2hStandingsText,
+  "1. Dream Team FC · 15 对战积分 · 512 总得分",
+  "h2h standings row (web line format)",
+);
+assertIncludes(h2hStandingsText, "—. Pending FC", "unranked keeps the dash");
+assertIncludes(h2hStandingsText, "tournamentId=9", "h2h share carries the site link");
+
+const h2hFixturesText = formatOfficialH2HShareText({
+  kind: "matches",
+  gameweek: 5,
+  tournamentName: "WhoamI Cup",
+  matches: [
+    { homeName: "Dream Team FC", awayName: "WhoamI FC", scoreText: "66 — 55" },
+    { homeName: "Pending FC", awayName: "平均队", scoreText: "对阵" }
+  ]
+});
+assertIncludes(h2hFixturesText, "本轮对阵:", "h2h fixtures section");
+assertIncludes(h2hFixturesText, "Dream Team FC 66 — 55 WhoamI FC", "scored fixture line");
+assertIncludes(h2hFixturesText, "Pending FC 对阵 平均队", "scoreless fixture renders 对阵");
+
+const h2hMatchupsText = formatOfficialH2HShareText({
+  kind: "matchups",
+  gameweek: 5,
+  tournamentName: "WhoamI Cup",
+  matches: [
+    { labelText: "GW4", homeName: "WhoamI FC", awayName: "Dream Team FC", scoreText: "61 — 58" },
+    { labelText: "GW5", homeName: "Dream Team FC", awayName: "WhoamI FC", scoreText: "对阵" }
+  ]
+});
+assertIncludes(h2hMatchupsText, "# WhoamI Cup · 我的对阵", "my-matchups title");
+assertIncludes(h2hMatchupsText, "GW4: WhoamI FC 61 — 58 Dream Team FC", "matchup history line");
+assertIncludes(h2hMatchupsText, "GW5: Dream Team FC 对阵 WhoamI FC", "upcoming matchup line");
 
 const matchText = formatLiveMatchShareText({
   matchId: 11,

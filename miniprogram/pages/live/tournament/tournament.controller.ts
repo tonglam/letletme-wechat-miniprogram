@@ -53,6 +53,7 @@ import {
   buildTournamentLineupComparison,
   copyShareText,
   formatLiveTournamentShareText,
+  formatOfficialH2HShareText,
   type TournamentCompareLineupRow,
 } from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
@@ -77,7 +78,55 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
-import { formatAverageNumber } from "../../../utils/summary-format";
+import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
+import {
+  exportTournamentBoardShareImage,
+  presentTournamentBoardShareImage,
+} from "../../../utils/tournament-board-share-image";
+import {
+  buildTournamentPickerState,
+  EMPTY_TOURNAMENT_PICKER_STATE,
+} from "../../../utils/tournament-picker-groups";
+import {
+  exportTournamentH2HShareImage,
+  presentTournamentH2HShareImage,
+  type TournamentH2HShareMatchRow,
+  type TournamentH2HShareStandingRow,
+} from "../../../utils/tournament-h2h-share-image";
+import {
+  getEntryOfficialH2HMatchups,
+  getTournamentDetailDesk,
+  getTournamentOfficialH2H,
+  type EntryOfficialH2HMatchupsItem,
+  type TournamentDetailDesk,
+} from "../../../services/tournament-detail.service";
+import {
+  filterTournamentRoster,
+  isOfficialH2HTournamentRow,
+  isTournamentSetupInFlight,
+  officialH2HMatchupStatusText,
+  officialH2HPhaseLabel,
+  officialH2HScoreSourceText,
+  officialH2HSideName,
+  scrubUntraceableH2HMatches,
+  shouldShowOfficialH2HStandings,
+  sortOfficialH2HStandings,
+  TOURNAMENT_ROSTER_PREVIEW,
+  TOURNAMENT_ROSTER_STEP,
+  tournamentEventRangeText,
+  tournamentGroupModeText,
+  tournamentHasKnockout,
+  tournamentKnockoutModeText,
+  tournamentLeagueTypeText,
+  tournamentSetupPhaseRows,
+  traceableOfficialH2HBoard,
+  visibleTournamentRoster,
+  type OfficialH2HBoard,
+  type OfficialH2HMatch,
+  type OfficialH2HStanding,
+  type TournamentParticipantRow,
+  type TournamentSetupPhaseRow,
+} from "../../../utils/official-h2h";
 type SortKey =
   | "livePoints"
   | "liveNetPoints"
@@ -85,12 +134,17 @@ type SortKey =
   | "played"
   | "totalPoints"
   | "overallRank"
+  | "teamValue"
   | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
 const CHIP_VALUES = ["TC", "BB", "WC", "FH"];
+// Web cadences: OfficialH2HCompetitionView refreshes the current GW every
+// 60s; TournamentClient polls setup progress every 5s.
+const H2H_REFRESH_MS = 60000;
+const SETUP_POLL_MS = 5000;
 
 export function partialTournamentErrorSuffix(retainedRowCount: number): string {
   return retainedRowCount > 0
@@ -125,6 +179,7 @@ export function noLiveEventState() {
     lastUpdated: "",
     scoreStatusText: "正在确认官方分数",
     scoreNextRefreshAt: "",
+    ...emptyH2HViewState(),
   };
 }
 
@@ -147,6 +202,9 @@ interface DisplayTournamentRow extends LiveTournamentRow {
   chipCode: string;
   displayCaptain: string;
   playedText: string;
+  overallRankText: string;
+  teamValueText: string;
+  topRank: boolean;
   isMe: boolean;
   pinned: boolean;
   compared: boolean;
@@ -161,6 +219,60 @@ interface OwnershipPlayerOption {
   teamShortName: string;
   teamName: string;
   position: string;
+}
+
+interface DisplayH2HStanding {
+  entryId: number;
+  entryName: string;
+  playerName: string;
+  rankText: string;
+  recordText: string;
+  playedText: string;
+  pointsForText: string;
+  matchPointsText: string;
+  isMe: boolean;
+  topRank: boolean;
+}
+
+interface DisplayH2HMatch {
+  key: string;
+  orderText: string;
+  phaseLabel: string;
+  isBye: boolean;
+  involvesViewer: boolean;
+  homeName: string;
+  homePlayer: string;
+  awayName: string;
+  awayPlayer: string;
+  hasScore: boolean;
+  homeScoreText: string;
+  awayScoreText: string;
+  homeWon: boolean;
+  awayWon: boolean;
+  tiebreakText: string;
+}
+
+interface DisplayH2HMatchup {
+  key: string;
+  roundText: string;
+  statusText: string;
+  statusClass: "live" | "finished" | "upcoming";
+  homeName: string;
+  homePlayer: string;
+  awayName: string;
+  awayPlayer: string;
+  hasScore: boolean;
+  homeScoreText: string;
+  awayScoreText: string;
+  homeWon: boolean;
+  awayWon: boolean;
+}
+
+interface DisplayRosterRow {
+  entryId: number;
+  entryName: string;
+  playerName: string;
+  isMe: boolean;
 }
 
 interface LiveTournamentData {
@@ -187,8 +299,17 @@ interface LiveTournamentData {
   entryId?: number;
   keyword: string;
   tournaments: TournamentOption[];
-  tournamentNames: string[];
-  selectedTournamentIndex: number;
+  classicTournaments: TournamentOption[];
+  h2hTournaments: TournamentOption[];
+  classicTournamentNames: string[];
+  h2hTournamentNames: string[];
+  selectedClassicIndex: number;
+  selectedH2HIndex: number;
+  classicPickerText: string;
+  h2hPickerText: string;
+  classicPickerActive: boolean;
+  h2hPickerActive: boolean;
+  hasDualTournamentKinds: boolean;
   selectedTournament: TournamentOption | null;
   rowCount: number;
   displayedRows: DisplayTournamentRow[];
@@ -261,8 +382,54 @@ interface LiveTournamentData {
   compareRightPickCount: number;
   shareLabel: string;
   shareCopied: boolean;
+  shareImageBusy: boolean;
   shareSheetOpen: boolean;
   shareText: string;
+  // Official H2H projection (web OfficialH2HCompetitionView parity).
+  h2hActive: boolean;
+  h2hTab: "standings" | "matches" | "mine";
+  h2hShowStandings: boolean;
+  h2hStandings: DisplayH2HStanding[];
+  h2hMatches: DisplayH2HMatch[];
+  h2hAwaitingSchedule: boolean;
+  h2hViewerRankText: string;
+  h2hViewerMatchPointsText: string;
+  h2hViewerRecordText: string;
+  // Viewer matchup history (web MatchupHistoryBoard, lazy-loaded once).
+  h2hMatchups: DisplayH2HMatchup[];
+  h2hMatchupsLoading: boolean;
+  h2hMatchupsLoaded: boolean;
+  h2hMatchupsFailed: boolean;
+  // Tournament setup-in-progress card (web lifecycle gate).
+  setupActive: boolean;
+  setupFailed: boolean;
+  setupPhases: TournamentSetupPhaseRow[];
+  // Competition details disclosure (web CompetitionDetailsDisclosure).
+  detailOpen: boolean;
+  detailLoading: boolean;
+  detailError: string;
+  detailCreator: string;
+  detailLeagueTypeText: string;
+  detailParticipantCountText: string;
+  detailGroupModeText: string;
+  detailGroupTeamNumText: string;
+  detailGroupNumText: string;
+  detailGroupEventsText: string;
+  detailKnockoutModeText: string;
+  detailKnockout: boolean;
+  detailKnockoutTeamNumText: string;
+  detailKnockoutRoundsText: string;
+  detailKnockoutEventsText: string;
+  detailRosterCountText: string;
+  detailRosterRows: DisplayRosterRow[];
+  detailRosterTotal: number;
+  detailRosterSearchable: boolean;
+  detailRosterKeyword: string;
+  detailRosterShownText: string;
+  detailRosterMoreText: string;
+  detailRosterAllText: string;
+  detailRosterCanCollapse: boolean;
+  detailRosterUnavailable: boolean;
 }
 
 interface LiveTournamentLoadOptions {
@@ -337,6 +504,8 @@ function boardSortOf(key: SortKey): LiveBoardSort {
       return "TOTAL_POINTS";
     case "overallRank":
       return "OVERALL_RANK";
+    case "teamValue":
+      return "TEAM_VALUE";
     case "entryName":
       return "ENTRY_NAME";
     case "livePoints":
@@ -449,6 +618,12 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
   const chip = textValue(row.chip, "无");
   const captain = textValue(row.captainName, "无队长");
   const chipCode = chipCodeOf(row.chip);
+  const captainPointsKnown =
+    typeof row.captainPoints === "number" && Number.isFinite(row.captainPoints);
+  const overallRankKnown =
+    typeof row.overallRank === "number" && row.overallRank > 0;
+  const teamValueKnown =
+    typeof row.teamValue === "number" && Number.isFinite(row.teamValue);
 
   return {
     ...row,
@@ -472,8 +647,18 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
       : "—",
     metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
     chipCode,
-    displayCaptain: captain && captain !== "无队长" ? `${captain} (C)` : "",
+    displayCaptain:
+      captain && captain !== "无队长"
+        ? `${captain} (C)${captainPointsKnown ? ` ${row.captainPoints}分` : ""}`
+        : "",
     playedText: `${played}/${played + toPlay}`,
+    overallRankText: overallRankKnown ? formatRank(row.overallRank) : "",
+    teamValueText: teamValueKnown
+      // The live-board payload exposes squad value in £m already (web
+      // formatTeamMoney parity) — no /10 rescale here.
+      ? `£${numberValue(row.teamValue).toFixed(1)}m`
+      : "",
+    topRank: false,
     isMe: false,
     pinned: false,
     compared: false,
@@ -704,6 +889,136 @@ function filterOwnershipPlayers(
   );
 }
 
+function emptyH2HViewState() {
+  return {
+    h2hActive: false,
+    h2hTab: "standings" as "standings" | "matches" | "mine",
+    h2hShowStandings: true,
+    h2hStandings: [] as DisplayH2HStanding[],
+    h2hMatches: [] as DisplayH2HMatch[],
+    h2hAwaitingSchedule: false,
+    h2hViewerRankText: "",
+    h2hViewerMatchPointsText: "",
+    h2hViewerRecordText: "",
+    h2hMatchups: [] as DisplayH2HMatchup[],
+    h2hMatchupsLoading: false,
+    h2hMatchupsLoaded: false,
+    h2hMatchupsFailed: false,
+    setupActive: false,
+    setupFailed: false,
+    setupPhases: [] as TournamentSetupPhaseRow[],
+  };
+}
+
+function displayH2HStanding(
+  row: OfficialH2HStanding,
+  viewerEntryId?: number,
+): DisplayH2HStanding {
+  const rank =
+    typeof row.rank === "number" && Number.isFinite(row.rank) ? row.rank : 0;
+  return {
+    entryId: row.entryId,
+    entryName: row.entryName || `参赛 ID #${row.entryId}`,
+    playerName: row.playerName || "",
+    rankText: rank > 0 ? String(rank) : "—",
+    recordText: `${numberValue(row.won)}-${numberValue(row.drawn)}-${numberValue(row.lost)}`,
+    playedText: String(numberValue(row.played)),
+    pointsForText: String(numberValue(row.pointsFor)),
+    matchPointsText: String(numberValue(row.matchPoints)),
+    isMe: viewerEntryId != null && row.entryId === viewerEntryId,
+    // Web highlights the podium ranks of the H2H table too.
+    topRank: rank >= 1 && rank <= 3,
+  };
+}
+
+function displayH2HMatch(
+  match: OfficialH2HMatch,
+  viewerEntryId?: number,
+): DisplayH2HMatch {
+  const homePoints =
+    typeof match.home.points === "number" &&
+    Number.isFinite(match.home.points)
+      ? match.home.points
+      : null;
+  const awayPoints =
+    typeof match.away.points === "number" &&
+    Number.isFinite(match.away.points)
+      ? match.away.points
+      : null;
+  const hasScore = homePoints != null && awayPoints != null;
+  return {
+    key: String(match.officialMatchId),
+    orderText: `#${String(match.sourceOrder + 1).padStart(2, "0")}`,
+    phaseLabel: officialH2HPhaseLabel(match),
+    isBye: Boolean(match.isBye),
+    involvesViewer:
+      viewerEntryId != null &&
+      (match.home.entryId === viewerEntryId ||
+        match.away.entryId === viewerEntryId),
+    homeName: officialH2HSideName(match.home) || "—",
+    homePlayer: match.home.playerName || "",
+    awayName: officialH2HSideName(match.away) || "—",
+    awayPlayer: match.away.playerName || "",
+    hasScore,
+    homeScoreText: hasScore ? String(homePoints) : "",
+    awayScoreText: hasScore ? String(awayPoints) : "",
+    homeWon:
+      hasScore &&
+      match.winnerEntryId != null &&
+      match.winnerEntryId === match.home.entryId,
+    awayWon:
+      hasScore &&
+      match.winnerEntryId != null &&
+      match.winnerEntryId === match.away.entryId,
+    tiebreakText: match.tiebreak ? `决胜规则：${match.tiebreak}` : "",
+  };
+}
+
+/** MatchupHistoryBoard row: GW label + live/finished/upcoming badge + sides. */
+function displayH2HMatchup(
+  match: OfficialH2HMatch,
+  desk: EntryOfficialH2HMatchupsItem | null,
+): DisplayH2HMatchup {
+  const homePoints =
+    typeof match.home.points === "number" &&
+    Number.isFinite(match.home.points)
+      ? match.home.points
+      : null;
+  const awayPoints =
+    typeof match.away.points === "number" &&
+    Number.isFinite(match.away.points)
+      ? match.away.points
+      : null;
+  const hasScore = homePoints != null && awayPoints != null;
+  const statusText = officialH2HMatchupStatusText(match, desk);
+  return {
+    key: String(match.officialMatchId),
+    roundText: `GW${match.eventId}`,
+    statusText,
+    statusClass:
+      statusText === "进行中"
+        ? "live"
+        : statusText === "已结束"
+          ? "finished"
+          : "upcoming",
+    homeName: officialH2HSideName(match.home) || "—",
+    homePlayer: match.home.playerName || "",
+    awayName: officialH2HSideName(match.away) || "—",
+    awayPlayer: match.away.playerName || "",
+    hasScore,
+    homeScoreText: hasScore ? String(homePoints) : "",
+    awayScoreText: hasScore ? String(awayPoints) : "",
+    homeWon:
+      hasScore &&
+      match.winnerEntryId != null &&
+      match.winnerEntryId === match.home.entryId,
+    awayWon:
+      hasScore &&
+      match.winnerEntryId != null &&
+      match.winnerEntryId === match.away.entryId,
+  };
+}
+
 function clearTournamentBoard(page: object): void {
   const board = page as {
     rows?: DisplayTournamentRow[];
@@ -761,17 +1076,17 @@ PerformancePage({
     entryId: 0,
     keyword: "",
     tournaments: [],
-    tournamentNames: [],
-    selectedTournamentIndex: 0,
+    ...EMPTY_TOURNAMENT_PICKER_STATE,
     selectedTournament: null,
     rowCount: 0,
     displayedRows: [],
     sortOptions: [
       { key: "livePoints", label: "GW" },
-      { key: "liveNetPoints", label: "净分" },
       { key: "transferCost", label: "扣分" },
       { key: "played", label: "出场" },
       { key: "totalPoints", label: "总分" },
+      { key: "overallRank", label: "总排" },
+      { key: "teamValue", label: "队值" },
     ],
     sortKey: "livePoints",
     sortDesc: true,
@@ -845,8 +1160,35 @@ PerformancePage({
     compareRightPickCount: 0,
     shareLabel: "分享文字",
     shareCopied: false,
+    shareImageBusy: false,
     shareSheetOpen: false,
     shareText: "",
+    ...emptyH2HViewState(),
+    detailOpen: false,
+    detailLoading: false,
+    detailError: "",
+    detailCreator: "",
+    detailLeagueTypeText: "",
+    detailParticipantCountText: "",
+    detailGroupModeText: "",
+    detailGroupTeamNumText: "",
+    detailGroupNumText: "",
+    detailGroupEventsText: "",
+    detailKnockoutModeText: "",
+    detailKnockout: false,
+    detailKnockoutTeamNumText: "",
+    detailKnockoutRoundsText: "",
+    detailKnockoutEventsText: "",
+    detailRosterCountText: "",
+    detailRosterRows: [],
+    detailRosterTotal: 0,
+    detailRosterSearchable: false,
+    detailRosterKeyword: "",
+    detailRosterShownText: "",
+    detailRosterMoreText: "",
+    detailRosterAllText: "",
+    detailRosterCanCollapse: false,
+    detailRosterUnavailable: false,
   } as LiveTournamentData,
 
   rowsRequest: null as Promise<void> | null,
@@ -892,6 +1234,16 @@ PerformancePage({
   startupGeneration: 0,
   shareCopiedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   shareRequest: null as Promise<void> | null,
+  h2hRequestId: 0,
+  h2hActiveEventId: 0,
+  h2hTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  setupTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  matchupRequestId: 0,
+  h2hMatchupDeskItem: null as EntryOfficialH2HMatchupsItem | null,
+  detailDesk: null as TournamentDetailDesk | null,
+  detailDeskKey: "",
+  detailParticipants: [] as TournamentParticipantRow[],
+  detailRosterVisible: TOURNAMENT_ROSTER_PREVIEW,
 
   ensureContext(
     reason: "page-load" | "page-show" | "pull-refresh",
@@ -1146,7 +1498,7 @@ PerformancePage({
           ...(seasonChanged
             ? {
                 tournaments: [],
-                tournamentNames: [],
+                ...EMPTY_TOURNAMENT_PICKER_STATE,
                 selectedTournament: null,
                 ownershipTeamOptions: [],
                 ownershipTeamNames: [],
@@ -1190,6 +1542,8 @@ PerformancePage({
           !this.data.selectedTournament
         ) {
           await this.loadTournaments(true);
+        } else if (isOfficialH2HTournamentRow(this.data.selectedTournament)) {
+          await this.loadH2HDesk({ forceRefresh: true });
         } else {
           await this.loadRows({ forceRefresh: true });
         }
@@ -1218,6 +1572,18 @@ PerformancePage({
         background: this.data.hasData,
         forceRefresh: true,
       });
+      return;
+    }
+    // An H2H view has no rows request to resume: re-arm its own refresh, or
+    // restart a desk load that onHide invalidated mid-flight.
+    if (resumed && isOfficialH2HTournamentRow(this.data.selectedTournament)) {
+      if (this.data.setupActive) {
+        void this.loadH2HDesk({ background: true });
+      } else if (this.data.h2hActive) {
+        this.scheduleH2HRefresh(this.data.event);
+      } else if (!this.data.hasData && this.data.event > 0) {
+        void this.loadH2HDesk();
+      }
       return;
     }
     this.liveRefresh?.sync();
@@ -1252,6 +1618,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.liveRefresh?.stop();
+    this.clearH2HTimers();
     this.clearShareCopiedTimer();
   },
 
@@ -1270,6 +1637,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     this.liveRefresh?.dispose();
+    this.clearH2HTimers();
     this.clearShareCopiedTimer();
   },
 
@@ -1338,6 +1706,7 @@ PerformancePage({
     this.rowsRequest = null;
     this.rowsRequestKey = "";
     clearTournamentBoard(this);
+    this.clearH2HState();
     this.setData({
       entryId: nextEntryId,
       loading: false,
@@ -1348,7 +1717,7 @@ PerformancePage({
       tournamentListError: "",
       tournamentListErrorSuffix: "",
       tournaments: [],
-      tournamentNames: [],
+      ...EMPTY_TOURNAMENT_PICKER_STATE,
       selectedTournament: null,
       rowCount: 0,
       displayedRows: [],
@@ -1356,6 +1725,7 @@ PerformancePage({
       scoreStatusText: "正在确认官方分数",
       scoreNextRefreshAt: "",
       ...emptyCompareState(),
+      ...emptyH2HViewState(),
     });
     if (loadDirectory) void this.loadTournaments(true);
     return true;
@@ -1380,6 +1750,7 @@ PerformancePage({
       this.failedEntryCount = 0;
       this.cachedLiveStoredAt = undefined;
       clearTournamentBoard(this);
+      this.clearH2HState();
       this.setData({
         loading: false,
         hasData: false,
@@ -1393,10 +1764,11 @@ PerformancePage({
         emptyDescription: "查找球队并设为我的球队后，即可加载实时赛事。",
         emptyActionText: "去选择球队",
         tournaments: [],
-        tournamentNames: [],
+        ...EMPTY_TOURNAMENT_PICKER_STATE,
         selectedTournament: null,
         rowCount: 0,
         displayedRows: [],
+        ...emptyH2HViewState(),
       });
       return;
     }
@@ -1433,9 +1805,10 @@ PerformancePage({
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
         clearTournamentBoard(this);
+        this.clearH2HState();
         this.setData({
           tournaments: [],
-          tournamentNames: [],
+          ...EMPTY_TOURNAMENT_PICKER_STATE,
           selectedTournament: null,
           rowCount: 0,
           displayedRows: [],
@@ -1446,6 +1819,7 @@ PerformancePage({
           emptyDescription:
             "加入一个赛事后，或等待新赛季数据同步，再回到这里重新检查。",
           emptyActionText: "重新检查",
+          ...emptyH2HViewState(),
         });
         return;
       }
@@ -1468,15 +1842,21 @@ PerformancePage({
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
         clearTournamentBoard(this);
+        this.clearH2HState();
       }
       this.setData({
         tournaments,
-        tournamentNames: tournaments.map((tournament) => tournament.name),
-        selectedTournamentIndex,
+        ...buildTournamentPickerState(tournaments, selectedTournament),
         selectedTournament,
         emptyState: "",
         ...(selectionChanged
-          ? { hasData: false, rowCount: 0, displayedRows: [], lastUpdated: "" }
+          ? {
+              hasData: false,
+              rowCount: 0,
+              displayedRows: [],
+              lastUpdated: "",
+              ...emptyH2HViewState(),
+            }
           : {}),
       });
       this.persistSelectedTournament(selectedTournament);
@@ -1486,12 +1866,14 @@ PerformancePage({
         this.failedEntryCount = 0;
         this.cachedLiveStoredAt = undefined;
         clearTournamentBoard(this);
+        this.clearH2HState();
         this.setData({
           rowCount: 0,
           displayedRows: [],
           hasData: true,
           loading: false,
           refreshing: false,
+          ...emptyH2HViewState(),
           resultsEmptyTitle:
             selectedTournament.participantCount === 0
               ? "当前赛事还没有参赛球队"
@@ -1502,6 +1884,18 @@ PerformancePage({
               : "比赛周开始后再显示实时排名",
         });
         return;
+      }
+      if (isOfficialH2HTournamentRow(selectedTournament)) {
+        // Official H2H leagues render the standings/fixtures projection, not
+        // the points board — the web skips the live-board request the same
+        // way (TournamentClient). The desk decides SETUP vs OFFICIAL_H2H.
+        this.liveRefresh?.stop();
+        await this.loadH2HDesk({ forceRefresh, trace });
+        return;
+      }
+      if (this.data.h2hActive || this.data.setupActive) {
+        this.clearH2HState();
+        this.setData({ ...emptyH2HViewState() });
       }
       if (selectionChanged) {
         // Re-arm recovery before the rows request: if that request fails, a
@@ -1784,9 +2178,12 @@ PerformancePage({
     const compareIds = this.data.compareIds || [];
     const rows = [...byEntry.values()].map((row, index) => {
       const compared = compareIds.includes(numberValue(row.entry));
+      const visibleRank = numberValue(row.rank, index + 1);
       return {
         ...row,
-        visibleRank: numberValue(row.rank, index + 1),
+        visibleRank,
+        // Web TournamentTable highlights the podium ranks.
+        topRank: row.eventPointsKnown && visibleRank >= 1 && visibleRank <= 3,
         isMe: numberValue(row.entry) === viewerId,
         pinned: false,
         compared,
@@ -2171,8 +2568,504 @@ PerformancePage({
     return request;
   },
 
+  clearH2HTimers() {
+    this.h2hRequestId += 1;
+    if (this.h2hTimer) {
+      clearTimeout(this.h2hTimer);
+      this.h2hTimer = undefined;
+    }
+    if (this.setupTimer) {
+      clearTimeout(this.setupTimer);
+      this.setupTimer = undefined;
+    }
+  },
+
+  clearH2HState() {
+    this.clearH2HTimers();
+    this.h2hActiveEventId = 0;
+    this.matchupRequestId += 1;
+    this.h2hMatchupDeskItem = null;
+    this.detailDesk = null;
+    this.detailDeskKey = "";
+  },
+
+  async loadH2HDesk(options: LiveTournamentLoadOptions = {}): Promise<void> {
+    const entryId = this.data.entryId;
+    const selected = this.data.selectedTournament;
+    const eventId = this.data.event;
+    if (
+      !entryId ||
+      !selected ||
+      !Number.isSafeInteger(eventId) ||
+      eventId <= 0
+    ) {
+      return;
+    }
+    const tournamentId = Number(selected.id);
+    const requestId = ++this.h2hRequestId;
+    const preserveData = this.data.hasData || options.background === true;
+    this.setData(
+      preserveData
+        ? { refreshing: true, error: "", errorSuffix: "" }
+        : {
+            loading: true,
+            error: "",
+            errorSuffix: "",
+            scoreStatusText: "正在确认官方分数",
+          },
+    );
+    try {
+      const desk = await getTournamentDetailDesk(
+        tournamentId,
+        entryId,
+        eventId,
+        options.forceRefresh === true,
+        options.trace,
+      );
+      if (!this.pageVisible || requestId !== this.h2hRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
+      if (!desk) throw new Error("赛事详情暂时不可用，请稍后重试");
+      if (desk.kind === "LIVE_POINTS") {
+        // The desk is authoritative: a pre-detected H2H league can still be a
+        // points surface, and the web falls back to the live board the same
+        // way (TournamentClient no-revision fallback).
+        this.clearH2HState();
+        this.setData({ ...emptyH2HViewState() });
+        await this.loadRows(options);
+        return;
+      }
+      this.detailDesk = desk;
+      this.detailDeskKey = String(tournamentId);
+      this.h2hActiveEventId = desk.context.activeEventId ?? 0;
+      if (desk.kind === "SETUP" || !desk.officialH2H) {
+        this.applySetupState(desk);
+        return;
+      }
+      this.applyH2HBoard(desk.officialH2H);
+    } catch (error) {
+      if (!this.pageVisible || requestId !== this.h2hRequestId) return;
+      this.setData({
+        error: error instanceof Error ? error.message : "H2H 赛事加载失败",
+        errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
+      });
+      this.syncDisplayState();
+      if (options.propagateError) throw error;
+    } finally {
+      if (requestId === this.h2hRequestId) {
+        this.setData({ loading: false, refreshing: false });
+        this.syncDisplayState();
+      }
+    }
+  },
+
+  /** GW navigation / refresh on an active H2H view refetches the board only. */
+  async loadH2HBoard(
+    eventId: number,
+    options: LiveTournamentLoadOptions = {},
+  ): Promise<void> {
+    const entryId = this.data.entryId;
+    const selected = this.data.selectedTournament;
+    if (
+      !entryId ||
+      !selected ||
+      !Number.isSafeInteger(eventId) ||
+      eventId <= 0
+    ) {
+      return;
+    }
+    const tournamentId = Number(selected.id);
+    const requestId = ++this.h2hRequestId;
+    this.setData(
+      this.data.hasData
+        ? { refreshing: true, error: "", errorSuffix: "" }
+        : { loading: true, error: "", errorSuffix: "" },
+    );
+    try {
+      const board = await getTournamentOfficialH2H(
+        tournamentId,
+        eventId,
+        options.forceRefresh === true,
+        options.trace,
+      );
+      if (!this.pageVisible || requestId !== this.h2hRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
+      this.applyH2HBoard(board);
+    } catch (error) {
+      if (!this.pageVisible || requestId !== this.h2hRequestId) return;
+      this.setData({
+        error: error instanceof Error ? error.message : "H2H 赛事加载失败",
+        errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
+      });
+      this.syncDisplayState();
+      if (options.propagateError) throw error;
+    } finally {
+      if (requestId === this.h2hRequestId) {
+        this.setData({ loading: false, refreshing: false });
+        this.syncDisplayState();
+      }
+    }
+  },
+
+  applySetupState(desk: TournamentDetailDesk) {
+    const setup = desk.setup;
+    const failed = setup?.status === "FAILED";
+    this.setData({
+      ...emptyH2HViewState(),
+      hasData: true,
+      setupActive: true,
+      setupFailed: failed,
+      // Web TournamentDetailClient replaces the checklist with the failure
+      // copy on FAILED; the active row carries completed/total unless the
+      // backend reports INDETERMINATE progress.
+      setupPhases: failed ? [] : tournamentSetupPhaseRows(setup),
+      scoreStatusText: "正在准备准确的积分榜",
+    });
+    this.scheduleSetupPoll(setup || null);
+    this.syncDisplayState();
+  },
+
+  scheduleSetupPoll(setup: TournamentDetailDesk["setup"] | null) {
+    if (this.setupTimer) {
+      clearTimeout(this.setupTimer);
+      this.setupTimer = undefined;
+    }
+    if (!this.pageVisible || !isTournamentSetupInFlight(setup)) return;
+    this.setupTimer = setTimeout(() => {
+      this.setupTimer = undefined;
+      if (!this.pageVisible || !this.data.setupActive) return;
+      void this.loadH2HDesk({ background: true });
+    }, SETUP_POLL_MS);
+  },
+
+  applyH2HBoard(board: OfficialH2HBoard) {
+    const entryId = this.data.entryId;
+    // Traceability gate (web traceableOfficialH2HScore): an untraceable score
+    // renders an empty table and VS fixtures, never stale numbers.
+    const traceable = traceableOfficialH2HBoard(board);
+    const standings = traceable
+      ? sortOfficialH2HStandings(board.standings || [])
+      : [];
+    const matches = traceable
+      ? board.matches || []
+      : scrubUntraceableH2HMatches(board.matches || []);
+    const activeEventId = this.h2hActiveEventId || this.data.maxGw;
+    const showStandings = shouldShowOfficialH2HStandings(
+      board.eventId,
+      activeEventId,
+    );
+    const viewer = standings.find((row) => row.entryId === entryId) || null;
+    this.setData({
+      ...emptyH2HViewState(),
+      // Matchup history is tournament-scoped, not GW-scoped: it survives
+      // board refetches and GW switches until the tournament context resets.
+      h2hMatchups: this.data.h2hMatchups,
+      h2hMatchupsLoading: this.data.h2hMatchupsLoading,
+      h2hMatchupsLoaded: this.data.h2hMatchupsLoaded,
+      h2hMatchupsFailed: this.data.h2hMatchupsFailed,
+      hasData: true,
+      h2hActive: true,
+      h2hTab:
+        this.data.h2hTab === "mine"
+          ? "mine"
+          : !showStandings || this.data.h2hTab === "matches"
+            ? "matches"
+            : "standings",
+      h2hShowStandings: showStandings,
+      h2hAwaitingSchedule: Boolean(board.awaitingSchedule),
+      h2hStandings: standings.map((row) => displayH2HStanding(row, entryId)),
+      h2hMatches: matches.map((match) => displayH2HMatch(match, entryId)),
+      h2hViewerRankText: viewer && viewer.rank ? String(viewer.rank) : "",
+      h2hViewerMatchPointsText: viewer
+        ? String(numberValue(viewer.matchPoints))
+        : "",
+      h2hViewerRecordText: viewer
+        ? `${numberValue(viewer.won)}-${numberValue(viewer.drawn)}-${numberValue(viewer.lost)}`
+        : "",
+      scoreStatusText: `H2H ${officialH2HScoreSourceText(board.scoreSource)}`,
+      scoreNextRefreshAt: "",
+      lastUpdated:
+        traceable && board.scoreCheckedAt
+          ? formatTime(new Date(board.scoreCheckedAt))
+          : "",
+    });
+    this.scheduleH2HRefresh(board.eventId);
+    this.syncDisplayState();
+  },
+
+  scheduleH2HRefresh(eventId: number) {
+    if (this.h2hTimer) {
+      clearTimeout(this.h2hTimer);
+      this.h2hTimer = undefined;
+    }
+    const activeEventId = this.h2hActiveEventId || this.data.maxGw;
+    // Web refreshes the current-GW H2H board every 60s while visible.
+    if (!this.pageVisible || eventId !== activeEventId) return;
+    this.h2hTimer = setTimeout(() => {
+      this.h2hTimer = undefined;
+      if (!this.pageVisible || !this.data.h2hActive) return;
+      void this.loadH2HBoard(this.data.event, {
+        background: true,
+        forceRefresh: true,
+      });
+      // Keep 我的对阵 live badges in step with the board refresh, but only
+      // once the tab has been opened (web refreshes the desk in the same
+      // interval).
+      if (this.data.h2hMatchupsLoaded) {
+        void this.loadH2HMatchups({ background: true, forceRefresh: true });
+      }
+    }, H2H_REFRESH_MS);
+  },
+
+  onH2HTabTap(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { tab?: string }
+    >,
+  ) {
+    const tab = event.currentTarget.dataset.tab;
+    if (tab !== "standings" && tab !== "matches" && tab !== "mine") return;
+    if (tab === "standings" && !this.data.h2hShowStandings) return;
+    this.setData({ h2hTab: tab });
+    if (tab === "mine") void this.loadH2HMatchups();
+  },
+
+  /**
+   * Web fetches the viewer's entry desk alongside the first board load and on
+   * every refresh; the Mini lazily loads it on the first 我的对阵 activation
+   * and then piggybacks it on the 60s board refresh so live badges stay
+   * accurate without paying for a desk fetch nobody opened.
+   */
+  async loadH2HMatchups(
+    options: { background?: boolean; forceRefresh?: boolean } = {},
+  ): Promise<void> {
+    const entryId = this.data.entryId;
+    const selected = this.data.selectedTournament;
+    if (!entryId || !selected) return;
+    if (this.data.h2hMatchupsLoading) return;
+    if (
+      this.data.h2hMatchupsLoaded &&
+      !options.forceRefresh &&
+      !options.background
+    ) {
+      return;
+    }
+    const tournamentId = Number(selected.id);
+    const requestId = ++this.matchupRequestId;
+    if (!options.background) {
+      this.setData({ h2hMatchupsLoading: true, h2hMatchupsFailed: false });
+    }
+    try {
+      const desks = await getEntryOfficialH2HMatchups(
+        entryId,
+        options.forceRefresh === true,
+        capturePageRequestTrace({
+          callerSurface: "live-tournament-h2h-matchups",
+          trigger: options.forceRefresh ? "refresh" : "load",
+        }),
+      );
+      if (!this.pageVisible || requestId !== this.matchupRequestId) return;
+      if (this.restartForPrincipalChange(entryId)) return;
+      // Web picks this tournament's desk out of the entry-wide list.
+      const item =
+        desks.find((candidate) => candidate.tournamentId === tournamentId) ||
+        null;
+      this.h2hMatchupDeskItem = item;
+      this.setData({
+        h2hMatchupsLoading: false,
+        h2hMatchupsLoaded: true,
+        h2hMatchupsFailed: false,
+        h2hMatchups: (item?.matches || []).map((match) =>
+          displayH2HMatchup(match, item),
+        ),
+      });
+    } catch (error) {
+      if (!this.pageVisible || requestId !== this.matchupRequestId) return;
+      miniLogger.warn(
+        "h2h-matchups.tournament",
+        error instanceof Error ? error.message : "failed",
+      );
+      this.setData({
+        h2hMatchupsLoading: false,
+        h2hMatchupsLoaded: true,
+        h2hMatchupsFailed: true,
+        h2hMatchups: [],
+      });
+    }
+  },
+
+  async onOpenTournamentDetail() {
+    const selected = this.data.selectedTournament;
+    const entryId = this.data.entryId;
+    if (!selected || !entryId) return;
+    const tournamentId = Number(selected.id);
+    const key = String(tournamentId);
+    this.setData({ detailOpen: true, detailError: "" });
+    const cached =
+      this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
+    if (cached) {
+      this.applyDetailDesk(cached);
+      return;
+    }
+    if (this.data.detailLoading) return;
+    this.setData({ detailLoading: true });
+    try {
+      const desk = await getTournamentDetailDesk(
+        tournamentId,
+        entryId,
+        this.data.event > 0 ? this.data.event : null,
+        false,
+        capturePageRequestTrace({
+          callerSurface: "live-tournament-detail",
+          trigger: "load",
+        }),
+      );
+      if (!this.pageVisible || !this.data.detailOpen) return;
+      if (!desk) throw new Error("赛事详情暂时不可用，请稍后重试");
+      this.detailDesk = desk;
+      this.detailDeskKey = key;
+      this.applyDetailDesk(desk);
+    } catch (error) {
+      if (!this.pageVisible || !this.data.detailOpen) return;
+      this.setData({
+        detailError:
+          error instanceof Error ? error.message : "赛事详情加载失败",
+      });
+    } finally {
+      if (this.pageVisible) this.setData({ detailLoading: false });
+    }
+  },
+
+  onCloseTournamentDetail() {
+    this.setData({ detailOpen: false, detailError: "" });
+  },
+
+  applyDetailDesk(desk: TournamentDetailDesk) {
+    const info = desk.tournament;
+    const rosterUnavailable = Boolean(
+      desk.unavailableSections?.includes("PARTICIPANTS"),
+    );
+    const participants = rosterUnavailable ? [] : desk.participants || [];
+    this.detailParticipants = participants;
+    const knockout = tournamentHasKnockout(info.knockoutMode);
+    const countText = (value?: number | null) =>
+      typeof value === "number" && Number.isFinite(value) && value > 0
+        ? String(value)
+        : "未配置";
+    this.setData({
+      detailCreator: info.creator || "—",
+      detailLeagueTypeText: tournamentLeagueTypeText(info.leagueType),
+      detailParticipantCountText:
+        typeof info.totalTeamNum === "number" && info.totalTeamNum > 0
+          ? String(info.totalTeamNum)
+          : "—",
+      detailGroupModeText: tournamentGroupModeText(info.groupMode),
+      detailGroupTeamNumText: countText(info.groupTeamNum),
+      detailGroupNumText: countText(info.groupNum),
+      detailGroupEventsText: tournamentEventRangeText(
+        info.groupStartedEventId,
+        info.groupEndedEventId,
+      ),
+      detailKnockoutModeText: tournamentKnockoutModeText(info.knockoutMode),
+      detailKnockout: knockout,
+      detailKnockoutTeamNumText: countText(info.knockoutTeamNum),
+      detailKnockoutRoundsText: countText(info.knockoutRounds),
+      detailKnockoutEventsText: tournamentEventRangeText(
+        info.knockoutStartedEventId,
+        info.knockoutEndedEventId,
+      ),
+      detailRosterUnavailable: rosterUnavailable,
+      detailRosterSearchable:
+        !rosterUnavailable && participants.length > TOURNAMENT_ROSTER_PREVIEW,
+      detailRosterCountText: rosterUnavailable
+        ? "参赛名单暂不可用"
+        : `已发布名单共 ${participants.length} 支球队`,
+    });
+    this.renderDetailRoster("", TOURNAMENT_ROSTER_PREVIEW);
+  },
+
+  renderDetailRoster(keyword: string, visibleCount: number) {
+    this.detailRosterVisible = visibleCount;
+    const viewerEntryId = this.data.entryId || null;
+    const filtered = filterTournamentRoster(this.detailParticipants, keyword);
+    const visible = visibleTournamentRoster(
+      filtered,
+      visibleCount,
+      viewerEntryId,
+    );
+    const total = filtered.length;
+    const hasMore = total > visibleCount;
+    const remaining = Math.max(0, total - visibleCount);
+    this.setData({
+      detailRosterKeyword: keyword,
+      detailRosterTotal: total,
+      detailRosterRows: visible.map((row) => ({
+        entryId: row.entryId,
+        entryName: row.entryName || `参赛 ID #${row.entryId}`,
+        playerName: row.playerName || "",
+        isMe: viewerEntryId != null && row.entryId === viewerEntryId,
+      })),
+      detailRosterShownText:
+        total > TOURNAMENT_ROSTER_PREVIEW
+          ? `已显示 ${Math.min(visibleCount, total)} / ${total}`
+          : "",
+      detailRosterMoreText: hasMore
+        ? `再显示 ${Math.min(TOURNAMENT_ROSTER_STEP, remaining)} 条`
+        : "",
+      detailRosterAllText: hasMore ? `显示全部 ${total} 支球队` : "",
+      detailRosterCanCollapse:
+        visibleCount > TOURNAMENT_ROSTER_PREVIEW &&
+        total > TOURNAMENT_ROSTER_PREVIEW,
+    });
+  },
+
+  onDetailRosterSearchInput(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+  ) {
+    this.renderDetailRoster(
+      event.detail.value || "",
+      TOURNAMENT_ROSTER_PREVIEW,
+    );
+  },
+
+  onDetailRosterMore() {
+    this.renderDetailRoster(
+      this.data.detailRosterKeyword,
+      Math.min(
+        this.detailRosterVisible + TOURNAMENT_ROSTER_STEP,
+        this.data.detailRosterTotal,
+      ),
+    );
+  },
+
+  onDetailRosterAll() {
+    this.renderDetailRoster(
+      this.data.detailRosterKeyword,
+      this.data.detailRosterTotal,
+    );
+  },
+
+  onDetailRosterCollapse() {
+    this.renderDetailRoster(
+      this.data.detailRosterKeyword,
+      TOURNAMENT_ROSTER_PREVIEW,
+    );
+  },
+
+  onOpenDetailRosterEntry(
+    event: WechatMiniprogram.BaseEvent<
+      WechatMiniprogram.IAnyObject,
+      { entryId?: string }
+    >,
+  ) {
+    const entry = Number(event.currentTarget.dataset.entryId);
+    if (!Number.isFinite(entry) || entry <= 0) return;
+    wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
+  },
   shouldAutoRefresh(): boolean {
     if (!this.data.selectedTournament) return false;
+    // The H2H view keeps its own 60s board timer; the live-snapshot probe
+    // only feeds the points board.
+    if (this.data.h2hActive || this.data.setupActive) return false;
     const currentEventId =
       this.liveSnapshot?.eventId ??
       (Number(getApp<IAppOption>().globalData.gw) || 0);
@@ -2554,14 +3447,50 @@ PerformancePage({
       lastUpdated: "",
       ...emptyCompareState(),
     });
+    if (isOfficialH2HTournamentRow(this.data.selectedTournament)) {
+      // H2H GW navigation refetches the board only (web
+      // GET_TOURNAMENT_OFFICIAL_H2H); the desk context is already cached, and
+      // the user's tab survives the switch. Matchup history spans every GW,
+      // so it stays too.
+      this.clearH2HTimers();
+      this.setData({
+        ...emptyH2HViewState(),
+        h2hTab: this.data.h2hTab,
+        h2hMatchups: this.data.h2hMatchups,
+        h2hMatchupsLoading: this.data.h2hMatchupsLoading,
+        h2hMatchupsLoaded: this.data.h2hMatchupsLoaded,
+        h2hMatchupsFailed: this.data.h2hMatchupsFailed,
+      });
+      void this.loadH2HBoard(next);
+      return;
+    }
     this.liveRefresh?.sync();
     this.loadRows();
   },
 
-  onTournamentChange(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const selectedTournamentIndex = Number(event.detail.value);
-    if (!Number.isFinite(selectedTournamentIndex)) return;
-    const selectedTournament = this.data.tournaments[selectedTournamentIndex];
+  onClassicTournamentChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+  ) {
+    this.onTournamentGroupChange(event, "classic");
+  },
+
+  onH2HTournamentChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+  ) {
+    this.onTournamentGroupChange(event, "h2h");
+  },
+
+  onTournamentGroupChange(
+    event: WechatMiniprogram.CustomEvent<{ value: string }>,
+    group: "classic" | "h2h",
+  ) {
+    const groupIndex = Number(event.detail.value);
+    if (!Number.isFinite(groupIndex)) return;
+    const groupTournaments =
+      group === "h2h"
+        ? this.data.h2hTournaments
+        : this.data.classicTournaments;
+    const selectedTournament = groupTournaments[groupIndex];
     if (!selectedTournament) return;
     this.liveRefresh?.stop();
     this.liveSnapshot = null;
@@ -2569,8 +3498,8 @@ PerformancePage({
     this.cachedLiveStoredAt = undefined;
     clearTournamentBoard(this);
     this.setData({
-      selectedTournamentIndex,
       selectedTournament,
+      ...buildTournamentPickerState(this.data.tournaments, selectedTournament),
       rowCount: 0,
       displayedRows: [],
       hasData: false,
@@ -2578,6 +3507,16 @@ PerformancePage({
       ...emptyCompareState(),
     });
     this.persistSelectedTournament(selectedTournament);
+    if (isOfficialH2HTournamentRow(selectedTournament)) {
+      this.clearH2HState();
+      this.setData({ ...emptyH2HViewState() });
+      void this.loadH2HDesk();
+      return;
+    }
+    if (this.data.h2hActive || this.data.setupActive) {
+      this.clearH2HState();
+      this.setData({ ...emptyH2HViewState() });
+    }
     this.liveRefresh?.sync();
     this.loadRows();
   },
@@ -3057,6 +3996,10 @@ PerformancePage({
       this.loadTournaments(true);
       return;
     }
+    if (this.data.h2hActive || this.data.setupActive) {
+      void this.loadH2HDesk({ forceRefresh: true });
+      return;
+    }
     this.loadRows({ forceRefresh: true });
   },
 
@@ -3203,6 +4146,206 @@ PerformancePage({
 
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
+  },
+
+  async onShareBoardImage() {
+    if (this.data.shareImageBusy) return;
+    const rows = this.data.displayedRows || [];
+    if (rows.length === 0) {
+      wx.showToast({ title: "还没有可分享的榜单", icon: "none" });
+      return;
+    }
+    this.setData({ shareImageBusy: true });
+    try {
+      const path = await exportTournamentBoardShareImage({
+        event: this.data.event,
+        tournamentName: this.data.selectedTournament?.name || "",
+        highestText: this.data.highestText,
+        averageText: this.data.averageText,
+        entriesText: this.data.entriesText,
+        rows: rows.map((row) => ({
+          rankText: row.eventPointsKnown
+            ? String(
+                numberValue(row.rank) > 0
+                  ? numberValue(row.rank)
+                  : numberValue(row.visibleRank),
+              )
+            : "—",
+          entryName: textValue(row.entryName, "-"),
+          metaLine: [row.playerName, row.displayCaptain]
+            .filter((part) => part && String(part).length > 0)
+            .join(" · "),
+          gwText: row.displayLive,
+          netText: row.displayNet,
+          totalText: row.displayTotal,
+          isMe: row.isMe === true,
+        })),
+      });
+      await presentTournamentBoardShareImage(path);
+    } catch (error) {
+      miniLogger.error(
+        "share-image.tournament",
+        error instanceof Error ? error.message : "failed",
+      );
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareImageBusy: false });
+    }
+  },
+
+  /** H2H share content follows the tab the user is looking at. */
+  h2hSharePayload(): {
+    kind: "standings" | "matches" | "matchups";
+    standingRows: TournamentH2HShareStandingRow[];
+    matchRows: TournamentH2HShareMatchRow[];
+  } {
+    const kind =
+      this.data.h2hTab === "mine"
+        ? ("matchups" as const)
+        : this.data.h2hTab === "matches"
+          ? ("matches" as const)
+          : ("standings" as const);
+    const standingRows: TournamentH2HShareStandingRow[] =
+      this.data.h2hStandings.map((row) => ({
+        rankText: row.rankText,
+        entryName: row.entryName,
+        recordText: row.recordText,
+        pointsForText: row.pointsForText,
+        matchPointsText: row.matchPointsText,
+        isMe: row.isMe,
+      }));
+    const matchRows: TournamentH2HShareMatchRow[] =
+      kind === "matchups"
+        ? this.data.h2hMatchups.map((row) => ({
+            labelText: row.roundText,
+            statusText: row.statusText,
+            homeName: row.homeName,
+            awayName: row.awayName,
+            scoreText: row.hasScore
+              ? `${row.homeScoreText} — ${row.awayScoreText}`
+              : "对阵",
+            involvesViewer: false,
+          }))
+        : this.data.h2hMatches.map((row) => ({
+            labelText: row.orderText,
+            statusText: row.isBye
+              ? `${row.phaseLabel} · 轮空`
+              : row.phaseLabel,
+            homeName: row.homeName,
+            awayName: row.awayName,
+            scoreText: row.hasScore
+              ? `${row.homeScoreText} — ${row.awayScoreText}`
+              : "对阵",
+            involvesViewer: row.involvesViewer,
+          }));
+    return { kind, standingRows, matchRows };
+  },
+
+  h2hShareEmptyText(kind: "standings" | "matches" | "matchups"): string {
+    if (kind === "standings") {
+      return this.data.h2hStandings.length ? "" : "还没有可分享的积分榜";
+    }
+    if (kind === "matches") {
+      return this.data.h2hMatches.length
+        ? ""
+        : this.data.h2hAwaitingSchedule
+          ? "本轮对阵还没发布"
+          : "还没有可分享的对阵";
+    }
+    return this.data.h2hMatchups.length ? "" : "还没有可分享的对阵记录";
+  },
+
+  onCopyH2HShare(): Promise<void> {
+    if (this.shareRequest) return this.shareRequest;
+    const request = (async () => {
+      try {
+        if (this.data.h2hTab === "mine") {
+          if (this.data.h2hMatchupsLoading) return;
+          if (!this.data.h2hMatchupsLoaded) await this.loadH2HMatchups();
+        }
+        const { kind, standingRows, matchRows } = this.h2hSharePayload();
+        const emptyText = this.h2hShareEmptyText(kind);
+        if (emptyText) {
+          wx.showToast({ title: emptyText, icon: "none" });
+          return;
+        }
+        const text = formatOfficialH2HShareText({
+          kind,
+          gameweek: this.data.event,
+          tournamentName: this.data.selectedTournament?.name,
+          tournamentId: this.data.selectedTournament?.id,
+          standings: standingRows,
+          matches: matchRows,
+        });
+        const ok = await copyShareText(text);
+        if (ok) {
+          this.setData({ shareCopied: true, shareSheetOpen: false });
+          this.clearShareCopiedTimer();
+          this.shareCopiedTimer = setTimeout(
+            () => this.setData({ shareCopied: false }),
+            2000,
+          );
+          return;
+        }
+        this.setData({ shareSheetOpen: true, shareText: text });
+      } catch (error) {
+        miniLogger.error(
+          "copy-share.h2h",
+          error instanceof Error ? error.message : "failed",
+        );
+        wx.showToast({ title: "复制失败", icon: "none" });
+      }
+    })();
+    this.shareRequest = request;
+    const clearRequest = () => {
+      if (this.shareRequest === request) {
+        this.shareRequest = null;
+      }
+    };
+    void request.then(clearRequest, clearRequest);
+    return request;
+  },
+
+  async onShareH2HImage() {
+    if (this.data.shareImageBusy) return;
+    if (this.data.h2hTab === "mine") {
+      if (this.data.h2hMatchupsLoading) return;
+      if (!this.data.h2hMatchupsLoaded) await this.loadH2HMatchups();
+    }
+    const { kind, standingRows, matchRows } = this.h2hSharePayload();
+    const emptyText = this.h2hShareEmptyText(kind);
+    if (emptyText) {
+      wx.showToast({ title: emptyText, icon: "none" });
+      return;
+    }
+    this.setData({ shareImageBusy: true });
+    try {
+      const statsLine =
+        kind === "standings" && this.data.h2hViewerRankText
+          ? [
+              `我的排名 ${this.data.h2hViewerRankText}`,
+              `对战积分 ${this.data.h2hViewerMatchPointsText}`,
+              `战绩 ${this.data.h2hViewerRecordText}`,
+            ].join(" · ")
+          : "";
+      const path = await exportTournamentH2HShareImage({
+        kind,
+        event: this.data.event,
+        tournamentName: this.data.selectedTournament?.name || "",
+        statsLine,
+        standingRows,
+        matchRows,
+      });
+      await presentTournamentH2HShareImage(path);
+    } catch (error) {
+      miniLogger.error(
+        "share-image.h2h",
+        error instanceof Error ? error.message : "failed",
+      );
+      wx.showToast({ title: "图片生成失败", icon: "none" });
+    } finally {
+      this.setData({ shareImageBusy: false });
+    }
   },
 
   onChooseEntry() {

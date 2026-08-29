@@ -84,3 +84,57 @@ test("entry transfer history cache keys include season", () => {
   assert.match(service, /cacheVariant: isLiveEvent \? "live" : "history"/);
   assert.match(graphql, /SEASON_SCOPED_POLICIES[\s\S]*"reporting"[\s\S]*"historical"/);
 });
+
+test("live entry projects auto-subs and captain promotion like the web", () => {
+  const service = source("miniprogram/services/live.service.ts");
+  const page = source("miniprogram/pages/live/entry/entry.ts");
+  const engine = source("miniprogram/utils/live-auto-subs.ts");
+  const row = source("miniprogram/components/player-row/player-row.wxml");
+  const pitch = source("miniprogram/components/squad-pitch/squad-pitch.wxml");
+  const canvas = source("miniprogram/utils/squad-pitch-canvas.ts");
+
+  // The calc query fetches everything the projection needs.
+  assert.match(service, /isGwFinished/);
+  assert.match(service, /bgw/);
+  assert.match(service, /effectiveLineup { elementId position effectiveMultiplier pickActive autoSub isCaptain isViceCaptain }/);
+  assert.match(service, /isCaptain: item\.isCaptain/);
+
+  // The page runs the engine before rows/pitch are built.
+  assert.match(page, /deriveLiveAutoSubProjection\(\{ chip: result\.chip, pickList: rawFieldPlayers, score: result\.score, snapshot: liveResult\.snapshot,? \}\)/);
+  assert.match(page, /applyLiveAutoSubProjection\(rawFieldPlayers, autoSubProjection\)/);
+  assert.match(page, /autoSubProjection\.captainPromotion\?\.playerInName \?\?/);
+
+  // Engine keeps the web truth tiers.
+  assert.match(engine, /score\?\.state === "FINAL"/);
+  assert.match(engine, /snapshot\?\.state === "SETTLED"/);
+  assert.match(engine, /minutes === 0|Number\(pick\.minutes \?\? 0\) === 0/);
+  assert.match(engine, /isValidFormation/);
+
+  // Arrow badges render on rows, pitch kits, bench cards, and the share image.
+  assert.match(row, /autosub-badge \{\{player\.autoSubIncoming \? 'autosub-in' : 'autosub-out'\}\}/);
+  assert.match(row, /\{\{player\.autoSubArrow\}\}/);
+  assert.match(pitch, /squad-autosub \{\{player\.autoSubIncoming \? 'in' : 'out'\}\}/);
+  assert.match(pitch, /squad-autosub bench/);
+  assert.match(canvas, /drawAutoSubBadge/);
+  assert.match(canvas, /autoSubRole/);
+});
+
+test("live entry retries a first-sync empty pick list with backoff", () => {
+  const page = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(page, /EMPTY_PICKS_RETRY_DELAYS_MS = \[1500, 3000, 7000, 12000\]/);
+  assert.match(page, /result\.availability === "READY" && rawRoster\.length === 0 && eventId === \(this\.liveSnapshot\?\.eventId \?\? currentLiveEventId\(\)\)/);
+  assert.match(page, /if \(keepLoadingForEmptyPicksRetry\) this\.setData\(\{ loading: true \}\)/);
+  assert.match(page, /result\.availability === "LINEUP_UNAVAILABLE"/);
+  assert.match(page, /本轮阵容数据暂不可用，请稍后重试/);
+  assert.match(page, /this\.liveRequestKey && this\.liveRequestKey !== requestKey/);
+});
+
+test("player detail sheet shows expected-goals stats from the calc payload", () => {
+  const service = source("miniprogram/services/live.service.ts");
+  const detail = source("miniprogram/pages/live/entry/player-detail.ts");
+  assert.match(service, /expectedGoals expectedAssists expectedGoalInvolvements expectedGoalsConceded/);
+  assert.match(detail, /expectedStatRow\("xG", player\.expectedGoals\)/);
+  assert.match(detail, /expectedStatRow\("xA", player\.expectedAssists\)/);
+  assert.match(detail, /expectedStatRow\("xGC", player\.expectedGoalsConceded\)/);
+  assert.match(detail, /statRow\("防守贡献", defensiveContribution\)/);
+});

@@ -42,6 +42,12 @@
   font-weight: 700;
 }
 
+/* Group placeholder (选择积分联赛 / 选择对战联赛) reads muted until the group owns the selection. */
+.league-name-empty {
+  color: var(--muted-ink);
+  font-weight: 600;
+}
+
 /* The caret carries the affordance — the text action would date the pill */
 .league-action {
   display: none;
@@ -867,6 +873,17 @@
   color: var(--ink);
 }
 
+/* Web TournamentTable parity: podium ranks stand out. */
+.board-row .col-rank.top3 {
+  color: var(--plum);
+  font-weight: 900;
+}
+
+.team-submeta {
+  font-size: 18rpx;
+  opacity: 0.85;
+}
+
 .col-team {
   min-width: 0;
   overflow: hidden;
@@ -947,4 +964,382 @@
   color: var(--green-ink);
   font-size: 24rpx;
   font-weight: 700;
+}
+
+/* Official H2H projection (web OfficialH2HCompetitionView parity) */
+.h2h-board .board-head,
+.h2h-board .board-row {
+  grid-template-columns: 40rpx minmax(0, 1fr) 110rpx 90rpx 76rpx;
+}
+
+.h2h-board .col-record {
+  color: var(--muted-ink);
+  font-weight: 700;
+}
+
+.h2h-board .board-row .col-mp {
+  color: var(--green-ink);
+}
+
+.h2h-await {
+  padding: 32rpx 24rpx;
+  border: 1rpx dashed var(--line);
+  color: var(--muted-ink);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.h2h-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.h2h-match {
+  overflow: hidden;
+  border-radius: 16rpx;
+  background: var(--card);
+  box-shadow: 0 2rpx 8rpx var(--plum-a4);
+}
+
+.h2h-match.viewer {
+  box-shadow: 0 0 0 2rpx var(--plum-a55);
+}
+
+.h2h-match-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 20rpx;
+  border-bottom: 1rpx solid var(--line);
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.h2h-match-order {
+  color: var(--plum);
+  font-variant-numeric: tabular-nums;
+}
+
+.h2h-match-phase {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h2h-bye {
+  margin-left: auto;
+  padding: 2rpx 12rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 999rpx;
+  font-size: 18rpx;
+}
+
+.h2h-share-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6rpx;
+  margin-bottom: 10rpx;
+}
+
+/* MatchupHistoryBoard status badge */
+.h2h-matchup-status {
+  margin-left: auto;
+  padding: 2rpx 12rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 999rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.h2h-matchup-status.live {
+  border-color: var(--plum-a55);
+  background: var(--accent-tint);
+  color: var(--plum);
+}
+
+.h2h-matchup-status.finished {
+  color: var(--muted-ink);
+}
+
+.h2h-matchup-status.upcoming {
+  border-color: var(--plum-a55);
+  color: var(--plum);
+}
+
+.h2h-viewer-dot {
+  width: 12rpx;
+  height: 12rpx;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--plum);
+}
+
+.h2h-bye + .h2h-viewer-dot {
+  margin-left: 0;
+}
+
+.h2h-match-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 20rpx;
+}
+
+.h2h-side {
+  min-width: 0;
+  text-align: right;
+}
+
+.h2h-side-away {
+  text-align: left;
+}
+
+.h2h-side-name {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 26rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.h2h-side-name.won {
+  color: var(--plum);
+}
+
+.h2h-side-player {
+  display: block;
+  margin-top: 4rpx;
+  overflow: hidden;
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h2h-score {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 10rpx 18rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+}
+
+.h2h-score-num {
+  color: var(--ink);
+  font-size: 30rpx;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.h2h-score-num.won {
+  color: var(--plum);
+}
+
+.h2h-score-sep {
+  color: var(--muted-ink);
+}
+
+.h2h-vs {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.h2h-tiebreak {
+  padding: 10rpx 20rpx;
+  border-top: 1rpx solid var(--line);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+/* Setup-in-progress card (web lifecycle gate) */
+.setup-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 40rpx 32rpx;
+  text-align: center;
+}
+
+.setup-title {
+  color: var(--ink);
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.setup-desc {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.setup-phases {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 8rpx;
+  text-align: left;
+}
+
+.setup-phase-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  font-size: 22rpx;
+  color: var(--muted-ink);
+}
+
+.setup-phase-row.active {
+  color: var(--ink);
+}
+
+.setup-phase-icon {
+  width: 32rpx;
+  text-align: center;
+  font-size: 20rpx;
+}
+
+.setup-phase-row.complete .setup-phase-icon {
+  color: var(--green-ink);
+}
+
+.setup-phase-row.active .setup-phase-icon {
+  color: var(--plum);
+}
+
+.setup-phase-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-phase-row.active .setup-phase-label {
+  font-weight: 700;
+}
+
+.setup-phase-progress {
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.setup-retry {
+  margin-top: 8rpx;
+}
+
+/* Competition details disclosure (web CompetitionDetailsDisclosure) */
+.detail-btn {
+  margin-left: 12rpx;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 16rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+}
+
+.detail-label {
+  color: var(--muted-ink);
+  font-size: 18rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.detail-value {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+}
+
+.roster-row.me {
+  border-color: var(--plum);
+  background: var(--accent-tint);
+}
+
+.roster-names {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.roster-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 24rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-player {
+  flex-shrink: 0;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.roster-empty {
+  padding: 32rpx 0;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  text-align: center;
+}
+
+.roster-foot {
+  margin-top: 12rpx;
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: center;
+}
+
+.roster-actions {
+  display: flex;
+  justify-content: center;
+  gap: 24rpx;
+  margin-top: 12rpx;
 }

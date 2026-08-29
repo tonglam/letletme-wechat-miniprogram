@@ -118,11 +118,11 @@
       <view class="live-pitch-bar">
         <text class="live-pitch-label">阵容图</text>
         <view
-          class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+          class="tool-btn {{shareBusy ? 'done' : ''}}"
           bindtap="onSharePitch"
           hover-class="hover-dim"
         >
-          <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+          <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
         </view>
       </view>
       <squad-pitch
@@ -138,10 +138,9 @@
     <view class="section card lineup-card">
       <view class="lineup-head">
         <view class="section-heading">阵容</view>
-        <view wx:if="{{hasData}}" class="tool-btn tool-btn-labeled {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
+        <view wx:if="{{hasData}}" class="tool-btn {{shareCopied ? 'done' : ''}}" bindtap="onCopyShare" hover-class="hover-dim">
           <image wx:if="{{shareCopied}}" class="tool-icon" src="/assets/icons/check.svg" mode="aspectFit" />
           <image wx:else class="tool-icon" src="/assets/icons/copy.svg" mode="aspectFit" />
-          <text class="tool-label">{{shareCopied ? '已复制' : '分享文字'}}</text>
         </view>
       </view>
       <app-empty-state
@@ -186,7 +185,7 @@
       </view>
     </view>
   </block>
-  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" bind:close="onClosePlayer" />
+  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" shareable="{{true}}" shareBusy="{{playerShareBusy}}" bind:close="onClosePlayer" bind:shareimage="onSharePlayerImage" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

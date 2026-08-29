@@ -277,8 +277,9 @@ test("Home selected-GW reads preserve stale metadata and discard superseded resp
   const home = source("miniprogram/pages/home/index/index.ts");
   const start = home.indexOf("async loadFixtureGw");
   const load = home.slice(start, home.indexOf("onRetryFixtures", start));
-  assert.match(load, /readCoreEventFixtureSchedule/);
-  assert.match(load, /!this\._pageVisible \|\| requestId !== this\._fixtureGwRequestId \|\| event !== this\.data\.selectedFixtureGw/);
+  assert.match(home, /async function readHomeFixtureSelection/);
+  assert.match(load, /readHomeFixtureSelection/);
+  assert.match(load, /!this\._pageVisible \|\| requestId !== this\._fixtureGwRequestId/);
   assert.match(load, /fixtureStaleMessage: read\.meta\.stale \? fixtureStaleMessage\(staleStoredAt\) : ""/);
   assert.match(load, /fixtureStaleStoredAt: staleStoredAt/);
 });

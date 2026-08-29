@@ -894,6 +894,8 @@ export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
   return mapTournamentLiveRows(page.rows).map((row, index) => ({
     ...row,
     rank: page.rows[index]?.rank ?? row.rank,
-    overallRank: page.rows[index]?.overallRank ?? row.overallRank,
+    // The mapped row already prefers score.overallRank (fresher); the raw
+    // board value is only the fallback (web liveEntries parity).
+    overallRank: row.overallRank ?? page.rows[index]?.overallRank,
   }));
 }

@@ -577,3 +577,131 @@ const staleH2hRows = mapTournamentLiveRows([
 ]);
 assertEqual(staleH2hRows[0]?.livePoints, undefined, "H2H summary points cannot become live points");
 assertEqual(staleH2hRows[0]?.score, undefined, "H2H summary provenance is rejected");
+
+// --- board enrichment fields (team value / captain points / OR fallback) ---
+const enrichedRows = mapTournamentLiveRows([
+  {
+    entry: 301,
+    entryName: "Value XI",
+    playerName: "Ada",
+    rank: 1,
+    overallRank: 54321,
+    livePoints: 60,
+    transferCost: 0,
+    liveNetPoints: 60,
+    liveTotalPoints: 1600,
+    played: 11,
+    toPlay: 0,
+    captainName: "Saka",
+    teamValue: 1015,
+    captainPoints: 14,
+    score: {
+      eventPoints: 60,
+      netEventPoints: 60,
+      totalPoints: 1600,
+      totalScope: "OVERALL",
+      overallRank: 12000,
+      transferCost: 0,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r9:301",
+      checkedAt: "2026-08-24T06:00:00.000Z"
+    }
+  }
+]);
+assertEqual(enrichedRows[0]?.teamValue, 1015, "team value maps through");
+assertEqual(enrichedRows[0]?.captainPoints, 14, "server captain points win");
+assertEqual(
+  enrichedRows[0]?.overallRank,
+  12000,
+  "score-level OR beats the staler row-level value"
+);
+
+// FINAL state: the armband moved via auto-sub — multiplier>=2 pick supplies
+// the captain points even though another pick is still flagged isCaptain.
+const finalRows = mapTournamentLiveRows([
+  {
+    entry: 303,
+    entryName: "Autosub FC",
+    playerName: "Cy",
+    rank: 3,
+    livePoints: 40,
+    transferCost: 0,
+    liveNetPoints: 40,
+    liveTotalPoints: 900,
+    played: 11,
+    toPlay: 0,
+    captainName: "Blanked",
+    score: {
+      eventPoints: 40,
+      source: "FPL_FINAL_RESULT",
+      state: "FINAL",
+      revision: "event-live:gw1:r9:303",
+      checkedAt: "2026-08-24T06:00:00.000Z"
+    },
+    pickList: [
+      {
+        element: 11,
+        webName: "Blanked",
+        position: 5,
+        isCaptain: true,
+        multiplier: 1,
+        totalPoints: 0
+      },
+      {
+        element: 12,
+        webName: "Promoted",
+        position: 7,
+        isViceCaptain: true,
+        multiplier: 2,
+        totalPoints: 9
+      }
+    ]
+  }
+]);
+assertEqual(
+  finalRows[0]?.captainPoints,
+  9,
+  "FINAL captain points come from the multiplier>=2 (promoted) pick"
+);
+
+// Non-FINAL rows derive from the flagged captain when the server field is absent.
+const liveDerived = mapTournamentLiveRows([
+  {
+    entry: 304,
+    entryName: "Deriver",
+    playerName: "Di",
+    rank: 4,
+    livePoints: 30,
+    transferCost: 0,
+    liveNetPoints: 30,
+    liveTotalPoints: 800,
+    played: 9,
+    toPlay: 2,
+    captainName: "Saka",
+    score: {
+      eventPoints: 30,
+      source: "FPL_EVENT_LIVE",
+      state: "FRESH",
+      revision: "event-live:gw1:r9:304",
+      checkedAt: "2026-08-24T06:00:00.000Z"
+    },
+    pickList: [
+      {
+        element: 21,
+        webName: "Saka",
+        position: 1,
+        isCaptain: true,
+        totalPoints: 12
+      }
+    ]
+  }
+]);
+assertEqual(
+  liveDerived[0]?.captainPoints,
+  12,
+  "flagged captain's points are derived while live"
+);
+assertEqual(liveDerived[0]?.teamValue, undefined, "legacy rows have no team value");
+
+console.log("live-tournament board enrichment tests passed");

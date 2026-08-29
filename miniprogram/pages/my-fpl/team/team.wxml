@@ -84,11 +84,11 @@
         <view class="section-heading">阵容</view>
         <view
           wx:if="{{pitchPlayers.length}}"
-          class="tool-btn tool-btn-labeled {{shareBusy ? 'done' : ''}}"
+          class="tool-btn {{shareBusy ? 'done' : ''}}"
           bindtap="onSharePitch"
           hover-class="hover-dim"
         >
-          <text class="tool-label">{{shareBusy ? '生成中' : '分享图片'}}</text>
+          <image class="tool-icon" src="/assets/icons/image.svg" mode="aspectFit" />
         </view>
       </view>
       <app-empty-state

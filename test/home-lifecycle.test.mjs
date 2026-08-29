@@ -5,6 +5,7 @@ import test from "node:test";
 globalThis.Page = globalThis.Page || ((definition) => definition);
 
 const homeModule = await import("../miniprogram/pages/home/index/index.ts");
+const homeServiceModule = await import("../miniprogram/services/home.service.ts");
 
 const source = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -44,10 +45,15 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
     /getEntryLeagueInfo/,
   );
   assert.match(page, /getMiniHomePersonalLeagues/);
+  assert.match(
+    page,
+    /startSecondaryData\(\)[\s\S]*const currentGw = Number\(app\.globalData\.currentGw\) \|\| 0[\s\S]*loadSecondaryData\([\s\S]*currentGw,/,
+  );
   assert.match(page, /homePersonalLeaguesMatchEntry/);
   const homeService = source("miniprogram/services/home.service.ts");
   assert.match(homeService, /const viewerEntryId = currentMyFplEntryId\(\)/);
-  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{viewerEntryId\}`/);
+  assert.match(homeService, /cacheVariant: `home-personal:entry:\$\{viewerEntryId\}:event:\$\{eventCacheScope\}`/);
+  assert.match(homeService, /homePersonalDeskMatchesEvent\(desk\.leagueRanks \|\| \[\], expectedEventId\)/);
   assert.match(homeService, /homePersonalDesk \{\s+entryId\s+state/);
   assert.match(homeService, /deskEntryId !== viewerEntryId/);
   assert.match(homeService, /entryId: deskEntryId/);
@@ -100,7 +106,7 @@ test("home transfer desk matches the web market teaser, not a renamed price list
   assert.match(service, /availabilityUpdates/);
   const retiredOwnershipField = "ownership" + "Movers";
   assert.doesNotMatch(service, new RegExp(retiredOwnershipField));
-  assert.match(service, /marketOwnershipDay/);
+  assert.match(service, /homeMarketDesk/);
   assert.match(service, /mostSelected/);
   assert.doesNotMatch(service, /latest真实身价变化|最新真实身价变化/);
 });
@@ -152,14 +158,39 @@ test("home accepts a personal league desk only for the same entry id", () => {
   );
 });
 
-test("home first viewport order matches the web: deadline, team desk, market, then fixtures last", () => {
+test("home rejects an H2H desk from a different current gameweek", () => {
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "H2H", h2hMatchup: { eventId: 2 } }],
+      2,
+    ),
+    true,
+  );
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "H2H", h2hMatchup: { eventId: 1 } }],
+      2,
+    ),
+    false,
+  );
+  assert.equal(
+    homeServiceModule.homePersonalDeskMatchesEvent(
+      [{ leagueType: "CLASSIC", h2hMatchup: null }],
+      2,
+    ),
+    true,
+  );
+});
+
+test("home first viewport order matches the web: deadline, personal desk, GW stats, dream team, market, fixtures last", () => {
   const page = source("miniprogram/pages/home/index/index.ts");
   const template = source("miniprogram/pages/home/index/index.wxml");
   const bindTeam = template.indexOf("bind-team");
   const deadline = template.indexOf("deadline-card");
   const boundEntry = template.lastIndexOf("<entry-card");
-  const market = template.indexOf("transfer-desk");
   const gwStats = template.indexOf("gw-stats-card");
+  const dreamTeam = template.indexOf("dream-card");
+  const market = template.indexOf("transfer-desk");
   const fixtures = template.indexOf("perf-primary-fixtures");
   assert.ok(
     bindTeam >= 0 && bindTeam < deadline,
@@ -168,23 +199,33 @@ test("home first viewport order matches the web: deadline, team desk, market, th
   assert.ok(
     deadline >= 0 &&
       boundEntry > deadline &&
-      market > boundEntry &&
-      gwStats > market &&
-      fixtures > gwStats,
-    "web order: deadline, personal desk, transfer desk, stats, fixtures last",
+      gwStats > boundEntry &&
+      dreamTeam > gwStats &&
+      market > dreamTeam &&
+      fixtures > market,
+    "web order: deadline, personal desk, GW stats, dream team, transfer desk, fixtures last",
   );
-  assert.match(template, /市场动态/);
+  // Two market cards mirror the web HomePriceChangeCarousel + HomeMarketCarousel,
+  // stacked price-first per the page owner's direction (身价变化 above 持有率变化).
+  assert.match(template, /持有率变化/);
+  assert.match(template, /出场状态观察/);
+  assert.match(template, /身价变化/);
+  assert.match(template, /涨跌趋势/);
+  assert.ok(
+    template.indexOf("涨跌趋势") < template.indexOf("持有率变化"),
+    "the price card stacks above the ownership card",
+  );
   assert.match(template, /打开市场/);
+  assert.match(template, /查看全部预测/);
   assert.match(template, /持有上升/);
   assert.match(template, /持有下降/);
-  assert.match(template, /出场状态观察/);
-  assert.match(template, /市场动态|marketLeadTitle/);
+  assert.equal(template.match(/section card transfer-desk/g)?.length, 2, "market area is two cards");
   assert.match(template, /notice-strip/);
   assert.match(template, /noticeText/);
   assert.match(page, /noticeText: supplement\.notice|noticeText: nextNotice/);
   assert.match(page, /NOTICE_AUTO_CLOSE_MS = 5 \* 1000/);
   assert.match(page, /scheduleNoticeAutoClose/);
-  assert.doesNotMatch(template, /section-title">身价变化/);
+  assert.match(template, /section-title">\{\{priceTab === 'today' \? '身价变化' : '涨跌趋势'\}\}/);
   assert.match(template, /bind-team[\s\S]*onChangeEntry[\s\S]*onGoAccountLink/);
   assert.match(template, /accountLinkReady && !accountLinked/);
   assert.doesNotMatch(template, /选择球队后开始/);
@@ -254,6 +295,43 @@ test("groupHomeFixturesByDay buckets by local date and prefers today", () => {
   assert.equal(grouped.days[0].rows[1].centerLabel, "2-1");
   assert.equal(grouped.days[0].rows[1].finished, true);
   assert.match(grouped.days[0].rows[0].centerLabel, /^\d{2}:\d{2}$/);
+});
+
+test("home fixture event stays on current GW until it settles", () => {
+  assert.equal(homeModule.resolveHomeFixtureEvent(2, 2, 3), 2);
+  assert.equal(homeModule.resolveHomeFixtureEvent(0, 1, 1), 1);
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent(
+      [{ finished: true }, { finished: true }],
+      2,
+      3,
+    ),
+    true,
+  );
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent(
+      [{ finished: true }, { finished: false }],
+      2,
+      3,
+    ),
+    false,
+  );
+  assert.equal(
+    homeModule.shouldAdvanceHomeFixtureEvent([], 2, 3),
+    false,
+  );
+});
+
+test("home fixture day selection prefers the next day across a gap", () => {
+  const days = [{ dateKey: "2026-08-29" }, { dateKey: "2026-08-31" }];
+  assert.equal(
+    homeModule.resolvePreferredHomeFixtureDayKey(days, new Date(2026, 7, 30, 12, 0)),
+    "2026-08-31",
+  );
+  assert.equal(
+    homeModule.resolvePreferredHomeFixtureDayKey(days, new Date(2026, 8, 1, 12, 0)),
+    "2026-08-31",
+  );
 });
 
 test("home secondary completion stays on the navigation tracker that started it", () => {

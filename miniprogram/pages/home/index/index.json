@@ -7,6 +7,8 @@
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
-    "entry-card": "../../../components/entry-card/entry-card"
+    "entry-card": "../../../components/entry-card/entry-card",
+    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet",
+    "squad-pitch": "../../../components/squad-pitch/squad-pitch"
   }
 }

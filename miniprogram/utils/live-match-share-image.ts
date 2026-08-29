@@ -7,6 +7,7 @@
  */
 import type { LiveMatch } from "../models/live";
 import { presentImage } from "./album-presenter";
+import { windowPixelRatio } from "./system-info";
 import {
   SHARE_BRAND_VERSION,
   drawShareBranding,
@@ -442,9 +443,7 @@ export function exportLiveMatchShareImage(
   const request = Promise.resolve().then(async () => {
     if (typeof createOffscreen === "function") {
       try {
-        const pixelRatio = liveMatchSharePixelRatio(
-          Number(wx.getSystemInfoSync().pixelRatio),
-        );
+        const pixelRatio = liveMatchSharePixelRatio(windowPixelRatio());
         const canvas = createOffscreen({
           type: "2d",
           width: Math.round(plan.width * pixelRatio),

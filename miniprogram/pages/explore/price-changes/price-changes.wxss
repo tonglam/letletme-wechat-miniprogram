@@ -6,6 +6,33 @@
   box-shadow: none;
 }
 
+/* Provisional live-channel strip — web instantUpdate badge parity. */
+.live-provisional-strip {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 24rpx;
+  margin-bottom: 16rpx;
+  background: var(--accent-tint);
+  border-radius: 12rpx;
+}
+
+.live-provisional-badge {
+  flex-shrink: 0;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  background: var(--green-ink);
+  color: var(--chalk);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.live-provisional-text {
+  color: var(--green-ink);
+  font-size: 20rpx;
+  line-height: 1.4;
+}
+
 .price-hero {
   padding: 28rpx;
 }

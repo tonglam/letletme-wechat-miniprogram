@@ -4,7 +4,14 @@ import {
   partitionHomeEntryLeagues
 } from "../../utils/entry-leagues";
 import { formatHomeH2HMatchup } from "../../utils/home-h2h";
+import { formatRank } from "../../utils/summary-format";
 import type { HomeH2HDisplay } from "../../utils/home-h2h";
+import {
+  exportHomeLeaguesShareImage,
+  presentHomeLeaguesShareImage,
+  type HomeLeaguesShareClassicRow,
+  type HomeLeaguesShareH2HRow,
+} from "../../utils/home-leagues-share-image";
 import type { HomeH2HMatchup } from "../../models/entry";
 
 interface EntryCardInfo {
@@ -35,11 +42,17 @@ interface LeagueRow {
   shortName?: string | null;
   type?: string | null;
   tournamentId?: number;
+  visibility?: string | null;
+  movement?: { direction?: string; places?: number | null } | null;
   h2hMatchup?: HomeH2HMatchup | null;
 }
 
 interface LeagueDisplayRow extends LeagueRow {
   rankText: string;
+  movementText: string;
+  movementClass: string;
+  visibilityText: string;
+  visibilityClass: string;
   h2h: HomeH2HDisplay | null;
 }
 
@@ -55,24 +68,37 @@ function formatNumber(value?: number): string {
   return typeof value === "number" ? String(value) : "-";
 }
 
-function formatRank(value?: number): string {
-  if (typeof value !== "number") {
-    return "-";
-  }
-
-  if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(1).replace(/\.0$/, "")}m`;
-  }
-
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
-  }
-
-  return String(value);
-}
-
 function formatCurrency(value?: number): string {
   return typeof value === "number" ? `£${(value / 10).toFixed(1)}m` : "-";
+}
+
+/** Web PersonalLeagueRankList parity: ↑N / ↓N movement next to the rank. */
+function formatMovement(
+  movement?: { direction?: string; places?: number | null } | null
+): { movementText: string; movementClass: string } {
+  const places = Number(movement?.places) || 0;
+  const direction = String(movement?.direction || "").toUpperCase();
+  if (direction === "UP" && places > 0) {
+    return { movementText: `↑${places}`, movementClass: "movement-up" };
+  }
+  if (direction === "DOWN" && places > 0) {
+    return { movementText: `↓${places}`, movementClass: "movement-down" };
+  }
+  return { movementText: "", movementClass: "" };
+}
+
+/** Web LeagueVisibilityBadge parity: classic rows lead with a 公开/私人 pill. */
+function formatVisibility(
+  visibility?: string | null
+): { visibilityText: string; visibilityClass: string } {
+  const value = String(visibility || "").toUpperCase();
+  if (value === "PUBLIC") {
+    return { visibilityText: "公开", visibilityClass: "visibility-public" };
+  }
+  if (value === "PRIVATE") {
+    return { visibilityText: "私人", visibilityClass: "visibility-private" };
+  }
+  return { visibilityText: "", visibilityClass: "" };
 }
 
 function buildPanel(
@@ -90,6 +116,8 @@ function buildPanel(
     return {
       ...league,
       rankText: typeof rank === "number" ? `#${rank}` : "",
+      ...formatMovement(league.movement),
+      ...formatVisibility(league.visibility),
       h2h: key === "h2h" && league.h2hMatchup
         ? formatHomeH2HMatchup(league.h2hMatchup)
         : null
@@ -101,6 +129,46 @@ function buildPanel(
     total: page.total,
     items: page.items.map(toDisplayRow),
     hasMore: page.hasMore
+  };
+}
+
+/** Share rows reuse the same display shaping as the visible panels. */
+function toClassicShareRow(league: LeagueRow): HomeLeaguesShareClassicRow {
+  const movement = formatMovement(league.movement);
+  const visibility = formatVisibility(league.visibility);
+  const rank = league.viewerRank ?? league.rank;
+  return {
+    name: league.name,
+    badgeText: visibility.visibilityText,
+    badgePublic: visibility.visibilityClass === "visibility-public",
+    rankText: typeof rank === "number" ? `#${rank}` : "",
+    movementText: movement.movementText,
+    movementTone:
+      movement.movementClass === "movement-up"
+        ? "up"
+        : movement.movementClass === "movement-down"
+          ? "down"
+          : ""
+  };
+}
+
+function toH2HShareRow(league: LeagueRow): HomeLeaguesShareH2HRow {
+  const display = league.h2hMatchup
+    ? formatHomeH2HMatchup(league.h2hMatchup)
+    : null;
+  const rank = league.viewerRank ?? league.rank;
+  const rankText = typeof rank === "number" ? `#${rank}` : "";
+  return {
+    name: league.name,
+    metaText: display
+      ? [display.eventLabel, display.statusLabel, rankText]
+          .filter((part) => part)
+          .join(" · ")
+      : rankText,
+    hasMatchup: Boolean(display),
+    viewerName: display?.viewer.primary || "",
+    opponentName: display?.opponent.primary || "",
+    centerText: display?.centerLabel || ""
   };
 }
 
@@ -133,6 +201,7 @@ Component({
     classicPanel: null as LeaguePanel | null,
     h2hPanel: null as LeaguePanel | null,
     hasLeaguePanels: false,
+    shareImageBusy: false,
     entryMetaText: "",
     transferText: ""
   },
@@ -172,7 +241,8 @@ Component({
         statRows: [
           { label: "总分", value: formatNumber(entry?.totalPoints) },
           { label: "总排名", value: formatRank(entry?.overallRank) },
-          { label: "身价", value: formatCurrency(entry?.teamValue) }
+          { label: "身价", value: formatCurrency(entry?.teamValue) },
+          { label: "银行", value: formatCurrency(entry?.bank) }
         ]
       });
     },
@@ -262,6 +332,43 @@ Component({
 
     onOpenAllLeagues() {
       this.triggerEvent("openleagues");
+    },
+
+    /** Web PersonalLeagueCarousel shares the panel as an image (image-only). */
+    async onShareLeagueImage(
+      event: WechatMiniprogram.BaseEvent<
+        WechatMiniprogram.IAnyObject,
+        { panel?: string }
+      >
+    ) {
+      const panel = event.currentTarget.dataset.panel === "h2h" ? "h2h" : "classic";
+      if (this.data.shareImageBusy) return;
+      // Share the panel's full league list (web shares the slide's full
+      // content, not the visible preview page).
+      const leagues = (
+        panel === "h2h" ? this.data.h2hLeagues : this.data.classicLeagues
+      ) as LeagueRow[];
+      if (!leagues.length) {
+        wx.showToast({ title: "暂无可分享的联赛", icon: "none" });
+        return;
+      }
+      this.setData({ shareImageBusy: true });
+      try {
+        const entry = (this.properties.entry || {}) as EntryCardInfo;
+        const path = await exportHomeLeaguesShareImage({
+          kind: panel,
+          entryName: entry.entryName || entry.teamName || "",
+          playerName: entry.playerName || "",
+          total: leagues.length,
+          classicRows: panel === "classic" ? leagues.map(toClassicShareRow) : [],
+          h2hRows: panel === "h2h" ? leagues.map(toH2HShareRow) : []
+        });
+        await presentHomeLeaguesShareImage(path);
+      } catch {
+        wx.showToast({ title: "图片生成失败", icon: "none" });
+      } finally {
+        this.setData({ shareImageBusy: false });
+      }
     },
 
     onOpen() {

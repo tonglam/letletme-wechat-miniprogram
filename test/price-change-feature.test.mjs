@@ -42,7 +42,9 @@ test("price prediction exposes the web-equivalent mobile controls and caveat", (
   assert.match(view, /movementOptions/);
   assert.match(view, /onTeamChange/);
   assert.match(view, /onSortChange/);
-  assert.match(view, /分享文字/);
+  // Icon-only copy share button (global share-button contract).
+  assert.match(view, /bindtap="onCopyShare"/);
+  assert.match(view, /copy\.svg/);
   assert.match(view, /不是价格保证/);
   assert.match(page, /AUTO_REFRESH_MS = 5 \* 60 \* 1000/);
   assert.match(page, /onShareAppMessage/);

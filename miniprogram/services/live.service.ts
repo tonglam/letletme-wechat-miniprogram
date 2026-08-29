@@ -5,6 +5,7 @@ import {
 } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 import type {
+  LiveEntryAvailability,
   LiveEntryResult,
   LiveMatch,
   LivePlayerRow,
@@ -115,6 +116,15 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         source
         state
         eventPointSemantics
+        effectiveLineup {
+          elementId
+          position
+          effectiveMultiplier
+          pickActive
+          autoSub
+          isCaptain
+          isViceCaptain
+        }
         revision
         checkedAt
         upstreamUpdatedAt
@@ -157,6 +167,17 @@ export const CALC_LIVE_POINTS_BY_ENTRY = `
         ownGoals
         penaltiesSaved
         penaltiesMissed
+        goalsConceded
+        defensiveContribution
+        starts
+        isGwStarted
+        isGwFinished
+        isPlayed
+        bgw
+        expectedGoals
+        expectedAssists
+        expectedGoalInvolvements
+        expectedGoalsConceded
       }
     }
   }
@@ -188,11 +209,22 @@ interface GraphQLPickListItem {
   ownGoals: number;
   penaltiesSaved: number;
   penaltiesMissed: number;
+  goalsConceded?: number;
+  defensiveContribution?: number;
+  starts?: boolean;
+  isGwStarted?: boolean;
+  isGwFinished?: boolean;
+  isPlayed?: boolean;
+  bgw?: boolean;
+  expectedGoals?: number;
+  expectedAssists?: number;
+  expectedGoalInvolvements?: number;
+  expectedGoalsConceded?: number;
 }
 
 interface CalcLivePointsByEntryResponse {
   calcLivePointsByEntry: {
-    availability: "READY" | "NO_PICKS";
+    availability: LiveEntryAvailability;
     snapshot: LiveSnapshotStatus | null;
     entry: number;
     event: number;
@@ -231,6 +263,8 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     autoSub: item.autoSub,
     captain: item.isCaptain || item.multiplier >= 2,
     viceCaptain: item.isViceCaptain,
+    isCaptain: item.isCaptain,
+    isViceCaptain: item.isViceCaptain,
     multiplier: item.multiplier,
     cleanSheets: item.cleanSheets,
     saves: item.saves,
@@ -239,6 +273,17 @@ function mapGraphQLPickList(pickList: GraphQLPickListItem[]): LivePlayerRow[] {
     ownGoals: item.ownGoals,
     penaltiesSaved: item.penaltiesSaved,
     penaltiesMissed: item.penaltiesMissed,
+    goalsConceded: item.goalsConceded,
+    defensiveContribution: item.defensiveContribution,
+    starts: item.starts,
+    isGwStarted: item.isGwStarted,
+    isGwFinished: item.isGwFinished,
+    isPlayed: item.isPlayed,
+    bgw: item.bgw,
+    expectedGoals: item.expectedGoals,
+    expectedAssists: item.expectedAssists,
+    expectedGoalInvolvements: item.expectedGoalInvolvements,
+    expectedGoalsConceded: item.expectedGoalsConceded,
   }));
 }
 
@@ -319,8 +364,10 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
+        homeTeamShortName
         awayTeamId
         awayTeamName
+        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
@@ -334,8 +381,10 @@ export const LIVE_MATCHES_QUERY = `
         eventId
         homeTeamId
         homeTeamName
+        homeTeamShortName
         awayTeamId
         awayTeamName
+        awayTeamShortName
         homeScore
         awayScore
         kickoffTime
@@ -353,8 +402,10 @@ export interface GraphQLMatchData {
   eventId: number;
   homeTeamId: number;
   homeTeamName: string;
+  homeTeamShortName: string | null;
   awayTeamId: number;
   awayTeamName: string;
+  awayTeamShortName: string | null;
   homeScore: number | null;
   awayScore: number | null;
   kickoffTime: string | null;
@@ -404,8 +455,10 @@ export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
     matchId: match.fixtureId,
     homeTeamId: match.homeTeamId,
     homeTeamName: match.homeTeamName,
+    homeTeamShortName: match.homeTeamShortName ?? undefined,
     homeScore: match.homeScore ?? undefined,
     awayTeamName: match.awayTeamName,
+    awayTeamShortName: match.awayTeamShortName ?? undefined,
     awayTeamId: match.awayTeamId,
     awayScore: match.awayScore ?? undefined,
     kickoffTime: match.kickoffTime ?? "",
@@ -532,6 +585,51 @@ function mapLiveFixturePlayer(
     bps: row.bps ?? 0,
     defensiveContribution: row.defensiveContribution ?? 0,
   };
+}
+
+export const PLAYER_LIVE_STATS_QUERY = `
+  query PlayerLiveStats($playerId: Int!, $eventId: Int!) {
+    playerLive(playerId: $playerId, eventId: $eventId) {
+      player { id webName position team { id name shortName } }
+      minutes goalsScored assists cleanSheets goalsConceded ownGoals
+      penaltiesSaved penaltiesMissed yellowCards redCards saves bonus bps
+      defensiveContribution totalPoints
+    }
+  }
+`;
+
+interface PlayerLiveStatsResponse {
+  playerLive: GraphQLLivePerformance | null;
+}
+
+/**
+ * Single-player GW stats for the player detail sheet — the mini counterpart of
+ * the web modal's GET_PLAYER_LIVE lazy fill. Keeps the hosting card's query
+ * thin while the sheet still shows the full stat set (DC, cards, saves…).
+ */
+export async function getPlayerLiveStats(
+  playerId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<LivePlayerRow | null> {
+  if (
+    !Number.isSafeInteger(playerId) || playerId <= 0
+    || !Number.isSafeInteger(eventId) || eventId <= 0
+  ) {
+    return null;
+  }
+  const data = await graphqlRequest<PlayerLiveStatsResponse>(
+    PLAYER_LIVE_STATS_QUERY,
+    { playerId, eventId },
+    {
+      cachePolicy: "live",
+      cacheVariant: `player-live:${eventId}`,
+      forceRefresh,
+      trace,
+    },
+  );
+  return data.playerLive ? mapLiveFixturePlayer(data.playerLive) : null;
 }
 
 async function fetchLiveFixturePlayers(
