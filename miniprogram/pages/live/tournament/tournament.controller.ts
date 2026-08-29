@@ -2639,6 +2639,15 @@ PerformancePage({
         // way (TournamentClient no-revision fallback).
         this.clearH2HState();
         this.setData({ ...emptyH2HViewState() });
+        // The LIVE_POINTS desk still has tournament info (roster, creator,
+        // etc.). Preserve it so the detail sheet can be cached for a later
+        // open; if the sheet is already open, reapply to avoid leaving it
+        // empty after clearH2HState wiped detailDesk.
+        this.detailDesk = desk;
+        this.detailDeskKey = String(tournamentId);
+        if (this.data.detailOpen) {
+          this.applyDetailDesk(desk);
+        }
         await this.loadRows(options);
         return;
       }

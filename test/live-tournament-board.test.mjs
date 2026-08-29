@@ -84,3 +84,19 @@ test("clearH2HState resets detailLoading when invalidating a pending detail requ
     /clearH2HState\(\)[\s\S]*?this\.detailRequestId \+= 1;[\s\S]*?this\.setData\(\{ detailLoading: false \}\)/,
   );
 });
+
+test("LIVE_POINTS fallback preserves the detail desk for an open sheet", () => {
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+
+  // When loadH2HDesk receives a LIVE_POINTS desk, clearH2HState wipes
+  // detailDesk. The desk must be preserved so the detail sheet (open or
+  // opened later) can show tournament info instead of staying empty.
+  assert.match(
+    controller,
+    /desk\.kind === "LIVE_POINTS"[\s\S]*?this\.clearH2HState\(\);[\s\S]*?this\.detailDesk = desk;[\s\S]*?this\.detailDeskKey = String\(tournamentId\);/,
+  );
+  assert.match(
+    controller,
+    /LIVE_POINTS[\s\S]*?this\.data\.detailOpen[\s\S]*?this\.applyDetailDesk\(desk\)/,
+  );
+});
