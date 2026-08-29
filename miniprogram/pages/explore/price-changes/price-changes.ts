@@ -599,9 +599,9 @@ PerformancePage({
     try { wx.pageScrollTo({ selector: "#price-change-list", duration: 180 }); } catch {}
   },
 
-  onOpenPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { code: number }>) {
-    const code = Number(event.currentTarget.dataset.code);
-    if (Number.isSafeInteger(code) && code > 0) goToPlayerDetail(code);
+  onOpenPlayer(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { playerId: number }>) {
+    const playerId = Number(event.currentTarget.dataset.playerId);
+    if (Number.isSafeInteger(playerId) && playerId > 0) goToPlayerDetail(playerId);
   },
 
   onExplain() {

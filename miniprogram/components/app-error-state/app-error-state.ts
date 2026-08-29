@@ -48,6 +48,10 @@ Component({
       type: String,
       value: "重试"
     },
+    showRetry: {
+      type: Boolean,
+      value: true
+    },
     reportText: {
       type: String,
       value: "告诉我们可以看一看"

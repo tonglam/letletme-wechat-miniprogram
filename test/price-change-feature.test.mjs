@@ -50,6 +50,13 @@ test("price prediction exposes the web-equivalent mobile controls and caveat", (
   assert.match(page, /onShareAppMessage/);
 });
 
+test("price prediction opens player detail by FPL element ID", () => {
+  assert.match(view, /data-player-id="\{\{item\.playerId\}\}"/);
+  assert.doesNotMatch(view, /data-code="\{\{item\.playerCode\}\}"/);
+  assert.match(page, /dataset\.playerId/);
+  assert.match(page, /goToPlayerDetail\(playerId\)/);
+});
+
 test("price prediction is a tracked registered Explore page", () => {
   const app = readFileSync(join(root, "miniprogram/app.json"), "utf8");
   const routes = readFileSync(join(root, "miniprogram/config/routes.ts"), "utf8");

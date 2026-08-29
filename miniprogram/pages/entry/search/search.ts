@@ -1,7 +1,10 @@
 import { PerformancePage } from "../../../utils/performance-page";
-import { getEntryInfo, searchEntries } from "../../../services/entry.service";
-import { enqueueMiniProgramEntrySync } from "../../../services/entry-sync.service";
+import { EntryLookupError, getEntryInfo, searchEntries } from "../../../services/entry.service";
 import type { EntryInfo, EntrySearchResult } from "../../../models/entry";
+import {
+  entryPersistencePresentation,
+  hasMatchingEntryPreview
+} from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import { formatRank } from "../../../utils/summary-format";
@@ -35,6 +38,9 @@ interface EntrySearchData {
   manualEntryId: string;
   loading: boolean;
   error: string;
+  errorCode: string;
+  canRetryLookup: boolean;
+  lookupNotice: string;
   buttonText: string;
   hasEntry: boolean;
   currentEntryId: number;
@@ -48,11 +54,35 @@ interface EntrySearchData {
   searchHits: EntryNameHit[];
 }
 
+function emptyEntryPreviewData(): Pick<
+  EntrySearchData,
+  | "hasPreview"
+  | "previewEntryId"
+  | "previewTitle"
+  | "previewSubtitle"
+  | "previewTotalPoints"
+  | "previewOverallRank"
+  | "isCurrentEntry"
+> {
+  return {
+    hasPreview: false,
+    previewEntryId: 0,
+    previewTitle: "",
+    previewSubtitle: "",
+    previewTotalPoints: "-",
+    previewOverallRank: "-",
+    isCurrentEntry: false
+  };
+}
+
 PerformancePage({
   data: {
     manualEntryId: "",
     loading: false,
     error: "",
+    errorCode: "",
+    canRetryLookup: false,
+    lookupNotice: "",
     buttonText: "查找球队",
     hasEntry: false,
     currentEntryId: 0,
@@ -113,13 +143,10 @@ PerformancePage({
       loading: false,
       buttonText: "查找球队",
       error: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      errorCode: "",
+      canRetryLookup: false,
+      lookupNotice: "",
+      ...emptyEntryPreviewData(),
       searchHits: []
     });
   },
@@ -136,7 +163,11 @@ PerformancePage({
       return;
     }
     if (keyword.length < 2) {
-      this.setData({ error: "请输入参赛 ID，或至少 2 个字符的球队名 / 经理名" });
+      this.setData({
+        error: "请输入参赛 ID，或至少 2 个字符的球队名 / 经理名",
+        errorCode: "INVALID_ID",
+        canRetryLookup: false
+      });
       return;
     }
     await this.lookupByName(keyword);
@@ -144,34 +175,44 @@ PerformancePage({
 
   async lookupByEntryId(entryId: number) {
     const requestId = ++this.lookupRequestId;
+    const preservePreview = hasMatchingEntryPreview(
+      this.data.hasPreview,
+      this.data.previewEntryId,
+      entryId
+    );
 
     this.setData({
       loading: true,
       buttonText: "查找中...",
       error: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      errorCode: "",
+      canRetryLookup: false,
+      lookupNotice: "",
+      ...(preservePreview ? {} : emptyEntryPreviewData()),
       searchHits: []
     });
     try {
       const entry = await getEntryInfo(entryId, true);
-      enqueueMiniProgramEntrySync(entryId);
       if (requestId !== this.lookupRequestId || Number(this.data.manualEntryId) !== entryId) {
         return;
       }
-      this.setData(mapPreviewData(entry, entryId));
+      const persistence = entryPersistencePresentation(entry.persistenceState);
+      this.setData({
+        ...mapPreviewData(entry, entryId),
+        lookupNotice: persistence?.message ?? "",
+        canRetryLookup: persistence?.retryable ?? false
+      });
       wx.showToast({ title: "已找到球队", icon: "success" });
     } catch (error) {
       if (requestId !== this.lookupRequestId) {
         return;
       }
+      const retryable = error instanceof EntryLookupError ? error.retryable : true;
       this.setData({
-        error: error instanceof Error ? error.message : "无法找到该参赛 ID 对应的球队"
+        error: error instanceof Error ? error.message : "当前无法确认球队数据，请稍后重试",
+        errorCode: error instanceof EntryLookupError ? error.status : "UNAVAILABLE",
+        canRetryLookup: retryable,
+        ...(preservePreview && retryable ? {} : emptyEntryPreviewData())
       });
     } finally {
       if (requestId === this.lookupRequestId) {
@@ -186,13 +227,10 @@ PerformancePage({
       loading: true,
       buttonText: "查找中...",
       error: "",
-      hasPreview: false,
-      previewEntryId: 0,
-      previewTitle: "",
-      previewSubtitle: "",
-      previewTotalPoints: "-",
-      previewOverallRank: "-",
-      isCurrentEntry: false,
+      errorCode: "",
+      canRetryLookup: false,
+      lookupNotice: "",
+      ...emptyEntryPreviewData(),
       searchHits: []
     });
     try {
@@ -201,15 +239,16 @@ PerformancePage({
         return;
       }
       if (hits.length === 0) {
-        this.setData({ error: "没有找到匹配的球队，可改用参赛 ID 再试" });
+        this.setData({
+          error: "没有找到匹配的球队，可改用参赛 ID 再试",
+          errorCode: "NOT_FOUND",
+          canRetryLookup: false
+        });
         return;
       }
       const [only] = hits;
       if (hits.length === 1 && only) {
         const hitEntryId = only.entryId || only.entry || 0;
-        if (hitEntryId > 0) {
-          enqueueMiniProgramEntrySync(hitEntryId);
-        }
         this.setData({
           ...mapPreviewData(toEntryInfo(only), hitEntryId),
           searchHits: []
@@ -226,7 +265,9 @@ PerformancePage({
         return;
       }
       this.setData({
-        error: error instanceof Error ? error.message : "查找球队失败，请稍后再试"
+        error: error instanceof Error ? error.message : "查找球队失败，请稍后再试",
+        errorCode: "UNAVAILABLE",
+        canRetryLookup: true
       });
     } finally {
       if (requestId === this.lookupRequestId) {
@@ -242,10 +283,12 @@ PerformancePage({
     }
     const hit = this.data.searchHits.find((item) => item.entryId === entryId);
     this.lookupRequestId += 1;
-    enqueueMiniProgramEntrySync(entryId);
     this.setData({
       manualEntryId: String(entryId),
       error: "",
+      errorCode: "",
+      canRetryLookup: false,
+      lookupNotice: "",
       ...(hit
         ? mapPreviewData(
             {
@@ -263,6 +306,11 @@ PerformancePage({
     });
   },
 
+  onRetryLookup() {
+    if (this.data.loading) return;
+    return this.onLookupEntry();
+  },
+
   onSetMyEntry() {
     const entryId = this.data.previewEntryId;
     if (!entryId) {
@@ -270,7 +318,6 @@ PerformancePage({
     }
 
     const sync = saveMiniProgramFollowEntry(entryId);
-    enqueueMiniProgramEntrySync(entryId);
     this.setData({ hasEntry: true, currentEntryId: entryId });
     wx.showToast({ title: "已设为我的球队", icon: "success", duration: 800 });
     void sync.then((synced) => {

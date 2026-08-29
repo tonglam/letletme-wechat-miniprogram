@@ -7,6 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 test("Tournament directory has one GraphQL operation and one season-aware read", () => {
   const service = source("miniprogram/services/tournament.service.ts");
   assert.equal((service.match(/query EntryTournaments/g) || []).length, 1);
+  assert.match(service, /entryParticipatingTournaments\(entryId: \$entryId\)/);
   assert.equal((service.match(/graphqlRead<EntryTournamentsResponse>/g) || []).length, 1);
   assert.match(service, /readEntryTournamentDirectory[\s\S]*cacheVariant: `season:\$\{season\}`/);
   assert.equal((service.match(/(?:return|await) readDirectory\(entry/g) || []).length, 4);
@@ -14,7 +15,7 @@ test("Tournament directory has one GraphQL operation and one season-aware read",
   assert.match(service, /getEntrySummaryTournaments[\s\S]*const rows = await readDirectory/);
   const directoryRead = service.indexOf("const result = await graphqlRead<EntryTournamentsResponse>");
   const partialGuard = service.indexOf("if (result.errors.length > 0)", directoryRead);
-  const mapping = service.indexOf("result.data.entryTournaments || []", directoryRead);
+  const mapping = service.indexOf("result.data.entryParticipatingTournaments || []", directoryRead);
   assert.ok(directoryRead >= 0 && partialGuard > directoryRead && mapping > partialGuard);
   assert.match(service, /async function readDirectory[\s\S]*const unresolvedEvent = !snapshot\?\.displayEvent[\s\S]*if \(forceRefresh \|\| !season \|\| unresolvedEvent\)[\s\S]*forceRefresh: forceRefresh \|\| !season/);
 });

@@ -39,7 +39,7 @@
 - [x] Create `pages/entry/search` four-file page.
 - [x] Create `pages/entry/profile` four-file page.
 - [x] Create `entry-card`.
-- [x] Implement entry search with GraphQL `entry(id)`.
+- [x] Implement entry search with GraphQL `entryLookup(id)` and explicit lookup statuses.
 - [x] Implement manual entry ID save.
 - [x] Implement selected entry storage and entry-scoped storage clearing.
 - [x] Implement home current GW/deadline/notice/fixture loading.

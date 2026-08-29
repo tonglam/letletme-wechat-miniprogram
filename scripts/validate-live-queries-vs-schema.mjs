@@ -9,23 +9,23 @@ const {
   LIVE_MATCHES_QUERY,
   LIVE_SNAPSHOT_QUERY,
   PLAYER_LIVE_STATS_QUERY,
-  TOURNAMENT_LIVE_POINTS
 } = await import("../miniprogram/services/live.service.ts");
 const {
   MINI_HOME_MARKET_QUERY,
-  MINI_HOME_PERSONAL_LEAGUES_QUERY
+  MINI_HOME_PERSONAL_LEAGUES_QUERY,
 } = await import("../miniprogram/services/home.service.ts");
 const {
   PRICE_CHANGE_BOARD_QUERY,
   PRICE_CHANGE_LIVE_BOARD_QUERY,
   PRICE_CHANGE_LIVE_CURSOR_QUERY,
   PRICE_CHANGE_PERSONAL_QUERY,
-  PRICE_CHANGE_START_PRICES_QUERY
+  PRICE_CHANGE_START_PRICES_QUERY,
 } = await import("../miniprogram/services/price-change.service.ts");
 const {
   GET_MY_FPL_COMPETITIONS_DESK,
   GET_MY_FPL_COMPETITION_BOARD,
-  GET_MY_FPL_COMPETITION_SEASON_PATH
+  GET_MY_FPL_COMPETITION_SEASON_PATH,
+  GET_ENTRY_TOURNAMENTS,
 } = await import("../miniprogram/services/tournament.service.ts");
 const {
   GET_TOURNAMENT_DETAIL_DESK,
@@ -35,9 +35,12 @@ const {
 const {
   ENTRY_LIVE_COMPETITION_BOARD_QUERY,
   TOURNAMENT_ENTRY_SQUADS_QUERY,
-  TOURNAMENT_SELECTION_INDEX_QUERY
+  TOURNAMENT_SELECTION_INDEX_QUERY,
 } = await import("../miniprogram/services/live-board.service.ts");
-const { ENTRY_LOOKUP_QUERY } = await import("../miniprogram/services/entry.service.ts");
+const { ENTRY_LOOKUP_QUERY } =
+  await import("../miniprogram/services/entry.service.ts");
+const { PLAYER_DETAIL } =
+  await import("../miniprogram/services/player.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
 
@@ -49,7 +52,6 @@ const operations = [
   ["LIVE_SNAPSHOT_QUERY", LIVE_SNAPSHOT_QUERY],
   ["CALC_LIVE_POINTS_BY_ENTRY", CALC_LIVE_POINTS_BY_ENTRY],
   ["LIVE_MATCHES_QUERY", LIVE_MATCHES_QUERY],
-  ["TOURNAMENT_LIVE_POINTS", TOURNAMENT_LIVE_POINTS],
   ["LIVE_FIXTURE_PLAYERS_BATCH", buildLiveFixturePlayersQuery(5)],
   ["PLAYER_LIVE_STATS_QUERY", PLAYER_LIVE_STATS_QUERY],
   ["MINI_HOME_PERSONAL_LEAGUES_QUERY", MINI_HOME_PERSONAL_LEAGUES_QUERY],
@@ -65,20 +67,21 @@ const operations = [
   ["GET_TOURNAMENT_DETAIL_DESK", GET_TOURNAMENT_DETAIL_DESK],
   ["GET_TOURNAMENT_OFFICIAL_H2H", GET_TOURNAMENT_OFFICIAL_H2H],
   ["GET_ENTRY_OFFICIAL_H2H_MATCHUPS", GET_ENTRY_OFFICIAL_H2H_MATCHUPS],
+  ["GET_ENTRY_TOURNAMENTS", GET_ENTRY_TOURNAMENTS],
   ["ENTRY_LIVE_COMPETITION_BOARD_QUERY", ENTRY_LIVE_COMPETITION_BOARD_QUERY],
   ["TOURNAMENT_SELECTION_INDEX_QUERY", TOURNAMENT_SELECTION_INDEX_QUERY],
   ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY],
-  ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY]
+  ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY],
+  ["PLAYER_DETAIL", PLAYER_DETAIL],
 ];
 
 async function loadSchema() {
   const resolvedPath = path.resolve(schemaModulePath);
   const imported = await import(pathToFileURL(resolvedPath).href);
-  if (
-    !imported.schema ||
-    typeof imported.schema.getTypeMap !== "function"
-  ) {
-    throw new Error(`GRAPHQL_SCHEMA_MODULE did not export a GraphQLSchema: ${resolvedPath}`);
+  if (!imported.schema || typeof imported.schema.getTypeMap !== "function") {
+    throw new Error(
+      `GRAPHQL_SCHEMA_MODULE did not export a GraphQLSchema: ${resolvedPath}`,
+    );
   }
 
   const requireFromSchema = createRequire(pathToFileURL(resolvedPath));
@@ -96,9 +99,9 @@ const astNodeLimit = (document) => {
   if (operations.length !== 1) return 200;
   const roots = operations[0].selectionSet.selections;
   return roots.length === 1 &&
-      roots[0].kind === Kind.FIELD &&
-      !roots[0].alias &&
-      roots[0].name.value === "entryLiveCompetitionBoard"
+    roots[0].kind === Kind.FIELD &&
+    !roots[0].alias &&
+    roots[0].name.value === "entryLiveCompetitionBoard"
     ? 400
     : 200;
 };
@@ -120,7 +123,9 @@ for (const [name, document] of operations) {
     errors = validate(schema, ast);
   } catch (error) {
     failed += 1;
-    console.error(`[FAIL] ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `[FAIL] ${name}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     continue;
   }
 
@@ -134,5 +139,7 @@ for (const [name, document] of operations) {
 }
 
 if (failed > 0) {
-  throw new Error(`${failed} live GraphQL operation(s) failed schema validation`);
+  throw new Error(
+    `${failed} live GraphQL operation(s) failed schema validation`,
+  );
 }

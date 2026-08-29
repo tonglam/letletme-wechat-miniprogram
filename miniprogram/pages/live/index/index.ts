@@ -2,8 +2,13 @@ import { PerformancePage } from "../../../utils/performance-page";
 import { routes } from "../../../config/routes";
 import { goToEntrySearch, navigateTo } from "../../../utils/navigation";
 import { ensureAppContext, getAppContextSnapshot } from "../../../services/app-context.service";
-import { getEntryInfo } from "../../../services/entry.service";
+import { EntryLookupError, getEntryInfo } from "../../../services/entry.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
+import type { EntryPersistenceState } from "../../../models/entry";
+import {
+  entryPersistenceNeedsRevalidation,
+  entryPersistencePresentation
+} from "../../../utils/entry-lookup-presentation";
 
 /** Live index warm-show skip window (aligned with home/leagues at 60s; team is 5 min). */
 export const LIVE_INDEX_REVALIDATE_MS = 60 * 1000;
@@ -27,6 +32,10 @@ PerformancePage({
     contextResolved: false,
     entryId: 0,
     entryName: "",
+    entryLookupStatus: "",
+    entryLookupMessage: "",
+    entryLookupRetryable: false,
+    entryPersistenceState: "" as EntryPersistenceState | "",
     event: 0,
     currentGw: 0,
     cards: [
@@ -100,7 +109,10 @@ PerformancePage({
     this.lifecycleRevision += 1;
   },
 
-  async loadContext(reason: "page-load" | "page-show") {
+  async loadContext(
+    reason: "page-load" | "page-show",
+    forceEntryLookup = false
+  ) {
     const lifecycleRevision = this.lifecycleRevision;
     try {
       await ensureAppContext({ reason });
@@ -114,12 +126,43 @@ PerformancePage({
     const entryId = app.globalData.entryId ?? 0;
     const entryChanged = this.data.entryId !== entryId;
     let entryName = entryChanged ? "" : this.data.entryName || "";
-    if (entryId && !entryName) {
+    let entryLookupStatus = entryChanged ? "" : this.data.entryLookupStatus || "";
+    let entryLookupMessage = entryChanged ? "" : this.data.entryLookupMessage || "";
+    let entryLookupRetryable = entryChanged
+      ? false
+      : Boolean(this.data.entryLookupRetryable);
+    let entryPersistenceState: EntryPersistenceState | "" = entryChanged
+      ? ""
+      : this.data.entryPersistenceState || "";
+    const persistenceRevalidation = entryPersistenceNeedsRevalidation(
+      entryPersistenceState
+    );
+    if (entryId && (!entryName || forceEntryLookup || persistenceRevalidation)) {
       try {
-        const entry = await getEntryInfo(entryId);
+        const entry = await getEntryInfo(
+          entryId,
+          forceEntryLookup || persistenceRevalidation
+        );
+        const persistence = entryPersistencePresentation(entry.persistenceState);
         entryName = entry.entryName || entry.teamName || "";
-      } catch {
-        entryName = "";
+        entryLookupStatus = "FOUND";
+        entryLookupMessage = persistence?.message ?? "";
+        entryLookupRetryable = persistence?.retryable ?? false;
+        entryPersistenceState = entry.persistenceState ?? "";
+      } catch (error) {
+        if (error instanceof EntryLookupError) {
+          entryLookupStatus = error.status;
+          entryLookupMessage = error.message;
+          entryLookupRetryable = error.retryable;
+          if (!error.retryable) {
+            entryName = "";
+            entryPersistenceState = "";
+          }
+        } else {
+          entryLookupStatus = "UNAVAILABLE";
+          entryLookupMessage = "当前无法确认球队数据，请稍后重试";
+          entryLookupRetryable = true;
+        }
       }
     }
     if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
@@ -127,6 +170,10 @@ PerformancePage({
       contextResolved: true,
       entryId,
       entryName: entryId ? entryName : "",
+      entryLookupStatus: entryId ? entryLookupStatus : "",
+      entryLookupMessage: entryId ? entryLookupMessage : "",
+      entryLookupRetryable: entryId ? entryLookupRetryable : false,
+      entryPersistenceState: entryId ? entryPersistenceState : "",
       event: app.globalData.gw,
       currentGw: app.globalData.currentGw || 0
     });
@@ -141,6 +188,15 @@ PerformancePage({
       return;
     }
 
+    goToEntrySearch();
+  },
+
+  onRetryEntryIdentity() {
+    if (!this.data.entryId || !this.data.entryLookupRetryable) return;
+    return this.loadContext("page-show", true);
+  },
+
+  onChangeEntry() {
     goToEntrySearch();
   },
 

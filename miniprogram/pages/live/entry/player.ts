@@ -75,11 +75,8 @@ function booleanValue(value: unknown): boolean | undefined {
 }
 
 function squadSlot(player: LivePlayerRow): number | undefined {
-  const legacyPosition = (player as unknown as { position?: unknown }).position;
-  for (const value of [player.squadPosition, legacyPosition]) {
-    const parsed = Number(value);
-    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 15) return parsed;
-  }
+  const parsed = Number(player.squadPosition);
+  if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 15) return parsed;
   return undefined;
 }
 

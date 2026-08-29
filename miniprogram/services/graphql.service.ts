@@ -85,6 +85,8 @@ export interface GraphQLOptions {
   season?: string;
   cacheVariant?: string;
   trace?: PageRequestTrace | null;
+  /** Explicitly map cached data when a stale result is served. */
+  mapStaleData?: (data: unknown) => unknown;
 }
 
 export interface PageRequestTrace {
@@ -239,16 +241,9 @@ export function hasGraphQLCode(error: unknown, code: string): boolean {
   );
 }
 
-/**
- * Legacy GraphQL deployments returned FORBIDDEN for an absent viewer entry.
- * Callers must use this only on the My FPL entry-scoped surface; a generic
- * FORBIDDEN elsewhere remains a real authorization failure.
- */
+/** Identifies the canonical missing-viewer-entry response on My FPL surfaces. */
 export function isViewerEntryAuthorizationError(error: unknown): boolean {
-  return (
-    hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED") ||
-    hasGraphQLCode(error, "FORBIDDEN")
-  );
+  return hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED");
 }
 
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
@@ -752,17 +747,23 @@ export function shouldCacheGraphQLData(
   if (!data || typeof data !== "object") {
     return false;
   }
-  if (operationName !== "EntryLookup") {
-    return true;
+  if (operationName === "EntryLookup") {
+    const lookup = (data as { entryLookup?: Record<string, unknown> }).entryLookup;
+    return Boolean(
+      lookup
+      && lookup.status === "FOUND"
+      && lookup.entry != null
+      && lookup.source === "DATABASE"
+      && lookup.persistenceState === "NOT_REQUIRED"
+    );
   }
-  const lookup = (data as { entryLookup?: Record<string, unknown> }).entryLookup;
-  return Boolean(
-    lookup
-    && lookup.status === "FOUND"
-    && lookup.entry != null
-    && lookup.source === "DATABASE"
-    && lookup.persistenceState === "NOT_REQUIRED"
-  );
+  if (operationName === "PlayerDetail") {
+    const detail = (data as {
+      playerDetail?: { dataAvailability?: { isFullyAuthoritative?: unknown } } | null;
+    }).playerDetail;
+    return detail == null || detail.dataAvailability?.isFullyAuthoritative === true;
+  }
+  return true;
 }
 
 export async function graphqlRead<T>(
@@ -1252,6 +1253,9 @@ export async function graphqlRequest<T>(
   const result = await graphqlRead<T>(query, variables, options);
   if (result.errors.length > 0) {
     throw new GraphQLApplicationError(result.errors);
+  }
+  if (result.meta.stale && options?.mapStaleData) {
+    return options.mapStaleData(result.data) as T;
   }
   return result.data;
 }

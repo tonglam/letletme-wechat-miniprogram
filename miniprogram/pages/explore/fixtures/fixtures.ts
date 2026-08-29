@@ -319,7 +319,7 @@ PerformancePage({
       // names never enter a record.
       recordExploreVisit({
         surface: "fixtures",
-        contractSource: "compat",
+        contractSource: "canonical",
         eventId: startEvent,
         horizon: this.data.horizon,
         cacheOutcome: hadLastGood ? "last-good" : "miss",

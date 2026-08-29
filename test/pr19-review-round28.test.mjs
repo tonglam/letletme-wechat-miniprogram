@@ -29,7 +29,7 @@ test("Live landing exposes primary content only after owned context resolution",
   const page = source("miniprogram/pages/live/index/index.ts");
   const template = source("miniprogram/pages/live/index/index.wxml");
   assert.match(page, /onLoad\(\)[\s\S]*loadContext\("page-load"\)/);
-  assert.match(page, /loadContext\(reason[\s\S]*await ensureAppContext\(\{ reason \}\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*contextResolved: true/);
+  assert.match(page, /async loadContext\([\s\S]*reason: "page-load" \| "page-show"[\s\S]*await ensureAppContext\(\{ reason \}\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*contextResolved: true/);
   assert.match(template, /id="\{\{contextResolved \? 'perf-primary-content' : ''\}\}" wx:if="\{\{contextResolved\}\}"/);
 });
 

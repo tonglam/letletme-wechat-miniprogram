@@ -41,12 +41,12 @@ test("live fixture player batches use the published player detail fields", () =>
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
 });
 
-test("live tournament desk requests official coverage and server ranking", async () => {
-  const { TOURNAMENT_LIVE_POINTS } =
-    await import("../miniprogram/services/live.service.ts");
-  assert.match(TOURNAMENT_LIVE_POINTS, /officialCoverage/);
-  assert.match(TOURNAMENT_LIVE_POINTS, /unavailableEntryIds/);
-  assert.match(TOURNAMENT_LIVE_POINTS, /board\s*\{[\s\S]*\brank\b/);
+test("live tournament board requests official coverage and server ranking", async () => {
+  const { ENTRY_LIVE_COMPETITION_BOARD_QUERY } =
+    await import("../miniprogram/services/live-board.service.ts");
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /officialCoverage/);
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /unavailableEntryIds/);
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /rows\s*\{[\s\S]*\brank\b/);
 });
 
 test("live match mapping carries the authoritative fixture minutes", () => {

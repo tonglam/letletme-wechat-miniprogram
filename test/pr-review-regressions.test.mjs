@@ -314,12 +314,11 @@ test("match rollover detaches same-status in-flight work", () => {
 
 test("entry lookup results are guarded by request generation and input identity", () => {
   const search = source("miniprogram/pages/entry/search/search.ts");
+  const entryService = source("miniprogram/services/entry.service.ts");
   assert.match(search, /getEntryInfo\(entryId, true\)/);
-  assert.match(search, /enqueueMiniProgramEntrySync\(entryId\)/);
-  assert.match(
-    source("miniprogram/services/entry-sync.service.ts"),
-    /\/entry-sync/,
-  );
+  assert.doesNotMatch(search, /enqueueMiniProgramEntrySync/);
+  assert.match(entryService, /persistenceState: lookup\.persistenceState/);
+  assert.match(search, /entryPersistencePresentation\(entry\.persistenceState\)/);
   assert.match(
     search,
     /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/,
@@ -341,20 +340,34 @@ test("entry lookup results are guarded by request generation and input identity"
   );
 });
 
+test("entry persistence recovery keeps valid UI state actionable", () => {
+  const landing = source("miniprogram/pages/live/index/index.ts");
+  const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
+  const liveEntryTemplate = source("miniprogram/pages/live/entry/entry.wxml");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+
+  assert.match(landing, /entryPersistenceNeedsRevalidation/);
+  assert.match(
+    landing,
+    /getEntryInfo\(\s*entryId,\s*forceEntryLookup \|\| persistenceRevalidation/,
+  );
+  assert.match(search, /hasMatchingEntryPreview/);
+  assert.match(
+    search,
+    /preservePreview && retryable \? \{\} : emptyEntryPreviewData\(\)/,
+  );
+  assert.match(liveEntry, /isDeterministicEntryIdentityFailure/);
+  assert.match(liveEntryTemplate, /retryText="\{\{entryLookupRetryable \? '重试球队查询' : '更换球队'\}\}"/);
+  assert.match(liveEntryTemplate, /bind:retry="onEntryLookupAction"/);
+});
+
 test("tournament status reports only rows actually retained", () => {
   const tournament = source(
     "miniprogram/pages/live/tournament/tournament.controller.ts",
   );
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
-  assert.match(tournament, /this\.retainedRowCount = retainedRows\.length/);
-  assert.match(
-    tournament,
-    /this\.officialTraceableEntries = combinedTournamentTraceableEntries\(\s*liveResult\.traceableEntries,\s*retainedRows,\s*liveResult\.totalEntries/,
-  );
-  assert.match(
-    tournament,
-    /combinedTournamentTraceableScoreStates\(\s*liveResult\.traceableScoreStates,\s*retainedRows/,
-  );
+  assert.match(tournament, /retainedRowCount/);
+  assert.match(tournament, /options\.lastGood \? rows\.length : 0/);
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
   assert.doesNotMatch(tournament, /overallRank: row\.overallRank \?\? row\.rank/);
@@ -543,15 +556,15 @@ test("tournament row requests are principal- and season-generation guarded", () 
   );
   assert.match(
     tournament,
-    /const entryId = this\.data\.entryId[\s\S]*const requestKey = `\$\{entryId\}:/,
+    /const variables = this\.buildBoardVariables\(\);[\s\S]*const requestKey = `board:\$\{JSON\.stringify\(variables\)\}:/,
   );
   assert.match(
     tournament,
-    /await getLivePointsByTournamentSnapshot[\s\S]*restartForPrincipalChange\(entryId\)/,
+    /await getEntryLiveCompetitionBoardPage[\s\S]*restartForPrincipalChange\(variables\.entryId\)/,
   );
   assert.match(
     tournament,
-    /catch \(error\)[\s\S]*restartForPrincipalChange\(entryId\)/,
+    /catch \(error\)[\s\S]*restartForPrincipalChange\(variables\.entryId\)/,
   );
 });
 

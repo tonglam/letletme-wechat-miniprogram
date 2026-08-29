@@ -48,6 +48,28 @@
   font-weight: 800;
 }
 
+.entry-lookup-notice {
+  margin: -8rpx 0 20rpx;
+  padding: 14rpx 18rpx;
+  border-radius: 10rpx;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.entry-lookup-action {
+  min-width: 176rpx;
+  margin: 14rpx 0 0;
+  padding: 10rpx 20rpx;
+  border: 1rpx solid var(--warning-a45);
+  border-radius: 12rpx;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
 .live-card {
   display: flex;
   align-items: center;

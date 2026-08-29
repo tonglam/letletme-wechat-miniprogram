@@ -137,8 +137,9 @@ export function forgetServedFromCache(requestKey: string): void {
  * Remove one request's cache entry from both memory and persistent storage.
  *
  * This is deliberately narrower than the session-wide purge: a successful
- * but non-authoritative response must invalidate the previous authoritative
- * value for the same request without evicting unrelated data.
+ * but non-authoritative PlayerDetail response must invalidate the previous
+ * authoritative value for the same request without evicting unrelated public
+ * data.
  */
 export function removeCacheEntry(cacheKey: string, requestKey: string): void {
   memoryCache.delete(cacheKey);

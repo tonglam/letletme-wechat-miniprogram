@@ -1,5 +1,5 @@
 import { PerformancePage } from "../../../utils/performance-page";
-import { getEntryInfo } from "../../../services/entry.service";
+import { EntryLookupError, getEntryInfo } from "../../../services/entry.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
 import type { EntryInfo } from "../../../models/entry";
@@ -13,6 +13,7 @@ import {
 interface EntryProfileData {
   loading: boolean;
   error: string;
+  errorRetryable: boolean;
   emptyState: boolean;
   entryId?: number;
   entry: EntryInfo;
@@ -23,6 +24,7 @@ PerformancePage({
   data: {
     loading: false,
     error: "",
+    errorRetryable: false,
     emptyState: false,
     entryId: 0,
     entry: {},
@@ -131,8 +133,15 @@ PerformancePage({
     trace?: PageRequestTrace,
     lifecycleRevision?: number
   ) {
-        if (!Number.isFinite(entryId) || entryId <= 0) {
-      this.setData({ loading: false, error: "", emptyState: true, entry: {}, overallRankText: "" });
+    if (!Number.isFinite(entryId) || entryId <= 0) {
+      this.setData({
+        loading: false,
+        error: "",
+        errorRetryable: false,
+        emptyState: true,
+        entry: {},
+        overallRankText: ""
+      });
       return;
     }
 
@@ -141,14 +150,23 @@ PerformancePage({
     const isActiveRequest = () => this.pageVisible
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId;
-    this.setData({ loading: true, error: "", emptyState: false, entryId });
+    this.setData({
+      loading: true,
+      error: "",
+      errorRetryable: false,
+      emptyState: false,
+      entryId
+    });
     try {
       const entry = await getEntryInfo(entryId, forceRefresh, trace);
       if (!isActiveRequest()) return;
       this.setData({ entry, overallRankText: formatRank(entry.overallRank) });
     } catch (error) {
       if (!isActiveRequest()) return;
-      this.setData({ error: error instanceof Error ? error.message : "球队资料加载失败" });
+      this.setData({
+        error: error instanceof Error ? error.message : "球队资料加载失败",
+        errorRetryable: error instanceof EntryLookupError ? error.retryable : true
+      });
     } finally {
       if (isActiveRequest()) this.setData({ loading: false });
     }

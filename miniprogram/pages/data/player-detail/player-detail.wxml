@@ -25,6 +25,28 @@
           </view>
         </view>
       </view>
+      <view wx:if="{{dataAvailabilityIssues.length}}" class="section-notice" role="status">
+        <view class="notice-title">部分数据不是权威结果</view>
+        <view class="notice-description">过期数据可能较旧，降级数据使用能力较弱的来源，不可用数据当前无法确认。</view>
+        <view class="availability-issues">
+          <view
+            wx:for="{{dataAvailabilityIssues}}"
+            wx:key="section"
+            class="availability-issue availability-issue-{{item.tone}}"
+          >
+            {{item.sectionLabel}}：{{item.stateLabel}}
+          </view>
+        </view>
+        <button class="notice-retry" bindtap="onRetry" disabled="{{loading}}">重新获取</button>
+      </view>
+      <view wx:if="{{injuryAvailability}}" class="injury-notice" role="status">
+        <view class="notice-title">伤病与出场状态</view>
+        <view class="injury-status">
+          {{injuryAvailability.statusLabel}}
+          <text wx:if="{{injuryAvailability.stale}}" class="injury-stale">来源已过期</text>
+        </view>
+        <view wx:if="{{injuryAvailability.news}}" class="notice-description">{{injuryAvailability.news}}</view>
+      </view>
     </view>
     <view class="section">
       <view class="section-heading">赛季数据</view>

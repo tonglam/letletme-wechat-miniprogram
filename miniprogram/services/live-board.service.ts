@@ -20,7 +20,7 @@ import {
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
 
-export const LIVE_BOARD_CONTRACT_VERSION = "entry-live-board-v1";
+export const LIVE_BOARD_CONTRACT_VERSION = "entry-live-board-v2";
 export const LIVE_BOARD_PAGE_SIZE = 20;
 export const LIVE_BOARD_LAST_GOOD_PREFIX =
   `${storagePrefixes.liveBoardLastGood}${LIVE_BOARD_CONTRACT_VERSION}`;
@@ -586,16 +586,6 @@ export async function getEntryLiveCompetitionBoardPage(
 
 function graphQLErrorCode(error: GraphQLErrorInfo): string {
   return String(error.extensions?.code || "");
-}
-
-export function isLiveBoardSchemaUnavailableError(error: unknown): boolean {
-  if (!(error instanceof GraphQLApplicationError)) return false;
-  return error.errors.some((item) => {
-    const message = String(item.message || "");
-    return graphQLErrorCode(item) === "GRAPHQL_VALIDATION_FAILED" ||
-      /Cannot query field\s+["']entryLiveCompetitionBoard["']/i.test(message) ||
-      /Unknown (?:argument|type).*EntryLiveCompetition/i.test(message);
-  });
 }
 
 export function hasLiveBoardErrorCode(error: unknown, code: string): boolean {

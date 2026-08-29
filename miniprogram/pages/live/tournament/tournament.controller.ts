@@ -1,10 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
-import {
-  getLivePointsByTournamentSnapshot,
-  getLiveSnapshot,
-  searchLivePointsByTournamentSnapshot,
-} from "../../../services/live.service";
+import { getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import {
   boardRowsToLiveRows,
@@ -13,7 +9,6 @@ import {
   getTournamentEntrySquads,
   getTournamentSelectionIndex,
   hasLiveBoardErrorCode,
-  isLiveBoardSchemaUnavailableError,
   liveBoardLastGoodKey,
   liveBoardSessionKey,
   readLiveBoardLastGood,
@@ -70,12 +65,9 @@ import {
   hasUnresolvedTournamentTeamExposureRules,
   isTournamentBoardControlGenerationCurrent,
   compareKnownTournamentValues,
-  combinedTournamentTraceableEntries,
-  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
-  tournamentScoreNextRefreshAt,
   type TournamentCaptainMode,
   type TournamentOwnershipScope,
   type TournamentTeamOption,
@@ -1038,7 +1030,6 @@ function clearTournamentBoard(page: object): void {
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
     boardPage?: LiveBoardPage | null;
-    usingLegacyBoard?: boolean;
     selectionIndexKey?: string;
     selectionIndexRequestId?: number;
     compareRequestId?: number;
@@ -1053,7 +1044,6 @@ function clearTournamentBoard(page: object): void {
   board.officialTotalEntries = undefined;
   board.unavailableEntryIds = [];
   board.boardPage = null;
-  board.usingLegacyBoard = false;
   board.selectionIndexKey = "";
   board.selectionIndexRequestId = (board.selectionIndexRequestId || 0) + 1;
   board.compareRequestId = (board.compareRequestId || 0) + 1;
@@ -1226,7 +1216,6 @@ PerformancePage({
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   boardPage: null as LiveBoardPage | null,
-  usingLegacyBoard: false,
   selectionIndexKey: "",
   selectionIndexRequestId: 0,
   compareRequestId: 0,
@@ -1356,11 +1345,11 @@ PerformancePage({
           this.setData({
             error: "",
             errorSuffix: "",
-            ...(this.usingLegacyBoard && snapshot?.checkedAt
+            ...(snapshot?.checkedAt
               ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
               : {}),
           });
-        } else if (this.usingLegacyBoard && snapshot?.checkedAt) {
+        } else if (snapshot?.checkedAt) {
           this.setData({
             lastUpdated: formatTime(new Date(snapshot.checkedAt)),
           });
@@ -2211,7 +2200,6 @@ PerformancePage({
       )
       .filter((name): name is string => Boolean(name));
     this.boardPage = page;
-    this.usingLegacyBoard = false;
     this.rows = rows;
     this.shareRows = rows;
     this.officialCoverage = page.officialCoverage;
@@ -2305,7 +2293,7 @@ PerformancePage({
   async loadSelectionIndex() {
     const page = this.boardPage;
     const scope = this.currentBoardScope();
-    if (!page || !scope || this.usingLegacyBoard) return;
+    if (!page || !scope) return;
     const key = `${scope.tournamentId}:${scope.eventId}:${page.playerRevision}`;
     if (this.selectionIndexKey === key && this.ownershipPlayers.length > 0) {
       return;
@@ -2392,16 +2380,7 @@ PerformancePage({
     const scope = this.currentBoardScope();
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
     if (comparedEntryIds.length !== 2) return;
-    if (!page || !scope || this.usingLegacyBoard) {
-      const compareSelection = compareSelectionState(this.rows, comparedEntryIds);
-      this.setData({
-        ...compareSelection,
-        compareOpen: Boolean(
-          compareSelection.compareLeft && compareSelection.compareRight,
-        ),
-      });
-      return;
-    }
+    if (!page || !scope) return;
     const requestId = this.compareRequestId + 1;
     this.compareRequestId = requestId;
     this.setData({ compareLoading: true, compareError: "", compareOpen: false });
@@ -2477,14 +2456,6 @@ PerformancePage({
       this.syncDisplayState();
       return Promise.resolve();
     }
-    if (
-      this.usingLegacyBoard &&
-      hasUnresolvedTournamentTeamExposureRules(this.data.teamExposureRules)
-    ) {
-      // Legacy team options are keyed by short name only. Do not let a
-      // recovered paged request silently drop those rules from its variables.
-      return this.loadLegacyRows(options);
-    }
     const variables = this.buildBoardVariables();
     if (!variables) {
       const error = new Error("当前会话或赛事信息不完整，请重新进入页面");
@@ -2526,11 +2497,17 @@ PerformancePage({
     const preserveData = this.data.hasData || options.background === true || Boolean(cached);
     this.setData(
       preserveData
-        ? { refreshing: true, error: "", errorSuffix: "" }
+        ? {
+            refreshing: true,
+            error: "",
+            errorSuffix: "",
+            errorWorkload: "gameweek" as const,
+          }
         : {
             loading: true,
             error: "",
             errorSuffix: "",
+            errorWorkload: "gameweek" as const,
             scoreStatusText: "正在确认官方分数",
           },
     );
@@ -2563,15 +2540,11 @@ PerformancePage({
         this.syncDisplayState();
       } catch (error) {
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
-        if (isLiveBoardSchemaUnavailableError(error)) {
-          this.usingLegacyBoard = true;
-          await this.loadLegacyRows({ ...options, trace });
-          return;
-        }
         if (this.restartForPrincipalChange(variables.entryId)) return;
         this.setData({
           error: error instanceof Error ? error.message : "实时赛事加载失败",
           errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
+          errorWorkload: "gameweek",
         });
         this.syncDisplayState();
         if (options.propagateError) throw error;
@@ -3088,186 +3061,6 @@ PerformancePage({
     if (!Number.isFinite(entry) || entry <= 0) return;
     wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
   },
-
-  loadLegacyRows(options: LiveTournamentLoadOptions = {}): Promise<void> {
-    const trace =
-      options.trace ||
-      capturePageRequestTrace({
-        callerSurface: "live-tournament-rows",
-        trigger: options.forceRefresh ? "refresh" : "load",
-      });
-    const entryId = this.data.entryId;
-    if (!entryId) {
-      clearTournamentBoard(this);
-      this.setData({ rowCount: 0, displayedRows: [], hasMore: false });
-      return Promise.resolve();
-    }
-    const selected = this.data.selectedTournament;
-    if (!selected) {
-      clearTournamentBoard(this);
-      this.setData({ rowCount: 0, displayedRows: [], hasMore: false });
-      return Promise.resolve();
-    }
-
-    // initializeFromContext/onShow resolves the shared live anchor before a
-    // row request starts. Do not await a second probe here: request coalescing
-    // relies on the loader returning the exact in-flight promise.
-    const eventId = this.data.event;
-    const hasNoParticipants = selected.participantCount === 0;
-    if (hasNoParticipants || !Number.isSafeInteger(eventId) || eventId <= 0) {
-      clearTournamentBoard(this);
-      this.setData({
-        rowCount: 0,
-        displayedRows: [],
-        hasMore: false,
-        loading: false,
-        refreshing: false,
-        error: "",
-        errorSuffix: "",
-        resultsEmptyTitle: hasNoParticipants
-          ? "当前赛事还没有参赛球队"
-          : "当前暂无进行中的比赛周",
-        resultsEmptyDescription: hasNoParticipants
-          ? "有球队加入后再显示实时排名"
-          : "比赛周开始后再显示实时排名",
-      });
-      this.syncDisplayState();
-      return Promise.resolve();
-    }
-    const keyword = this._submittedKeyword;
-    const requestKey = `${entryId}:${selected.id}:${eventId}:${keyword}:${options.forceRefresh === true}`;
-    if (this.rowsRequest && this.rowsRequestKey === requestKey) {
-      return this.rowsRequest;
-    }
-
-    const requestId = this.rowsRequestId + 1;
-    this.rowsRequestId = requestId;
-    const preserveData = options.background === true && this.data.hasData;
-    if (!preserveData) {
-      this.retainedRowCount = 0;
-    }
-    this.setData(
-      preserveData
-        ? {
-            refreshing: true,
-            error: "",
-            errorWorkload: "gameweek" as const,
-            errorSuffix: "",
-          }
-        : {
-            loading: true,
-            error: "",
-            errorWorkload: "gameweek" as const,
-            errorSuffix: "",
-          },
-    );
-
-    const request = (async () => {
-      try {
-        const liveResult = keyword
-          ? await searchLivePointsByTournamentSnapshot(
-              selected.id,
-              eventId,
-              keyword,
-              options.forceRefresh === true,
-              trace,
-              entryId,
-            )
-          : await getLivePointsByTournamentSnapshot(
-              selected.id,
-              eventId,
-              options.forceRefresh === true,
-              trace,
-              entryId,
-            );
-        if (!this.pageVisible || requestId !== this.rowsRequestId) return;
-        if (this.restartForPrincipalChange(entryId)) return;
-        const refreshedRows = liveResult.data.map(normalizeRow);
-        const unavailableEntryIds = mergeUnavailableTournamentEntryIds(
-          liveResult.failedEntryIds,
-          liveResult.unavailableEntryIds,
-        );
-        const failedEntryIds = new Set(unavailableEntryIds);
-        this.officialCoverage = liveResult.officialCoverage;
-        this.officialTotalEntries = liveResult.totalEntries;
-        this.unavailableEntryIds = unavailableEntryIds;
-        this.failedEntryCount = Math.max(
-          failedEntryIds.size,
-          liveResult.partialError ? 1 : 0,
-        );
-        // Per-entry failures do not invalidate producer metadata. Retaining a
-        // SETTLED snapshot stops expensive batch polling while the partial
-        // row error remains visible and manually retryable.
-        this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
-        this.cachedLiveStoredAt = liveResult.servedStoredAt;
-        const refreshedEntryIds = new Set(
-          refreshedRows.map((row) => numberValue(row.entry)),
-        );
-        const retainedRows = preserveData
-          ? this.rows.filter(
-              (row: DisplayTournamentRow) =>
-                failedEntryIds.has(numberValue(row.entry)) &&
-                !refreshedEntryIds.has(numberValue(row.entry)),
-            )
-          : [];
-        this.retainedRowCount = retainedRows.length;
-        this.officialTraceableEntries = combinedTournamentTraceableEntries(
-          liveResult.traceableEntries,
-          retainedRows,
-          liveResult.totalEntries,
-        );
-        this.officialTraceableScoreStates =
-          combinedTournamentTraceableScoreStates(
-            liveResult.traceableScoreStates,
-            retainedRows,
-          );
-        const nextRows = [...refreshedRows, ...retainedRows];
-        this.setData({
-          scoreNextRefreshAt: tournamentScoreNextRefreshAt(nextRows) || "",
-        });
-        this.applyRows(
-          nextRows,
-          true,
-          liveResult.servedStoredAt || Date.now(),
-        );
-        if (liveResult.partialError) {
-          this.setData({
-            error: liveResult.partialError,
-            errorSuffix: partialTournamentErrorSuffix(retainedRows.length),
-          });
-        }
-        this.liveRefresh?.sync();
-        this.syncDisplayState();
-      } catch (error) {
-        if (!this.pageVisible || requestId !== this.rowsRequestId) return;
-        if (this.restartForPrincipalChange(entryId)) return;
-        this.setData({
-          error: error instanceof Error ? error.message : "实时赛事加载失败",
-          errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
-        });
-        this.syncDisplayState();
-        if (options.propagateError) throw error;
-      } finally {
-        if (requestId === this.rowsRequestId) {
-          this.setData({ loading: false, refreshing: false });
-          this.syncDisplayState();
-        }
-      }
-    })();
-
-    this.rowsRequest = request;
-    this.rowsRequestKey = requestKey;
-    const clearRequest = () => {
-      if (this.rowsRequest === request) {
-        this.rowsRequest = null;
-        this.rowsRequestKey = "";
-        this.revalidateCachedSnapshot();
-      }
-    };
-    void request.then(clearRequest, clearRequest);
-    return request;
-  },
-
   shouldAutoRefresh(): boolean {
     if (!this.data.selectedTournament) return false;
     // The H2H view keeps its own 60s board timer; the live-snapshot probe
@@ -3332,13 +3125,9 @@ PerformancePage({
     });
   },
 
-  reloadBoardControls(options: { fetchLegacy?: boolean } = {}) {
+  reloadBoardControls() {
     const controlRequestId = this.boardControlRequestId + 1;
     this.boardControlRequestId = controlRequestId;
-    if (this.usingLegacyBoard && !options.fetchLegacy) {
-      this.applyRows(this.rows, true);
-      return;
-    }
     return this.loadRows({
       background: this.data.hasData,
       propagateError: true,
@@ -3374,7 +3163,7 @@ PerformancePage({
     resetPage: boolean,
     fetchedAt?: number,
   ) {
-    if (!this.usingLegacyBoard && this.boardPage) {
+    if (this.boardPage) {
       this.syncBoardCompareMarkers();
       return;
     }
@@ -3633,13 +3422,13 @@ PerformancePage({
     if (event) {
       this.setData({ keyword: this._submittedKeyword });
     }
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 
   onResetSearch() {
     this._submittedKeyword = "";
     this.setData({ keyword: "" });
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
@@ -3839,15 +3628,6 @@ PerformancePage({
 
   onOpenCompareSheet() {
     if (this.data.compareIds.length !== 2) return;
-    if (this.usingLegacyBoard) {
-      const compareSelection = compareSelectionState(
-        this.rows,
-        this.data.compareIds,
-      );
-      if (!compareSelection.compareLeft || !compareSelection.compareRight) return;
-      this.setData({ ...compareSelection, compareOpen: true });
-      return;
-    }
     void this.loadCompareSquads();
   },
 
@@ -3877,7 +3657,7 @@ PerformancePage({
       compareHint: compareHintText(current.length),
       compareLeft: left,
       compareRight: right,
-      compareOpen: this.usingLegacyBoard && current.length === 2,
+      compareOpen: false,
       compareLoading: false,
       compareError: "",
       compareLineupRows: [],
@@ -3885,7 +3665,7 @@ PerformancePage({
       compareRightPickCount: 0,
     });
     this.syncBoardCompareMarkers();
-    if (current.length === 2 && !this.usingLegacyBoard) {
+    if (current.length === 2) {
       void this.loadCompareSquads();
     }
   },
@@ -4122,10 +3902,7 @@ PerformancePage({
     if (!this.data.hasMore) {
       return;
     }
-    if (this.usingLegacyBoard || !this.boardPage) {
-      this.applyRows(this.rows, false);
-      return;
-    }
+    if (!this.boardPage) return;
     if (!canPaginateTournamentBoard({
       loading: this.data.loading,
       refreshing: this.data.refreshing,
@@ -4234,7 +4011,6 @@ PerformancePage({
     const board = this.boardPage;
     const scope = this.currentBoardScope();
     if (
-      this.usingLegacyBoard ||
       !board ||
       !scope ||
       currentRows.length >= board.filteredEntries
@@ -4327,7 +4103,7 @@ PerformancePage({
         }
         const expectedRows = this.boardPage?.filteredEntries || this.data.filteredCount;
         const entriesText =
-          complete || this.usingLegacyBoard
+          complete
             ? this.data.entriesText
             : `${rows.length}/${expectedRows}（当前已加载）`;
         const text = formatLiveTournamentShareText({
@@ -4623,9 +4399,6 @@ PerformancePage({
       teamExposureScope: "any",
       activeFilterCount: 0,
     });
-    // Legacy keyword reads may contain only a subset, so clearing still needs
-    // a server read. Keep the previous controls and rows transactionally until
-    // that replacement succeeds.
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 });

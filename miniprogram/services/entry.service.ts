@@ -39,7 +39,7 @@ export const ENTRY_LOOKUP_QUERY = `
 
 export type { EntryLookupSource, EntryLookupStatus, EntryPersistenceState } from "../models/entry";
 
-interface EntryLookupResponse {
+interface GetEntryResponse {
   entryLookup: {
     status: EntryLookupStatus;
     retryable: boolean;
@@ -164,7 +164,7 @@ interface EntryEventResultResponse {
   entryEventResult: EntryEventResult | null;
 }
 
-function mapGraphQLEntry(entry: EntryLookupResponse["entryLookup"]["entry"]): EntryInfo | undefined {
+function mapGraphQLEntry(entry: GetEntryResponse["entryLookup"]["entry"]): EntryInfo | undefined {
   if (!entry) {
     return undefined;
   }
@@ -240,7 +240,7 @@ export async function getEntryInfo(
   forceRefresh = false,
   trace?: PageRequestTrace | null
 ): Promise<EntryInfo> {
-  const data = await graphqlRequest<EntryLookupResponse>(ENTRY_LOOKUP_QUERY, { id: entry }, {
+  const data = await graphqlRequest<GetEntryResponse>(ENTRY_LOOKUP_QUERY, { id: entry }, {
     cachePolicy: "reporting",
     forceRefresh,
     trace

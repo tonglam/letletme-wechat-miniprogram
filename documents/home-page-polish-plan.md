@@ -228,7 +228,7 @@ function mapFixtureRow(fixture: Fixture, index: number): HomeFixtureRow {
 
 - [x] Treat WeChat auth and FPL Entry binding as separate concepts.
 - [x] If `entryId` is missing, force route to `pages/entry/search/search`.
-- [x] Do not call GraphQL `entry(id)` when entry is missing.
+- [x] Do not call GraphQL `entryLookup(id)` when entry is missing.
 - [ ] Verify fresh install/storage-clear lands on entry binding.
 - [ ] Verify binding success returns user to home dashboard.
 
