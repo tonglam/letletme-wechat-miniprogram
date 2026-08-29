@@ -243,6 +243,61 @@ async function main(): Promise<void> {
     assertEqual(run.boardCalls.length, 0, "a null cursor never fetches a board");
   }
 
+  // updateSeed while a timer is pending reschedules from the new seed: a
+  // newly hot window must not sit out the old idle delay.
+  {
+    const run = harness({ cursor: null });
+    await run.poller.start();
+    const pending = run.poller as unknown as {
+      timer: unknown;
+      windowDeadline: unknown;
+    };
+    const oldTimer = pending.timer;
+    assert(oldTimer !== null, "the first tick leaves a pending timer");
+    const deadline = new Date(Date.now() + 2 * MIN).toISOString();
+    run.poller.updateSeed({ revision: "durable-1", deadline, nextDeadlines: [] });
+    assert(
+      pending.timer !== null && pending.timer !== oldTimer,
+      "updateSeed reschedules the pending timer",
+    );
+    assertEqual(
+      pending.windowDeadline,
+      Date.parse(deadline),
+      "updateSeed recomputes the window deadline from the new seed",
+    );
+    run.poller.stop();
+  }
+
+  // A tick that started under an old seed must not overwrite the refreshed
+  // board when updateSeed lands mid-request.
+  {
+    let resolveCursor: ((cursor: PriceChangeLiveCursor | null) => void) | undefined;
+    const updates: string[] = [];
+    const poller = new PriceChangeLivePoller(
+      {
+        onUpdate: (board, state) => updates.push(`${state}:${board.revision}`),
+        onReset: () => undefined,
+      },
+      {
+        readCursor: () =>
+          new Promise((resolve) => {
+            resolveCursor = resolve;
+          }),
+        readBoard: async () => fakeLiveBoard("PROVISIONAL", "hot-1", "hash-1"),
+      },
+    );
+    poller.updateSeed({ revision: "durable-0", deadline: null, nextDeadlines: [] });
+    const firstTick = poller.start();
+    poller.updateSeed(
+      { revision: "durable-1", deadline: null, nextDeadlines: [] },
+      fakeBoard("durable-1"),
+    );
+    resolveCursor?.(fakeCursor("PROVISIONAL", "hot-1", "hash-1"));
+    await firstTick;
+    poller.stop();
+    assertEqual(updates.length, 0, "stale tick never overwrites a replaced seed");
+  }
+
   console.log("price-change-live tests passed");
 }
 

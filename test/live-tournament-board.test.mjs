@@ -56,3 +56,19 @@ test("the board pipeline keeps score-level overall rank ahead of the row value",
   const service = source("miniprogram/services/live-board.service.ts");
   assert.match(service, /overallRank: row\.overallRank \?\? page\.rows\[index\]\?\.overallRank/);
 });
+
+test("tournament detail sheet drops stale responses from a previous selection", () => {
+  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+
+  // A pending request only dedupes a reopen of the same tournament; a
+  // different selection starts its own load and supersedes the old one.
+  assert.match(controller, /detailLoading && this\.detailRequestKey === key\) return;/);
+  assert.match(controller, /const requestId = \+\+this\.detailRequestId;/);
+  assert.match(controller, /this\.detailRequestKey = key;/);
+  // Late responses from a superseded request never commit, and never clear
+  // the newer request's loading flag.
+  assert.match(controller, /if \(requestId !== this\.detailRequestId\) return;/);
+  assert.match(controller, /this\.pageVisible && requestId === this\.detailRequestId/);
+  // Switching modes/tournaments invalidates a pending detail request.
+  assert.match(controller, /this\.detailRequestId \+= 1;/);
+});

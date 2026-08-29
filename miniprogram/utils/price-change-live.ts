@@ -121,6 +121,7 @@ export class PriceChangeLivePoller {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight = false;
   private stopped = true;
+  private seedGeneration = 0;
 
   constructor(
     handlers: PriceChangeLivePollerHandlers,
@@ -141,6 +142,22 @@ export class PriceChangeLivePoller {
     this.revision = seed.revision;
     this.sourceHash = null;
     this.state = "DURABLE";
+    this.seedGeneration += 1;
+    // The retained window belongs to the replaced seed.
+    this.windowDeadline = null;
+    // A running poller must not keep a timer scheduled from the replaced
+    // seed: a newly hot/final window would otherwise sit out the old idle
+    // delay. An in-flight tick reschedules from the new seed in its finally
+    // block, so only a pending timer needs an explicit refresh.
+    if (!this.stopped && !this.inFlight && this.timer !== null) {
+      const policy = resolvePriceChangeLivePollPolicy(
+        this.policySeed,
+        Date.now(),
+        this.windowDeadline,
+      );
+      this.windowDeadline = policy.windowDeadline;
+      this.schedule(policy.delayMs);
+    }
   }
 
   /** Starts the loop; the returned promise settles when the first tick ends. */
@@ -172,6 +189,7 @@ export class PriceChangeLivePoller {
   /** One poll cycle; public so tests can drive ticks without timers. */
   async pollOnce(): Promise<void> {
     if (this.stopped || this.inFlight) return;
+    const seedGeneration = this.seedGeneration;
     const atStart = resolvePriceChangeLivePollPolicy(
       this.policySeed,
       Date.now(),
@@ -182,6 +200,9 @@ export class PriceChangeLivePoller {
     try {
       // Read failures degrade to a skipped tick (web fetchJson → null parity).
       const cursor = await this.reads.readCursor().catch(() => null);
+      // A seed replaced mid-tick already rendered fresher data; this tick's
+      // reads began under the old seed and must not overwrite it.
+      if (seedGeneration !== this.seedGeneration) return;
       if (cursor) {
         if (!cursor.revision || cursor.state === "UNAVAILABLE") {
           // A provisional snapshot can expire or be withdrawn before the next
@@ -218,6 +239,7 @@ export class PriceChangeLivePoller {
                   .readBoard(cursor.revision, cursor.sourceHash ?? undefined)
                   .catch(() => null)
               : await this.reads.readBoard().catch(() => null);
+          if (seedGeneration !== this.seedGeneration) return;
           const revisionMatches =
             cursor.state !== "PROVISIONAL" ||
             (live?.revision === cursor.revision &&
