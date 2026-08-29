@@ -115,7 +115,6 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   MyFplCompetitionBoard: { authMode: "session", cachePolicy: "reporting" },
   MyFplCompetitionSeasonPath: { authMode: "session", cachePolicy: "reporting" },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
-  GetEntryLiveCompetitionsDesk: { authMode: "session", cachePolicy: "live" },
   GetEntryLiveCompetitionBoard: { authMode: "session", cachePolicy: "network-only" },
   GetTournamentSelectionIndex: { authMode: "session", cachePolicy: "network-only" },
   GetTournamentEntrySquads: { authMode: "session", cachePolicy: "network-only" },

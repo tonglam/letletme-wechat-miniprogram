@@ -1,10 +1,6 @@
 import { PerformancePage } from "../../../utils/performance-page";
 import { getEntryPointsRaceTournament } from "../../../services/tournament.service";
-import {
-  getLivePointsByTournamentSnapshot,
-  getLiveSnapshot,
-  searchLivePointsByTournamentSnapshot,
-} from "../../../services/live.service";
+import { getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import {
   boardRowsToLiveRows,
@@ -13,7 +9,6 @@ import {
   getTournamentEntrySquads,
   getTournamentSelectionIndex,
   hasLiveBoardErrorCode,
-  isLiveBoardSchemaUnavailableError,
   liveBoardLastGoodKey,
   liveBoardSessionKey,
   readLiveBoardLastGood,
@@ -70,12 +65,9 @@ import {
   hasUnresolvedTournamentTeamExposureRules,
   isTournamentBoardControlGenerationCurrent,
   compareKnownTournamentValues,
-  combinedTournamentTraceableEntries,
-  combinedTournamentTraceableScoreStates,
   mergeUnavailableTournamentEntryIds,
   officialTournamentTotalPoints,
   tournamentManagerScoreStatus,
-  tournamentScoreNextRefreshAt,
   type TournamentCaptainMode,
   type TournamentOwnershipScope,
   type TournamentTeamOption,
@@ -1038,7 +1030,6 @@ function clearTournamentBoard(page: object): void {
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
     boardPage?: LiveBoardPage | null;
-    usingLegacyBoard?: boolean;
     selectionIndexKey?: string;
     selectionIndexRequestId?: number;
     compareRequestId?: number;
@@ -1053,7 +1044,6 @@ function clearTournamentBoard(page: object): void {
   board.officialTotalEntries = undefined;
   board.unavailableEntryIds = [];
   board.boardPage = null;
-  board.usingLegacyBoard = false;
   board.selectionIndexKey = "";
   board.selectionIndexRequestId = (board.selectionIndexRequestId || 0) + 1;
   board.compareRequestId = (board.compareRequestId || 0) + 1;
@@ -1226,7 +1216,6 @@ PerformancePage({
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   boardPage: null as LiveBoardPage | null,
-  usingLegacyBoard: false,
   selectionIndexKey: "",
   selectionIndexRequestId: 0,
   compareRequestId: 0,
@@ -1356,11 +1345,11 @@ PerformancePage({
           this.setData({
             error: "",
             errorSuffix: "",
-            ...(this.usingLegacyBoard && snapshot?.checkedAt
+            ...(snapshot?.checkedAt
               ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
               : {}),
           });
-        } else if (this.usingLegacyBoard && snapshot?.checkedAt) {
+        } else if (snapshot?.checkedAt) {
           this.setData({
             lastUpdated: formatTime(new Date(snapshot.checkedAt)),
           });
@@ -2211,7 +2200,6 @@ PerformancePage({
       )
       .filter((name): name is string => Boolean(name));
     this.boardPage = page;
-    this.usingLegacyBoard = false;
     this.rows = rows;
     this.shareRows = rows;
     this.officialCoverage = page.officialCoverage;
@@ -2305,7 +2293,7 @@ PerformancePage({
   async loadSelectionIndex() {
     const page = this.boardPage;
     const scope = this.currentBoardScope();
-    if (!page || !scope || this.usingLegacyBoard) return;
+    if (!page || !scope) return;
     const key = `${scope.tournamentId}:${scope.eventId}:${page.playerRevision}`;
     if (this.selectionIndexKey === key && this.ownershipPlayers.length > 0) {
       return;
@@ -2392,16 +2380,7 @@ PerformancePage({
     const scope = this.currentBoardScope();
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
     if (comparedEntryIds.length !== 2) return;
-    if (!page || !scope || this.usingLegacyBoard) {
-      const compareSelection = compareSelectionState(this.rows, comparedEntryIds);
-      this.setData({
-        ...compareSelection,
-        compareOpen: Boolean(
-          compareSelection.compareLeft && compareSelection.compareRight,
-        ),
-      });
-      return;
-    }
+    if (!page || !scope) return;
     const requestId = this.compareRequestId + 1;
     this.compareRequestId = requestId;
     this.setData({ compareLoading: true, compareError: "", compareOpen: false });
@@ -2477,14 +2456,6 @@ PerformancePage({
       this.syncDisplayState();
       return Promise.resolve();
     }
-    if (
-      this.usingLegacyBoard &&
-      hasUnresolvedTournamentTeamExposureRules(this.data.teamExposureRules)
-    ) {
-      // Legacy team options are keyed by short name only. Do not let a
-      // recovered paged request silently drop those rules from its variables.
-      return this.loadLegacyRows(options);
-    }
     const variables = this.buildBoardVariables();
     if (!variables) {
       const error = new Error("当前会话或赛事信息不完整，请重新进入页面");
@@ -2526,11 +2497,17 @@ PerformancePage({
     const preserveData = this.data.hasData || options.background === true || Boolean(cached);
     this.setData(
       preserveData
-        ? { refreshing: true, error: "", errorSuffix: "" }
+        ? {
+            refreshing: true,
+            error: "",
+            errorSuffix: "",
+            errorWorkload: "gameweek" as const,
+          }
         : {
             loading: true,
             error: "",
             errorSuffix: "",
+            errorWorkload: "gameweek" as const,
             scoreStatusText: "正在确认官方分数",
           },
     );
@@ -2563,15 +2540,11 @@ PerformancePage({
         this.syncDisplayState();
       } catch (error) {
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
-        if (isLiveBoardSchemaUnavailableError(error)) {
-          this.usingLegacyBoard = true;
-          await this.loadLegacyRows({ ...options, trace });
-          return;
-        }
         if (this.restartForPrincipalChange(variables.entryId)) return;
         this.setData({
           error: error instanceof Error ? error.message : "实时赛事加载失败",
           errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
+          errorWorkload: "gameweek",
         });
         this.syncDisplayState();
         if (options.propagateError) throw error;
@@ -3332,13 +3305,9 @@ PerformancePage({
     });
   },
 
-  reloadBoardControls(options: { fetchLegacy?: boolean } = {}) {
+  reloadBoardControls() {
     const controlRequestId = this.boardControlRequestId + 1;
     this.boardControlRequestId = controlRequestId;
-    if (this.usingLegacyBoard && !options.fetchLegacy) {
-      this.applyRows(this.rows, true);
-      return;
-    }
     return this.loadRows({
       background: this.data.hasData,
       propagateError: true,
@@ -3374,7 +3343,7 @@ PerformancePage({
     resetPage: boolean,
     fetchedAt?: number,
   ) {
-    if (!this.usingLegacyBoard && this.boardPage) {
+    if (this.boardPage) {
       this.syncBoardCompareMarkers();
       return;
     }
@@ -3633,13 +3602,13 @@ PerformancePage({
     if (event) {
       this.setData({ keyword: this._submittedKeyword });
     }
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 
   onResetSearch() {
     this._submittedKeyword = "";
     this.setData({ keyword: "" });
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 
   onGwChange(event: WechatMiniprogram.CustomEvent<{ value: number }>) {
@@ -3839,15 +3808,6 @@ PerformancePage({
 
   onOpenCompareSheet() {
     if (this.data.compareIds.length !== 2) return;
-    if (this.usingLegacyBoard) {
-      const compareSelection = compareSelectionState(
-        this.rows,
-        this.data.compareIds,
-      );
-      if (!compareSelection.compareLeft || !compareSelection.compareRight) return;
-      this.setData({ ...compareSelection, compareOpen: true });
-      return;
-    }
     void this.loadCompareSquads();
   },
 
@@ -3877,7 +3837,7 @@ PerformancePage({
       compareHint: compareHintText(current.length),
       compareLeft: left,
       compareRight: right,
-      compareOpen: this.usingLegacyBoard && current.length === 2,
+      compareOpen: false,
       compareLoading: false,
       compareError: "",
       compareLineupRows: [],
@@ -3885,7 +3845,7 @@ PerformancePage({
       compareRightPickCount: 0,
     });
     this.syncBoardCompareMarkers();
-    if (current.length === 2 && !this.usingLegacyBoard) {
+    if (current.length === 2) {
       void this.loadCompareSquads();
     }
   },
@@ -4122,10 +4082,7 @@ PerformancePage({
     if (!this.data.hasMore) {
       return;
     }
-    if (this.usingLegacyBoard || !this.boardPage) {
-      this.applyRows(this.rows, false);
-      return;
-    }
+    if (!this.boardPage) return;
     if (!canPaginateTournamentBoard({
       loading: this.data.loading,
       refreshing: this.data.refreshing,
@@ -4234,7 +4191,6 @@ PerformancePage({
     const board = this.boardPage;
     const scope = this.currentBoardScope();
     if (
-      this.usingLegacyBoard ||
       !board ||
       !scope ||
       currentRows.length >= board.filteredEntries
@@ -4327,7 +4283,7 @@ PerformancePage({
         }
         const expectedRows = this.boardPage?.filteredEntries || this.data.filteredCount;
         const entriesText =
-          complete || this.usingLegacyBoard
+          complete
             ? this.data.entriesText
             : `${rows.length}/${expectedRows}（当前已加载）`;
         const text = formatLiveTournamentShareText({
@@ -4623,9 +4579,6 @@ PerformancePage({
       teamExposureScope: "any",
       activeFilterCount: 0,
     });
-    // Legacy keyword reads may contain only a subset, so clearing still needs
-    // a server read. Keep the previous controls and rows transactionally until
-    // that replacement succeeds.
-    this.reloadBoardControls({ fetchLegacy: true });
+    this.reloadBoardControls();
   },
 });

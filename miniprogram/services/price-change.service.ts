@@ -189,7 +189,6 @@ function persistLastGoodBoard(board: PriceChangeBoard): void {
   const fetchedAt = board.fetchedAt ? Date.parse(board.fetchedAt) : NaN;
   const savedAt = Number.isFinite(fetchedAt) ? fetchedAt : Date.now();
 	try {
-		purgeLegacyLastGoodBoard();
 		wx.setStorageSync(storageKeys.lastPriceChangeBoard, { savedAt, board });
   } catch {
     // Persistent last-good is an enhancement; the GraphQL cache still applies.
@@ -198,7 +197,6 @@ function persistLastGoodBoard(board: PriceChangeBoard): void {
 
 export function readLastGoodPriceChangeBoard(now = Date.now()): StoredPriceChangeBoard | null {
 	try {
-		purgeLegacyLastGoodBoard();
 		const value = wx.getStorageSync(storageKeys.lastPriceChangeBoard) as unknown;
     if (!isRecord(value) || typeof value.savedAt !== "number") return null;
     if (now - value.savedAt >= LAST_GOOD_MAX_AGE_MS || now < value.savedAt - MINUTE) {
@@ -210,14 +208,6 @@ export function readLastGoodPriceChangeBoard(now = Date.now()): StoredPriceChang
   } catch {
     return null;
   }
-}
-
-function purgeLegacyLastGoodBoard(): void {
-	try {
-		wx.removeStorageSync(storageKeys.legacyLastPriceChangeBoard);
-	} catch {
-		// Cache migration is best effort; the v2 key is the only key ever read.
-	}
 }
 
 function lastGoodPriceChangeBoardRead(): PriceChangeBoardRead | null {

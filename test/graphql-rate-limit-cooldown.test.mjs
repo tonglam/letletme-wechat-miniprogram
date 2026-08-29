@@ -265,12 +265,12 @@ test("a longer global cooldown wins over a shorter workload cooldown", () => {
   assert.equal(state.remainingSeconds, 60);
 });
 
-test("legacy FORBIDDEN application errors are limited to the viewer-entry recovery predicate", () => {
+test("only the canonical viewer-entry error enables viewer recovery", () => {
   assert.equal(
     isViewerEntryAuthorizationError(
       new GraphQLApplicationError([{ extensions: { code: "FORBIDDEN" } }]),
     ),
-    true,
+    false,
   );
   assert.equal(
     isViewerEntryAuthorizationError(

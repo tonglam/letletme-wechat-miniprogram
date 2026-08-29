@@ -221,6 +221,12 @@ test("EntryLookup caches only authoritative database hits", () => {
   assert.equal(shouldCacheGraphQLData("EntryLookup", {
     entryLookup: { status: "UNAVAILABLE", entry: null },
   }), false);
+  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
+    playerDetail: { dataAvailability: { isFullyAuthoritative: false } },
+  }), false);
+  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
+    playerDetail: { dataAvailability: { isFullyAuthoritative: true } },
+  }), true);
   assert.equal(
     shouldCacheGraphQLData("EntryLeagues", { entryLeagues: [] }),
     true,

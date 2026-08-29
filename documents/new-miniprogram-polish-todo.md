@@ -8,7 +8,7 @@
 - 2026-04-28: Polish todo created after starter implementation reached service-backed pages and shared components.
 - 2026-04-28: Home code now forces unbound users to `pages/entry/search/search`; WeChat DevTools verification is still required.
 - 2026-04-28: Home polish implemented in code: normalized fixtures, countdown, refresh event/deadline flow, compact notice strip, four shortcuts, and dashboard styling.
-- 2026-04-28: Entry binding page restyled after rendered screenshot review; binding now validates Entry ID through GraphQL `entry(id)` instead of the old REST fuzzy-search path. Runtime config uses Mini Program `envVersion`: `develop` -> `http://127.0.0.1:4000/graphql`, `trial/release` -> web proxy. Dev override is available through local storage key `letletme_graphql_endpoint_override`.
+- 2026-04-28: Entry binding page restyled after rendered screenshot review; binding now validates Entry ID through GraphQL `entryLookup(id)` instead of the old REST fuzzy-search path. Runtime config uses Mini Program `envVersion`: `develop` -> `http://127.0.0.1:4000/graphql`, `trial/release` -> web proxy. Dev override is available through local storage key `letletme_graphql_endpoint_override`.
 - 2026-04-29: Summary-page polish compared the old Mini Program summary pages with the new TypeScript pages. Scope kept to the three rebuilt core pages: `summary/gameweek` replaces old `summary/overall`; `summary/entry` carries forward old entry tabs; `summary/league` carries forward old league picker, averages, rankings, captain, and score sections. Old niche pages (`groupTournament`, `scout`, `special`) remain deferred.
 - 2026-04-29: Data-page comparison scoped to existing pages only. Old `stat/player` maps to new `data/player-detail`; old `stat/team` maps to new `data/team-detail`; old `stat/price` maps to new `data/price`; old `stat/fixture` is referenced by the new data hub but the new fixture page is not present. Old `stat/filter`, `stat/select`, and `stat/record/*` are not included in this pass because there is no existing new page to compare against.
 - 2026-04-29: REST-to-GraphQL audit replaced existing GraphQL-backed reads for players, teams, fixtures, price values/history, entry league/history/event/transfer reads, and GW summary/dream-team/elite/transfer reads. Remaining REST calls are refresh/job endpoints or summary season aggregate reads without a matching GraphQL field in `/Users/tong/CursorProjects/letletme-graphql`.
@@ -79,7 +79,7 @@
 - [x] Add deadline countdown display using Mini Program-safe interval logic.
 - [x] Add countdown-finish flow: refresh event/deadline, refresh app global data, reload home data.
 - [x] Make pull-down refresh call GraphQL `currentEventInfo`, then `app.initAppData()`, then reload home fixtures/notice/entry.
-- [x] Avoid unnecessary GraphQL `entry(id)` calls when no Entry ID exists.
+- [x] Avoid unnecessary GraphQL `entryLookup(id)` calls when no Entry ID exists.
 - [x] Convert notice display into a compact notice strip and support long text wrapping.
 - [x] Add four shortcuts: Live, Data, Summary, Me; use `switchTab` only for tab pages.
 - [x] Decide fixture-row navigation: fixture rows are non-linking; “更多” routes to `data/fixtures`.
@@ -91,7 +91,7 @@
 - [x] Add input validation messages that do not rely only on error-state full-page block.
 - [x] Add submit behavior from keyboard confirm.
 - [x] Remove visible team/player fuzzy search until Web GraphQL exposes a supported search query.
-- [x] Validate and bind Entry ID through GraphQL `entry(id)`; local dev resolves from Mini Program `envVersion`, not a hardcoded `APP_ENV`.
+- [x] Validate and bind Entry ID through GraphQL `entryLookup(id)`; local dev resolves from Mini Program `envVersion`, not a hardcoded `APP_ENV`.
 - [x] Add local GraphQL endpoint override support through `letletme_graphql_endpoint_override` storage.
 - [x] Add fixed Mini Program button styling so default button typography does not render oversized.
 - [x] Add loading state while Entry ID validation is running.
@@ -313,7 +313,7 @@
 ## API And Backend Shape Checks
 
 - [x] Verify current app source no longer calls legacy REST endpoints.
-- [x] Replace entry binding/profile info source with Web GraphQL `entry(id)`.
+- [x] Replace entry binding/profile info source with Web GraphQL `entryLookup(id)` and handle explicit lookup statuses.
 - [ ] Confirm request domain whitelist includes `https://letletme.top`; retain `https://www.letletme.top` for one compatibility release.
 - [ ] Verify actual backend response shape for live entry, match, and tournament GraphQL operations.
 - [ ] Verify actual backend response shape for player/team/price/fixture GraphQL operations.

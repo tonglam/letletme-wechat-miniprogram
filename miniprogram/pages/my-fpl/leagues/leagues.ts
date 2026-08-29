@@ -708,8 +708,8 @@ PerformancePage({
     try {
       // The web and GraphQL backends now expose one authenticated desk for
       // My FPL competitions. It owns membership, setup state, finalized-event
-      // gating, and the tournament directory; the legacy entryTournaments
-      // projection can be stale or disagree with the selected viewer.
+      // gating, and the tournament directory; no separate legacy projection
+      // is consulted for the selected viewer.
       let desk: MyFplCompetitionsDesk;
       try {
         desk = await getMyFplCompetitionsDesk(

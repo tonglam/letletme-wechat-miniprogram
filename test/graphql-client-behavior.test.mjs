@@ -32,6 +32,16 @@ function installRuntime(handler) {
       storage.delete(key);
       success?.({});
     },
+    canIUse: (schema) =>
+      schema === "setStorage.object.encrypt" ||
+      schema === "getStorage.object.encrypt",
+    getStorage: ({ key, success, fail }) => {
+      if (storage.has(key)) {
+        success?.({ data: storage.get(key), errMsg: "getStorage:ok" });
+      } else {
+        fail?.({ errMsg: "getStorage:fail data not found" });
+      }
+    },
     showToast: () => undefined,
     request: (options) => {
       if (options.url.endsWith("/api/miniprogram/telemetry")) {
@@ -242,6 +252,36 @@ test("stale fallback is limited to transient transport failures", async () => {
   await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
 });
 
+test("graphqlRequest explicitly maps stale fallback data before discarding metadata", async () => {
+  const runtime = installRuntime(success({ value: { authoritative: true } }));
+  const query = "query BehaviorMappedStale { value { authoritative } }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 1,
+    staleTtl: 60_000,
+  };
+
+  await graphqlRequest(query, {}, options);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  runtime.setHandler((request) =>
+    request.fail({ errMsg: "request:fail timeout" }),
+  );
+  const stale = await graphqlRequest(query, {}, {
+    ...options,
+    forceRefresh: true,
+    mapStaleData(data) {
+      return {
+        ...data,
+        value: { ...data.value, authoritative: false, stale: true },
+      };
+    },
+  });
+
+  assert.deepEqual(stale, {
+    value: { authoritative: false, stale: true },
+  });
+});
+
 test("session refresh network failure serves stale data without a second refresh", async () => {
   const runtime = installRuntime(success({ value: "last-good" }));
   const query = "query BehaviorSessionRefreshStale { value }";
@@ -311,12 +351,22 @@ test("session retry re-keys the in-flight request for the refreshed token", asyn
           expiresAt: "2099-01-01T00:00:00.000Z",
           profile: {
             id: "refreshed-account",
+            name: null,
+            email: null,
+            emailVerified: false,
+            image: null,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            accountMode: "MINI_ONLY",
             followEntryId: 202,
             effectiveEntryId: 202,
             effectiveEntrySource: "MINI",
             webAccountLinked: false,
             entryConflict: false,
+            webVerifiedEntryId: null,
             wechatLinked: true,
+            fplEntryId: null,
+            fplEntryBoundAt: null,
+            fplEntryVerifiedAt: null,
           },
         },
       });
@@ -375,6 +425,39 @@ test("session retry joins a request already running under the refreshed token", 
   let firstRequest;
   let secondRequest;
   const runtime = installRuntime((request) => {
+    if (request.url.endsWith("/wechat/login")) {
+      request.success({
+        statusCode: 200,
+        data: {
+          success: true,
+          contractVersion: 2,
+          authenticated: true,
+          webAccountLinked: false,
+          token: "session-b",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          profile: {
+            id: "refreshed-account",
+            name: null,
+            email: null,
+            emailVerified: false,
+            image: null,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            accountMode: "MINI_ONLY",
+            webAccountLinked: false,
+            followEntryId: null,
+            webVerifiedEntryId: null,
+            effectiveEntryId: null,
+            effectiveEntrySource: null,
+            entryConflict: false,
+            fplEntryId: null,
+            fplEntryBoundAt: null,
+            fplEntryVerifiedAt: null,
+            wechatLinked: true,
+          },
+        },
+      });
+      return;
+    }
     graphQLRequests += 1;
     if (graphQLRequests === 1) {
       firstRequest = request;
@@ -386,6 +469,7 @@ test("session retry joins a request already running under the refreshed token", 
     }
     request.fail({ errMsg: "unexpected duplicate GraphQL request" });
   });
+  globalThis.wx.login = ({ success }) => success({ code: "refresh-code" });
   clearSessionCredentials();
   runtime.storage.set("api-session-token", "session-a");
   runtime.storage.set("api-session-expires-at", "2099-01-01T00:00:00.000Z");

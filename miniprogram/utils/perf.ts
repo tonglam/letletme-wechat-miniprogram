@@ -122,7 +122,7 @@ export interface MyFplVisitRecord {
 export interface CompetitionVisitRecord {
   surface: "list";
   principalState?: string;
-  contractSource: "compat";
+  contractSource: "canonical";
   listCountBucket?: "0" | "1" | "2-5" | "6-20" | ">20";
   cacheOutcome?: "fresh" | "last-good" | "miss";
   handoffActionType?: string;
@@ -132,7 +132,7 @@ export interface CompetitionVisitRecord {
 
 export interface ExploreVisitRecord {
   surface: "overview" | "fixtures";
-  contractSource: "compat";
+  contractSource: "canonical";
   eventId?: number;
   horizon?: 3 | 5 | 8;
   cacheOutcome?: "fresh" | "last-good" | "miss";
