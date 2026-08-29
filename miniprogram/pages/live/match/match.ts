@@ -865,8 +865,8 @@ Page({
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.checkedAt
-            ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+          ...(snapshot?.sourceCheckedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)) }
             : {}),
         });
         this.syncDisplayState();
@@ -892,7 +892,6 @@ Page({
             this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
-          coverageFailed: this.liveSnapshot?.coverageFailed,
           probeDurationBucket: durationBucket(info.probeDurationMs),
           fullFetchDurationBucket:
             info.reloadDurationMs === undefined

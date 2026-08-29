@@ -3,7 +3,7 @@ import type { LiveSnapshotStatus } from "../models/live";
 
 /**
  * Owns the refresh lifecycle every Live page used to hand-roll: a
- * server-deadline eligibility-gated timer, a single-flight revision probe, revision-based
+ * server-deadline eligibility-gated timer, a single-flight revision probe, score-revision-based
  * full-reload triggering, and stale-response guards — plus offline-aware
  * stop/resume, which previously did not exist anywhere.
  *
@@ -18,15 +18,9 @@ export interface LiveRefreshControllerOptions {
   probe: () => Promise<LiveSnapshotStatus | null>;
   /** Background full reload after a revision/event change. */
   reload: () => Promise<void>;
-  /** Adopt an observed snapshot that turned out unchanged (fresh checkedAt). */
+  /** Adopt an observed snapshot that turned out unchanged. */
   acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
-  /** Official manager score may need a reload after the player snapshot settles. */
-  shouldReloadOnUnchangedProbe?: () => boolean;
-  /**
-   * Optional manager refresh deadline.  A page can remain on an unchanged
-   * player snapshot while the official manager aggregate is scheduled to
-   * publish later, so the controller arms a one-shot probe for that deadline.
-   */
+  /** The server's next check deadline; this schedules a probe only. */
   getNextRefreshAt?: () => string | null | undefined;
   /** Probe failure: current data is kept, the page only updates its status. */
   onProbeError?: (message: string) => void;
@@ -120,8 +114,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
         const probeDurationMs = Date.now() - probeStart;
         if (isResponseStale(requestId)) return;
         if (
-          !liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed) &&
-          !options.shouldReloadOnUnchangedProbe?.()
+          !liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed)
         ) {
           options.onProbeSettled?.({
             snapshotState: observed?.state,

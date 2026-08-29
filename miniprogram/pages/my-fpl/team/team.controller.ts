@@ -70,7 +70,7 @@ export function phaseBannerFromSnapshot(
   // The current snapshot contract has no explicit SETTLING state. Without a
   // successful probe (or a deadline passed into this page), absence is
   // unknown rather than evidence that processing has begun.
-  return snapshotState === "LIVE" ? "live" : "";
+  return snapshotState === "LIVE_ACTIVE" ? "live" : "";
 }
 
 type EntrySummaryTab = "squad" | "transfer" | "chips" | "history";

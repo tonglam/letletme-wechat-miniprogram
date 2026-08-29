@@ -2,6 +2,9 @@ import type { LiveSnapshotStatus } from "../models/live";
 
 export const LIVE_REFRESH_INTERVAL_MS = 30_000;
 
+const contentRevision = (snapshot: LiveSnapshotStatus): string =>
+  snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "";
+
 export function liveSnapshotNeedsRefresh(
   accepted?: LiveSnapshotStatus | null,
   observed?: LiveSnapshotStatus | null,
@@ -9,11 +12,11 @@ export function liveSnapshotNeedsRefresh(
   if (!accepted || !observed) return true;
   return (
     accepted.eventId !== observed.eventId ||
-    accepted.revision !== observed.revision ||
-    accepted.windowState !== observed.windowState
+    contentRevision(accepted) !== contentRevision(observed)
   );
 }
 
+/** Only the server's next-refresh deadline controls score polling. */
 export function shouldPollLiveSnapshot(options: {
   pageVisible: boolean;
   currentEventId?: number;
@@ -21,8 +24,6 @@ export function shouldPollLiveSnapshot(options: {
   snapshot?: LiveSnapshotStatus | null;
   windowState?: string | null;
   nextRefreshAt?: string | null;
-  managerScoreState?: string | null;
-  managerNextRefreshAt?: string | null;
 }): boolean {
   const {
     pageVisible,
@@ -31,34 +32,15 @@ export function shouldPollLiveSnapshot(options: {
     snapshot,
     windowState,
     nextRefreshAt,
-    managerScoreState,
-    managerNextRefreshAt,
   } = options;
-  if (!pageVisible || !currentEventId || selectedEventId !== currentEventId) {
+  if (!pageVisible || !currentEventId || selectedEventId !== currentEventId)
     return false;
-  }
-  // Missing or stale metadata must not wedge current-event recovery after a
-  // failed gameweek switch or a rolling backend deployment.
   if (!snapshot || snapshot.eventId !== selectedEventId) return true;
-  // PRESEASON retains an upcoming anchor and should use the server's low
-  // cadence context deadline so all live desks can switch after the first
-  // actual kickoff. Only a true offseason has no useful probe target.
-  if (windowState === "OFFSEASON") return false;
-  if (managerScoreState === "SETTLING") return true;
-  if (managerNextRefreshAt && Number.isFinite(Date.parse(managerNextRefreshAt)))
-    return true;
-  if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
-  if (
-    !windowState &&
-    !snapshot.windowState &&
-    (snapshot.state === "SETTLED" || snapshot.state === "FINALIZED")
-  ) {
+  if (windowState === "OFFSEASON" || windowState === "BETWEEN_GAMEWEEKS")
     return false;
-  }
-  const resolvedWindowState = windowState ?? snapshot.windowState;
-  return (
-    resolvedWindowState !== "FINALIZED" &&
-    resolvedWindowState !== "BETWEEN_GAMEWEEKS"
+  if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
+  return !["FINALIZED", "OFFSEASON", "BETWEEN_GAMEWEEKS"].includes(
+    windowState ?? snapshot.state,
   );
 }
 
