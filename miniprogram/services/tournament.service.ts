@@ -568,12 +568,18 @@ export const GET_MY_TOURNAMENT_SEASON_REVIEW = `
 const myTournamentReviewOptions = (
   forceRefresh: boolean,
   trace?: PageRequestTrace,
+  viewerEntryId?: number | null,
 ) => ({
   cachePolicy: "reporting" as const,
   cacheTtl: MY_TOURNAMENT_REVIEW_CACHE_TTL_MS,
   staleTtl: MY_TOURNAMENT_REVIEW_STALE_TTL_MS,
   forceRefresh,
   trace,
+  cacheVariant: `viewer-entry:${
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? Number(viewerEntryId)
+      : "none"
+  }`,
   contract: MY_TOURNAMENT_REVIEW_CONTRACT,
   mapStaleData: mapStaleTournamentReviewData,
 });
@@ -582,13 +588,14 @@ export async function getMyTournamentReviewCatalog(
   scope: MyTournamentReviewScope = "ACCESSIBLE",
   forceRefresh = false,
   trace?: PageRequestTrace,
+  viewerEntryId?: number | null,
 ): Promise<MyTournamentReviewCatalog> {
   const data = await graphqlRequest<{
     myTournamentReviewCatalog: MyTournamentReviewCatalog;
   }>(
     GET_MY_TOURNAMENT_REVIEW_CATALOG,
     { scope },
-    myTournamentReviewOptions(forceRefresh, trace),
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
   );
   return data.myTournamentReviewCatalog;
 }
@@ -600,13 +607,14 @@ export async function getMyTournamentGameweekReview(
   trace?: PageRequestTrace,
   after: string | null = null,
   revision: string | null = null,
+  viewerEntryId?: number | null,
 ): Promise<MyTournamentGameweekReview> {
   const data = await graphqlRequest<{
     myTournamentGameweekReview: MyTournamentGameweekReview;
   }>(
     GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
     { tournamentId, eventId, first: 100, after, revision },
-    myTournamentReviewOptions(forceRefresh, trace),
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
   );
   return data.myTournamentGameweekReview;
 }
@@ -617,13 +625,14 @@ export async function getMyTournamentSeasonReview(
   forceRefresh = false,
   trace?: PageRequestTrace,
   after: string | null = null,
+  viewerEntryId?: number | null,
 ): Promise<MyTournamentSeasonReview> {
   const data = await graphqlRequest<{
     myTournamentSeasonReview: MyTournamentSeasonReview;
   }>(
     GET_MY_TOURNAMENT_SEASON_REVIEW,
     { tournamentId, throughEventId, first: 100, after },
-    myTournamentReviewOptions(forceRefresh, trace),
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
   );
   return data.myTournamentSeasonReview;
 }

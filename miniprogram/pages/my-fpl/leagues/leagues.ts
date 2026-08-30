@@ -849,6 +849,7 @@ PerformancePage({
           scope,
           forceRefresh,
           trace ?? undefined,
+          entryId,
         );
       } catch (error) {
         if (!isViewerEntryAuthorizationError(error)) throw error;
@@ -886,6 +887,7 @@ PerformancePage({
           scope,
           true,
           trace ?? undefined,
+          entryId,
         );
       }
       if (!isActiveRequest()) return;
@@ -1040,8 +1042,18 @@ PerformancePage({
           eventId,
           forceRefresh,
           trace,
+          null,
+          null,
+          this.data.entryId,
         ),
-        getMyTournamentSeasonReview(tournamentId, eventId, forceRefresh, trace),
+        getMyTournamentSeasonReview(
+          tournamentId,
+          eventId,
+          forceRefresh,
+          trace,
+          null,
+          this.data.entryId,
+        ),
       ]);
       if (!isActiveRequest()) return;
       const selected =
@@ -1117,6 +1129,11 @@ PerformancePage({
       this.setData({ v2Error: "赛事复盘快照版本缺失，请重试" });
       return;
     }
+    if (requestView === "season" && !seasonRevision) {
+      this.v2RetryOperation = "review";
+      this.setData({ v2Error: "赛事复盘快照版本缺失，请重试" });
+      return;
+    }
     const requestId = this.viewRequestId;
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-leagues-v2",
@@ -1132,6 +1149,7 @@ PerformancePage({
           true,
           trace,
           after,
+          this.data.entryId,
         );
         if (
           !this.pageVisible ||
@@ -1150,6 +1168,8 @@ PerformancePage({
           : next;
         this.setData({
           v2Season: merged,
+          v2State: merged.state,
+          v2StatusText: tournamentReviewStateText(merged.state),
           v2HasNextPage: Boolean(tournamentReviewNextCursor(merged)),
         });
         this.v2RetryOperation = null;
@@ -1161,6 +1181,7 @@ PerformancePage({
           trace,
           after,
           gameweekRevision,
+          this.data.entryId,
         );
         if (
           !this.pageVisible ||
@@ -1179,6 +1200,8 @@ PerformancePage({
           : next;
         this.setData({
           v2Gameweek: merged,
+          v2State: merged.state,
+          v2StatusText: tournamentReviewStateText(merged.state),
           v2TransferCostTotal: tournamentReviewTransferCostTotal(merged.points),
           v2HeadlineLabel: tournamentReviewHeadlineLabel(
             merged.points?.headlineMetric ?? "gross",

@@ -170,6 +170,9 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.doesNotMatch(template, /freshness\.ageSeconds/);
   assert.match(service, /mapStaleData: mapStaleTournamentReviewData/);
   assert.match(service, /state: "DEGRADED"/);
+  assert.match(service, /cacheVariant: `viewer-entry:/);
+  assert.match(page, /requestView === "season" && !seasonRevision/);
+  assert.match(page, /v2State: merged\.state/);
   assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
 });
 
