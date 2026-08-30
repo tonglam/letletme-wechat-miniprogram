@@ -366,8 +366,9 @@ export interface MyTournamentReviewH2H {
     isBye: boolean;
     home: MyTournamentReviewH2HSide | null;
     away: MyTournamentReviewH2HSide | null;
-  }>;
+	}>;
   standings: Array<{
+    groupId: number;
     entryId: number;
     entryName: string;
     rank: number;
@@ -466,7 +467,7 @@ const REVIEW_H2H_FIELDS = `
     home { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
     away { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
   }
-  standings { entryId entryName rank played won drawn lost matchPoints pointsFor pointsAgainst }
+  standings { groupId entryId entryName rank played won drawn lost matchPoints pointsFor pointsAgainst }
 `;
 const REVIEW_KNOCKOUT_FIELDS = `
   nextCursor hasNextPage
