@@ -44,7 +44,6 @@ import {
 } from "../../../utils/live-match-share-image";
 import { windowPixelRatio } from "../../../utils/system-info";
 import {
-  appendNextEventRows,
   countLiveMatchTabs,
   liveMatchTabKey,
   preferredLiveMatchTab,
@@ -1370,8 +1369,89 @@ Page({
                   contextRevision: context.contextRevision,
                 }
               : undefined;
-        this.setData({ errorWorkload: "fixtures" });
+
+        // A complete Match V2 publication is self-contained and owns the
+        // current-event page. Core fixtures are a cold schedule fallback only;
+        // they must never gate or add a second read to the warm live path.
+        this.setData({ errorWorkload: "gameweek" });
         navigationTracker?.mark("primaryRequestStartAt");
+        let publishedMatchday: LiveSnapshotResult<LiveMatch[]> | null = null;
+        let publicationError: unknown = null;
+        try {
+          publishedMatchday =
+            options.prefetchedLiveResult ??
+            (await getLiveMatchByStatusSnapshot(
+              "all",
+              options.forceRefresh === true,
+              requestTrace,
+              targetEvent,
+            ));
+        } catch (error) {
+          publicationError = error;
+        }
+        if (!this.pageVisible || requestId !== this.liveRequestId) return;
+
+        if (publishedMatchday?.snapshot) {
+          navigationTracker?.mark("primaryResponseAt");
+          const publicationMatches = publishedMatchday.data.map((match) =>
+            normalizeMatch(match, match.playStatus || match.status || "not_start"),
+          );
+          this.liveWindow = true;
+          this.liveSnapshot = publishedMatchday.snapshot;
+          this.cachedLiveStoredAt = publishedMatchday.servedStoredAt;
+          this.coreMatches = publicationMatches;
+          const publicationStatus = this.resolveActiveStatus(publicationMatches);
+          const visibleMatches = filterMatches(
+            publicationMatches,
+            publicationStatus,
+          );
+          this.setData(
+            {
+              status: publicationStatus,
+              statusTabs: buildStatusTabs(publicationMatches),
+              activeStatusLabel:
+                STATUS_OPTIONS.find((item) => item.key === publicationStatus)
+                  ?.label || "比赛",
+              emptyDescription: emptyDescription(publicationStatus),
+              matches: visibleMatches,
+              groups: groupMatches(visibleMatches, publicationStatus),
+              hasData: true,
+              scheduleEmpty: false,
+              error: "",
+              fixtureStaleMessage: "",
+              lastUpdated: formatTime(
+                new Date(
+                  publishedMatchday.snapshot.contentUpdatedAt ||
+                    publishedMatchday.servedStoredAt ||
+                    Date.now(),
+                ),
+              ),
+            },
+            () => {
+              navigationTracker?.mark("primarySetDataAt");
+              wx.nextTick(() => navigationTracker?.observePrimary());
+            },
+          );
+          this.liveRefresh?.sync();
+          this.syncDisplayState();
+          return;
+        }
+
+        if (preserveData) {
+          this.setData({
+            error:
+              publicationError instanceof Error
+                ? publicationError.message
+                : "实时比赛 publication 暂不可用",
+          });
+          this.liveRefresh?.sync();
+          this.syncDisplayState();
+          return;
+        }
+
+        // No accepted Match publication exists on this cold page. Fall back to
+        // the retained Core schedule without fabricating live player detail.
+        this.setData({ errorWorkload: "fixtures" });
         const coreRead = await readCoreEventFixtureSchedule(
           targetEvent,
           context.season,
@@ -1390,93 +1470,40 @@ Page({
           coreRead.data.some(
             (fixture) => !fixture.finished && fixture.started === true,
           );
-        const retainLiveBoardUntilCandidate = preserveData && this.liveWindow;
-        if (!retainLiveBoardUntilCandidate) this.coreMatches = core;
+        this.coreMatches = core;
         this.armKickoffTransition(coreRead.data);
         const activeStatus = this.resolveActiveStatus(core);
         const activeStatusLabel =
           STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label ||
           "比赛";
         const matches = filterMatches(core, activeStatus);
-        if (!retainLiveBoardUntilCandidate) {
-          this.setData(
-            {
-              status: activeStatus,
-              statusTabs: buildStatusTabs(core),
-              activeStatusLabel,
-              emptyDescription: emptyDescription(activeStatus),
-              matches,
-              groups: groupMatches(matches, activeStatus),
-              hasData: true,
-              scheduleEmpty: false,
-              error: "",
-              fixtureStaleMessage: coreRead.meta.stale
-                ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
+        this.setData(
+          {
+            status: activeStatus,
+            statusTabs: buildStatusTabs(core),
+            activeStatusLabel,
+            emptyDescription: emptyDescription(activeStatus),
+            matches,
+            groups: groupMatches(matches, activeStatus),
+            hasData: true,
+            scheduleEmpty: false,
+            error:
+              publicationError instanceof Error
+                ? publicationError.message
                 : "",
-              lastUpdated: formatTime(
-                new Date(coreRead.meta.storedAt || Date.now()),
-              ),
-            },
-            () => {
-              navigationTracker?.mark("primarySetDataAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
-            },
-          );
-        }
-        if (this.liveWindow) {
-          // Arm revision recovery before the overlay request so a failed first
-          // Live acquisition after kickoff still recovers automatically.
-          this.liveRefresh?.sync();
-          this.setData({ errorWorkload: "gameweek" });
-          const liveResult =
-            options.prefetchedLiveResult ??
-            (await getLiveMatchByStatusSnapshot(
-              "all",
-              options.forceRefresh === true,
-              requestTrace,
-              targetEvent,
-            ));
-          if (!this.pageVisible || requestId !== this.liveRequestId) return;
-          if (!liveResult.snapshot && retainLiveBoardUntilCandidate) {
-            this.setData({ error: "实时比赛 publication 暂不可用" });
-            this.liveRefresh?.sync();
-            this.syncDisplayState();
-            return;
-          }
-          this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
-          this.cachedLiveStoredAt = liveResult.servedStoredAt;
-          this.coreMatches = appendNextEventRows(
-            mergeLiveOverlay(core, liveResult.data),
-            liveResult.data,
-          ).map((match) =>
-            // Rows beyond the core desk are next-event fixtures from the live
-            // snapshot — normalize them for display like any core row.
-            match.statusText ? match : normalizeMatch(match, "not_start"),
-          );
-          const overlayStatus = this.resolveActiveStatus(this.coreMatches);
-          const overlaid = filterMatches(this.coreMatches, overlayStatus);
-          this.setData({
-            status: overlayStatus,
-            statusTabs: buildStatusTabs(this.coreMatches),
-            activeStatusLabel:
-              STATUS_OPTIONS.find((item) => item.key === overlayStatus)
-                ?.label || "比赛",
-            emptyDescription: emptyDescription(overlayStatus),
-            matches: overlaid,
-            groups: groupMatches(overlaid, overlayStatus),
-            error: "",
+            fixtureStaleMessage: coreRead.meta.stale
+              ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
+              : "",
             lastUpdated: formatTime(
-              new Date(
-                liveResult.snapshot?.contentUpdatedAt ||
-                  liveResult.servedStoredAt ||
-                  Date.now(),
-              ),
+              new Date(coreRead.meta.storedAt || Date.now()),
             ),
-          });
-          this.liveRefresh?.sync();
-        } else {
-          this.liveRefresh?.sync();
-        }
+          },
+          () => {
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
+          },
+        );
+        this.liveRefresh?.sync();
         this.syncDisplayState();
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return;

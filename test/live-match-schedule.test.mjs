@@ -8,12 +8,19 @@ const source = (path) =>
     " ",
   );
 
-test("Live Matches paints Core schedule before an optional overlay", () => {
+test("Live Matches uses the self-contained V2 publication before the cold Core fallback", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
+  const publication = page.indexOf("await getLiveMatchByStatusSnapshot");
   const core = page.indexOf("await readCoreEventFixtureSchedule");
-  const primaryCommit = page.indexOf("primarySetDataAt", core);
-  const overlay = page.indexOf("await getLiveMatchByStatusSnapshot", core);
-  assert.ok(core >= 0 && primaryCommit > core && overlay > primaryCommit);
+  assert.ok(publication >= 0 && core > publication);
+  assert.match(
+    page,
+    /if \(publishedMatchday\?\.snapshot\) \{[\s\S]*this\.coreMatches = publicationMatches[\s\S]*return;/,
+  );
+  assert.match(
+    page,
+    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;[\s\S]*await readCoreEventFixtureSchedule/,
+  );
   assert.match(page, /liveWindowSnapshot\?\.eventId \?\? this\.targetEventId/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
@@ -21,9 +28,9 @@ test("Live Matches paints Core schedule before an optional overlay", () => {
     page,
     /await readCoreEventFixtureSchedule[\s\S]*const activeStatus = this\.resolveActiveStatus\(core\)[\s\S]*filterMatches\(core, activeStatus\)/,
   );
-  assert.match(
-    page,
-    /await getLiveMatchByStatusSnapshot[\s\S]*const overlayStatus = this\.resolveActiveStatus\(this\.coreMatches\)[\s\S]*filterMatches\(this\.coreMatches, overlayStatus\)/,
+  assert.doesNotMatch(
+    page.slice(core),
+    /await getLiveMatchByStatusSnapshot/,
   );
 });
 
@@ -125,19 +132,11 @@ test("an unavailable background publication cannot overwrite the accepted match 
   const page = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     page,
-    /const retainLiveBoardUntilCandidate = preserveData && this\.liveWindow/,
+    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;/,
   );
   assert.match(
     page,
-    /if \(!retainLiveBoardUntilCandidate\) \{[\s\S]*this\.setData\([\s\S]*matches,[\s\S]*groups:/,
-  );
-  assert.match(
-    page,
-    /if \(!liveResult\.snapshot && retainLiveBoardUntilCandidate\) \{[\s\S]*return;/,
-  );
-  assert.match(
-    page,
-    /if \(!liveResult\.snapshot && retainLiveBoardUntilCandidate\)[\s\S]*this\.liveSnapshot = liveResult\.snapshot \?\? liveWindowSnapshot/,
+    /if \(publishedMatchday\?\.snapshot\)[\s\S]*this\.setData\([\s\S]*matches: visibleMatches/,
   );
 });
 
@@ -176,24 +175,18 @@ test("live match tabs follow web content preference and carry per-tab counts", (
   // Per-tab counts come from the same bucketing as the filter.
   assert.match(page, /countLiveMatchTabs/);
   assert.match(page, /statusTabs: buildStatusTabs\(core\)/);
-  assert.match(page, /statusTabs: buildStatusTabs\(this\.coreMatches\)/);
+  assert.match(page, /statusTabs: buildStatusTabs\(publicationMatches\)/);
   assert.match(template, /wx:for="\{\{statusTabs\}\}"/);
   assert.match(template, /status-tab-count">\{\{item\.count\}\}/);
 });
 
-test("settled desk does not request a cross-event fixture overlay", () => {
+test("settled desk stays event-scoped without a second fixture overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const service = source("miniprogram/services/live.service.ts");
-  // V2 live data is event-scoped. The core fixture schedule owns the selected
-  // event; the live overlay must not smuggle a next-event LKG into the page.
-  assert.match(
-    page,
-    /appendNextEventRows\(\s*mergeLiveOverlay\(core, liveResult\.data\),\s*liveResult\.data,\s*\)/,
-  );
-  assert.match(
-    page,
-    /match\.statusText \? match : normalizeMatch\(match, "not_start"\)/,
-  );
+  // V2 live data is event-scoped and self-contained; the page must not smuggle
+  // a next-event LKG into the publication path.
+  assert.match(page, /this\.coreMatches = publicationMatches/);
+  assert.doesNotMatch(page, /appendNextEventRows\(/);
   assert.doesNotMatch(service, /nextFixtures/);
   assert.doesNotMatch(service, /homeTeamShortName\s+awayTeamShortName/);
 });
