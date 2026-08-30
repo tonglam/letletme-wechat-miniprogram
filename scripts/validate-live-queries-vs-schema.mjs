@@ -9,12 +9,10 @@ const {
   LIVE_MATCHES_QUERY,
   LIVE_SNAPSHOT_QUERY,
   PLAYER_LIVE_STATS_QUERY,
-  TOURNAMENT_LIVE_POINTS
+  TOURNAMENT_LIVE_POINTS,
 } = await import("../miniprogram/services/live.service.ts");
-const {
-  MINI_HOME_MARKET_QUERY,
-  MINI_HOME_PERSONAL_LEAGUES_QUERY
-} = await import("../miniprogram/services/home.service.ts");
+const { MINI_HOME_MARKET_QUERY, MINI_HOME_PERSONAL_LEAGUES_QUERY } =
+  await import("../miniprogram/services/home.service.ts");
 const {
   PRICE_CHANGE_BOARD_QUERY,
   PRICE_CHANGE_LIVE_BOARD_QUERY,
@@ -31,14 +29,15 @@ const {
 const {
   GET_TOURNAMENT_DETAIL_DESK,
   GET_TOURNAMENT_OFFICIAL_H2H,
-  GET_ENTRY_OFFICIAL_H2H_MATCHUPS
+  GET_ENTRY_OFFICIAL_H2H_MATCHUPS,
 } = await import("../miniprogram/services/tournament-detail.service.ts");
 const {
   ENTRY_LIVE_COMPETITION_BOARD_QUERY,
   TOURNAMENT_ENTRY_SQUADS_QUERY,
   TOURNAMENT_SELECTION_INDEX_QUERY,
 } = await import("../miniprogram/services/live-board.service.ts");
-const { ENTRY_LOOKUP_QUERY } = await import("../miniprogram/services/entry.service.ts");
+const { ENTRY_LOOKUP_QUERY } =
+  await import("../miniprogram/services/entry.service.ts");
 const { PLAYER_DETAIL } =
   await import("../miniprogram/services/player.service.ts");
 
@@ -70,9 +69,9 @@ const operations = [
   ["ENTRY_LIVE_COMPETITION_BOARD_QUERY", ENTRY_LIVE_COMPETITION_BOARD_QUERY],
   ["TOURNAMENT_SELECTION_INDEX_QUERY", TOURNAMENT_SELECTION_INDEX_QUERY],
   ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY],
-  ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY]
+  ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY],
   ["GET_ENTRY_TOURNAMENTS", GET_ENTRY_TOURNAMENTS],
-  ["PLAYER_DETAIL", PLAYER_DETAIL]
+  ["PLAYER_DETAIL", PLAYER_DETAIL],
 ];
 
 async function loadSchema() {
@@ -101,8 +100,12 @@ const astNodeLimit = (document) => {
   return roots.length === 1 &&
     roots[0].kind === Kind.FIELD &&
     !roots[0].alias &&
-    roots[0].name.value === "entryLiveCompetitionBoard"
-    ? 400
+    ["calcLivePointsByEntry", "entryLiveCompetitionBoard"].includes(
+      roots[0].name.value,
+    )
+    ? roots[0].name.value === "calcLivePointsByEntry"
+      ? 320
+      : 400
     : 200;
 };
 
