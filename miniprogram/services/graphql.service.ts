@@ -87,6 +87,8 @@ export interface GraphQLOptions {
   trace?: PageRequestTrace | null;
   /** Explicitly map cached data when a stale result is served. */
   mapStaleData?: (data: unknown) => unknown;
+  /** Explicit consumer contract required by version-gated GraphQL roots. */
+  contract?: "my-tournament-review-v2";
 }
 
 export interface PageRequestTrace {
@@ -176,6 +178,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
+  contract?: "my-tournament-review-v2";
 }
 
 export class GraphQLTransportError extends Error {
@@ -324,7 +327,15 @@ function resolvePolicy(
     throw new Error("赛季信息暂时不可用，请稍后重试");
   }
   const seasonVariant = season ? `season:${season}` : "";
-  const cacheVariant = [cachePolicy, seasonVariant, options?.cacheVariant || ""]
+  const contractVariant = options?.contract
+    ? `contract:${options.contract}`
+    : "";
+  const cacheVariant = [
+    cachePolicy,
+    seasonVariant,
+    contractVariant,
+    options?.cacheVariant || "",
+  ]
     .filter(Boolean)
     .join("|");
   const freshTtl = mutation
@@ -345,6 +356,7 @@ function resolvePolicy(
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
     workload: getGraphQLWorkload(operationName, cachePolicy),
+    contract: options?.contract,
   };
 }
 
@@ -523,6 +535,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
+  contract?: "my-tournament-review-v2",
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -532,6 +545,7 @@ export function buildGraphQLRequestHeaders(
   if (authMode === "session" && token) {
     header.Authorization = `Bearer ${token}`;
   }
+  if (contract) header["X-LetLetMe-Contract"] = contract;
   return header;
 }
 
@@ -548,6 +562,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
+  contract: "my-tournament-review-v2" | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
@@ -582,6 +597,7 @@ function makeRequest<T>(
       authMode,
       token,
       getMiniProgramDeviceId(),
+      contract,
     );
     if (isLivePointsV2Query(query)) {
       header["X-LetLetMe-Contract"] = "live-points-v2";
@@ -619,6 +635,7 @@ function makeRequest<T>(
               operationName,
               authMode,
               workload,
+              contract,
               false,
               currentToken,
               onNetworkAttempt,
@@ -644,6 +661,7 @@ function makeRequest<T>(
               operationName,
               authMode,
               workload,
+              contract,
               false,
               freshToken,
               onNetworkAttempt,
@@ -1066,6 +1084,7 @@ export async function graphqlRead<T>(
         policy.operationName,
         policy.authMode,
         policy.workload,
+        policy.contract,
         true,
         token,
         () => {

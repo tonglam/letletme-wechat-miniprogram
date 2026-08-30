@@ -1,3 +1,75 @@
+<block wx:if="{{v2Enabled}}">
+  <view class="page page-tabbar review-v2-page">
+    <view class="section toolbar review-v2-toolbar">
+      <view class="row">
+        <picker wx:if="{{v2TournamentNames.length}}" class="league-picker" mode="selector" range="{{v2TournamentNames}}" value="{{v2SelectedTournamentIndex}}" bindchange="onTournamentChange">
+          <view class="league-switch"><text class="league-name">{{v2SelectedTournament.name || '请选择赛事'}}</text></view>
+        </picker>
+        <view wx:else class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事复盘待就绪'}}</view>
+        <picker wx:if="{{v2EventIds.length}}" class="review-event-picker" mode="selector" range="{{v2EventIds}}" value="{{v2SelectedEventIndex}}" bindchange="onGwChange">
+          <view class="review-event-pill">GW{{v2Event}}</view>
+        </picker>
+      </view>
+      <view wx:if="{{v2Catalog && v2Catalog.adminReadAll}}" class="review-admin-scope" bindtap="onV2ScopeTap" hover-class="hover-dim">{{v2Scope === 'ALL' ? '管理员：只看我的赛事' : '管理员：查看全部赛事'}}</view>
+    </view>
+
+    <view wx:if="{{v2SelectedTournament}}" class="section tab-strip">
+      <view class="tab-item {{showSeason ? 'tab-active' : ''}}" data-view="season" catchtap="onViewTap" hover-class="hover-dim">赛季</view>
+      <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
+    </view>
+
+    <data-status wx:if="{{v2Error}}" status="stale" message="{{v2Error}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <app-loading wx:elif="{{v2Loading}}" text="加载赛事复盘" />
+    <view wx:elif="{{!v2SelectedTournament}}" class="section">
+      <app-empty-state title="暂无可复盘赛事" description="创建或加入 LetLetMe 赛事并完成轮次结算后，会显示在这里。" />
+    </view>
+    <block wx:else>
+      <view class="section card review-v2-header">
+        <view class="review-v2-eyebrow">{{v2Format === 'H2H' ? 'H2H 对战' : (v2Format === 'KNOCKOUT' ? '淘汰赛' : '积分赛')}}</view>
+        <view class="review-v2-title">{{v2SelectedTournament.name}}</view>
+        <view class="review-v2-meta">{{v2SelectedTournament.totalTeamNum}} 支队伍 · {{v2StatusText}}</view>
+        <view class="review-v2-hint">这里是已结算快照复盘中心；未结算数据统一前往 Live。</view>
+      </view>
+      <view wx:if="{{showSeason && v2Season}}" class="section">
+        <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.latestEventId || v2Event}}</view>
+        <view wx:if="{{v2Season.points}}" class="review-v2-stat-grid">
+          <view class="review-v2-stat"><text>Gross 总分</text><text class="review-v2-stat-value">{{v2Season.points.grossPointsTotal}}</text></view>
+          <view class="review-v2-stat"><text>Net 总分</text><text class="review-v2-stat-value">{{v2Season.points.netPointsTotal}}</text></view>
+          <view class="review-v2-stat"><text>参赛行</text><text class="review-v2-stat-value">{{v2Season.points.rows.length}}</text></view>
+        </view>
+        <view wx:if="{{v2Season.points}}" class="review-v2-table">
+          <view class="review-v2-table-head"><text>#</text><text>球队</text><text>Gross</text><text>Net</text></view>
+          <view wx:for="{{v2Season.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.grossPoints === null || item.grossPoints === undefined ? '—' : item.grossPoints}}</text><text>{{item.netPoints === null || item.netPoints === undefined ? '—' : item.netPoints}}</text></view>
+        </view>
+        <view wx:if="{{v2Season.h2h}}" class="review-v2-h2h-list"><view class="section-heading">对战积分榜</view><view wx:for="{{v2Season.h2h.standings}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.matchPoints}} 分</text><text>{{item.won}}胜 {{item.drawn}}平</text></view></view>
+        <view wx:if="{{v2Season.knockout}}" class="review-v2-knockout"><view class="section-heading">淘汰赛晋级路径</view><view wx:for="{{v2Season.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><text>{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}} — {{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}</text></view></view>
+        <view wx:if="{{v2Season.freshness}}" class="review-v2-freshness">赛季快照发布于 {{v2Season.freshness.publishedAt}} · {{v2Season.freshness.ageSeconds}} 秒前</view>
+      </view>
+
+      <view wx:if="{{showGameweek && v2Gameweek}}" class="section">
+        <view class="section-heading">GW{{v2Event}} 单轮表现</view>
+        <view wx:if="{{v2Gameweek.points}}" class="review-v2-stat-grid">
+          <view class="review-v2-stat"><text>本轮积分（Gross）</text><text class="review-v2-stat-value">{{v2Gameweek.points.grossPointsTotal}}</text></view>
+          <view class="review-v2-stat"><text>转会成本</text><text class="review-v2-stat-value">{{v2TransferCostTotal}}</text></view>
+          <view class="review-v2-stat"><text>Net</text><text class="review-v2-stat-value">{{v2Gameweek.points.netPointsTotal}}</text></view>
+        </view>
+        <view wx:if="{{v2Gameweek.points}}" class="review-v2-table">
+          <view class="review-v2-table-head"><text>#</text><text>球队</text><text>Gross</text><text>转会成本 / Net</text></view>
+          <view wx:for="{{v2Gameweek.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.grossPoints === null || item.grossPoints === undefined ? '—' : item.grossPoints}}</text><text>{{item.transferCost === null || item.transferCost === undefined ? 0 : item.transferCost}} / {{item.netPoints === null || item.netPoints === undefined ? '—' : item.netPoints}}</text></view>
+        </view>
+        <view wx:if="{{v2Gameweek.h2h}}" class="review-v2-h2h-list"><view class="section-heading">本轮对战</view><view wx:for="{{v2Gameweek.h2h.matches}}" wx:key="matchId" class="review-v2-match-card"><text>{{item.isBye ? '轮空' : '小组对战'}}</text><text>{{item.home && item.home.isAverage ? '平均队伍' : (item.home ? item.home.entryName : '平均队伍')}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}} — {{item.away && item.away.isAverage ? '平均队伍' : (item.away ? item.away.entryName : '平均队伍')}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}</text></view></view>
+        <view wx:if="{{v2Gameweek.knockout}}" class="review-v2-knockout"><view class="section-heading">淘汰赛对阵</view><view wx:for="{{v2Gameweek.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><text>{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}} — {{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}</text></view></view>
+        <view wx:if="{{v2Gameweek.scope && v2Gameweek.scope.freshness}}" class="review-v2-freshness">快照发布于 {{v2Gameweek.scope.freshness.publishedAt}} · {{v2Gameweek.scope.freshness.ageSeconds}} 秒前</view>
+      </view>
+      <view wx:if="{{v2HasNextPage}}" class="section review-v2-load-more">
+        <button size="mini" loading="{{v2LoadingMore}}" disabled="{{v2LoadingMore}}" bindtap="onV2LoadMore">{{v2LoadingMore ? '正在加载…' : '加载更多'}}</button>
+      </view>
+    </block>
+    <view class="section"><view class="footnote">创建、筹备和管理赛事请访问 LetLetMe 网页版</view></view>
+  </view>
+  <bottomNavBar active="myFpl" />
+</block>
+<block wx:else>
 <view class="page page-tabbar">
   <!-- Toolbar — same language as the live tournament desk -->
   <view class="section toolbar">
@@ -267,3 +339,4 @@
 
   <bottomNavBar active="myFpl" />
 </view>
+ </block>

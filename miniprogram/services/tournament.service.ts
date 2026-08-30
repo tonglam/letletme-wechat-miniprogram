@@ -282,6 +282,299 @@ export const GET_MY_FPL_COMPETITION_SEASON_PATH = `
   }
 `;
 
+/** V2 finalized-snapshot contract. Live and legacy reporting roots are not
+ * used by the My FPL tournament review page. */
+export type MyTournamentReviewScope = "ACCESSIBLE" | "MANAGED" | "ALL";
+export type MyTournamentReviewFormat = "POINTS" | "H2H" | "KNOCKOUT";
+export type MyTournamentReviewState =
+  "PENDING" | "WAITING_SOURCE" | "READY" | "DEGRADED" | "UNAVAILABLE";
+
+export interface MyTournamentReviewCatalogItem {
+  tournamentId: number;
+  name: string;
+  creator: string;
+  leagueId: number;
+  leagueType: string;
+  totalTeamNum: number;
+  latestFinalizedEventId: number | null;
+  latestAvailableEventId: number | null;
+  latestRevision: string | null;
+  latestFormat: MyTournamentReviewFormat | null;
+  state: MyTournamentReviewState;
+  publishedAt: string | null;
+}
+
+export interface MyTournamentReviewCatalog {
+  state: MyTournamentReviewState;
+  asOf: string;
+  viewerEntryId: number | null;
+  adminReadAll: boolean;
+  tournaments: MyTournamentReviewCatalogItem[];
+}
+
+export interface MyTournamentReviewScopeMeta {
+  tournamentId: number;
+  eventId: number;
+  revision: string;
+  format: MyTournamentReviewFormat;
+  state: MyTournamentReviewState;
+  freshness: {
+    eventDataCheckedAt: string;
+    sourceMinCheckedAt: string;
+    sourceMaxCheckedAt: string;
+    publishedAt: string;
+    ageSeconds: number;
+  } | null;
+  rowCount: number;
+  expectedSubjectCount: number;
+  readySubjectCount: number;
+  notApplicableSubjectCount: number;
+  contentSha256: string | null;
+}
+
+export interface MyTournamentReviewPointsRow {
+  entryId: number;
+  entryName: string;
+  playerName: string;
+  applicable: boolean;
+  rank: number | null;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  tournamentScore: number | null;
+  seasonGrossPoints: number | null;
+  seasonNetPoints: number | null;
+}
+
+export interface MyTournamentReviewPoints {
+  headlineMetric: string;
+  grossPointsTotal: number;
+  grossPointsAverage: number;
+  netPointsTotal: number;
+  seasonGrossPointsTotal: number;
+  seasonGrossPointsAverage: number;
+  seasonNetPointsTotal: number;
+  rows: MyTournamentReviewPointsRow[];
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewH2H {
+  matches: Array<{
+    matchId: string;
+    groupId: number;
+    isBye: boolean;
+    home: MyTournamentReviewH2HSide | null;
+    away: MyTournamentReviewH2HSide | null;
+  }>;
+  standings: Array<{
+    entryId: number;
+    entryName: string;
+    rank: number;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    matchPoints: number;
+    pointsFor: number;
+    pointsAgainst: number;
+  }>;
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewH2HSide {
+  entryId: number | null;
+  entryName: string;
+  isAverage: boolean;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  matchPoints: number | null;
+}
+
+export interface MyTournamentReviewKnockout {
+  matches: Array<{
+    round: number | null;
+    name: string | null;
+    matchId: number;
+    playAgainstId: number;
+    winnerEntryId: number | null;
+    home: MyTournamentReviewKnockoutSide | null;
+    away: MyTournamentReviewKnockoutSide | null;
+  }>;
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewKnockoutSide {
+  entryId: number;
+  entryName: string;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  goalsScored: number | null;
+  goalsConceded: number | null;
+}
+
+export interface MyTournamentGameweekReview {
+  state: MyTournamentReviewState;
+  scope: MyTournamentReviewScopeMeta | null;
+  points: MyTournamentReviewPoints | null;
+  h2h: MyTournamentReviewH2H | null;
+  knockout: MyTournamentReviewKnockout | null;
+}
+
+export interface MyTournamentSeasonReview {
+  state: MyTournamentReviewState;
+  tournamentId: number;
+  throughEventId: number;
+  latestEventId: number | null;
+  latestRevision: string | null;
+  format: MyTournamentReviewFormat | null;
+  freshness: {
+    eventDataCheckedAt: string;
+    sourceMinCheckedAt: string;
+    sourceMaxCheckedAt: string;
+    publishedAt: string;
+    ageSeconds: number;
+  } | null;
+  finalizedEventIds: number[];
+  points: MyTournamentReviewPoints | null;
+  h2h: MyTournamentReviewH2H | null;
+  knockout: MyTournamentReviewKnockout | null;
+}
+
+const MY_TOURNAMENT_REVIEW_CONTRACT = "my-tournament-review-v2" as const;
+const MY_TOURNAMENT_REVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+const MY_TOURNAMENT_REVIEW_STALE_TTL_MS = 15 * 60 * 1000;
+
+const REVIEW_SCOPE_META_FIELDS = `
+  tournamentId eventId revision format state
+  freshness { eventDataCheckedAt sourceMinCheckedAt sourceMaxCheckedAt publishedAt ageSeconds }
+  rowCount expectedSubjectCount readySubjectCount notApplicableSubjectCount contentSha256
+`;
+const REVIEW_POINTS_FIELDS = `
+  headlineMetric grossPointsTotal grossPointsAverage netPointsTotal
+  seasonGrossPointsTotal seasonGrossPointsAverage seasonNetPointsTotal nextCursor hasNextPage
+  rows { entryId entryName playerName applicable rank grossPoints transferCost netPoints tournamentScore seasonGrossPoints seasonNetPoints }
+`;
+const REVIEW_H2H_FIELDS = `
+  nextCursor hasNextPage
+  matches {
+    matchId groupId isBye
+    home { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
+    away { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
+  }
+  standings { entryId entryName rank played won drawn lost matchPoints pointsFor pointsAgainst }
+`;
+const REVIEW_KNOCKOUT_FIELDS = `
+  nextCursor hasNextPage
+  matches {
+    round name matchId playAgainstId winnerEntryId
+    home { entryId entryName grossPoints transferCost netPoints goalsScored goalsConceded }
+    away { entryId entryName grossPoints transferCost netPoints goalsScored goalsConceded }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_REVIEW_CATALOG = `
+  query MyTournamentReviewCatalog($scope: MyTournamentReviewScope = ACCESSIBLE) {
+    myTournamentReviewCatalog(scope: $scope) {
+      state asOf viewerEntryId adminReadAll
+      tournaments {
+        tournamentId name creator leagueId leagueType totalTeamNum
+        latestFinalizedEventId latestAvailableEventId latestRevision latestFormat state publishedAt
+      }
+    }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_GAMEWEEK_REVIEW = `
+  query MyTournamentGameweekReview($tournamentId: Int!, $eventId: Int!, $first: Int = 100, $after: String) {
+    myTournamentGameweekReview(tournamentId: $tournamentId, eventId: $eventId, first: $first, after: $after) {
+      state
+      scope {${REVIEW_SCOPE_META_FIELDS}}
+      points {${REVIEW_POINTS_FIELDS}}
+      h2h {${REVIEW_H2H_FIELDS}}
+      knockout {${REVIEW_KNOCKOUT_FIELDS}}
+    }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_SEASON_REVIEW = `
+  query MyTournamentSeasonReview($tournamentId: Int!, $throughEventId: Int!, $first: Int = 100, $after: String) {
+    myTournamentSeasonReview(tournamentId: $tournamentId, throughEventId: $throughEventId, first: $first, after: $after) {
+      state tournamentId throughEventId latestEventId latestRevision format
+      freshness { eventDataCheckedAt sourceMinCheckedAt sourceMaxCheckedAt publishedAt ageSeconds }
+      finalizedEventIds
+      points {${REVIEW_POINTS_FIELDS}}
+      h2h {${REVIEW_H2H_FIELDS}}
+      knockout {${REVIEW_KNOCKOUT_FIELDS}}
+    }
+  }
+`;
+
+const myTournamentReviewOptions = (
+  forceRefresh: boolean,
+  trace?: PageRequestTrace,
+) => ({
+  cachePolicy: "reporting" as const,
+  cacheTtl: MY_TOURNAMENT_REVIEW_CACHE_TTL_MS,
+  staleTtl: MY_TOURNAMENT_REVIEW_STALE_TTL_MS,
+  forceRefresh,
+  trace,
+  contract: MY_TOURNAMENT_REVIEW_CONTRACT,
+});
+
+export async function getMyTournamentReviewCatalog(
+  scope: MyTournamentReviewScope = "ACCESSIBLE",
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+): Promise<MyTournamentReviewCatalog> {
+  const data = await graphqlRequest<{
+    myTournamentReviewCatalog: MyTournamentReviewCatalog;
+  }>(
+    GET_MY_TOURNAMENT_REVIEW_CATALOG,
+    { scope },
+    myTournamentReviewOptions(forceRefresh, trace),
+  );
+  return data.myTournamentReviewCatalog;
+}
+
+export async function getMyTournamentGameweekReview(
+  tournamentId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  after: string | null = null,
+): Promise<MyTournamentGameweekReview> {
+  const data = await graphqlRequest<{
+    myTournamentGameweekReview: MyTournamentGameweekReview;
+  }>(
+    GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
+    { tournamentId, eventId, first: 100, after },
+    myTournamentReviewOptions(forceRefresh, trace),
+  );
+  return data.myTournamentGameweekReview;
+}
+
+export async function getMyTournamentSeasonReview(
+  tournamentId: number,
+  throughEventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  after: string | null = null,
+): Promise<MyTournamentSeasonReview> {
+  const data = await graphqlRequest<{
+    myTournamentSeasonReview: MyTournamentSeasonReview;
+  }>(
+    GET_MY_TOURNAMENT_SEASON_REVIEW,
+    { tournamentId, throughEventId, first: 100, after },
+    myTournamentReviewOptions(forceRefresh, trace),
+  );
+  return data.myTournamentSeasonReview;
+}
+
 const GET_TOURNAMENT_SELECTION_STATS = `
   query TournamentSelectionStats($tournamentId: Int!, $eventId: Int!, $limit: Int) {
     tournamentSelectionStats(tournamentId: $tournamentId, eventId: $eventId, limit: $limit) {
@@ -753,7 +1046,7 @@ export async function getEntryPointsRaceTournament(
       (t) =>
         !t.groupMode ||
         t.groupMode === "POINTS_RACES" ||
-        isOfficialH2HTournamentRow(t)
+        isOfficialH2HTournamentRow(t),
     )
     .map((t) => ({
       id: Number(t.id),
@@ -761,7 +1054,7 @@ export async function getEntryPointsRaceTournament(
       participantCount: t.totalTeamNum ?? undefined,
       groupMode: t.groupMode,
       leagueType: t.leagueType,
-      rosterMode: t.rosterMode
+      rosterMode: t.rosterMode,
     }));
 }
 

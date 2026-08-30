@@ -6,11 +6,11 @@ import {
   GraphQLApplicationError,
   graphqlRead,
   graphqlRequest,
-  purgeGraphQLStorageCache
+  purgeGraphQLStorageCache,
 } from "../miniprogram/services/graphql.service.ts";
 import {
   clearSessionCredentials,
-  restoreApiSessionCredentials
+  restoreApiSessionCredentials,
 } from "../miniprogram/services/auth.service.ts";
 import { acknowledgeDiagnosticDisclosure } from "../miniprogram/utils/privacy.ts";
 
@@ -50,7 +50,7 @@ function installRuntime(handler) {
       }
       requests.push(options);
       requestHandler(options);
-    }
+    },
   };
   acknowledgeDiagnosticDisclosure();
   storage.delete("auth-diagnostic-disclosure-v1");
@@ -59,34 +59,53 @@ function installRuntime(handler) {
     storage,
     setHandler(next) {
       requestHandler = next;
-    }
+    },
   };
 }
 
 function success(data, errors) {
-  return (options) => options.success({
-    statusCode: 200,
-    data: { data, ...(errors ? { errors } : {}) }
-  });
+  return (options) =>
+    options.success({
+      statusCode: 200,
+      data: { data, ...(errors ? { errors } : {}) },
+    });
 }
 
 const publicReporting = {
   authMode: "public",
-  cachePolicy: "reporting"
+  cachePolicy: "reporting",
 };
 
 test("public headers omit Bearer while session headers include it", () => {
-  assert.deepEqual(buildGraphQLRequestHeaders("public", "secret-token", "wx-device-123"), {
-    "content-type": "application/json",
-    "X-Letletme-Client": "wechat-miniprogram",
-    "X-Letletme-Device-Id": "wx-device-123"
-  });
-  assert.deepEqual(buildGraphQLRequestHeaders("session", "secret-token", "wx-device-123"), {
-    "content-type": "application/json",
-    "X-Letletme-Client": "wechat-miniprogram",
-    "X-Letletme-Device-Id": "wx-device-123",
-    Authorization: "Bearer secret-token"
-  });
+  assert.deepEqual(
+    buildGraphQLRequestHeaders("public", "secret-token", "wx-device-123"),
+    {
+      "content-type": "application/json",
+      "X-Letletme-Client": "wechat-miniprogram",
+      "X-Letletme-Device-Id": "wx-device-123",
+    },
+  );
+  assert.deepEqual(
+    buildGraphQLRequestHeaders("session", "secret-token", "wx-device-123"),
+    {
+      "content-type": "application/json",
+      "X-Letletme-Client": "wechat-miniprogram",
+      "X-Letletme-Device-Id": "wx-device-123",
+      Authorization: "Bearer secret-token",
+    },
+  );
+});
+
+test("V2 review requests carry an explicit contract header", () => {
+  assert.equal(
+    buildGraphQLRequestHeaders(
+      "session",
+      "secret-token",
+      "wx-device-123",
+      "my-tournament-review-v2",
+    )["X-LetLetMe-Contract"],
+    "my-tournament-review-v2",
+  );
 });
 
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {
@@ -99,21 +118,33 @@ test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", asyn
   assert.equal(second.meta.source, "memory");
   assert.equal(runtime.requests.length, 1);
 
-  const forced = await graphqlRead(query, {}, {
-    ...publicReporting,
-    forceRefresh: true
-  });
+  const forced = await graphqlRead(
+    query,
+    {},
+    {
+      ...publicReporting,
+      forceRefresh: true,
+    },
+  );
   assert.equal(forced.meta.source, "network");
   assert.equal(runtime.requests.length, 2);
 
   for (let index = 0; index < 125; index += 1) {
-    await graphqlRead(`query BehaviorL1_${index} { value }`, {}, publicReporting);
+    await graphqlRead(
+      `query BehaviorL1_${index} { value }`,
+      {},
+      publicReporting,
+    );
   }
   const beforeStorageRead = runtime.requests.length;
   const fromStorage = await graphqlRead(query, {}, publicReporting);
   assert.equal(fromStorage.meta.source, "storage");
   assert.equal(runtime.requests.length, beforeStorageRead);
-  assert.ok(Array.from(runtime.storage.keys()).some((key) => key.startsWith("gql:v2:public:")));
+  assert.ok(
+    Array.from(runtime.storage.keys()).some((key) =>
+      key.startsWith("gql:v2:public:"),
+    ),
+  );
 });
 
 test("uncacheable EntryLookup refresh evicts the previous authoritative result", async () => {
@@ -124,34 +155,40 @@ test("uncacheable EntryLookup refresh evicts the previous authoritative result",
       statusCode: 200,
       data: {
         data: {
-          entryLookup: callCount === 1
-            ? {
-                status: "FOUND",
-                retryable: false,
-                source: "DATABASE",
-                persistenceState: "NOT_REQUIRED",
-                entry: { id: 123 },
-              }
-            : {
-                status: "UNAVAILABLE",
-                retryable: true,
-                source: null,
-                persistenceState: null,
-                entry: null,
-              },
+          entryLookup:
+            callCount === 1
+              ? {
+                  status: "FOUND",
+                  retryable: false,
+                  source: "DATABASE",
+                  persistenceState: "NOT_REQUIRED",
+                  entry: { id: 123 },
+                }
+              : {
+                  status: "UNAVAILABLE",
+                  retryable: true,
+                  source: null,
+                  persistenceState: null,
+                  entry: null,
+                },
         },
       },
     });
   });
-  const query = "query EntryLookup($id: Int!) { entryLookup(id: $id) { status entry { id } } }";
+  const query =
+    "query EntryLookup($id: Int!) { entryLookup(id: $id) { status entry { id } } }";
   const options = { ...publicReporting, cacheVariant: "entry:123" };
 
   const first = await graphqlRead(query, { id: 123 }, options);
   assert.equal(first.meta.source, "network");
-  const degraded = await graphqlRead(query, { id: 123 }, {
-    ...options,
-    forceRefresh: true,
-  });
+  const degraded = await graphqlRead(
+    query,
+    { id: 123 },
+    {
+      ...options,
+      forceRefresh: true,
+    },
+  );
   assert.equal(degraded.meta.source, "network");
   assert.equal(degraded.data.entryLookup.status, "UNAVAILABLE");
 
@@ -187,16 +224,26 @@ test("degraded PlayerDetail refresh evicts the previous authoritative cache", as
   const first = await graphqlRead(query, { playerId: 1 }, publicReporting);
   assert.equal(first.meta.source, "network");
 
-  const degraded = await graphqlRead(query, { playerId: 1 }, {
-    ...publicReporting,
-    forceRefresh: true,
-  });
+  const degraded = await graphqlRead(
+    query,
+    { playerId: 1 },
+    {
+      ...publicReporting,
+      forceRefresh: true,
+    },
+  );
   assert.equal(degraded.meta.source, "network");
-  assert.equal(degraded.data.playerDetail.dataAvailability.isFullyAuthoritative, false);
+  assert.equal(
+    degraded.data.playerDetail.dataAvailability.isFullyAuthoritative,
+    false,
+  );
 
   const next = await graphqlRead(query, { playerId: 1 }, publicReporting);
   assert.equal(next.meta.source, "network");
-  assert.equal(next.data.playerDetail.dataAvailability.isFullyAuthoritative, false);
+  assert.equal(
+    next.data.playerDetail.dataAvailability.isFullyAuthoritative,
+    false,
+  );
   assert.equal(runtime.requests.length, 3);
 });
 
@@ -204,14 +251,23 @@ test("startup cleanup removes legacy, invalid, expired, and oldest excess rows",
   const runtime = installRuntime(success({ value: 1 }));
   const now = 1_000_000;
   runtime.storage.set("gql:legacy", { version: 1, staleUntil: now + 1 });
-  runtime.storage.set("gql:v2:other:invalid", { version: 2, staleUntil: now + 1 });
-  runtime.storage.set("gql:v2:public:wrong-version", { version: 1, staleUntil: now + 1 });
-  runtime.storage.set("gql:v2:session:expired", { version: 2, staleUntil: now });
+  runtime.storage.set("gql:v2:other:invalid", {
+    version: 2,
+    staleUntil: now + 1,
+  });
+  runtime.storage.set("gql:v2:public:wrong-version", {
+    version: 1,
+    staleUntil: now + 1,
+  });
+  runtime.storage.set("gql:v2:session:expired", {
+    version: 2,
+    staleUntil: now,
+  });
   for (let index = 0; index < 152; index += 1) {
     runtime.storage.set(`gql:v2:public:valid-${index}`, {
       version: 2,
       staleUntil: now + 60_000,
-      storedAt: index
+      storedAt: index,
     });
   }
 
@@ -234,16 +290,21 @@ test("identical concurrent reads are single-flight", async () => {
   const query = "query BehaviorSingleFlight { value }";
   const [first, second] = await Promise.all([
     graphqlRead(query, {}, publicReporting),
-    graphqlRead(query, {}, publicReporting)
+    graphqlRead(query, {}, publicReporting),
   ]);
 
   assert.equal(runtime.requests.length, 1);
-  assert.deepEqual(new Set([first.meta.source, second.meta.source]), new Set(["network", "in-flight"]));
+  assert.deepEqual(
+    new Set([first.meta.source, second.meta.source]),
+    new Set(["network", "in-flight"]),
+  );
 });
 
 test("partial GraphQL data is readable but never cached", async () => {
   const errors = [{ message: "section unavailable", path: ["section"] }];
-  const runtime = installRuntime(success({ section: null, retained: true }, errors));
+  const runtime = installRuntime(
+    success({ section: null, retained: true }, errors),
+  );
   const query = "query BehaviorPartial { section retained }";
 
   const first = await graphqlRead(query, {}, publicReporting);
@@ -262,33 +323,49 @@ test("stale fallback is limited to transient transport failures", async () => {
   const options = {
     ...publicReporting,
     cacheTtl: 1,
-    staleTtl: 60_000
+    staleTtl: 60_000,
   };
 
   await graphqlRead(query, {}, options);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  runtime.setHandler((request) => request.fail({ errMsg: "request:fail timeout" }));
-  const stale = await graphqlRead(query, {}, { ...options, forceRefresh: true });
+  runtime.setHandler((request) =>
+    request.fail({ errMsg: "request:fail timeout" }),
+  );
+  const stale = await graphqlRead(
+    query,
+    {},
+    { ...options, forceRefresh: true },
+  );
   assert.equal(stale.meta.source, "stale");
   assert.equal(stale.meta.stale, true);
   assert.equal(stale.data.value, "last-good");
 
-  runtime.setHandler((request) => request.success({
-    statusCode: 401,
-    data: { errors: [{ message: "unauthorized" }] }
-  }));
-  await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
+  runtime.setHandler((request) =>
+    request.success({
+      statusCode: 401,
+      data: { errors: [{ message: "unauthorized" }] },
+    }),
+  );
+  await assert.rejects(
+    graphqlRead(query, {}, { ...options, forceRefresh: true }),
+  );
 
-  runtime.setHandler((request) => request.success({
-    statusCode: 200,
-    data: {
-      errors: [{
-        message: "Unknown field",
-        extensions: { code: "GRAPHQL_VALIDATION_FAILED" }
-      }]
-    }
-  }));
-  await assert.rejects(graphqlRead(query, {}, { ...options, forceRefresh: true }));
+  runtime.setHandler((request) =>
+    request.success({
+      statusCode: 200,
+      data: {
+        errors: [
+          {
+            message: "Unknown field",
+            extensions: { code: "GRAPHQL_VALIDATION_FAILED" },
+          },
+        ],
+      },
+    }),
+  );
+  await assert.rejects(
+    graphqlRead(query, {}, { ...options, forceRefresh: true }),
+  );
 });
 
 test("graphqlRequest explicitly maps stale fallback data before discarding metadata", async () => {
@@ -305,16 +382,20 @@ test("graphqlRequest explicitly maps stale fallback data before discarding metad
   runtime.setHandler((request) =>
     request.fail({ errMsg: "request:fail timeout" }),
   );
-  const stale = await graphqlRequest(query, {}, {
-    ...options,
-    forceRefresh: true,
-    mapStaleData(data) {
-      return {
-        ...data,
-        value: { ...data.value, authoritative: false, stale: true },
-      };
+  const stale = await graphqlRequest(
+    query,
+    {},
+    {
+      ...options,
+      forceRefresh: true,
+      mapStaleData(data) {
+        return {
+          ...data,
+          value: { ...data.value, authoritative: false, stale: true },
+        };
+      },
     },
-  });
+  );
 
   assert.deepEqual(stale, {
     value: { authoritative: false, stale: true },
@@ -328,7 +409,7 @@ test("session refresh network failure serves stale data without a second refresh
     authMode: "session",
     cachePolicy: "reporting",
     cacheTtl: 1,
-    staleTtl: 60_000
+    staleTtl: 60_000,
   };
 
   clearSessionCredentials();
@@ -350,14 +431,18 @@ test("session refresh network failure serves stale data without a second refresh
       }
       request.success({
         statusCode: 401,
-        data: { errors: [{ message: "unauthorized" }] }
+        data: { errors: [{ message: "unauthorized" }] },
       });
     });
 
-    const stale = await graphqlRead(query, {}, {
-      ...options,
-      forceRefresh: true
-    });
+    const stale = await graphqlRead(
+      query,
+      {},
+      {
+        ...options,
+        forceRefresh: true,
+      },
+    );
     assert.equal(stale.meta.source, "stale");
     assert.equal(stale.meta.stale, true);
     assert.equal(stale.data.value, "last-good");
@@ -564,20 +649,23 @@ test("application error text containing 429 never serves stale data", async () =
   const options = {
     ...publicReporting,
     cacheTtl: 1,
-    staleTtl: 60_000
+    staleTtl: 60_000,
   };
 
   await graphqlRead(query, {}, options);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  runtime.setHandler((request) => request.success({
-    statusCode: 200,
-    data: { errors: [{ message: "Entry 429 was not found" }] }
-  }));
+  runtime.setHandler((request) =>
+    request.success({
+      statusCode: 200,
+      data: { errors: [{ message: "Entry 429 was not found" }] },
+    }),
+  );
 
   await assert.rejects(
     graphqlRead(query, {}, { ...options, forceRefresh: true }),
-    (error) => error instanceof GraphQLApplicationError
-      && error.errors.some((item) => item.message === "Entry 429 was not found")
+    (error) =>
+      error instanceof GraphQLApplicationError &&
+      error.errors.some((item) => item.message === "Entry 429 was not found"),
   );
   assert.equal(runtime.requests.length, 2);
 });
