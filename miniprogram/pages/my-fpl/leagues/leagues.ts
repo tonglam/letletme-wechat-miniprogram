@@ -711,6 +711,11 @@ PerformancePage({
         currentMyFplEntryId() === this.loadedEntryId &&
         (snapshot?.contextRevision ?? 0) === this.loadedContextRevision
       ) {
+        // The interrupted catalog request may have been awaiting its nested
+        // review when onHide invalidated it. That request can no longer own
+        // the load flags; the review retry below owns only view state.
+        this.loadPending = false;
+        this.loadForceRefresh = false;
         await this.retryV2Operation(forceRefresh);
         return;
       }
@@ -930,7 +935,7 @@ PerformancePage({
       const eventId = retainedEventId || latestEventId;
       const eventIds = mergeTournamentReviewEventIds(
         retainedEventIds,
-        eventId ? [eventId] : [],
+        [latestEventId, eventId].filter((candidate): candidate is number => candidate > 0),
       );
       this.setData({
         loading: false,

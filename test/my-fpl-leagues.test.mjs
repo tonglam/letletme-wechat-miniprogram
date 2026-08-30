@@ -113,8 +113,10 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(service, /revision: \$revision/);
   assert.match(page, /next\.scope\?\.revision !== gameweekRevision/);
   assert.match(page, /next\.latestRevision !== seasonRevision/);
+  assert.match(page, /\[latestEventId, eventId\]/);
   assert.match(page, /this\.v2RetryOperation = "loadMore"/);
   assert.match(page, /async retryV2Operation\(forceRefresh = true\)/);
+  assert.match(page, /this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;[\s\S]*retryV2Operation/);
   assert.match(
     page,
     /this\.data\.v2Loading \|\|[\s\S]*this\.data\.v2LoadingMore/,
@@ -136,13 +138,18 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   );
   assert.match(template, /v2Season\.points\.seasonGrossPointsTotal/);
   assert.match(template, /v2Season\.points\.seasonNetPointsTotal/);
+  assert.match(template, /v2SelectedTournament\.totalTeamNum/);
   assert.match(template, /wx:for="\{\{v2GameweekRows\}\}"/);
   assert.match(template, /bindtap="onOpenWebsite"/);
   assert.match(template, /actionText="\{\{emptyState === 'entry'/);
   assert.match(
     template,
-    /<data-status wx:if="\{\{v2Error\}\}"[\s\S]*<app-loading wx:if="\{\{v2Loading\}\}"/,
+    /<data-status[^>]*wx:if="\{\{v2Error\}\}"[\s\S]*<app-loading wx:if="\{\{v2Loading\}\}"/,
   );
+  assert.match(template, /transferCost === null \|\| item\.transferCost === undefined \? '—'/);
+  assert.match(template, /winnerEntryId/);
+  assert.match(template, /review-v2-match-winner/);
+  assert.match(template, /perf-primary-content/);
   assert.match(template, /review-v2-h2h-row/);
   assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
 });

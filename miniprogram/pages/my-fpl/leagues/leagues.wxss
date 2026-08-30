@@ -746,6 +746,18 @@
   line-height: 1.4;
 }
 
+.review-v2-match-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4rpx;
+  align-items: baseline;
+}
+
+.review-v2-match-winner {
+  color: var(--green-ink);
+  font-weight: 800;
+}
+
 .review-v2-freshness {
   padding: 12rpx 14rpx;
   border-radius: 10rpx;
