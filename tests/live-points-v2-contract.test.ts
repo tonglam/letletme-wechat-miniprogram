@@ -30,13 +30,33 @@ function assertEqual(
 
 const revision = (value: string): string => value.repeat(64 / value.length);
 
-const snapshot = (scoreCoreRevision = revision("a")): LiveSnapshotStatus => ({
+const snapshot = (
+  scoreCoreRevision = revision("a"),
+  revisionOverrides: Partial<NonNullable<LiveSnapshotStatus["revisions"]>> = {},
+): LiveSnapshotStatus => ({
   season: "2627",
   eventId: 1,
   state: "LIVE_ACTIVE",
   scoreCoreRevision,
   publishedAt: "2026-08-29T10:00:00.000Z",
   sourceCheckedAt: "2026-08-29T10:00:00.000Z",
+  revisions: {
+    publicationId: "publication-1",
+    generation: 1,
+    lifecycle: revision("b"),
+    fixtureIdentity: revision("c"),
+    scoreCore: scoreCoreRevision,
+    displayStats: revision("d"),
+    explain: revision("e"),
+    picksBase: revision("f"),
+    officialAdjustment: null,
+    previousTotals: revision("g"),
+    finalResult: null,
+    rules: revision("h"),
+    algorithm: "live-points-v2-algorithm-1",
+    input: revision("i"),
+    ...revisionOverrides,
+  },
 });
 
 const score = (
@@ -119,6 +139,20 @@ assertEqual(
   liveSnapshotNeedsRefresh(snapshot(), snapshot(revision("b"))),
   true,
   "score revision change reloads the score",
+);
+assertEqual(
+  liveSnapshotNeedsRefresh(snapshot(),
+    snapshot(revision("a"), { officialAdjustment: revision("b") }),
+  ),
+  true,
+  "official adjustment revision reloads the score",
+);
+assertEqual(
+  liveSnapshotNeedsRefresh(snapshot(),
+    snapshot(revision("a"), { finalResult: revision("b") }),
+  ),
+  true,
+  "final result revision reloads the score",
 );
 assertEqual(
   shouldPollLiveSnapshot({

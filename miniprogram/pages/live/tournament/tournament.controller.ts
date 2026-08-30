@@ -2298,6 +2298,13 @@ PerformancePage({
     const page = this.boardPage;
     const scope = this.currentBoardScope();
     if (!page || !scope) return;
+    if (!page.scoreCoreRevision) {
+      this.setData({
+        filterOptionsLoading: false,
+        filterOptionsError: "当前榜单版本暂不可用",
+      });
+      return;
+    }
     const key = `${scope.tournamentId}:${scope.eventId}:${page.scoreCoreRevision}`;
     if (this.selectionIndexKey === key && this.ownershipPlayers.length > 0) {
       return;
@@ -2312,7 +2319,7 @@ PerformancePage({
         ref: {
           season: page.season,
           eventId: page.eventId,
-          scoreCoreRevision: page.scoreCoreRevision || "unavailable",
+          scoreCoreRevision: page.scoreCoreRevision,
         },
         trace: capturePageRequestTrace({
           callerSurface: "live-tournament-filter-index",
@@ -2385,6 +2392,14 @@ PerformancePage({
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
     if (comparedEntryIds.length !== 2) return;
     if (!page || !scope) return;
+    if (!page.scoreCoreRevision) {
+      this.setData({
+        compareLoading: false,
+        compareError: "当前榜单版本暂不可用",
+        compareOpen: false,
+      });
+      return;
+    }
     const requestId = this.compareRequestId + 1;
     this.compareRequestId = requestId;
     this.setData({ compareLoading: true, compareError: "", compareOpen: false });
@@ -2396,7 +2411,7 @@ PerformancePage({
         ref: {
           season: page.season,
           eventId: page.eventId,
-          scoreCoreRevision: page.scoreCoreRevision || "unavailable",
+          scoreCoreRevision: page.scoreCoreRevision,
         },
         trace: capturePageRequestTrace({
           callerSurface: "live-tournament-compare",
