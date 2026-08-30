@@ -110,7 +110,7 @@ test("keeps the live matchday V2 publication query bounded", () => {
   assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 1);
   assert.ok(LIVE_MATCHES_QUERY.length < 3_000);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures|upcoming\s*:/);
-  assert.match(LIVE_MATCHES_QUERY, /\bnextEventId\b/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEventId\b/);
 });
 
 test("uses a revision-aware context query for automatic live freshness checks", () => {

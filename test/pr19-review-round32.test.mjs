@@ -5,11 +5,11 @@ import test from "node:test";
 const read = (path) =>
   fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
 
-test("Live Match resumed startup owns errors and initializes recovery polling", () => {
+test("Live Match publication startup owns errors and initializes recovery polling", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
   assert.match(
     page,
-    /catch \(error\) \{[\s\S]*if \(!context\) \{[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return;[\s\S]*this\.showContextError\(error\)/
+    /loadData\([\s\S]*catch \(error\) \{[\s\S]*error: error instanceof Error[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/
   );
   assert.match(
     page,

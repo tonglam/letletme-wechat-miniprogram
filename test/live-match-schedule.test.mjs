@@ -21,7 +21,14 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
     page,
     /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;[\s\S]*await readCoreEventFixtureSchedule/,
   );
-  assert.match(page, /liveWindowSnapshot\?\.eventId \?\? this\.targetEventId/);
+  assert.match(
+    page,
+    /this\.liveSnapshot\?\.eventId \|\| undefined/,
+  );
+  assert.doesNotMatch(
+    page,
+    /this\.liveSnapshot\?\.eventId \|\| this\.currentEventId/,
+  );
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
   assert.match(
@@ -36,14 +43,8 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
 
 test("preseason uses displayEvent schedule without a Live overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
-  assert.match(
-    page,
-    /currentEventId = liveWindow\?\.eventId \?\? context\.currentEvent \?\? 0/,
-  );
-  assert.match(
-    page,
-    /targetEventId = liveWindow\?\.eventId \?\? context\.displayEvent \?\? 0/,
-  );
+  assert.match(page, /currentEventId = context\.currentEvent \?\? 0/);
+  assert.match(page, /targetEventId = context\.displayEvent \?\? 0/);
   assert.match(page, /this\.liveWindow = Boolean\([\s\S]*this\.liveSnapshot/);
   const statusHandler = page.slice(page.indexOf("onStatusTap"));
   assert.doesNotMatch(
@@ -56,10 +57,6 @@ test("match with no displayEvent commits a scheduled empty state", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const template = source("miniprogram/pages/live/match/match.wxml");
   assert.match(page, /if \(!targetEvent\) \{[\s\S]*noScheduleState\(\)/);
-  assert.match(
-    page,
-    /if \(!this\.targetEventId\) \{[\s\S]*noScheduleState\(\)/,
-  );
   assert.doesNotMatch(page, /当前赛季暂无赛程/);
   assert.match(template, /scheduleEmpty/);
   assert.match(template, /当前赛季暂无赛程/);
@@ -138,6 +135,18 @@ test("an unavailable background publication cannot overwrite the accepted match 
     page,
     /if \(publishedMatchday\?\.snapshot\)[\s\S]*this\.setData\([\s\S]*matches: visibleMatches/,
   );
+});
+
+test("heartbeat-only Match probes update metadata without rebuilding matches", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const accept = page.slice(
+    page.indexOf("acceptSnapshot:"),
+    page.indexOf("onProbeError:"),
+  );
+  assert.match(accept, /this\.liveSnapshot = snapshot/);
+  assert.match(accept, /fixtureStaleMessage: matchDetailUpdateMessage/);
+  assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
+  assert.doesNotMatch(accept, /\bmatches\s*:|\bgroups\s*:/);
 });
 
 test("Live Match surfaces a stale Core fixture fallback", () => {

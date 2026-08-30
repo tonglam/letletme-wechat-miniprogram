@@ -420,9 +420,8 @@ test("an overlapping manual refresh queues one forced CalcLive and forced transf
   assert.deepEqual(transferCalls, [[123, 33, true]]);
 });
 
-test("match cold start waits for the current event before arming recovery", async () => {
+test("match cold start probes the active-event publication before context fallback", async () => {
   const calls = [];
-  let resolveContext;
   const app = {
     globalData: { gw: 0, currentGw: 0 }
   };
@@ -435,12 +434,11 @@ test("match cold start waits for the current event before arming recovery", asyn
   const context = {
     data: { ...matchPage.data },
     currentEventId: 0,
+    targetEventId: 0,
     liveRefresh: null,
     ensureContext(reason) {
-      calls.push(`context:${reason}`);
-      return new Promise((resolve) => {
-        resolveContext = resolve;
-      });
+      calls.push(`unexpected-context:${reason}`);
+      return Promise.reject(new Error("unexpected context gate"));
     },
     setData(update) {
       Object.assign(this.data, update);
@@ -461,19 +459,14 @@ test("match cold start waits for the current event before arming recovery", asyn
     }
   };
 
-  const loading = matchPage.onLoad.call(context);
-  assert.deepEqual(calls, ["loading", "context:page-load"]);
-  app.globalData.gw = 33;
-  app.globalData.currentGw = 33;
-  resolveContext({ currentEvent: 33, displayEvent: 33, season: "2025-26" });
-  await loading;
+  await matchPage.onLoad.call(context);
 
-  assert.equal(context.currentEventId, 33);
-  assert.equal(context.targetEventId, 33);
-  assert.deepEqual(calls, ["loading", "context:page-load", "load:33"]);
+  assert.equal(context.currentEventId, 0);
+  assert.equal(context.targetEventId, 0);
+  assert.deepEqual(calls, ["loading", "load:0"]);
 });
 
-test("match cold start selects the schema-backed not-started bucket during preseason", async () => {
+test("match cold start does not fabricate a preseason state before publication fallback", async () => {
   const app = {
     globalData: { gw: 1, currentGw: 0 },
     initAppData: async () => {}
@@ -484,7 +477,9 @@ test("match cold start selects the schema-backed not-started bucket during prese
     ...matchPage,
     data: { ...matchPage.data },
     currentEventId: 0,
-    ensureContext: async () => ({ currentEvent: null, displayEvent: 1, season: "2025-26" }),
+    ensureContext: async () => {
+      throw new Error("unexpected context gate");
+    },
     liveRefresh: null,
     setData(update) {
       Object.assign(this.data, update);
@@ -499,9 +494,9 @@ test("match cold start selects the schema-backed not-started bucket during prese
   await matchPage.onLoad.call(context);
 
   assert.equal(context.currentEventId, 0);
-  assert.equal(context.targetEventId, 1);
-  assert.equal(context.data.status, "not_start");
-  assert.equal(context.data.activeStatusLabel, "未开始");
+  assert.equal(context.targetEventId, 0);
+  assert.equal(context.data.status, "playing");
+  assert.equal(context.data.activeStatusLabel, "比赛中");
 });
 
 test("match status changes filter the Core schedule without network work", () => {

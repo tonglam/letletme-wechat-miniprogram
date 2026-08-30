@@ -140,10 +140,18 @@ test("cold context failures settle Home and all Live page loading states", () =>
   const match = source("miniprogram/pages/live/match/match.ts");
   const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(home, /startHomeLifecycle\([\s\S]*catch \(error\)[\s\S]*if \(isActiveLifecycle\(\)\) this\.showContextError\(error, tracker\)/);
-  for (const page of [entry, match, tournament]) {
+  for (const page of [entry, tournament]) {
     assert.match(page, /let context = getAppContextSnapshot\(\)[\s\S]*catch \(error\)[\s\S]*if \(!context\)[\s\S]*this\.showContextError\(error\)/);
     assert.match(page, /showContextError\(error: unknown\)[\s\S]*loading: false/);
   }
+  assert.match(
+    match,
+    /loadData\([\s\S]*catch \(error\)[\s\S]*error: error instanceof Error[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/,
+  );
+  assert.match(
+    match,
+    /const context = cachedContext \|\| \(await this\.ensureContext\("page-load"\)\)/,
+  );
 });
 
 test("local entry selection commits the canonical binding revision", () => {

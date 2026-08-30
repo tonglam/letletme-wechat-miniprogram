@@ -2,8 +2,77 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parse, visit } from "graphql";
 
-const { LIVE_MATCHES_QUERY, mapGraphQLMatch } =
+const {
+  LIVE_MATCHES_QUERY,
+  liveMatchdayRequestOptions,
+  mapGraphQLMatch,
+  snapshotFromLiveMatchday,
+  validateLiveMatchday,
+} =
   await import("../miniprogram/services/live.service.ts");
+
+const ISO = "2026-08-31T12:00:00.000Z";
+
+const matchdayResult = () => ({
+  availability: "READY",
+  delivery: {
+    state: "FRESH",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["REDIS_CURRENT"],
+  },
+  snapshot: {
+    season: "2026-27",
+    eventId: 3,
+    state: "PRE_DEADLINE",
+    revisions: {
+      deskPublicationId: "desk-1",
+      deskGeneration: 1,
+      lifecycle: "lifecycle-1",
+      fixtureIdentity: "fixture-1",
+      scoreState: "score-1",
+      detailPublicationId: null,
+      detailGeneration: null,
+      playerDetail: null,
+    },
+    times: {
+      deskSourceCheckedAt: ISO,
+      deskContentUpdatedAt: ISO,
+      deskPublishedAt: ISO,
+      deskStaleAt: null,
+      detailSourceCheckedAt: null,
+      detailContentUpdatedAt: null,
+      detailPublishedAt: null,
+      detailStaleAt: null,
+      servedAt: ISO,
+      nextRefreshAt: null,
+    },
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_PENDING"],
+    },
+    matches: [
+      {
+        fixtureId: 30,
+        eventId: 3,
+        homeTeamId: 1,
+        homeTeamName: "Home",
+        homeTeamShortName: "HOM",
+        awayTeamId: 2,
+        awayTeamName: "Away",
+        awayTeamShortName: "AWY",
+        homeScore: null,
+        awayScore: null,
+        kickoffTime: ISO,
+        minutes: 0,
+        started: false,
+        finished: false,
+        finishedProvisional: false,
+        players: [],
+      },
+    ],
+  },
+});
 
 test("live matchday query is one V2 publication with embedded players", () => {
   assert.match(LIVE_MATCHES_QUERY, /query LiveMatchday\(\$eventId: Int\)/);
@@ -14,10 +83,66 @@ test("live matchday query is one V2 publication with embedded players", () => {
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
   assert.match(LIVE_MATCHES_QUERY, /matches\s*\{[\s\S]*minutes[\s\S]*started/);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEventId\b/);
+  assert.doesNotMatch(
+    LIVE_MATCHES_QUERY,
+    /scoreCoreRevision|windowState|dataAvailability|checkpointedAt|\brules\b|\balgorithm\b|\binput\b/,
+  );
   assert.doesNotMatch(
     LIVE_MATCHES_QUERY,
     /liveMatchdayDesk|liveFixturePlayers/,
   );
+});
+
+test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
+  const result = matchdayResult();
+  validateLiveMatchday(result);
+  const snapshot = snapshotFromLiveMatchday(result);
+  assert.equal(snapshot?.availability, "READY");
+  assert.equal(snapshot?.revisions.scoreState, "score-1");
+  assert.equal(snapshot?.times.deskContentUpdatedAt, ISO);
+  assert.equal("scoreCoreRevision" in snapshot, false);
+  assert.equal("windowState" in snapshot, false);
+  assert.equal("dataAvailability" in snapshot, false);
+  assert.equal("nextEventId" in snapshot, false);
+});
+
+test("live matchday rejects partial detail vectors and fake unavailable snapshots", () => {
+  const partialDetail = matchdayResult();
+  partialDetail.snapshot.revisions.detailPublicationId = "detail-1";
+  assert.throws(
+    () => validateLiveMatchday(partialDetail),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+
+  const fakeUnavailable = matchdayResult();
+  fakeUnavailable.availability = "UNAVAILABLE";
+  fakeUnavailable.delivery = {
+    state: "UNAVAILABLE",
+    servedFrom: null,
+    reasonCodes: ["DESK_UNAVAILABLE"],
+  };
+  assert.throws(
+    () => validateLiveMatchday(fakeUnavailable),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+});
+
+test("active-event Match reads cannot enter the cross-request cache", () => {
+  assert.deepEqual(liveMatchdayRequestOptions(undefined, false), {
+    cachePolicy: "live",
+    cacheVariant: "matchday:event:active-pointer",
+    cacheTtl: 0,
+    staleTtl: 0,
+    forceRefresh: false,
+    trace: undefined,
+  });
+  assert.deepEqual(liveMatchdayRequestOptions(3, true), {
+    cachePolicy: "live",
+    cacheVariant: "matchday:event:3",
+    forceRefresh: true,
+    trace: undefined,
+  });
 });
 
 test("live matchday V2 query stays within the public AST budget", () => {

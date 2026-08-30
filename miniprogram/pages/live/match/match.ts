@@ -1,12 +1,9 @@
-import {
-  getLiveMatchByStatusSnapshot,
-  getLiveSnapshot,
-} from "../../../services/live.service";
+import { getLiveMatchByStatusSnapshot } from "../../../services/live.service";
 import type {
   LiveMatch,
+  LiveMatchdayStatus,
   LivePlayerRow,
   LiveSnapshotResult,
-  LiveSnapshotStatus,
 } from "../../../models/live";
 import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
 import type { Fixture } from "../../../models/common";
@@ -18,8 +15,9 @@ import {
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
-  shouldRevalidateCachedLiveSnapshot,
-  shouldPollLiveSnapshot,
+  liveMatchdayNeedsRefresh,
+  shouldRevalidateCachedLiveMatchday,
+  shouldPollLiveMatchday,
 } from "../../../utils/live-refresh";
 import {
   createLiveRefreshController,
@@ -76,7 +74,7 @@ interface LiveMatchLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
   trackNavigation?: boolean;
-  prefetchedLiveResult?: LiveSnapshotResult<LiveMatch[]>;
+  prefetchedLiveResult?: LiveSnapshotResult<LiveMatch[], LiveMatchdayStatus>;
 }
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -104,6 +102,25 @@ function formatTime(date: Date): string {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+export function matchDetailUpdateMessage(
+  snapshot: LiveMatchdayStatus | null,
+  matches: readonly LiveMatch[],
+): string {
+  if (
+    !snapshot ||
+    !matches.some((match) => match.playStatus !== "not_started") ||
+    !["PENDING", "STALE", "DEGRADED"].includes(
+      snapshot.detailDelivery.state,
+    )
+  ) {
+    return "";
+  }
+  const updatedAt = snapshot.times.detailContentUpdatedAt;
+  return updatedAt
+    ? `球员数据正在更新 · 明细更新于 ${formatTime(new Date(updatedAt))}`
+    : "球员数据正在更新";
 }
 
 function textValue(value: unknown, fallback = "-"): string {
@@ -752,7 +769,7 @@ Page({
   liveRequest: null as Promise<void> | null,
   liveRequestKey: "",
   liveRequestId: 0,
-  liveSnapshot: null as LiveSnapshotStatus | null,
+  liveSnapshot: null as LiveMatchdayStatus | null,
   cachedLiveStoredAt: undefined as number | undefined,
   liveRefresh: null as LiveRefreshController | null,
   probing: false,
@@ -811,31 +828,21 @@ Page({
         emptyDescription: emptyDescription(storedStatus),
       });
     }
-    // onShow can run before shared launch data has resolved. Wait for the
-    // current event, then arm recovery before the first match request so a
-    // failed cold-start request still has a revision poll to recover it.
+    // Match V2's active-event pointer is the cold-start authority. App context
+    // is consumed only when already available; an unavailable publication may
+    // fetch it later for the retained Core schedule fallback.
     this.setData({ loading: true });
-    let context = getAppContextSnapshot();
-    try {
-      context = await this.ensureContext("page-load");
-    } catch (error) {
-      if (!context) {
-        if (!this.pageVisible || this.perfTracker !== tracker) return;
-        this.showContextError(error);
-        this.startupPending = false;
-        return;
-      }
+    const context = getAppContextSnapshot();
+    if (context) {
+      this.currentEventId = context.currentEvent ?? 0;
+      this.targetEventId = context.displayEvent ?? 0;
+      this.loadedSeason = context.season || undefined;
+      this.armContextDeadline(context.nextDeadlineAt);
     }
-    if (!this.pageVisible || this.perfTracker !== tracker) return;
     this.startupPending = false;
-    this.perfTracker.mark("contextReadyAt");
-    const liveWindow = await getLiveSnapshot().catch(() => null);
-    this.liveSnapshot = liveWindow;
-    this.currentEventId = liveWindow?.eventId ?? context.currentEvent ?? 0;
-    this.targetEventId = liveWindow?.eventId ?? context.displayEvent ?? 0;
-    this.loadedSeason = context.season || undefined;
-    this.armContextDeadline(context.nextDeadlineAt);
+    tracker.mark("contextReadyAt");
     if (
+      context &&
       !context.currentEvent &&
       this.targetEventId &&
       !isValidStatus(storedStatus)
@@ -854,10 +861,14 @@ Page({
 
   initLiveRefresh() {
     if (this.liveRefresh) return;
-    let prefetchedLiveResult: LiveSnapshotResult<LiveMatch[]> | null = null;
+    let prefetchedLiveResult: LiveSnapshotResult<
+      LiveMatch[],
+      LiveMatchdayStatus
+    > | null = null;
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
+      hasRevisionChanged: liveMatchdayNeedsRefresh,
       probe: async () => {
         const liveResult = await getLiveMatchByStatusSnapshot(
           "all",
@@ -883,15 +894,24 @@ Page({
           prefetchedLiveResult: liveResult ?? undefined,
         });
       },
-      getNextRefreshAt: () => this.liveSnapshot?.nextRefreshAt || null,
+      getNextRefreshAt: () =>
+        this.liveSnapshot?.times.nextRefreshAt || null,
       // Publication revision, not a heartbeat deadline, owns content reloads.
       reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.contentUpdatedAt
-            ? { lastUpdated: formatTime(new Date(snapshot.contentUpdatedAt)) }
+          fixtureStaleMessage: matchDetailUpdateMessage(
+            snapshot,
+            this.coreMatches,
+          ),
+          ...(snapshot?.times.deskContentUpdatedAt
+            ? {
+                lastUpdated: formatTime(
+                  new Date(snapshot.times.deskContentUpdatedAt),
+                ),
+              }
             : {}),
         });
         this.syncDisplayState();
@@ -978,12 +998,8 @@ Page({
     try {
       const context = await this.ensureContext("page-show", true);
       if (!this.pageVisible) return;
-      const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
-      if (liveWindow) this.liveSnapshot = liveWindow;
-      const nextCurrentEventId =
-        liveWindow?.eventId ?? context.currentEvent ?? 0;
-      const nextTargetEventId =
-        liveWindow?.eventId ?? context.displayEvent ?? 0;
+      const nextCurrentEventId = context.currentEvent ?? 0;
+      const nextTargetEventId = context.displayEvent ?? nextCurrentEventId;
       const nextSeason = context.season || undefined;
       const changed =
         nextCurrentEventId !== this.currentEventId ||
@@ -1001,7 +1017,7 @@ Page({
       this.liveRequestId += 1;
       this.liveRequest = null;
       this.liveRequestKey = "";
-      this.liveSnapshot = liveWindow;
+      this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       this.setData({
         matches: [],
@@ -1088,26 +1104,30 @@ Page({
     try {
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
-        context = await this.ensureContext("pull-refresh", true);
+        context = await this.ensureContext("pull-refresh", true).catch(
+          () => context,
+        );
       }
-      if (!context) throw new Error("赛季和比赛轮信息加载失败");
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
-      const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
-      if (liveWindow) this.liveSnapshot = liveWindow;
-      this.currentEventId = liveWindow?.eventId ?? context.currentEvent ?? 0;
-      this.targetEventId = liveWindow?.eventId ?? context.displayEvent ?? 0;
-      this.loadedSeason = context.season || this.loadedSeason;
-      this.armContextDeadline(context.nextDeadlineAt);
-      tracker.mark("contextReadyAt");
-      if (!this.targetEventId) {
-        this.liveRefresh?.stop();
-        this.setData(noScheduleState(), () => {
-          wx.nextTick(() => tracker.observePrimary());
-        });
-        this.syncDisplayState();
-        return;
+      if (context) {
+        const nextCurrentEventId =
+          context.currentEvent ?? this.liveSnapshot?.eventId ?? 0;
+        const nextTargetEventId =
+          context.displayEvent ?? this.liveSnapshot?.eventId ?? 0;
+        if (
+          this.liveSnapshot &&
+          this.liveSnapshot.eventId !== nextTargetEventId
+        ) {
+          this.liveSnapshot = null;
+          this.cachedLiveStoredAt = undefined;
+        }
+        this.currentEventId = nextCurrentEventId;
+        this.targetEventId = nextTargetEventId;
+        this.loadedSeason = context.season || this.loadedSeason;
+        this.armContextDeadline(context.nextDeadlineAt);
       }
+      tracker.mark("contextReadyAt");
       this.initLiveRefresh();
       await this.loadData({
         background,
@@ -1167,11 +1187,10 @@ Page({
       // The replacement lifecycle owns both the load and its recovery polling.
       this.initLiveRefresh();
     }
-    const liveWindow = await getLiveSnapshot().catch(() => this.liveSnapshot);
-    if (liveWindow) this.liveSnapshot = liveWindow;
     const nextCurrentEventId =
-      liveWindow?.eventId ?? context?.currentEvent ?? 0;
-    const nextTargetEventId = liveWindow?.eventId ?? context?.displayEvent ?? 0;
+      context?.currentEvent ?? this.liveSnapshot?.eventId ?? this.currentEventId;
+    const nextTargetEventId =
+      context?.displayEvent ?? this.liveSnapshot?.eventId ?? this.targetEventId;
     const nextSeason = context?.season || undefined;
     this.armContextDeadline(context?.nextDeadlineAt);
     const seasonChanged = Boolean(
@@ -1193,7 +1212,7 @@ Page({
       this.liveRequestKey = "";
       this.currentEventId = nextCurrentEventId;
       this.targetEventId = nextTargetEventId;
-      this.liveSnapshot = liveWindow;
+      this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       if (resumed) {
         this.clearCopiedMatchTimer();
@@ -1330,29 +1349,7 @@ Page({
 
     const request = (async () => {
       try {
-        const context =
-          getAppContextSnapshot() || (await this.ensureContext("page-load"));
-        const liveWindowSnapshot = await getLiveSnapshot().catch(
-          () => this.liveSnapshot,
-        );
-        if (liveWindowSnapshot) this.liveSnapshot = liveWindowSnapshot;
-        const targetEvent =
-          liveWindowSnapshot?.eventId ??
-          this.targetEventId ??
-          context.displayEvent ??
-          0;
-        if (!targetEvent) {
-          this.liveRefresh?.stop();
-          this.setData(noScheduleState(), () => {
-            navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
-          });
-          this.syncDisplayState();
-          return;
-        }
-        this.currentEventId = targetEvent;
-        this.targetEventId = targetEvent;
-        this.armContextDeadline(context.nextDeadlineAt);
+        const cachedContext = getAppContextSnapshot();
         const requestTrace =
           options.background === true && options.trackNavigation !== true
             ? null
@@ -1366,7 +1363,7 @@ Page({
                   forceReason: options.forceRefresh
                     ? ("user-refresh" as const)
                     : undefined,
-                  contextRevision: context.contextRevision,
+                  contextRevision: cachedContext?.contextRevision ?? 0,
                 }
               : undefined;
 
@@ -1375,7 +1372,10 @@ Page({
         // they must never gate or add a second read to the warm live path.
         this.setData({ errorWorkload: "gameweek" });
         navigationTracker?.mark("primaryRequestStartAt");
-        let publishedMatchday: LiveSnapshotResult<LiveMatch[]> | null = null;
+        let publishedMatchday: LiveSnapshotResult<
+          LiveMatch[],
+          LiveMatchdayStatus
+        > | null = null;
         let publicationError: unknown = null;
         try {
           publishedMatchday =
@@ -1384,7 +1384,7 @@ Page({
               "all",
               options.forceRefresh === true,
               requestTrace,
-              targetEvent,
+              this.liveSnapshot?.eventId || undefined,
             ));
         } catch (error) {
           publicationError = error;
@@ -1398,6 +1398,12 @@ Page({
           );
           this.liveWindow = true;
           this.liveSnapshot = publishedMatchday.snapshot;
+          this.currentEventId = publishedMatchday.snapshot.eventId;
+          this.targetEventId = publishedMatchday.snapshot.eventId;
+          this.loadedSeason = publishedMatchday.snapshot.season;
+          if (cachedContext) {
+            this.armContextDeadline(cachedContext.nextDeadlineAt);
+          }
           this.cachedLiveStoredAt = publishedMatchday.servedStoredAt;
           this.coreMatches = publicationMatches;
           const publicationStatus = this.resolveActiveStatus(publicationMatches);
@@ -1418,10 +1424,13 @@ Page({
               hasData: true,
               scheduleEmpty: false,
               error: "",
-              fixtureStaleMessage: "",
+              fixtureStaleMessage: matchDetailUpdateMessage(
+                publishedMatchday.snapshot,
+                publicationMatches,
+              ),
               lastUpdated: formatTime(
                 new Date(
-                  publishedMatchday.snapshot.contentUpdatedAt ||
+                  publishedMatchday.snapshot.times.deskContentUpdatedAt ||
                     publishedMatchday.servedStoredAt ||
                     Date.now(),
                 ),
@@ -1451,6 +1460,22 @@ Page({
 
         // No accepted Match publication exists on this cold page. Fall back to
         // the retained Core schedule without fabricating live player detail.
+        const context =
+          cachedContext || (await this.ensureContext("page-load"));
+        const targetEvent = context.displayEvent ?? this.targetEventId ?? 0;
+        if (!targetEvent) {
+          this.liveRefresh?.stop();
+          this.setData(noScheduleState(), () => {
+            navigationTracker?.mark("primarySetDataAt");
+            wx.nextTick(() => navigationTracker?.observePrimary());
+          });
+          this.syncDisplayState();
+          return;
+        }
+        this.currentEventId = context.currentEvent ?? targetEvent;
+        this.targetEventId = targetEvent;
+        this.loadedSeason = context.season || this.loadedSeason;
+        this.armContextDeadline(context.nextDeadlineAt);
         this.setData({ errorWorkload: "fixtures" });
         const coreRead = await readCoreEventFixtureSchedule(
           targetEvent,
@@ -1464,9 +1489,7 @@ Page({
         navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
         this.liveWindow =
-          Boolean(
-            this.liveSnapshot && this.liveSnapshot.windowState !== "OFFSEASON",
-          ) ||
+          Boolean(this.liveSnapshot) ||
           coreRead.data.some(
             (fixture) => !fixture.finished && fixture.started === true,
           );
@@ -1557,19 +1580,17 @@ Page({
 
   shouldAutoRefresh(): boolean {
     if (!this.liveWindow && !this.liveSnapshot) return false;
-    return shouldPollLiveSnapshot({
+    return shouldPollLiveMatchday({
       pageVisible: this.pageVisible,
       currentEventId: this.currentEventId,
       selectedEventId: this.currentEventId,
       snapshot: this.liveSnapshot,
-      windowState: this.liveSnapshot?.windowState,
-      nextRefreshAt: this.liveSnapshot?.nextRefreshAt,
     });
   },
 
   revalidateCachedSnapshot(): boolean {
     if (
-      !shouldRevalidateCachedLiveSnapshot({
+      !shouldRevalidateCachedLiveMatchday({
         servedStoredAt: this.cachedLiveStoredAt,
         pageVisible: this.pageVisible,
         currentEventId: this.currentEventId,

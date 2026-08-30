@@ -9,7 +9,6 @@ export type LiveSnapshotState =
   | "GW_REVIEW"
   | "FINALIZED"
   | "PRESEASON"
-  | "PRE_DEADLINE"
   | "BETWEEN_GAMEWEEKS"
   | "OFFSEASON"
   | "UNAVAILABLE";
@@ -105,9 +104,60 @@ export interface LiveSnapshotStatus {
   nextRefreshAt?: string | null;
 }
 
-export interface LiveSnapshotResult<T> {
+export type LiveMatchdayState =
+  | "PRE_DEADLINE"
+  | "LIVE_ACTIVE"
+  | "BETWEEN_FIXTURES"
+  | "DAY_SETTLING"
+  | "GW_REVIEW"
+  | "FINALIZED";
+
+export type LiveMatchdayDeliveryState = LiveDeliveryState | "PENDING";
+
+export interface LiveMatchdayDelivery {
+  state: LiveMatchdayDeliveryState;
+  servedFrom: Exclude<LiveServedFrom, "FINAL_RESULT" | "UNAVAILABLE"> | null;
+  reasonCodes: string[];
+}
+
+export interface LiveMatchdayRevisionVector {
+  deskPublicationId: string;
+  deskGeneration: number;
+  lifecycle: string;
+  fixtureIdentity: string;
+  scoreState: string;
+  detailPublicationId: string | null;
+  detailGeneration: number | null;
+  playerDetail: string | null;
+}
+
+export interface LiveMatchdayTimes {
+  deskSourceCheckedAt: string;
+  deskContentUpdatedAt: string;
+  deskPublishedAt: string;
+  deskStaleAt: string | null;
+  detailSourceCheckedAt: string | null;
+  detailContentUpdatedAt: string | null;
+  detailPublishedAt: string | null;
+  detailStaleAt: string | null;
+  servedAt: string;
+  nextRefreshAt: string | null;
+}
+
+export interface LiveMatchdayStatus {
+  season: string;
+  eventId: number;
+  state: LiveMatchdayState;
+  revisions: LiveMatchdayRevisionVector;
+  times: LiveMatchdayTimes;
+  availability: "READY" | "UNAVAILABLE";
+  delivery: LiveMatchdayDelivery;
+  detailDelivery: LiveMatchdayDelivery;
+}
+
+export interface LiveSnapshotResult<T, S = LiveSnapshotStatus> {
   data: T;
-  snapshot: LiveSnapshotStatus | null;
+  snapshot: S | null;
   /** Fetch time when the payload was served from the short-lived client cache. */
   servedStoredAt?: number;
   failedEntryIds?: number[];

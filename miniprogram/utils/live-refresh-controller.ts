@@ -12,17 +12,26 @@ import type { LiveSnapshotStatus } from "../models/live";
  *
  * The core stays wx-free: connectivity is injected so tests can drive it.
  */
-export interface LiveRefreshControllerOptions {
+type RefreshSnapshot = { eventId: number; state: string };
+
+export interface LiveRefreshControllerOptions<
+  Snapshot extends RefreshSnapshot = LiveSnapshotStatus,
+> {
   /** Page guard: visible, current event selected, not settled, target exists. */
   isEligible: () => boolean;
   /** The snapshot the page has accepted, for revision comparison. */
-  getAcceptedSnapshot: () => LiveSnapshotStatus | null;
+  getAcceptedSnapshot: () => Snapshot | null;
   /** Lightweight revision probe (production: getLiveSnapshot). */
-  probe: () => Promise<LiveSnapshotStatus | null>;
+  probe: () => Promise<Snapshot | null>;
   /** Background full reload after a revision/event change. */
   reload: () => Promise<void>;
   /** Adopt an observed snapshot that turned out unchanged. */
-  acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
+  acceptSnapshot?: (snapshot: Snapshot | null) => void;
+  /** Product-specific revision vector comparison; LP remains the default. */
+  hasRevisionChanged?: (
+    accepted: Snapshot | null,
+    observed: Snapshot | null,
+  ) => boolean;
   /** The server's next check deadline; this schedules a probe only. */
   getNextRefreshAt?: () => string | null | undefined;
   /** Reload page-specific data when its advertised deadline has elapsed. */
@@ -65,8 +74,8 @@ export interface LiveRefreshController {
   dispose(): void;
 }
 
-export function createLiveRefreshController(
-  options: LiveRefreshControllerOptions,
+export function createLiveRefreshController<Snapshot extends RefreshSnapshot>(
+  options: LiveRefreshControllerOptions<Snapshot>,
 ): LiveRefreshController {
   const intervalMs = options.intervalMs ?? LIVE_REFRESH_INTERVAL_MS;
   let timer: number | undefined;
@@ -126,10 +135,13 @@ export function createLiveRefreshController(
         const observed = await options.probe();
         const probeDurationMs = Date.now() - probeStart;
         if (isResponseStale(requestId)) return;
-        const revisionChanged = liveSnapshotNeedsRefresh(
-          options.getAcceptedSnapshot(),
-          observed,
-        );
+        const accepted = options.getAcceptedSnapshot();
+        const revisionChanged = options.hasRevisionChanged
+          ? options.hasRevisionChanged(accepted, observed)
+          : liveSnapshotNeedsRefresh(
+              accepted as unknown as LiveSnapshotStatus | null,
+              observed as unknown as LiveSnapshotStatus | null,
+            );
         if (
           !revisionChanged &&
           !(options.reloadOnDeadline === true && deadlineExpired)

@@ -1,19 +1,18 @@
 import { getServedCacheStoredAt, graphqlRequest } from "./graphql.service";
-import type { PageRequestTrace } from "./graphql.service";
+import type { GraphQLOptions, PageRequestTrace } from "./graphql.service";
 import type {
   LiveEntryAvailability,
   LiveEntryResult,
-  LiveDataAvailability,
-  LiveDelivery,
-  LiveDeliveryState,
   LiveMatch,
+  LiveMatchdayDelivery,
+  LiveMatchdayRevisionVector,
+  LiveMatchdayState,
+  LiveMatchdayStatus,
+  LiveMatchdayTimes,
   LivePlayerRow,
   LiveScore,
-  LiveServedFrom,
-  LiveRevisionVector,
   LiveSnapshotResult,
   LiveSnapshotStatus,
-  LiveTimes,
 } from "../models/live";
 import { traceableLiveScore } from "./live-score-v2";
 
@@ -394,7 +393,6 @@ export const LIVE_MATCHES_QUERY = `
       snapshot {
         season
         eventId
-        nextEventId
         state
         revisions {
           deskPublicationId
@@ -484,43 +482,10 @@ export interface GraphQLMatchData {
   players?: GraphQLMatchdayPlayer[];
 }
 
-type MatchdayDeliveryState = LiveDeliveryState | "PENDING";
-
-interface LiveMatchdayDelivery {
-  state: MatchdayDeliveryState;
-  servedFrom: LiveServedFrom | null;
-  reasonCodes: string[];
-}
-
-interface LiveMatchdayRevisionVector {
-  deskPublicationId: string;
-  deskGeneration: number;
-  lifecycle: string;
-  fixtureIdentity: string;
-  scoreState: string;
-  detailPublicationId: string | null;
-  detailGeneration: number | null;
-  playerDetail: string | null;
-}
-
-interface LiveMatchdayTimes {
-  deskSourceCheckedAt: string;
-  deskContentUpdatedAt: string;
-  deskPublishedAt: string;
-  deskStaleAt: string | null;
-  detailSourceCheckedAt: string | null;
-  detailContentUpdatedAt: string | null;
-  detailPublishedAt: string | null;
-  detailStaleAt: string | null;
-  servedAt: string;
-  nextRefreshAt: string | null;
-}
-
 interface LiveMatchdaySnapshot {
   season: string;
   eventId: number;
-  nextEventId: number | null;
-  state: LiveSnapshotStatus["state"];
+  state: LiveMatchdayState;
   revisions: LiveMatchdayRevisionVector;
   times: LiveMatchdayTimes;
   detailDelivery: LiveMatchdayDelivery;
@@ -586,102 +551,153 @@ function mapLiveMatchdayPlayer(player: GraphQLMatchdayPlayer): LivePlayerRow {
   };
 }
 
-function snapshotFromLiveMatchday(
+const MATCH_LIFECYCLE_STATES = new Set<LiveMatchdayState>([
+  "PRE_DEADLINE",
+  "LIVE_ACTIVE",
+  "BETWEEN_FIXTURES",
+  "DAY_SETTLING",
+  "GW_REVIEW",
+  "FINALIZED",
+]);
+
+const MATCH_DELIVERY_STATES = new Set([
+  "FRESH",
+  "STALE",
+  "DEGRADED",
+  "FINAL",
+  "PENDING",
+  "UNAVAILABLE",
+]);
+
+const MATCH_SERVED_FROM = new Set([
+  "REDIS_CURRENT",
+  "REDIS_PREVIOUS",
+  "PROCESS_LKG",
+  "POSTGRES_CHECKPOINT",
+]);
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isOptionalTimestamp(value: unknown): boolean {
+  return value === null || isTimestamp(value);
+}
+
+function isMatchDelivery(value: unknown): value is LiveMatchdayDelivery {
+  if (!value || typeof value !== "object") return false;
+  const delivery = value as LiveMatchdayDelivery;
+  return (
+    MATCH_DELIVERY_STATES.has(delivery.state) &&
+    (delivery.servedFrom === null || MATCH_SERVED_FROM.has(delivery.servedFrom)) &&
+    Array.isArray(delivery.reasonCodes) &&
+    delivery.reasonCodes.every((reason) => typeof reason === "string" && reason.length > 0)
+  );
+}
+
+export function snapshotFromLiveMatchday(
   result: LiveMatchesResponse["liveMatchday"],
-): LiveSnapshotStatus | null {
+): LiveMatchdayStatus | null {
   const snapshot = result.snapshot;
   if (!snapshot) return null;
-  const dataAvailability: LiveDataAvailability =
-    result.availability !== "READY" || result.delivery.state === "PENDING"
-      ? "UNAVAILABLE"
-      : result.delivery.state;
-  const contentUpdatedAt = [
-    snapshot.times.deskContentUpdatedAt,
-    snapshot.times.detailContentUpdatedAt,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
-  const revisions: LiveRevisionVector = {
-    publicationId: snapshot.revisions.deskPublicationId,
-    generation: snapshot.revisions.deskGeneration,
-    lifecycle: snapshot.revisions.lifecycle,
-    fixtureIdentity: snapshot.revisions.fixtureIdentity,
-    scoreCore: snapshot.revisions.scoreState,
-    displayStats:
-      snapshot.revisions.playerDetail ?? snapshot.revisions.scoreState,
-    explain: snapshot.revisions.playerDetail ?? snapshot.revisions.scoreState,
-    picksBase: null,
-    officialAdjustment: null,
-    previousTotals: null,
-    finalResult: null,
-    rules: "live-matches-v2",
-    algorithm: "live-matches-v2",
-    input:
-      snapshot.revisions.detailPublicationId ??
-      snapshot.revisions.deskPublicationId,
-  };
-  const times: LiveTimes = {
-    sourceCheckedAt: snapshot.times.deskSourceCheckedAt,
-    contentUpdatedAt: snapshot.times.deskContentUpdatedAt,
-    publishedAt: snapshot.times.deskPublishedAt,
-    checkpointedAt: null,
-    servedAt: snapshot.times.servedAt,
-    staleAt:
-      snapshot.times.deskStaleAt ??
-      snapshot.times.nextRefreshAt ??
-      snapshot.times.servedAt,
-    nextRefreshAt: snapshot.times.nextRefreshAt,
-  };
-  const delivery: LiveDelivery = {
-    state:
-      result.delivery.state === "PENDING"
-        ? "UNAVAILABLE"
-        : result.delivery.state,
-    servedFrom: result.delivery.servedFrom ?? "UNAVAILABLE",
-    reasonCodes: result.delivery.reasonCodes,
-  };
-  const windowState: LiveSnapshotStatus["windowState"] =
-    snapshot.state === "UNAVAILABLE"
-      ? null
-      : snapshot.state === "PICKS_WAIT" ||
-          snapshot.state === "PICKS_PROBE" ||
-          snapshot.state === "PICKS_SYNC"
-        ? "PRE_DEADLINE"
-        : snapshot.state;
   return {
     season: snapshot.season,
     eventId: snapshot.eventId,
-    scoreCoreRevision: snapshot.revisions.scoreState,
     state: snapshot.state,
-    publishedAt: snapshot.times.deskPublishedAt,
-    sourceCheckedAt: snapshot.times.deskSourceCheckedAt,
-    contentUpdatedAt: contentUpdatedAt ?? snapshot.times.deskContentUpdatedAt,
-    revisions,
-    times,
-    delivery,
-    windowState,
-    dataAvailability,
-    nextRefreshAt: snapshot.times.nextRefreshAt,
+    revisions: snapshot.revisions,
+    times: snapshot.times,
+    availability: result.availability,
+    delivery: result.delivery,
+    detailDelivery: snapshot.detailDelivery,
   };
 }
 
-function validateLiveMatchday(
-  result: LiveMatchesResponse["liveMatchday"],
-): void {
-  const snapshot = result.snapshot;
-  if (result.availability === "READY" && !snapshot) {
+export function validateLiveMatchday(
+  result: LiveMatchesResponse["liveMatchday"] | null | undefined,
+): asserts result is LiveMatchesResponse["liveMatchday"] {
+  if (
+    !result ||
+    (result.availability !== "READY" && result.availability !== "UNAVAILABLE") ||
+    !isMatchDelivery(result.delivery)
+  ) {
     throw new Error("LIVE_MATCHDAY_INCOHERENT");
   }
-  if (!snapshot) return;
+  const snapshot = result.snapshot;
+  if (result.availability === "UNAVAILABLE") {
+    if (
+      snapshot !== null ||
+      result.delivery.state !== "UNAVAILABLE" ||
+      result.delivery.servedFrom !== null
+    ) {
+      throw new Error("LIVE_MATCHDAY_INCOHERENT");
+    }
+    return;
+  }
+  if (
+    !snapshot ||
+    result.delivery.state === "UNAVAILABLE" ||
+    result.delivery.state === "PENDING" ||
+    result.delivery.servedFrom === null
+  ) {
+    throw new Error("LIVE_MATCHDAY_INCOHERENT");
+  }
+  if (!snapshot.revisions || !snapshot.times) {
+    throw new Error("LIVE_MATCHDAY_INCOHERENT");
+  }
+  const detailRevisionPresent =
+    typeof snapshot.revisions.detailPublicationId === "string" &&
+    snapshot.revisions.detailPublicationId.length > 0 &&
+    Number.isSafeInteger(snapshot.revisions.detailGeneration) &&
+    Number(snapshot.revisions.detailGeneration) > 0 &&
+    typeof snapshot.revisions.playerDetail === "string" &&
+    snapshot.revisions.playerDetail.length > 0;
+  const detailRevisionAbsent =
+    snapshot.revisions.detailPublicationId === null &&
+    snapshot.revisions.detailGeneration === null &&
+    snapshot.revisions.playerDetail === null;
   if (
     !snapshot.season ||
     !Number.isSafeInteger(snapshot.eventId) ||
     snapshot.eventId <= 0 ||
+    !MATCH_LIFECYCLE_STATES.has(snapshot.state) ||
     !snapshot.revisions.deskPublicationId ||
     !Number.isSafeInteger(snapshot.revisions.deskGeneration) ||
     snapshot.revisions.deskGeneration <= 0 ||
+    !snapshot.revisions.lifecycle ||
+    !snapshot.revisions.fixtureIdentity ||
     !snapshot.revisions.scoreState ||
+    (!detailRevisionPresent && !detailRevisionAbsent) ||
+    !isTimestamp(snapshot.times.deskSourceCheckedAt) ||
+    !isTimestamp(snapshot.times.deskContentUpdatedAt) ||
+    !isTimestamp(snapshot.times.deskPublishedAt) ||
+    !isOptionalTimestamp(snapshot.times.deskStaleAt) ||
+    !isOptionalTimestamp(snapshot.times.detailSourceCheckedAt) ||
+    !isOptionalTimestamp(snapshot.times.detailContentUpdatedAt) ||
+    !isOptionalTimestamp(snapshot.times.detailPublishedAt) ||
+    !isOptionalTimestamp(snapshot.times.detailStaleAt) ||
+    !isTimestamp(snapshot.times.servedAt) ||
+    !isOptionalTimestamp(snapshot.times.nextRefreshAt) ||
+    !isMatchDelivery(snapshot.detailDelivery) ||
     !Array.isArray(snapshot.matches)
+  ) {
+    throw new Error("LIVE_MATCHDAY_INCOHERENT");
+  }
+  if (
+    detailRevisionAbsent !==
+      (snapshot.times.detailSourceCheckedAt === null &&
+        snapshot.times.detailContentUpdatedAt === null &&
+        snapshot.times.detailPublishedAt === null &&
+        snapshot.times.detailStaleAt === null) ||
+    (detailRevisionAbsent &&
+      (snapshot.detailDelivery.servedFrom !== null ||
+        !["PENDING", "DEGRADED"].includes(snapshot.detailDelivery.state))) ||
+    (detailRevisionPresent &&
+      (snapshot.detailDelivery.servedFrom === null ||
+        ["PENDING", "UNAVAILABLE"].includes(snapshot.detailDelivery.state))) ||
+    (result.delivery.state === "FINAL" &&
+      (snapshot.state !== "FINALIZED" ||
+        snapshot.detailDelivery.state !== "FINAL" ||
+        !detailRevisionPresent))
   ) {
     throw new Error("LIVE_MATCHDAY_INCOHERENT");
   }
@@ -697,6 +713,20 @@ function validateLiveMatchday(
       fixture.homeTeamId <= 0 ||
       fixture.awayTeamId <= 0 ||
       fixture.homeTeamId === fixture.awayTeamId ||
+      !fixture.homeTeamName ||
+      !fixture.homeTeamShortName ||
+      !fixture.awayTeamName ||
+      !fixture.awayTeamShortName ||
+      (fixture.homeScore !== null &&
+        (!Number.isSafeInteger(fixture.homeScore) || fixture.homeScore < 0)) ||
+      (fixture.awayScore !== null &&
+        (!Number.isSafeInteger(fixture.awayScore) || fixture.awayScore < 0)) ||
+      (fixture.kickoffTime !== null && !isTimestamp(fixture.kickoffTime)) ||
+      !Number.isSafeInteger(fixture.minutes) ||
+      fixture.minutes < 0 ||
+      typeof fixture.started !== "boolean" ||
+      typeof fixture.finished !== "boolean" ||
+      typeof fixture.finishedProvisional !== "boolean" ||
       !Array.isArray(fixture.players)
     ) {
       throw new Error("LIVE_MATCHDAY_INCOHERENT");
@@ -710,7 +740,9 @@ function validateLiveMatchday(
         playerIds.has(player.id) ||
         (player.teamId !== fixture.homeTeamId &&
           player.teamId !== fixture.awayTeamId) ||
-        !Number.isFinite(player.totalPoints) ||
+        !player.webName ||
+        !Object.prototype.hasOwnProperty.call(POSITION_TYPE, player.position) ||
+        !Number.isSafeInteger(player.totalPoints) ||
         !Array.isArray(player.stats)
       ) {
         throw new Error("LIVE_MATCHDAY_INCOHERENT");
@@ -729,6 +761,22 @@ function validateLiveMatchday(
       }
     }
   }
+}
+
+export function liveMatchdayRequestOptions(
+  expectedEventId: number | undefined,
+  forceRefresh: boolean,
+  trace?: PageRequestTrace | null,
+): GraphQLOptions {
+  return {
+    cachePolicy: "live",
+    cacheVariant: `matchday:event:${expectedEventId ?? "active-pointer"}`,
+    // An active pointer is intentionally never cached: its event identity can
+    // change between requests. Explicit event reads remain season+event keyed.
+    ...(expectedEventId === undefined ? { cacheTtl: 0, staleTtl: 0 } : {}),
+    forceRefresh,
+    trace,
+  };
 }
 
 export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
@@ -871,17 +919,17 @@ export async function getLiveMatchByStatusSnapshot(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
   expectedEventId?: number,
-): Promise<LiveSnapshotResult<LiveMatch[]>> {
+): Promise<LiveSnapshotResult<LiveMatch[], LiveMatchdayStatus>> {
   const variables = { eventId: expectedEventId ?? null };
+  const requestOptions = liveMatchdayRequestOptions(
+    expectedEventId,
+    forceRefresh,
+    trace,
+  );
   const data = await graphqlRequest<LiveMatchesResponse>(
     LIVE_MATCHES_QUERY,
     variables,
-    {
-      cachePolicy: "live",
-      cacheVariant: "matchday",
-      forceRefresh,
-      trace,
-    },
+    requestOptions,
   );
   const result = data.liveMatchday;
   validateLiveMatchday(result);
@@ -889,7 +937,11 @@ export async function getLiveMatchByStatusSnapshot(
   return {
     data: filterLiveMatchesByStatus(mapped, status),
     snapshot: snapshotFromLiveMatchday(result),
-    servedStoredAt: getServedCacheStoredAt(LIVE_MATCHES_QUERY, variables),
+    servedStoredAt: getServedCacheStoredAt(
+      LIVE_MATCHES_QUERY,
+      variables,
+      requestOptions,
+    ),
   };
 }
 

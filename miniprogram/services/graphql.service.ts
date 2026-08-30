@@ -548,6 +548,17 @@ export function isLiveMatchesV2Query(query: string): boolean {
   return /\bliveMatchday\s*(?:\(|\{)/.test(query);
 }
 
+export function liveContractVersionForQuery(query: string): string | null {
+  const matches = isLiveMatchesV2Query(query);
+  const points = isLivePointsV2Query(query);
+  if (matches && points) {
+    throw new Error("LIVE_CONTRACT_MIXED_OPERATION");
+  }
+  if (matches) return LIVE_MATCHES_CONTRACT_VERSION;
+  if (points) return "live-points-v2";
+  return null;
+}
+
 function makeRequest<T>(
   query: string,
   variables: Record<string, unknown>,
@@ -589,10 +600,9 @@ function makeRequest<T>(
       token,
       getMiniProgramDeviceId(),
     );
-    if (isLiveMatchesV2Query(query)) {
-      header["X-LetLetMe-Contract"] = LIVE_MATCHES_CONTRACT_VERSION;
-    } else if (isLivePointsV2Query(query)) {
-      header["X-LetLetMe-Contract"] = "live-points-v2";
+    const liveContractVersion = liveContractVersionForQuery(query);
+    if (liveContractVersion) {
+      header["X-LetLetMe-Contract"] = liveContractVersion;
     }
 
     onNetworkAttempt?.();
@@ -729,8 +739,9 @@ function requestIdentity(
 export function getServedCacheStoredAt(
   query: string,
   variables: Record<string, unknown>,
+  options?: GraphQLOptions,
 ): number | undefined {
-  const policy = resolvePolicy(query);
+  const policy = resolvePolicy(query, options);
   const token = policy.authMode === "session" ? getApiSessionToken() : null;
   const { requestKey } = requestIdentity(query, variables, policy, token);
   return getServedStoredAt(requestKey);

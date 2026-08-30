@@ -433,24 +433,31 @@ test("team summary requests discard older GW responses", () => {
   );
 });
 
-test("unchanged live probes refresh the displayed check time", () => {
+test("unchanged live probes update metadata while Match Last Updated remains content time", () => {
   for (const path of [
     "miniprogram/pages/live/entry/entry.ts",
-    "miniprogram/pages/live/match/match.ts",
     "miniprogram/pages/live/tournament/tournament.controller.ts",
   ]) {
     const page = source(path);
-    const timestampField = path.endsWith("/match.ts")
-      ? "contentUpdatedAt"
-      : "sourceCheckedAt";
     assert.match(
       page,
       new RegExp(
-        `acceptSnapshot:[\\s\\S]*snapshot\\?\\.${timestampField}[\\s\\S]*lastUpdated: formatTime\\(new Date\\(snapshot\\.${timestampField}\\)\\)`,
+        `acceptSnapshot:[\\s\\S]*snapshot\\?\\.sourceCheckedAt[\\s\\S]*lastUpdated: formatTime\\(new Date\\(snapshot\\.sourceCheckedAt\\)\\)`,
       ),
       path,
     );
   }
+  const match = source("miniprogram/pages/live/match/match.ts");
+  const accept = match.slice(
+    match.indexOf("acceptSnapshot:"),
+    match.indexOf("onProbeError:"),
+  );
+  assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
+  assert.match(
+    accept,
+    /lastUpdated: formatTime\( new Date\(snapshot\.times\.deskContentUpdatedAt\), \)/,
+  );
+  assert.doesNotMatch(accept, /deskSourceCheckedAt/);
 });
 
 test("fixture windows honor event and season cache identity on open and resume", () => {

@@ -1,4 +1,7 @@
-import type { LiveSnapshotStatus } from "../models/live";
+import type {
+  LiveMatchdayStatus,
+  LiveSnapshotStatus,
+} from "../models/live";
 
 /**
  * The single presentation vocabulary every Live surface renders. Derived
@@ -15,7 +18,7 @@ export type LiveDisplayState =
   | "unavailable";
 
 export interface LiveDisplayInput {
-  snapshot: LiveSnapshotStatus | null;
+  snapshot: LiveSnapshotStatus | LiveMatchdayStatus | null;
   /** Any renderable payload (fresh or last-good). */
   hasData: boolean;
   /** Full fetch in flight. */
@@ -52,6 +55,13 @@ export function normalizeLiveDisplayState(input: LiveDisplayInput): LiveDisplayS
   if (snapshot?.state === "FINALIZED") return "final";
   if (snapshot?.state === "PRE_DEADLINE" && !hasData) return "scheduled";
   if (loading || probing) return "refreshing";
+  if (
+    hasData &&
+    snapshot?.delivery &&
+    ["STALE", "DEGRADED", "UNAVAILABLE"].includes(snapshot.delivery.state)
+  ) {
+    return "delayed";
+  }
   if (lastError && hasData) return "delayed";
   return "fresh";
 }
