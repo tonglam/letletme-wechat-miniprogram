@@ -313,16 +313,24 @@ jobs:
             .codex/instruction-policy.v1.json \
             .codex/instruction-integrity.json \
             .codex/global-skills.json \
-            .codex/provision_global_skills.py; do
-            if test -e "trusted/$file" && test "$approved" != true; then
-              test ! -L "trusted/$file"
-              test -f "target/$file" && test ! -L "target/$file"
-              cmp -s "trusted/$file" "target/$file" || {
-                echo "governance gate file changed: $file"
+            .codex/provision_global_skills.py \
+            skills-lock.json; do
+            if test "$approved" != true; then
+              if test -e "trusted/$file"; then
+                test ! -L "trusted/$file"
+                test -f "target/$file" && test ! -L "target/$file"
+                cmp -s "trusted/$file" "target/$file" || {
+                  echo "governance gate file changed: $file"
+                  exit 1
+                }
+              elif test -e "target/$file"; then
+                echo "governance gate file added: $file"
                 exit 1
-              }
+              fi
             else
-              test -s "target/$file" && test ! -L "target/$file"
+              if test -e "target/$file"; then
+                test -s "target/$file" && test ! -L "target/$file"
+              fi
             fi
           done
           if test "$approved" = true; then
@@ -568,7 +576,7 @@ jobs:
 
           validator = load_tree(
               Path(os.environ["TARGET_VALIDATOR"]),
-              {"parse_yaml_mapping", "validate_asset", "check_agents_claude_consistency", "main", "has_secret", "_has_private_ip_literal", "_looks_like_placeholder", "_validate_skill_inventory"},
+              {"parse_yaml_mapping", "validate_asset", "check_agents_claude_consistency", "main", "has_secret", "has_secret_bytes", "has_locked_skill_secret", "has_locked_skill_secret_bytes", "skill_tree_digest", "validate_locked_skill", "_has_private_ip_literal", "_looks_like_placeholder", "_validate_skill_inventory"},
           )
           provisioner_path = Path(os.environ["TARGET_PROVISIONER"])
           provisioner = load_tree(provisioner_path, {"load_manifest", "verify_registry", "tree_digest", "main"})
@@ -1129,6 +1137,55 @@ jobs:
                           rebound.add(node.asname or node.name)
               return rebound
 
+          def check_has_secret_shape(node):
+              """Require secret-detection results to reach a failure return."""
+
+              def calls_receiver(expression, operation, receiver):
+                  return any(
+                      isinstance(item, ast.Call)
+                      and isinstance(item.func, ast.Attribute)
+                      and item.func.attr == operation
+                      and isinstance(item.func.value, ast.Name)
+                      and item.func.value.id == receiver
+                      for item in ast.walk(expression)
+                  )
+
+              def calls_name(expression, name):
+                  return any(
+                      isinstance(item, ast.Call)
+                      and isinstance(item.func, ast.Name)
+                      and item.func.id == name
+                      for item in ast.walk(expression)
+                  )
+
+              def returns_true(statements):
+                  return any(
+                      isinstance(item, ast.Return)
+                      and isinstance(item.value, ast.Constant)
+                      and item.value.value is True
+                      for statement in statements
+                      for item in ast.walk(statement)
+                  )
+
+              precheck = False
+              placeholder_check = False
+              for branch in ast.walk(node):
+                  if not isinstance(branch, ast.If):
+                      continue
+                  if (
+                      calls_receiver(branch.test, "search", "PEM_RE")
+                      and calls_receiver(branch.test, "search", "PRIVATE_ORIGIN_RE")
+                      and calls_name(branch.test, "_has_private_ip_literal")
+                      and returns_true(branch.body)
+                  ):
+                      precheck = True
+                  if calls_name(branch.test, "_looks_like_placeholder") and returns_true(branch.body):
+                      placeholder_check = True
+              if not precheck:
+                  raise SystemExit("approved validator has_secret does not propagate pre-check results")
+              if not placeholder_check:
+                  raise SystemExit("approved validator has_secret does not propagate credential-pattern results")
+
           def check_validator_shape(tree):
               parse_yaml = function_node(tree, "parse_yaml_mapping")
               validate = function_node(tree, "validate_asset")
@@ -1139,7 +1196,11 @@ jobs:
                   "_validate_instruction_file": function_node(tree, "_validate_instruction_file"),
                   "_validate_global_manifest": function_node(tree, "_validate_global_manifest"),
                   "_validate_skill_inventory": function_node(tree, "_validate_skill_inventory"),
+                  "validate_locked_skill": function_node(tree, "validate_locked_skill"),
                   "has_secret": function_node(tree, "has_secret"),
+                  "has_secret_bytes": function_node(tree, "has_secret_bytes"),
+                  "has_locked_skill_secret_bytes": function_node(tree, "has_locked_skill_secret_bytes"),
+                  "skill_tree_digest": function_node(tree, "skill_tree_digest"),
                   "_has_private_ip_literal": function_node(tree, "_has_private_ip_literal"),
                   "_looks_like_placeholder": function_node(tree, "_looks_like_placeholder"),
               }
@@ -1155,16 +1216,32 @@ jobs:
                       "_validate_instruction_file",
                       "_validate_global_manifest",
                       "_validate_skill_inventory",
+                      "validate_locked_skill",
                       "has_secret",
+                      "has_secret_bytes",
+                      "has_locked_skill_secret_bytes",
+                      "skill_tree_digest",
                       "_has_private_ip_literal",
                       "_looks_like_placeholder",
                   },
               )
               if rebound:
                   raise SystemExit(f"approved validator rebinds protected names: {', '.join(sorted(rebound))}")
+              check_has_secret_shape(helper_nodes["has_secret"])
+              secret_bytes = helper_nodes["has_secret_bytes"]
+              json_operations = {
+                  item.func.attr
+                  for item in ast.walk(secret_bytes)
+                  if isinstance(item, ast.Call)
+                  and isinstance(item.func, ast.Attribute)
+                  and isinstance(item.func.value, ast.Name)
+                  and item.func.value.id == "json"
+              }
+              if not {"loads", "dumps"}.issubset(json_operations):
+                  raise SystemExit("approved validator has_secret_bytes must normalize decoded JSON")
               required_calls = {
                   "parse_yaml_mapping": (parse_yaml, {"_parse_scalar"}),
-                  "validate_asset": (validate, {"validate_skill", "_validate_instruction_file", "_validate_global_manifest", "check_agents_claude_consistency", "_validate_skill_inventory"}),
+                  "validate_asset": (validate, {"validate_skill", "validate_locked_skill", "_validate_instruction_file", "_validate_global_manifest", "check_agents_claude_consistency", "_validate_skill_inventory"}),
                   "main": (main, {"validate_asset"}),
               }
               for label, (node, required_names) in required_calls.items():
@@ -1330,10 +1407,14 @@ jobs:
               check_exception_handlers(main, {"validate_asset"}, "validator main")
               helper_requirements = {
                   "_parse_scalar": {"_strip_yaml_comment", "loads"},
-                  "validate_skill": {"_validate_instruction_file", "rglob", "read_bytes", "has_secret"},
+                  "validate_skill": {"_validate_instruction_file", "rglob", "read_bytes", "has_secret_bytes"},
+                  "validate_locked_skill": {"skill_tree_digest", "rglob", "read_bytes", "is_file", "has_locked_skill_secret_bytes"},
+                  "skill_tree_digest": {"sha256", "rglob", "read_bytes", "relative_to", "as_posix"},
+                  "has_locked_skill_secret_bytes": {"loads", "dumps", "has_locked_skill_secret"},
                   "_validate_instruction_file": {"read_text", "read_frontmatter", "check_reference_links", "scan_reference_graph", "has_secret"},
                   "_validate_global_manifest": {"load_json", "read_bytes", "sha256", "resolve"},
                   "_validate_skill_inventory": {"load_json"},
+                  "has_secret_bytes": {"loads", "has_secret"},
                   "has_secret": {"search", "finditer", "_has_private_ip_literal", "_looks_like_placeholder"},
                   "_has_private_ip_literal": {"finditer", "ip_address"},
                   "_looks_like_placeholder": {"fullmatch", "match", "search"},
@@ -1346,10 +1427,13 @@ jobs:
                       raise SystemExit(f"approved validator {label} is missing helper operations: {', '.join(missing)}")
               helper_direct = {
                   "_parse_scalar": {"_strip_yaml_comment"},
-                  "validate_skill": {"_validate_instruction_file", "has_secret"},
+                  "validate_skill": {"_validate_instruction_file", "has_secret_bytes"},
+                  "validate_locked_skill": {"skill_tree_digest", "has_locked_skill_secret_bytes"},
                   "_validate_instruction_file": {"read_frontmatter", "check_reference_links", "scan_reference_graph", "has_secret"},
                   "_validate_global_manifest": {"load_json"},
                   "_validate_skill_inventory": {"load_json"},
+                  "has_secret_bytes": {"has_secret"},
+                  "has_locked_skill_secret_bytes": {"has_locked_skill_secret"},
                   "has_secret": {"_has_private_ip_literal", "_looks_like_placeholder"},
               }
               helper_receivers = {
@@ -1363,6 +1447,26 @@ jobs:
                   },
                   "_validate_skill_inventory": {
                       "iterdir": {"root"},
+                  },
+                  "validate_locked_skill": {
+                      "is_dir": {"path"},
+                      "is_file": {"entry", "reference"},
+                      "rglob": {"path"},
+                      "read_bytes": {"reference"},
+                  },
+                  "skill_tree_digest": {
+                      "sha256": {"hashlib"},
+                      "rglob": {"path"},
+                      "relative_to": {"item"},
+                      "as_posix": {"relative"},
+                      "read_bytes": {"item"},
+                  },
+                  "has_secret_bytes": {
+                      "loads": {"json"},
+                  },
+                  "has_locked_skill_secret_bytes": {
+                      "loads": {"json"},
+                      "dumps": {"json"},
                   },
                   "has_secret": {
                       "search": {"PEM_RE", "PRIVATE_ORIGIN_RE"},
@@ -1393,6 +1497,27 @@ jobs:
                   for operation, receivers in operations.items():
                       if not (info.call_receivers.get(operation, set()) & receivers):
                           raise SystemExit(f"approved validator {label} requires an unshadowed {operation} call")
+              locked_validator = helper_nodes["validate_locked_skill"]
+              if "SKILL.md" not in reachable_string_literals(locked_validator):
+                  raise SystemExit("approved validator validate_locked_skill must require the SKILL.md entrypoint")
+              if not any(
+                  isinstance(node, ast.Compare)
+                  and {item.id for item in ast.walk(node) if isinstance(item, ast.Name)} >= {"actual_hash", "expected_hash"}
+                  for node in ast.walk(locked_validator)
+              ):
+                  raise SystemExit("approved validator validate_locked_skill must compare the computed hash with the lock")
+              locked_calls = [
+                  node
+                  for node in ast.walk(validate)
+                  if isinstance(node, ast.Call)
+                  and isinstance(node.func, ast.Name)
+                  and node.func.id == "validate_locked_skill"
+              ]
+              if not any(
+                  any(keyword.arg == "expected_hash" for keyword in call.keywords)
+                  for call in locked_calls
+              ):
+                  raise SystemExit("approved validator validate_asset must pass each locked skill hash to validate_locked_skill")
               if not any(isinstance(node, (ast.For, ast.While, ast.If, ast.Try)) for node in ast.walk(parse_yaml)):
                   raise SystemExit("approved validator parse_yaml_mapping has no parsing control flow")
               if not any(isinstance(node, (ast.For, ast.While, ast.If, ast.Try)) for node in ast.walk(validate)):
@@ -1414,6 +1539,22 @@ jobs:
               pass
           else:
               raise SystemExit("validator semantic fixture unexpectedly passed")
+          secret_result_fixture = ast.parse(
+              "def has_secret(text):\n"
+              "  PEM_RE.search(text)\n"
+              "  PRIVATE_ORIGIN_RE.search(text)\n"
+              "  _has_private_ip_literal(text)\n"
+              "  for pattern in SECRET_VALUE_RES:\n"
+              "    pattern.finditer(text)\n"
+              "  _looks_like_placeholder(text)\n"
+              "  return False\n"
+          )
+          try:
+              check_has_secret_shape(function_node(secret_result_fixture, "has_secret"))
+          except SystemExit:
+              pass
+          else:
+              raise SystemExit("secret-result semantic fixture unexpectedly passed")
           check_validator_shape(validator)
           check_module_entrypoint(validator, "validator")
           call_exit_fixture = ast.parse(
@@ -1908,14 +2049,14 @@ jobs:
               if run_text.include?("<<") && run_text.lines.any? { |line| line.match?(/^\s*(?:python3?|ruby|node|bash|sh|zsh)\s+(?:trusted|target)\//) }
                 raise "workflow step may not hide an executable validator command in a heredoc"
               end
-              target_execution = %r{(?:\A|[;&|]\s*|\bthen\s+)\s*(?:(?:[^ \t;&|]+/)*(?:python3?|ruby|node|bash|sh|zsh|source|exec)\b(?:\s+-[^\s;&|]+)*\s+["']?(?:\./)?target/|["']?(?:\./)?target/)}
+              target_execution = %r{(?:\A|[;&|]\s*|\bthen\s+)\s*(?:(?:command\s+)?(?:[^ \t;&|]+/)*(?:python3?|ruby|node|bash|sh|zsh|source|exec)\b(?:\s+-[^\s;&|]+)*\s+["']?(?:\./)?target/|(?:command\s+)?["']?(?:\./)?target/)}
               target_reference = %r{(?:\btarget(?:/|\b)|\$PWD/target(?:/|\b)|\$GITHUB_WORKSPACE/target(?:/|\b)|\$\([^\n)]*\btarget\b[^\n)]*\)|<\([^\n)]*\btarget/)}
               safe_target_read = %r{^\s*(?:python3\s+-m\s+py_compile\s+target/\.codex/(?:validate_instructions|provision_global_skills)\.py(?:\s+target/\.codex/(?:validate_instructions|provision_global_skills)\.py)*|ruby\s+-e\s+'require \"yaml\"; YAML\.safe_load\(File\.read\(ARGV\.fetch\(0\)\), aliases: false\)'\s+target/\.github/workflows/instruction-integrity\.yml|ruby\s+-ryaml\s+-\s+target/\.github/workflows/instruction-integrity\.yml\s+<<["']?RUBY["']?)\s*$}
               if shell_surface.any? do |line|
                 stripped = line.strip
                 next false if stripped.match?(safe_target_read)
                 stripped.match?(target_execution) || (
-                  stripped.match?(%r{(?:\A|[;&|]\s*|\bthen\s+)\s*(?:env\s+)?(?:python3?|ruby|node|bash|sh|zsh|source|exec|eval)\b}) && stripped.match?(target_reference)
+                  stripped.match?(%r{(?:\A|[;&|]\s*|\bthen\s+)\s*(?:(?:env|command)\s+)*(?:python3?|ruby|node|bash|sh|zsh|source|exec|eval)\b}) && stripped.match?(target_reference)
                 )
               end
                 raise "workflow step may not execute code from the proposed checkout"
@@ -2093,7 +2234,7 @@ jobs:
             raise "trusted validator command is missing --expected-config-commit" unless command.match?(/(?:\A|\s)--expected-config-commit(?:\s|\z)/)
             raise "trusted validator command must be standalone and failure-propagating" if command.match?(/[;&|<>]/)
             raise "trusted validator command can terminate before validation" if run.lines.any? { |line| line.match?(/\b(?:exit|return|false|kill|exec)\b/) }
-            %w[AGENTS.md .codex/global-skills.json .codex/provision_global_skills.py].each do |needle|
+            %w[AGENTS.md .codex/global-skills.json .codex/provision_global_skills.py skills-lock.json].each do |needle|
               raise "bootstrap protection is missing #{needle}" unless steps.any? { |step| step.is_a?(Hash) && step["run"].to_s.include?(needle) }
             end
             protection_step = steps.find { |step| step.is_a?(Hash) && step["name"].to_s == "Protect instruction contents unless explicitly approved" }
