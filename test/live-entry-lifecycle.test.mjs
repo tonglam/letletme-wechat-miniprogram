@@ -34,7 +34,7 @@ test("V2 pending/unavailable preserves same-event data and controls polling", ()
   assert.match(branch, /priorSnapshotNextRefreshAt/);
   assert.match(page, /result\.availability === "PENDING"/);
   assert.match(page, /const retainExisting/);
-  assert.match(page, /if \(retainExisting\) this\.liveRefresh\?\.sync\(\)/);
+  assert.match(page, /if \(retainExisting \|\| result\.availability === "PENDING"\)\s*this\.liveRefresh\?\.sync\(\)/);
   assert.match(page, /LIVE_POINTS_UNAVAILABLE_ERROR/);
   assert.match(page, /this\.liveSnapshot\?\.nextRefreshAt/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
@@ -123,7 +123,7 @@ test("live entry projects auto-subs and captain promotion like the web", () => {
   // The page runs the engine before rows/pitch are built.
   assert.match(
     page,
-    /deriveLiveAutoSubProjection\(\{ chip: result\.chip, pickList: rawFieldPlayers, score: result\.score, snapshot: liveResult\.snapshot,? \}\)/,
+    /deriveLiveAutoSubProjection\(\{ chip: result\.chip, pickList: rawFieldPlayers, score: renderableScore, snapshot: liveResult\.snapshot,? \}\)/,
   );
   assert.match(
     page,
@@ -131,7 +131,7 @@ test("live entry projects auto-subs and captain promotion like the web", () => {
   );
   assert.match(
     page,
-    /autoSubProjection\.captainPromotion\?\.playerInName \?\?/,
+    /autoSubProjection\.captainPromotion\?\.playerInName \|\|/,
   );
 
   // Engine keeps the web truth tiers.
