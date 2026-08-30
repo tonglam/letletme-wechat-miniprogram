@@ -1,4 +1,7 @@
-import { LIVE_REFRESH_INTERVAL_MS, liveSnapshotNeedsRefresh } from "./live-refresh";
+import {
+  LIVE_REFRESH_INTERVAL_MS,
+  liveSnapshotNeedsRefresh,
+} from "./live-refresh";
 import type { LiveSnapshotStatus } from "../models/live";
 
 /**
@@ -22,6 +25,8 @@ export interface LiveRefreshControllerOptions {
   acceptSnapshot?: (snapshot: LiveSnapshotStatus | null) => void;
   /** The server's next check deadline; this schedules a probe only. */
   getNextRefreshAt?: () => string | null | undefined;
+  /** Reload page-specific data when its advertised deadline has elapsed. */
+  reloadOnDeadline?: boolean;
   /** Probe failure: current data is kept, the page only updates its status. */
   onProbeError?: (message: string) => void;
   /** Probe lifecycle for status rendering (true when a probe actually starts). */
@@ -60,7 +65,9 @@ export interface LiveRefreshController {
   dispose(): void;
 }
 
-export function createLiveRefreshController(options: LiveRefreshControllerOptions): LiveRefreshController {
+export function createLiveRefreshController(
+  options: LiveRefreshControllerOptions,
+): LiveRefreshController {
   const intervalMs = options.intervalMs ?? LIVE_REFRESH_INTERVAL_MS;
   let timer: number | undefined;
   let online = options.isOnline ? options.isOnline() : true;
@@ -76,7 +83,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
 
   function stopTimer(): void {
     if (timer !== undefined) {
-			clearTimeout(timer);
+      clearTimeout(timer);
       timer = undefined;
     }
   }
@@ -91,7 +98,9 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
   }
 
   function isResponseStale(requestId: number): boolean {
-    return disposed || requestId !== probeRequestId || Boolean(options.isStale?.());
+    return (
+      disposed || requestId !== probeRequestId || Boolean(options.isStale?.())
+    );
   }
 
   function runProbe(): Promise<void> {
@@ -100,7 +109,12 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
 
     const nextRefreshAt = options.getNextRefreshAt?.();
     const deadline = nextRefreshAt ? Date.parse(nextRefreshAt) : Number.NaN;
-    if (nextRefreshAt && Number.isFinite(deadline) && deadline <= Date.now()) {
+    const deadlineExpired =
+      Boolean(nextRefreshAt) &&
+      nextRefreshAt !== consumedDeadline &&
+      Number.isFinite(deadline) &&
+      deadline <= Date.now();
+    if (deadlineExpired && nextRefreshAt) {
       consumedDeadline = nextRefreshAt;
     }
 
@@ -113,14 +127,19 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
         const observed = await options.probe();
         const probeDurationMs = Date.now() - probeStart;
         if (isResponseStale(requestId)) return;
+        const revisionChanged = liveSnapshotNeedsRefresh(
+          options.getAcceptedSnapshot(),
+          observed,
+        );
         if (
-          !liveSnapshotNeedsRefresh(options.getAcceptedSnapshot(), observed)
+          !revisionChanged &&
+          !(options.reloadOnDeadline === true && deadlineExpired)
         ) {
           options.onProbeSettled?.({
             snapshotState: observed?.state,
             revisionChanged: false,
             reloaded: false,
-            probeDurationMs
+            probeDurationMs,
           });
           options.acceptSnapshot?.(observed);
           sync();
@@ -134,7 +153,7 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
           revisionChanged: true,
           reloaded: true,
           probeDurationMs,
-          reloadDurationMs: Date.now() - reloadStart
+          reloadDurationMs: Date.now() - reloadStart,
         });
       } catch (error) {
         if (isResponseStale(requestId)) return;
@@ -143,19 +162,19 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
           revisionChanged: false,
           reloaded: false,
           probeDurationMs: Date.now() - probeStart,
-          error: message
+          error: message,
         });
         options.onProbeError?.(message);
-			// A failed one-shot deadline must not leave the page permanently
-			// unrefreshed. Retry at the normal bounded cadence; a successful probe
-			// will re-arm from the server-provided deadline.
-			stopTimer();
-			if (eligible()) {
-				timer = setTimeout(() => {
-					timer = undefined;
-					void runProbe();
-				}, intervalMs) as unknown as number;
-			}
+        // A failed one-shot deadline must not leave the page permanently
+        // unrefreshed. Retry at the normal bounded cadence; a successful probe
+        // will re-arm from the server-provided deadline.
+        stopTimer();
+        if (eligible()) {
+          timer = setTimeout(() => {
+            timer = undefined;
+            void runProbe();
+          }, intervalMs) as unknown as number;
+        }
       }
     })();
 
@@ -185,12 +204,14 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
       nextRefreshAt === consumedDeadline &&
       Number.isFinite(deadline) &&
       deadline <= Date.now();
-    const baseDelay = Number.isFinite(deadline) && !deadlineConsumed
-      ? Math.max(10, deadline - Date.now())
-      : intervalMs;
-    const jitter = Number.isFinite(deadline) && !deadlineConsumed
-      ? baseDelay * (Math.random() * 0.2 - 0.1)
-      : 0;
+    const baseDelay =
+      Number.isFinite(deadline) && !deadlineConsumed
+        ? Math.max(10, deadline - Date.now())
+        : intervalMs;
+    const jitter =
+      Number.isFinite(deadline) && !deadlineConsumed
+        ? baseDelay * (Math.random() * 0.2 - 0.1)
+        : 0;
     const delay = Math.max(10, Math.round(baseDelay + jitter));
     timer = setTimeout(() => {
       timer = undefined;
@@ -226,6 +247,6 @@ export function createLiveRefreshController(options: LiveRefreshControllerOption
       disposed = true;
       stop();
       unsubscribeNetwork?.();
-    }
+    },
   };
 }

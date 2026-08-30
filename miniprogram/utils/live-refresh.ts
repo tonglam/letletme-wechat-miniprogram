@@ -6,6 +6,7 @@ const contentRevision = (snapshot: LiveSnapshotStatus): string =>
   [
     snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "",
     snapshot.revisions?.lifecycle ?? "",
+    snapshot.revisions?.fixtureIdentity ?? "",
     snapshot.revisions?.picksBase ?? "",
     snapshot.revisions?.officialAdjustment ?? "",
     snapshot.revisions?.finalResult ?? "",
@@ -46,7 +47,9 @@ export function shouldPollLiveSnapshot(options: {
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
   if (effectiveState === "OFFSEASON") return false;
   if (effectiveState === "BETWEEN_GAMEWEEKS") return false;
-  return !["FINALIZED", "OFFSEASON", "BETWEEN_GAMEWEEKS"].includes(effectiveState);
+  return !["FINALIZED", "OFFSEASON", "BETWEEN_GAMEWEEKS"].includes(
+    effectiveState,
+  );
 }
 
 export function shouldRevalidateCachedLiveSnapshot(options: {

@@ -141,14 +141,24 @@ assertEqual(
   "score revision change reloads the score",
 );
 assertEqual(
-  liveSnapshotNeedsRefresh(snapshot(),
+  liveSnapshotNeedsRefresh(
+    snapshot(),
+    snapshot(revision("a"), { fixtureIdentity: revision("z") }),
+  ),
+  true,
+  "fixture revision change reloads match data",
+);
+assertEqual(
+  liveSnapshotNeedsRefresh(
+    snapshot(),
     snapshot(revision("a"), { officialAdjustment: revision("b") }),
   ),
   true,
   "official adjustment revision reloads the score",
 );
 assertEqual(
-  liveSnapshotNeedsRefresh(snapshot(),
+  liveSnapshotNeedsRefresh(
+    snapshot(),
     snapshot(revision("a"), { finalResult: revision("b") }),
   ),
   true,
