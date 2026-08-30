@@ -805,6 +805,39 @@ export function shouldCacheGraphQLData(
       detail == null || detail.dataAvailability?.isFullyAuthoritative === true
     );
   }
+  if (operationName === "MyTournamentReviewCatalog") {
+    const catalog = (
+      data as {
+        myTournamentReviewCatalog?: {
+          state?: unknown;
+          tournaments?: Array<{ state?: unknown }>;
+        } | null;
+      }
+    ).myTournamentReviewCatalog;
+    return Boolean(
+      catalog?.state === "READY" &&
+        Array.isArray(catalog.tournaments) &&
+        catalog.tournaments.every((tournament) => tournament.state === "READY"),
+    );
+  }
+  if (operationName === "MyTournamentGameweekReview") {
+    return (
+      (
+        data as {
+          myTournamentGameweekReview?: { state?: unknown } | null;
+        }
+      ).myTournamentGameweekReview?.state === "READY"
+    );
+  }
+  if (operationName === "MyTournamentSeasonReview") {
+    return (
+      (
+        data as {
+          myTournamentSeasonReview?: { state?: unknown } | null;
+        }
+      ).myTournamentSeasonReview?.state === "READY"
+    );
+  }
   return true;
 }
 

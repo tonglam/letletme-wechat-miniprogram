@@ -52,6 +52,101 @@ test("My FPL page routes the settled tournament review through V2", async () => 
   assert.match(service, /X-LetLetMe-Contract|MY_TOURNAMENT_REVIEW_CONTRACT/);
 });
 
+test("V2 review presentation uses complete aggregates and contract-selected scores", () => {
+  assert.deepEqual(
+    leaguesModule.mergeTournamentReviewEventIds(
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      [1, 2, 3, 4, 5],
+    ),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  );
+  assert.equal(
+    leaguesModule.tournamentReviewTransferCostTotal({
+      grossPointsTotal: 400,
+      netPointsTotal: 384,
+    }),
+    16,
+  );
+  const row = {
+    grossPoints: 72,
+    netPoints: 68,
+    tournamentScore: 75,
+  };
+  assert.equal(leaguesModule.tournamentReviewHeadlineValue("gross", row), 72);
+  assert.equal(leaguesModule.tournamentReviewHeadlineValue("net", row), 68);
+  assert.equal(
+    leaguesModule.tournamentReviewHeadlineValue("custom-score", row),
+    75,
+  );
+  assert.equal(
+    leaguesModule.tournamentReviewHeadlineLabel("custom-score"),
+    "赛事分",
+  );
+});
+
+test("V2 review pins pagination and resumes the failed operation", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(
+    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
+    "utf8",
+  );
+  const template = readFileSync(
+    new URL(
+      "../miniprogram/pages/my-fpl/leagues/leagues.wxml",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const style = readFileSync(
+    new URL(
+      "../miniprogram/pages/my-fpl/leagues/leagues.wxss",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const service = readFileSync(
+    new URL("../miniprogram/services/tournament.service.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(service, /\$revision: String/);
+  assert.match(service, /revision: \$revision/);
+  assert.match(page, /next\.scope\?\.revision !== gameweekRevision/);
+  assert.match(page, /next\.latestRevision !== seasonRevision/);
+  assert.match(page, /this\.v2RetryOperation = "loadMore"/);
+  assert.match(page, /async retryV2Operation\(forceRefresh = true\)/);
+  assert.match(
+    page,
+    /this\.data\.v2Loading \|\|[\s\S]*this\.data\.v2LoadingMore/,
+  );
+  assert.match(page, /this\.loadedContextRevision =\s*getAppContextSnapshot/);
+  assert.match(page, /this\.loadedEvent = eventId/);
+  assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);
+  assert.match(
+    page,
+    /catalog\.tournaments\.length === 0 && catalog\.state !== "READY"/,
+  );
+  assert.match(
+    page,
+    /finally \{[\s\S]*this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;/,
+  );
+  assert.match(
+    page,
+    /isViewerEntryAuthorizationError\(error\)[\s\S]*refreshAuthoritativeFollow\(\)/,
+  );
+  assert.match(template, /v2Season\.points\.seasonGrossPointsTotal/);
+  assert.match(template, /v2Season\.points\.seasonNetPointsTotal/);
+  assert.match(template, /wx:for="\{\{v2GameweekRows\}\}"/);
+  assert.match(template, /bindtap="onOpenWebsite"/);
+  assert.match(template, /actionText="\{\{emptyState === 'entry'/);
+  assert.match(
+    template,
+    /<data-status wx:if="\{\{v2Error\}\}"[\s\S]*<app-loading wx:if="\{\{v2Loading\}\}"/,
+  );
+  assert.match(template, /review-v2-h2h-row/);
+  assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
+});
+
 test("league warm show reloads only after identity change or the 60s window", () => {
   assert.equal(
     leaguesModule.shouldReloadLeagues(

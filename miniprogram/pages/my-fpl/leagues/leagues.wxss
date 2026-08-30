@@ -721,6 +721,10 @@
   color: var(--ink);
 }
 
+.review-v2-h2h-row {
+  grid-template-columns: 48rpx 52rpx minmax(0, 1fr) 90rpx 116rpx;
+}
+
 .review-v2-team {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -763,6 +767,10 @@
     grid-template-columns: 44rpx minmax(0, 1fr) 86rpx 112rpx;
     padding: 0 10rpx;
     font-size: 18rpx;
+  }
+
+  .review-v2-h2h-row {
+    grid-template-columns: 36rpx 42rpx minmax(0, 1fr) 72rpx 96rpx;
   }
 
   .review-v2-stat-grid {

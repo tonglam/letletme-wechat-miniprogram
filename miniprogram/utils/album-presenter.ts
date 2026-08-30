@@ -15,7 +15,6 @@ export function presentImage(path: string): Promise<void> {
         fail: (err) => {
           // "fail cancel" = the user dismissed the share panel; stay silent.
           if (err && /cancel/.test(err.errMsg || "")) return;
-          console.warn("showShareImageMenu failed, falling back to album", err);
           void saveToAlbum(path);
         },
         complete: () => resolve()

@@ -7,6 +7,7 @@ import {
   graphqlRead,
   graphqlRequest,
   purgeGraphQLStorageCache,
+  shouldCacheGraphQLData,
 } from "../miniprogram/services/graphql.service.ts";
 import {
   clearSessionCredentials,
@@ -105,6 +106,60 @@ test("V2 review requests carry an explicit contract header", () => {
       "my-tournament-review-v2",
     )["X-LetLetMe-Contract"],
     "my-tournament-review-v2",
+  );
+});
+
+test("V2 review cache accepts only fully READY snapshots", () => {
+  const transientStates = [
+    "PENDING",
+    "WAITING_SOURCE",
+    "DEGRADED",
+    "UNAVAILABLE",
+  ];
+  for (const state of transientStates) {
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentGameweekReview", {
+        myTournamentGameweekReview: { state },
+      }),
+      false,
+    );
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentSeasonReview", {
+        myTournamentSeasonReview: { state },
+      }),
+      false,
+    );
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentReviewCatalog", {
+        myTournamentReviewCatalog: {
+          state: "READY",
+          tournaments: [{ state: "READY" }, { state }],
+        },
+      }),
+      false,
+    );
+  }
+
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentGameweekReview", {
+      myTournamentGameweekReview: { state: "READY" },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentSeasonReview", {
+      myTournamentSeasonReview: { state: "READY" },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentReviewCatalog", {
+      myTournamentReviewCatalog: {
+        state: "READY",
+        tournaments: [{ state: "READY" }],
+      },
+    }),
+    true,
   );
 });
 

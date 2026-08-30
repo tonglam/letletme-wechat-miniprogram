@@ -17,6 +17,8 @@ import {
   type TournamentSeasonMetric,
   type TournamentSeasonSnapshot,
   type MyTournamentGameweekReview,
+  type MyTournamentReviewPoints,
+  type MyTournamentReviewPointsRow,
   type MyTournamentReviewCatalog,
   type MyTournamentReviewFormat,
   type MyTournamentReviewScope,
@@ -65,6 +67,12 @@ import { canReadEventReporting } from "../../../utils/event-context";
 type LeagueView = "season" | "gameweek";
 type LeagueEmptyState = "" | "entry" | "tournaments" | "view";
 type BoardSortKey = "rank" | "c1" | "c2" | "c3";
+type V2RetryOperation = "catalog" | "review" | "loadMore";
+
+interface TournamentReviewPointsDisplayRow
+  extends MyTournamentReviewPointsRow {
+  headlineValue: number | null;
+}
 
 interface TileStat {
   label: string;
@@ -142,6 +150,8 @@ interface LeaguesData {
   v2State: MyTournamentReviewState;
   v2StatusText: string;
   v2TransferCostTotal: number;
+  v2HeadlineLabel: string;
+  v2GameweekRows: TournamentReviewPointsDisplayRow[];
   v2Gameweek: MyTournamentGameweekReview | null;
   v2Season: MyTournamentSeasonReview | null;
   v2Loading: boolean;
@@ -239,6 +249,61 @@ function tournamentReviewNextCursor(
     review?.knockout?.nextCursor ??
     null
   );
+}
+
+export function mergeTournamentReviewEventIds(
+  current: readonly number[],
+  incoming: readonly number[],
+): number[] {
+  return Array.from(
+    new Set(
+      [...current, ...incoming].filter(
+        (eventId) => Number.isSafeInteger(eventId) && eventId > 0,
+      ),
+    ),
+  ).sort((left, right) => left - right);
+}
+
+export function tournamentReviewTransferCostTotal(
+  points: MyTournamentReviewPoints | null | undefined,
+): number {
+  if (!points) return 0;
+  return Math.max(0, points.grossPointsTotal - points.netPointsTotal);
+}
+
+export function tournamentReviewHeadlineLabel(metric: string): string {
+  switch (metric.trim().toLowerCase()) {
+    case "gross":
+      return "Gross";
+    case "net":
+      return "Net";
+    default:
+      return "赛事分";
+  }
+}
+
+export function tournamentReviewHeadlineValue(
+  metric: string,
+  row: MyTournamentReviewPointsRow,
+): number | null {
+  switch (metric.trim().toLowerCase()) {
+    case "gross":
+      return row.grossPoints;
+    case "net":
+      return row.netPoints;
+    default:
+      return row.tournamentScore;
+  }
+}
+
+function tournamentReviewDisplayRows(
+  points: MyTournamentReviewPoints | null | undefined,
+): TournamentReviewPointsDisplayRow[] {
+  if (!points) return [];
+  return points.rows.map((row) => ({
+    ...row,
+    headlineValue: tournamentReviewHeadlineValue(points.headlineMetric, row),
+  }));
 }
 
 function mergeTournamentReviewPage(
@@ -496,6 +561,8 @@ PerformancePage({
     v2State: "UNAVAILABLE" as MyTournamentReviewState,
     v2StatusText: "暂无已结算快照",
     v2TransferCostTotal: 0,
+    v2HeadlineLabel: "Gross",
+    v2GameweekRows: [] as TournamentReviewPointsDisplayRow[],
     v2Gameweek: null,
     v2Season: null,
     v2Loading: true,
@@ -572,6 +639,7 @@ PerformancePage({
   loadPending: false,
   loadForceRefresh: false,
   resumeForceRefresh: false,
+  v2RetryOperation: null as V2RetryOperation | null,
   seasonRows: [] as BoardRow[],
   gwRows: [] as BoardRow[],
 
@@ -635,6 +703,17 @@ PerformancePage({
       this.resumeForceRefresh = false;
       const app = getApp<IAppOption>();
       const snapshot = getAppContextSnapshot();
+      if (
+        resumeIncomplete &&
+        this.data.v2Enabled &&
+        this.v2RetryOperation !== null &&
+        this.v2RetryOperation !== "catalog" &&
+        currentMyFplEntryId() === this.loadedEntryId &&
+        (snapshot?.contextRevision ?? 0) === this.loadedContextRevision
+      ) {
+        await this.retryV2Operation(forceRefresh);
+        return;
+      }
       // Compare against the picker GW, not current/next GW: browsing a
       // historical round must not force a directory reload on every show.
       if (
@@ -665,13 +744,25 @@ PerformancePage({
       this.data.loading ||
       this.loadPending ||
       this.data.viewLoading ||
-      this.data.pathLoading;
+      this.data.pathLoading ||
+      this.data.v2Loading ||
+      this.data.v2LoadingMore;
     if (this.loadPending) {
       this.resumeForceRefresh =
         this.resumeForceRefresh || this.loadForceRefresh;
     }
-    if (this.data.viewLoading || this.data.pathLoading) {
-      this.setData({ viewLoading: false, pathLoading: false });
+    if (
+      this.data.viewLoading ||
+      this.data.pathLoading ||
+      this.data.v2Loading ||
+      this.data.v2LoadingMore
+    ) {
+      this.setData({
+        viewLoading: false,
+        pathLoading: false,
+        v2Loading: false,
+        v2LoadingMore: false,
+      });
     }
     this.lifecycleRevision += 1;
     this.requestId += 1;
@@ -685,6 +776,7 @@ PerformancePage({
     this.resumeForceRefresh = false;
     this.loadPending = false;
     this.loadForceRefresh = false;
+    this.v2RetryOperation = null;
     this.lifecycleRevision += 1;
     this.requestId += 1;
     this.viewRequestId += 1;
@@ -723,15 +815,14 @@ PerformancePage({
     scopeOverride?: MyTournamentReviewScope,
   ) {
     const requestId = ++this.requestId;
-    const entryId = currentMyFplEntryId();
+    let entryId = currentMyFplEntryId() || 0;
     const scope = scopeOverride ?? this.data.v2Scope;
     const isActiveRequest = () =>
       this.pageVisible && requestId === this.requestId;
-    if (!entryId) {
-      this.showEntryEmptyState();
-      this.setData({ v2Enabled: true, v2Loading: false });
-      return;
-    }
+    this.loadPending = true;
+    this.loadForceRefresh = forceRefresh;
+    this.viewRequestId += 1;
+    this.v2RetryOperation = "catalog";
     this.setData({
       loading: true,
       error: "",
@@ -742,14 +833,77 @@ PerformancePage({
       emptyState: "",
     });
     try {
-      const catalog = await getMyTournamentReviewCatalog(
-        scope,
-        forceRefresh,
-        trace ?? undefined,
-      );
+      let catalog: MyTournamentReviewCatalog;
+      try {
+        catalog = await getMyTournamentReviewCatalog(
+          scope,
+          forceRefresh,
+          trace ?? undefined,
+        );
+      } catch (error) {
+        if (!isViewerEntryAuthorizationError(error)) throw error;
+        let refreshedEntryId: number | null;
+        try {
+          refreshedEntryId = await refreshAuthoritativeFollow();
+        } catch {
+          if (isActiveRequest()) {
+            this.setData({
+              loading: false,
+              v2Loading: false,
+              v2Error: "球队状态尚未同步，请稍后重试",
+            });
+          }
+          return;
+        }
+        if (!isActiveRequest()) return;
+        if (!refreshedEntryId) {
+          this.showEntryEmptyState();
+          this.v2RetryOperation = null;
+          return;
+        }
+        if (refreshedEntryId === entryId) {
+          this.setData({
+            loading: false,
+            v2Loading: false,
+            v2Error: "球队状态尚未同步，请稍后重试",
+          });
+          return;
+        }
+        entryId = refreshedEntryId;
+        this.viewRequestId += 1;
+        this.setData({
+          entryId,
+          v2Catalog: null,
+          v2TournamentNames: [],
+          v2SelectedTournament: null,
+          v2EventIds: [],
+          v2Event: 0,
+          v2Gameweek: null,
+          v2Season: null,
+          v2GameweekRows: [],
+          v2HasNextPage: false,
+        });
+        catalog = await getMyTournamentReviewCatalog(
+          scope,
+          true,
+          trace ?? undefined,
+        );
+      }
       if (!isActiveRequest()) return;
+      if (!entryId && !catalog.adminReadAll) {
+        this.showEntryEmptyState();
+        this.v2RetryOperation = null;
+        return;
+      }
+      const currentEntryId = currentMyFplEntryId() || 0;
+      if (currentEntryId !== entryId) {
+        void this.loadV2Leagues(true, trace, scope);
+        return;
+      }
+      const previousTournamentId =
+        this.data.v2SelectedTournament?.tournamentId ?? 0;
       const retainedId =
-        this.data.v2SelectedTournament?.tournamentId || readLastPick(entryId);
+        previousTournamentId || (entryId ? readLastPick(entryId) : 0);
       const selected =
         catalog.tournaments.find((item) => item.tournamentId === retainedId) ||
         catalog.tournaments[0] ||
@@ -762,10 +916,22 @@ PerformancePage({
             ),
           )
         : 0;
-      const eventId =
+      const latestEventId =
         selected?.latestAvailableEventId ??
         selected?.latestFinalizedEventId ??
         0;
+      const sameTournament =
+        Boolean(selected) && selected?.tournamentId === previousTournamentId;
+      const retainedEventIds = sameTournament ? this.data.v2EventIds : [];
+      const retainedEventId =
+        sameTournament && retainedEventIds.includes(this.data.v2Event)
+          ? this.data.v2Event
+          : 0;
+      const eventId = retainedEventId || latestEventId;
+      const eventIds = mergeTournamentReviewEventIds(
+        retainedEventIds,
+        eventId ? [eventId] : [],
+      );
       this.setData({
         loading: false,
         v2Loading: Boolean(selected && eventId),
@@ -775,10 +941,8 @@ PerformancePage({
         v2TournamentNames: catalog.tournaments.map((item) => item.name),
         v2SelectedTournamentIndex: selectedIndex,
         v2SelectedTournament: selected,
-        v2EventIds: selected?.latestAvailableEventId
-          ? [selected.latestAvailableEventId]
-          : [],
-        v2SelectedEventIndex: 0,
+        v2EventIds: eventIds,
+        v2SelectedEventIndex: Math.max(0, eventIds.indexOf(eventId)),
         v2Event: eventId,
         event: eventId,
         v2Format: selected?.latestFormat ?? null,
@@ -786,13 +950,23 @@ PerformancePage({
         v2StatusText: tournamentReviewStateText(
           selected?.state ?? "UNAVAILABLE",
         ),
+        v2TransferCostTotal: sameTournament
+          ? this.data.v2TransferCostTotal
+          : 0,
+        v2HeadlineLabel: sameTournament ? this.data.v2HeadlineLabel : "Gross",
+        v2GameweekRows: sameTournament ? this.data.v2GameweekRows : [],
+        v2Gameweek: sameTournament ? this.data.v2Gameweek : null,
+        v2Season: sameTournament ? this.data.v2Season : null,
         tournaments: [],
         tournamentNames: [],
         selectedTournament: null,
       });
       this.loadedEntryId = entryId;
+      this.loadedSeason =
+        getApp<IAppOption>().globalData.season || this.loadedSeason;
+      this.loadedContextRevision =
+        getAppContextSnapshot()?.contextRevision ?? 0;
       this.lastLoadAt = Date.now();
-      this.loadedEvent = eventId;
       if (selected && eventId) {
         await this.loadV2Review(
           selected.tournamentId,
@@ -801,13 +975,28 @@ PerformancePage({
           trace ?? undefined,
         );
       } else if (isActiveRequest()) {
-        this.setData({
-          v2Loading: false,
-          emptyState: catalog.tournaments.length ? "view" : "tournaments",
-        });
+        const catalogUnavailable =
+          catalog.tournaments.length === 0 && catalog.state !== "READY";
+        if (catalogUnavailable) {
+          this.v2RetryOperation = "catalog";
+          this.setData({
+            v2Loading: false,
+            v2State: catalog.state,
+            v2StatusText: tournamentReviewStateText(catalog.state),
+            v2Error: "赛事复盘目录暂时不可用，请稍后重试",
+            emptyState: "",
+          });
+        } else {
+          this.v2RetryOperation = null;
+          this.setData({
+            v2Loading: false,
+            emptyState: catalog.tournaments.length ? "view" : "tournaments",
+          });
+        }
       }
     } catch (error) {
       if (!isActiveRequest()) return;
+      this.v2RetryOperation = "catalog";
       this.setData({
         loading: false,
         v2Loading: false,
@@ -815,6 +1004,11 @@ PerformancePage({
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
         error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
+    } finally {
+      if (requestId === this.requestId) {
+        this.loadPending = false;
+        this.loadForceRefresh = false;
+      }
     }
   },
 
@@ -827,6 +1021,7 @@ PerformancePage({
     const requestId = ++this.viewRequestId;
     const isActiveRequest = () =>
       this.pageVisible && requestId === this.viewRequestId;
+    this.v2RetryOperation = "review";
     this.setData({
       v2Loading: true,
       v2LoadingMore: false,
@@ -849,21 +1044,25 @@ PerformancePage({
         this.data.v2Catalog?.tournaments.find(
           (item) => item.tournamentId === tournamentId,
         ) || null;
-      const eventIds = season.finalizedEventIds?.length
-        ? season.finalizedEventIds
-        : eventId > 0
-          ? [eventId]
-          : [];
+      const eventIds = mergeTournamentReviewEventIds(
+        this.data.v2EventIds,
+        season.finalizedEventIds?.length
+          ? season.finalizedEventIds
+          : eventId > 0
+            ? [eventId]
+            : [],
+      );
+      this.v2RetryOperation = null;
+      this.loadedEvent = eventId;
       this.setData({
         v2Loading: false,
         v2Gameweek: gameweek,
         v2Season: season,
-        v2TransferCostTotal: gameweek.points
-          ? gameweek.points.rows.reduce(
-              (total, row) => total + (Number(row.transferCost) || 0),
-              0,
-            )
-          : 0,
+        v2TransferCostTotal: tournamentReviewTransferCostTotal(gameweek.points),
+        v2HeadlineLabel: tournamentReviewHeadlineLabel(
+          gameweek.points?.headlineMetric ?? "gross",
+        ),
+        v2GameweekRows: tournamentReviewDisplayRows(gameweek.points),
         v2EventIds: eventIds,
         v2SelectedEventIndex: Math.max(0, eventIds.indexOf(eventId)),
         v2SelectedTournament: selected,
@@ -899,7 +1098,7 @@ PerformancePage({
   },
 
   async onV2LoadMore() {
-    if (this.data.v2LoadingMore) return;
+    if (this.data.v2Loading || this.data.v2LoadingMore) return;
     const tournamentId = this.data.v2SelectedTournament?.tournamentId;
     const eventId = this.data.v2Event;
     const requestView = this.data.activeView;
@@ -907,18 +1106,26 @@ PerformancePage({
       requestView === "season" ? this.data.v2Season : this.data.v2Gameweek;
     const after = tournamentReviewNextCursor(current);
     if (!tournamentId || !eventId || !after) return;
+    const gameweekRevision = this.data.v2Gameweek?.scope?.revision ?? null;
+    const seasonRevision = this.data.v2Season?.latestRevision ?? null;
+    if (requestView === "gameweek" && !gameweekRevision) {
+      this.v2RetryOperation = "review";
+      this.setData({ v2Error: "赛事复盘快照版本缺失，请重试" });
+      return;
+    }
     const requestId = this.viewRequestId;
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-leagues-v2",
-      trigger: "show",
+      trigger: "pagination",
     });
+    this.v2RetryOperation = "loadMore";
     this.setData({ v2LoadingMore: true, v2Error: "" });
     try {
       if (requestView === "season") {
         const next = await getMyTournamentSeasonReview(
           tournamentId,
           eventId,
-          false,
+          true,
           trace,
           after,
         );
@@ -928,6 +1135,9 @@ PerformancePage({
           this.data.activeView !== requestView
         )
           return;
+        if (next.latestRevision !== seasonRevision) {
+          throw new Error("赛事复盘快照已更新，请刷新后重试");
+        }
         const merged = this.data.v2Season
           ? (mergeTournamentReviewPage(
               this.data.v2Season,
@@ -938,13 +1148,15 @@ PerformancePage({
           v2Season: merged,
           v2HasNextPage: Boolean(tournamentReviewNextCursor(merged)),
         });
+        this.v2RetryOperation = null;
       } else {
         const next = await getMyTournamentGameweekReview(
           tournamentId,
           eventId,
-          false,
+          true,
           trace,
           after,
+          gameweekRevision,
         );
         if (
           !this.pageVisible ||
@@ -952,6 +1164,9 @@ PerformancePage({
           this.data.activeView !== requestView
         )
           return;
+        if (next.scope?.revision !== gameweekRevision) {
+          throw new Error("赛事复盘快照已更新，请刷新后重试");
+        }
         const merged = this.data.v2Gameweek
           ? (mergeTournamentReviewPage(
               this.data.v2Gameweek,
@@ -960,8 +1175,14 @@ PerformancePage({
           : next;
         this.setData({
           v2Gameweek: merged,
+          v2TransferCostTotal: tournamentReviewTransferCostTotal(merged.points),
+          v2HeadlineLabel: tournamentReviewHeadlineLabel(
+            merged.points?.headlineMetric ?? "gross",
+          ),
+          v2GameweekRows: tournamentReviewDisplayRows(merged.points),
           v2HasNextPage: Boolean(tournamentReviewNextCursor(merged)),
         });
+        this.v2RetryOperation = null;
       }
     } catch (error) {
       if (
@@ -970,6 +1191,7 @@ PerformancePage({
         this.data.activeView !== requestView
       )
         return;
+      this.v2RetryOperation = "loadMore";
       this.setData({
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
@@ -984,6 +1206,8 @@ PerformancePage({
     const catalog = this.data.v2Catalog;
     const selected = catalog?.tournaments[index];
     if (!selected) return;
+    this.viewRequestId += 1;
+    this.v2RetryOperation = null;
     const eventId =
       selected.latestAvailableEventId ?? selected.latestFinalizedEventId ?? 0;
     this.setData({
@@ -996,13 +1220,19 @@ PerformancePage({
       v2Format: selected.latestFormat,
       v2State: selected.state,
       v2StatusText: tournamentReviewStateText(selected.state),
+      v2TransferCostTotal: 0,
+      v2HeadlineLabel: "Gross",
+      v2GameweekRows: [],
       v2Gameweek: null,
       v2Season: null,
+      v2Loading: false,
       v2LoadingMore: false,
       v2HasNextPage: false,
     });
-    writeLastPick(this.data.entryId, selected.tournamentId);
-    if (eventId)
+    if (this.data.entryId > 0) {
+      writeLastPick(this.data.entryId, selected.tournamentId);
+    }
+    if (eventId) {
       void this.loadV2Review(
         selected.tournamentId,
         eventId,
@@ -1012,6 +1242,7 @@ PerformancePage({
           trigger: "show",
         }),
       );
+    }
   },
 
   onV2ScopeTap() {
@@ -1029,6 +1260,7 @@ PerformancePage({
   },
 
   showEntryEmptyState() {
+    this.v2RetryOperation = null;
     this.clearEntryScopedViewState();
     this.loadedSeason = undefined;
     this.pathLoadedKey = "";
@@ -1050,6 +1282,8 @@ PerformancePage({
       v2State: "UNAVAILABLE",
       v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
       v2TransferCostTotal: 0,
+      v2HeadlineLabel: "Gross",
+      v2GameweekRows: [],
       v2Gameweek: null,
       v2Season: null,
       v2LoadingMore: false,
@@ -1381,6 +1615,14 @@ PerformancePage({
         v2SelectedEventIndex: rawValue,
         v2Event: value,
         event: value,
+        v2TransferCostTotal: 0,
+        v2HeadlineLabel: "Gross",
+        v2GameweekRows: [],
+        v2Gameweek: null,
+        v2Season: null,
+        v2LoadingMore: false,
+        v2HasNextPage: false,
+        v2Error: "",
       });
       void this.loadV2Review(
         tournamentId,
@@ -1431,6 +1673,9 @@ PerformancePage({
     ) as LeagueView;
     if (view === this.data.activeView) return;
     if (this.data.v2Enabled) {
+      if (this.data.v2Loading) return;
+      this.viewRequestId += 1;
+      this.v2RetryOperation = null;
       const nextState =
         (view === "season"
           ? this.data.v2Season?.state
@@ -1980,9 +2225,35 @@ PerformancePage({
     }
   },
 
+  async retryV2Operation(forceRefresh = true) {
+    const operation = this.v2RetryOperation;
+    if (operation === "loadMore") {
+      await this.onV2LoadMore();
+      return;
+    }
+    const trace = capturePageRequestTrace({
+      callerSurface: "my-fpl-leagues-v2",
+      trigger: "refresh",
+    });
+    if (operation === "review") {
+      const tournamentId = this.data.v2SelectedTournament?.tournamentId;
+      const eventId = this.data.v2Event;
+      if (tournamentId && eventId > 0) {
+        await this.loadV2Review(
+          tournamentId,
+          eventId,
+          forceRefresh,
+          trace,
+        );
+        return;
+      }
+    }
+    await this.loadV2Leagues(forceRefresh, trace);
+  },
+
   onRetry() {
     if (this.data.v2Enabled) {
-      void this.loadV2Leagues(true);
+      void this.retryV2Operation(true);
       return;
     }
     if (this.data.tournaments.length) {

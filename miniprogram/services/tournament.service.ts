@@ -491,8 +491,8 @@ export const GET_MY_TOURNAMENT_REVIEW_CATALOG = `
 `;
 
 export const GET_MY_TOURNAMENT_GAMEWEEK_REVIEW = `
-  query MyTournamentGameweekReview($tournamentId: Int!, $eventId: Int!, $first: Int = 100, $after: String) {
-    myTournamentGameweekReview(tournamentId: $tournamentId, eventId: $eventId, first: $first, after: $after) {
+  query MyTournamentGameweekReview($tournamentId: Int!, $eventId: Int!, $first: Int = 100, $after: String, $revision: String) {
+    myTournamentGameweekReview(tournamentId: $tournamentId, eventId: $eventId, first: $first, after: $after, revision: $revision) {
       state
       scope {${REVIEW_SCOPE_META_FIELDS}}
       points {${REVIEW_POINTS_FIELDS}}
@@ -548,12 +548,13 @@ export async function getMyTournamentGameweekReview(
   forceRefresh = false,
   trace?: PageRequestTrace,
   after: string | null = null,
+  revision: string | null = null,
 ): Promise<MyTournamentGameweekReview> {
   const data = await graphqlRequest<{
     myTournamentGameweekReview: MyTournamentGameweekReview;
   }>(
     GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
-    { tournamentId, eventId, first: 100, after },
+    { tournamentId, eventId, first: 100, after, revision },
     myTournamentReviewOptions(forceRefresh, trace),
   );
   return data.myTournamentGameweekReview;
