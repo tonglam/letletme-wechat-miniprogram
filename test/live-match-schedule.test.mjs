@@ -69,7 +69,7 @@ test("fixture service rejects partial errors before mapping an empty schedule", 
 
 test("Live revision recovery retains the original desk when the forced refresh fails", () => {
   const service = source("miniprogram/services/live.service.ts");
-  const recovery = service.slice(service.indexOf('if (!hasGraphQLErrorCode(error, "LIVE_REVISION_GONE"))'));
+  const recovery = service.slice(service.indexOf('if (!hasGraphQLErrorCode(error, "LIVE_SCORE_REVISION_GONE"))'));
   assert.match(recovery, /try \{[\s\S]*const refreshed = await graphqlRequest/);
   assert.match(recovery, /catch \{[\s\S]*enriched = mapped/);
 });
@@ -99,15 +99,15 @@ test("live match tabs follow web content preference and carry per-tab counts", (
   assert.match(template, /status-tab-count">\{\{item\.count\}\}/);
 });
 
-test("settled desk surfaces next-event fixtures like the web fallback", () => {
+test("settled desk does not request a cross-event fixture overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const service = source("miniprogram/services/live.service.ts");
-  // Web parity (selectLiveMatchEvent): a fully finished event yields the
-  // not-started tab to the next event's fixtures from the desk snapshot.
-  assert.match(page, /appendNextEventRows\( mergeLiveOverlay\(core, liveResult\.data\), liveResult\.data, \)/);
+  // V2 live data is event-scoped. The core fixture schedule owns the selected
+  // event; the live overlay must not smuggle a next-event LKG into the page.
+  assert.match(page, /appendNextEventRows\(\s*mergeLiveOverlay\(core, liveResult\.data\),\s*liveResult\.data,\s*\)/);
   assert.match(page, /match\.statusText \? match : normalizeMatch\(match, "not_start"\)/);
-  assert.match(service, /nextFixtures \{[\s\S]*homeTeamShortName[\s\S]*awayTeamShortName/);
-  assert.match(service, /homeTeamShortName: match\.homeTeamShortName \?\? undefined/);
+  assert.doesNotMatch(service, /nextFixtures/);
+  assert.doesNotMatch(service, /homeTeamShortName\s+awayTeamShortName/);
 });
 
 test("live match player sheet offers image share like the web modal", () => {

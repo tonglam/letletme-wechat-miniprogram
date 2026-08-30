@@ -318,6 +318,113 @@ function isNullableDate(value: unknown): value is string | null {
     (typeof value === "string" && Number.isFinite(Date.parse(value)));
 }
 
+function validateRevisionVector(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  for (const field of [
+    "publicationId",
+    "lifecycle",
+    "fixtureIdentity",
+    "scoreCore",
+    "displayStats",
+    "explain",
+    "rules",
+    "algorithm",
+    "input",
+  ]) {
+    if (typeof value[field] !== "string" || !value[field]) {
+      missing.push(`${path}.${field}`);
+    }
+  }
+  if (!isInteger(value.generation) || value.generation < 0) {
+    missing.push(`${path}.generation`);
+  }
+  for (const field of [
+    "picksBase",
+    "officialAdjustment",
+    "previousTotals",
+    "finalResult",
+  ]) {
+    if (!isNullableString(value[field])) {
+      missing.push(`${path}.${field}`);
+    } else if (value[field] !== null && value[field] === "") {
+      missing.push(`${path}.${field}`);
+    }
+  }
+}
+
+function validateLiveTimes(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  for (const field of [
+    "sourceCheckedAt",
+    "contentUpdatedAt",
+    "publishedAt",
+    "servedAt",
+    "staleAt",
+  ]) {
+    if (!isNullableDate(value[field]) || value[field] === null) {
+      missing.push(`${path}.${field}`);
+    }
+  }
+  for (const field of ["checkpointedAt", "nextRefreshAt"]) {
+    if (!isNullableDate(value[field])) {
+      missing.push(`${path}.${field}`);
+    }
+  }
+}
+
+function validateLiveDelivery(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  if (
+    ![
+      "FRESH",
+      "STALE",
+      "DEGRADED",
+      "FINAL",
+      "UNAVAILABLE",
+    ].includes(String(value.state))
+  ) {
+    missing.push(`${path}.state`);
+  }
+  if (
+    ![
+      "REDIS_CURRENT",
+      "REDIS_PREVIOUS",
+      "PROCESS_LKG",
+      "POSTGRES_CHECKPOINT",
+      "FINAL_RESULT",
+    ].includes(String(value.servedFrom))
+  ) {
+    missing.push(`${path}.servedFrom`);
+  }
+  if (
+    !Array.isArray(value.reasonCodes) ||
+    !value.reasonCodes.every((item) => typeof item === "string")
+  ) {
+    missing.push(`${path}.reasonCodes`);
+  }
+}
+
 function validateLiveScore(
   value: unknown,
   path: string,
@@ -335,24 +442,9 @@ function validateLiveScore(
     if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
   }
   if (value.totalScope !== "OVERALL" && value.totalScope !== "UNKNOWN") missing.push(`${path}.totalScope`);
-  const revisions = value.revisions;
-  if (!isRecord(revisions)) missing.push(`${path}.revisions`);
-  else {
-    for (const field of ["publicationId", "lifecycle", "fixtureIdentity", "scoreCore", "displayStats", "explain", "rules", "algorithm", "input"]) {
-      if (typeof revisions[field] !== "string" || !revisions[field]) missing.push(`${path}.revisions.${field}`);
-    }
-    if (!isInteger(revisions.generation) || revisions.generation < 0) missing.push(`${path}.revisions.generation`);
-  }
-  const times = value.times;
-  if (!isRecord(times)) missing.push(`${path}.times`);
-  else {
-    for (const field of ["sourceCheckedAt", "contentUpdatedAt", "publishedAt", "servedAt", "staleAt"]) {
-      if (!isNullableDate(times[field]) || times[field] === null) missing.push(`${path}.times.${field}`);
-    }
-    if (!isNullableDate(times.checkpointedAt) || !isNullableDate(times.nextRefreshAt)) missing.push(`${path}.times.optional`);
-  }
-  const delivery = value.delivery;
-  if (!isRecord(delivery) || !["FRESH", "STALE", "DEGRADED", "FINAL", "UNAVAILABLE"].includes(String(delivery.state)) || !["REDIS_CURRENT", "REDIS_PREVIOUS", "PROCESS_LKG", "POSTGRES_CHECKPOINT", "FINAL_RESULT"].includes(String(delivery.servedFrom)) || !Array.isArray(delivery.reasonCodes) || !delivery.reasonCodes.every((item) => typeof item === "string")) missing.push(`${path}.delivery`);
+  validateRevisionVector(value.revisions, `${path}.revisions`, missing);
+  validateLiveTimes(value.times, `${path}.times`, missing);
+  validateLiveDelivery(value.delivery, `${path}.delivery`, missing);
 }
 
 function validateBoardRow(
@@ -413,9 +505,9 @@ export function parseLiveBoardPage(
   if (!AVAILABILITY.has(String(root.dataAvailability))) {
     missing.push("dataAvailability");
   }
-  if (!Array.isArray(root.revisions) && !isRecord(root.revisions)) missing.push("revisions");
-  if (!isRecord(root.times)) missing.push("times");
-  if (!isRecord(root.delivery)) missing.push("delivery");
+  validateRevisionVector(root.revisions, "revisions", missing);
+  validateLiveTimes(root.times, "times", missing);
+  validateLiveDelivery(root.delivery, "delivery", missing);
   if (!new Set(["WARMING", "COMPLETE", "PARTIAL", "UNAVAILABLE"]).has(String(root.coverageState))) missing.push("coverageState");
   if (!new Set(["FULL_FIELD", "AVAILABLE_ROWS"]).has(String(root.rankScope))) missing.push("rankScope");
   for (const field of ["computedEntries", "deferredEntryCount", "failedEntryCount", "unavailableEntryCount"]) {

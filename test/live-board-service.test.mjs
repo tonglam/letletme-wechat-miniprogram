@@ -54,26 +54,60 @@ const {
 const checkedAt = "2026-08-23T12:00:00.000Z";
 const nextRefreshAt = "2026-08-23T12:00:30.000Z";
 
+function validRevisions(overrides = {}) {
+  return {
+    publicationId: "publication-1",
+    generation: 1,
+    lifecycle: "lifecycle-r1",
+    fixtureIdentity: "fixture-r1",
+    scoreCore: "score-r1",
+    displayStats: "display-r1",
+    explain: "explain-r1",
+    picksBase: "picks-r1",
+    officialAdjustment: null,
+    previousTotals: "totals-r1",
+    finalResult: null,
+    rules: "rules-r1",
+    algorithm: "live-points-v2-algorithm-1",
+    input: "input-r1",
+    ...overrides
+  };
+}
+
+function validTimes(overrides = {}) {
+  return {
+    sourceCheckedAt: checkedAt,
+    contentUpdatedAt: checkedAt,
+    publishedAt: checkedAt,
+    checkpointedAt: null,
+    servedAt: checkedAt,
+    staleAt: nextRefreshAt,
+    nextRefreshAt,
+    ...overrides
+  };
+}
+
+function validDelivery(overrides = {}) {
+  return {
+    state: "FRESH",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: [],
+    ...overrides
+  };
+}
+
 function validScore(overrides = {}) {
   return {
     eventPoints: 38,
     netEventPoints: 34,
     totalPoints: 101,
     totalScope: "OVERALL",
-    eventRank: 100,
-    overallRank: 1000,
-    leagueRank: 3,
     transferCost: 4,
     source: "FPL_ENTRY_SUMMARY",
-    state: "LIVE",
-    eventPointSemantics: "GROSS",
-    revision: "manager-row-r1",
-    checkedAt,
-    upstreamUpdatedAt: null,
-    staleAt: nextRefreshAt,
-    nextRefreshAt,
-    reconciliation: "MATCH",
-    reasonCodes: [],
+    calculationMode: "PROJECTED_AUTOSUBS",
+    revisions: validRevisions(),
+    times: validTimes(),
+    delivery: validDelivery(),
     ...overrides
   };
 }
@@ -84,14 +118,17 @@ function validPage(overrides = {}) {
     eventId: 1,
     tournamentId: 7,
     boardRevision: "board-r1",
-    playerRevision: "player-r1",
-    managerRevision: "manager-r1",
+    scoreCoreRevision: "score-r1",
+    revisions: validRevisions(),
+    times: validTimes(),
+    delivery: validDelivery(),
     dataAvailability: "FRESH",
-    managerDataAvailability: "FRESH",
-    managerServedFrom: "REDIS",
-    managerRefreshQueued: false,
-    managerCheckedAt: checkedAt,
-    managerNextRefreshAt: nextRefreshAt,
+    coverageState: "COMPLETE",
+    rankScope: "FULL_FIELD",
+    computedEntries: 65,
+    deferredEntryCount: 0,
+    failedEntryCount: 0,
+    unavailableEntryCount: 0,
     officialCoverage: 1,
     unavailableEntryIds: [],
     failedEntryIds: [],
@@ -162,15 +199,15 @@ beforeEach(async () => {
   await restoreSession();
 });
 
-test("light board parser requires the additive contract and never requests pickList", () => {
+test("light board parser requires the complete V2 contract and never requests pickList", () => {
   assert.equal(parseLiveBoardPage(validPage()).boardRevision, "board-r1");
   assert.doesNotMatch(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /pickList/);
   assert.throws(
-    () => parseLiveBoardPage(validPage({ managerRevision: undefined })),
+    () => parseLiveBoardPage(validPage({ scoreCoreRevision: undefined })),
     (error) =>
       error instanceof LiveBoardInvalidResponseError &&
       error.code === "LIVE_BOARD_INVALID_RESPONSE" &&
-      error.missingFields.includes("managerRevision")
+      error.missingFields.includes("scoreCoreRevision")
   );
   assert.throws(
     () =>
@@ -337,9 +374,14 @@ test("canonical board validation errors are surfaced without a legacy reader", a
   );
 });
 
-test("malformed success becomes a stable error and records internal diagnostics", async () => {
+test("malformed V2 success becomes a stable error and records internal diagnostics", async () => {
   installRuntime(
-    graphQLSuccess(validPage({ managerCheckedAt: "not-a-date" }), "request-bad-board")
+    graphQLSuccess(
+      validPage({
+        times: validTimes({ sourceCheckedAt: "not-a-date" })
+      }),
+      "request-bad-board"
+    )
   );
 
   await assert.rejects(
@@ -352,7 +394,7 @@ test("malformed success becomes a stable error and records internal diagnostics"
       assert.equal(error.code, "LIVE_BOARD_INVALID_RESPONSE");
       assert.equal(error.message, "实时赛事响应不完整，请稍后重试");
       assert.equal(error.requestId, "request-bad-board");
-      assert.equal(error.missingFields.includes("managerCheckedAt"), true);
+      assert.equal(error.missingFields.includes("times.sourceCheckedAt"), true);
       return true;
     }
   );
@@ -362,7 +404,7 @@ test("malformed success becomes a stable error and records internal diagnostics"
   assert.equal(diagnostic.code, "LIVE_BOARD_INVALID_RESPONSE");
   assert.equal(diagnostic.operation, "GetEntryLiveCompetitionBoard");
   assert.match(diagnostic.at, /^\d{4}-\d{2}-\d{2}T/);
-  assert.match(diagnostic.message, /missing=managerCheckedAt/);
+  assert.match(diagnostic.message, /missing=times.sourceCheckedAt/);
 });
 
 test("response identity includes the expected season", async () => {

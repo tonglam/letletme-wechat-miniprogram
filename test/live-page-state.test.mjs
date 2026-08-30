@@ -200,7 +200,7 @@ test("an older entry lookup failure cannot overwrite a newer confirmed identity"
   assert.equal(context.data.entryLookupStatus, "FOUND");
 });
 
-test("entry NO_PICKS keeps polling when an unavailable score retains a retry deadline", () => {
+test("confirmed NO_PICKS does not poll even when stale retry metadata remains", () => {
   const context = {
     data: {
       ...entryPage.data,
@@ -221,10 +221,10 @@ test("entry NO_PICKS keeps polling when an unavailable score retains a retry dea
     }
   };
 
-  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+  assert.equal(entryPage.shouldAutoRefresh.call(context), false);
 });
 
-test("entry NO_PICKS keeps polling when only the snapshot retains a retry deadline", () => {
+test("confirmed NO_PICKS does not poll from snapshot retry metadata", () => {
   const context = {
     data: {
       ...entryPage.data,
@@ -246,7 +246,7 @@ test("entry NO_PICKS keeps polling when only the snapshot retains a retry deadli
     }
   };
 
-  assert.equal(entryPage.shouldAutoRefresh.call(context), true);
+  assert.equal(entryPage.shouldAutoRefresh.call(context), false);
 });
 
 test("match offseason is a scheduled empty state, not a request error", () => {
@@ -1299,7 +1299,7 @@ test("live loaders normalize display state after clearing loading flags", () => 
 test("team phase banner never invents settling after a failed snapshot probe", () => {
   assert.equal(teamModule.phaseBannerFromSnapshot(undefined), "");
   assert.equal(teamModule.phaseBannerFromSnapshot("SCHEDULED"), "");
-  assert.equal(teamModule.phaseBannerFromSnapshot("LIVE"), "live");
+  assert.equal(teamModule.phaseBannerFromSnapshot("LIVE_ACTIVE"), "live");
   assert.equal(teamModule.phaseBannerFromSnapshot("SETTLED"), "");
 });
 
