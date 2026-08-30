@@ -10,6 +10,7 @@ const contentRevision = (snapshot: LiveSnapshotStatus): string =>
     snapshot.revisions?.displayStats ?? "",
     snapshot.revisions?.picksBase ?? "",
     snapshot.revisions?.officialAdjustment ?? "",
+    snapshot.revisions?.previousTotals ?? "",
     snapshot.revisions?.finalResult ?? "",
   ].join(":");
 
