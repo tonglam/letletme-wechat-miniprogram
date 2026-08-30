@@ -1,3 +1,5 @@
+import { miniLogger } from "./logger";
+
 /**
  * Shared presenter for image actions. The component/page decides how an
  * image is rendered; this module owns the privacy-gated save/share fallback.
@@ -15,7 +17,7 @@ export function presentImage(path: string): Promise<void> {
         fail: (err) => {
           // "fail cancel" = the user dismissed the share panel; stay silent.
           if (err && /cancel/.test(err.errMsg || "")) return;
-          console.warn("showShareImageMenu failed, falling back to album", err);
+          miniLogger.warn("share_image_menu_fallback", err);
           void saveToAlbum(path);
         },
         complete: () => resolve()
