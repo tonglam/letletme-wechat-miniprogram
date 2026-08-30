@@ -39,7 +39,8 @@ export type LiveServedFrom =
   | "REDIS_PREVIOUS"
   | "PROCESS_LKG"
   | "POSTGRES_CHECKPOINT"
-  | "FINAL_RESULT";
+  | "FINAL_RESULT"
+  | "UNAVAILABLE";
 
 export interface LiveRevisionVector {
   publicationId: string;

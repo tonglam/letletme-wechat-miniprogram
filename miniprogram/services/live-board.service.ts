@@ -413,6 +413,7 @@ function validateLiveDelivery(
       "PROCESS_LKG",
       "POSTGRES_CHECKPOINT",
       "FINAL_RESULT",
+      "UNAVAILABLE",
     ].includes(String(value.servedFrom))
   ) {
     missing.push(`${path}.servedFrom`);
