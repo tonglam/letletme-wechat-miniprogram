@@ -787,9 +787,19 @@ def check_governance_binding(path: Path, text: str, errors: list[str]) -> None:
 
     # Treat wrapped Markdown lines as one clause while retaining word
     # boundaries; otherwise a harmless line wrap can disable the check.
-    operative = _without_markdown_code(text)
-    operative = re.sub(r"<!--.*?(?:-->|$)", " ", operative, flags=re.S)
-    lowered = " ".join(operative.casefold().split())
+    section, outside = _governance_parts(text)
+    if section is None:
+        errors.append(f"{path}: must contain exactly one operative '## Governance and review' section")
+        lowered = ""
+    else:
+        lowered = section.casefold()
+        conflicts = (
+            r"\b(?:ignore|disregard|bypass|waive)\b.{0,160}\b(?:review|finding|thread|ci|cleanup|quota|unresolved|undispositioned)\b",
+            r"\b(?:merge|ship|release)\b.{0,160}\b(?:without|even\s+with)\b.{0,80}\b(?:review|finding|thread|ci|cleanup|unresolved|undispositioned)\b",
+            r"\b(?:allow|permit)\b.{0,160}\b(?:merge|ship|release)\b.{0,80}\b(?:unresolved|undispositioned)\b",
+        )
+        if any(re.search(pattern, outside, flags=re.I | re.S) for pattern in conflicts):
+            errors.append(f"{path}: operative text outside Governance and review conflicts with the mandatory review rules")
     required_clauses = {
         "quota rule": (
             "a review may be skipped only after two consecutive explicit quota-limit responses",
@@ -814,8 +824,8 @@ def check_governance_binding(path: Path, text: str, errors: list[str]) -> None:
             errors.append(f"{path}: missing operative {label} clause")
 
 
-def _governance_section(text: str) -> str | None:
-    """Return a whitespace-normalized governance section for parity checks."""
+def _governance_parts(text: str) -> tuple[str | None, str]:
+    """Return the operative governance section and text outside it."""
 
     # Headings in fenced/indented Markdown examples are not operative.  A
     # duplicate operative heading is rejected rather than allowing the first
@@ -827,14 +837,23 @@ def _governance_section(text: str) -> str | None:
         if re.match(r"^\s*##\s+Governance and review\s*$", line, flags=re.I)
     ]
     if len(matches) != 1:
-        return None
+        return None, ""
     start = matches[0]
     end = len(lines)
     for index in range(start + 1, len(lines)):
         if re.match(r"^\s*##\s+", lines[index]):
             end = index
             break
-    return " ".join("\n".join(lines[start:end]).split())
+    section = " ".join("\n".join(lines[start:end]).split())
+    outside = " ".join("\n".join(lines[:start] + lines[end:]).split()).casefold()
+    return section, outside
+
+
+def _governance_section(text: str) -> str | None:
+    """Return a whitespace-normalized governance section for parity checks."""
+
+    section, _ = _governance_parts(text)
+    return section
 
 
 def check_agents_claude_consistency(repo: Path, errors: list[str]) -> None:
@@ -1013,7 +1032,17 @@ def has_secret_bytes(raw: bytes) -> bool:
     # ignored and remain covered by the latin-1 scan.
     for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be"):
         try:
-            candidates.append(raw.decode(encoding))
+            decoded = raw.decode(encoding)
+            candidates.append(decoded)
+            # JSON consumers decode escaped object keys/values before using
+            # them. Scan a normalized serialization as well so an escaped
+            # ``passw\\u006frd`` key cannot hide a literal credential.
+            try:
+                parsed = json.loads(decoded)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+            else:
+                candidates.append(json.dumps(parsed, ensure_ascii=False))
         except UnicodeDecodeError:
             continue
     return any(has_secret(candidate) for candidate in candidates)
@@ -1112,7 +1141,31 @@ def _validate_skill_inventory(repo: Path, skills: list[Any], errors: list[str]) 
             if not isinstance(value, dict):
                 errors.append(f"{lock_path}: skills must be a mapping")
             else:
-                locked = {str(name) for name in value}
+                for name, metadata in value.items():
+                    skill_name = str(name)
+                    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
+                        errors.append(f"{lock_path}: invalid locked skill name: {skill_name!r}")
+                        continue
+                    if not isinstance(metadata, dict):
+                        errors.append(f"{lock_path}: metadata for {skill_name!r} must be a mapping")
+                        continue
+                    source = metadata.get("source")
+                    source_type = metadata.get("sourceType")
+                    computed_hash = metadata.get("computedHash")
+                    if not isinstance(source, str) or not source.strip():
+                        errors.append(f"{lock_path}: {skill_name!r} must declare a non-empty source")
+                        continue
+                    if not isinstance(source_type, str) or not re.fullmatch(
+                        r"[a-z0-9]+(?:-[a-z0-9]+)*", source_type
+                    ):
+                        errors.append(f"{lock_path}: {skill_name!r} has invalid sourceType")
+                        continue
+                    if not isinstance(computed_hash, str) or not re.fullmatch(
+                        r"[0-9a-fA-F]{64}", computed_hash
+                    ):
+                        errors.append(f"{lock_path}: {skill_name!r} must declare a SHA-256 computedHash")
+                        continue
+                    locked.add(skill_name)
     allowed = contracted | locked
     try:
         children = sorted(root.iterdir(), key=lambda path: path.name)
@@ -1586,11 +1639,7 @@ def validate_asset(
                 repo,
                 policy,
                 errors,
-                require_governance=(
-                    path.name == "CLAUDE.md"
-                    or ".claude" in path.relative_to(repo).parts
-                    and any(part in {"agents", "rules"} for part in path.relative_to(repo).parts)
-                ),
+                require_governance=path.name == "CLAUDE.md",
             )
             # CLAUDE.md is an operative consumer entrypoint in repositories
             # that provide it, even when the legacy contract lists only
