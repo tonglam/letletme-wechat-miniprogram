@@ -535,11 +535,17 @@ export function buildGraphQLRequestHeaders(
   return header;
 }
 
+export const LIVE_MATCHES_CONTRACT_VERSION = "live-matches-v2";
+
 /** Every Live Points operation is hard-gated to the V2 contract. */
 export function isLivePointsV2Query(query: string): boolean {
-  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|liveMatchdayDesk|liveFixturePlayers|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
+  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
     query,
   );
+}
+
+export function isLiveMatchesV2Query(query: string): boolean {
+  return /\bliveMatchday\s*(?:\(|\{)/.test(query);
 }
 
 function makeRequest<T>(
@@ -583,7 +589,9 @@ function makeRequest<T>(
       token,
       getMiniProgramDeviceId(),
     );
-    if (isLivePointsV2Query(query)) {
+    if (isLiveMatchesV2Query(query)) {
+      header["X-LetLetMe-Contract"] = LIVE_MATCHES_CONTRACT_VERSION;
+    } else if (isLivePointsV2Query(query)) {
       header["X-LetLetMe-Contract"] = "live-points-v2";
     }
 

@@ -440,9 +440,14 @@ test("unchanged live probes refresh the displayed check time", () => {
     "miniprogram/pages/live/tournament/tournament.controller.ts",
   ]) {
     const page = source(path);
+    const timestampField = path.endsWith("/match.ts")
+      ? "contentUpdatedAt"
+      : "sourceCheckedAt";
     assert.match(
       page,
-      /acceptSnapshot:[\s\S]*snapshot\?\.sourceCheckedAt[\s\S]*lastUpdated: formatTime\(new Date\(snapshot\.sourceCheckedAt\)\)/,
+      new RegExp(
+        `acceptSnapshot:[\\s\\S]*snapshot\\?\\.${timestampField}[\\s\\S]*lastUpdated: formatTime\\(new Date\\(snapshot\\.${timestampField}\\)\\)`,
+      ),
       path,
     );
   }

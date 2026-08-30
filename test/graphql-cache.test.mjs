@@ -29,7 +29,8 @@ import {
   httpErrorMessage,
 } from "../miniprogram/utils/request-error.ts";
 
-const query = "query EntryLookup($entryId: Int!) { entryLookup(id: $entryId) { status entry { id } } }";
+const query =
+  "query EntryLookup($entryId: Int!) { entryLookup(id: $entryId) { status entry { id } } }";
 const variables = { entryId: 123 };
 
 test("separates public and authenticated GraphQL caches", () => {
@@ -103,12 +104,13 @@ test("does not expose raw HTTP status codes to users", () => {
   );
 });
 
-test("keeps the live matchday desk query compact", () => {
-  assert.match(LIVE_MATCHES_QUERY, /liveMatchdayDesk/);
+test("keeps the live matchday V2 publication query bounded", () => {
+  assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
+  assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 1);
-  assert.ok(LIVE_MATCHES_QUERY.length < 1_200);
+  assert.ok(LIVE_MATCHES_QUERY.length < 3_000);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures|upcoming\s*:/);
-  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEvent\b/);
+  assert.match(LIVE_MATCHES_QUERY, /\bnextEventId\b/);
 });
 
 test("uses a revision-aware context query for automatic live freshness checks", () => {
@@ -201,34 +203,52 @@ test("only gateway failures are transient HTTP failures", () => {
 });
 
 test("EntryLookup caches only authoritative database hits", () => {
-  assert.equal(shouldCacheGraphQLData("EntryLookup", {
-    entryLookup: { status: "NOT_FOUND", entry: null, source: "FPL" },
-  }), false);
-  assert.equal(shouldCacheGraphQLData("EntryLookup", {
-    entryLookup: {
-      status: "FOUND",
-      entry: { id: 1 },
-      source: "FPL",
-      persistenceState: "QUEUED",
-    },
-  }), false);
-  assert.equal(shouldCacheGraphQLData("EntryLookup", {
-    entryLookup: {
-      status: "FOUND",
-      entry: { id: 1 },
-      source: "DATABASE",
-      persistenceState: "NOT_REQUIRED",
-    },
-  }), true);
-  assert.equal(shouldCacheGraphQLData("EntryLookup", {
-    entryLookup: { status: "UNAVAILABLE", entry: null },
-  }), false);
-  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
-    playerDetail: { dataAvailability: { isFullyAuthoritative: false } },
-  }), false);
-  assert.equal(shouldCacheGraphQLData("PlayerDetail", {
-    playerDetail: { dataAvailability: { isFullyAuthoritative: true } },
-  }), true);
+  assert.equal(
+    shouldCacheGraphQLData("EntryLookup", {
+      entryLookup: { status: "NOT_FOUND", entry: null, source: "FPL" },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("EntryLookup", {
+      entryLookup: {
+        status: "FOUND",
+        entry: { id: 1 },
+        source: "FPL",
+        persistenceState: "QUEUED",
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("EntryLookup", {
+      entryLookup: {
+        status: "FOUND",
+        entry: { id: 1 },
+        source: "DATABASE",
+        persistenceState: "NOT_REQUIRED",
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("EntryLookup", {
+      entryLookup: { status: "UNAVAILABLE", entry: null },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("PlayerDetail", {
+      playerDetail: { dataAvailability: { isFullyAuthoritative: false } },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("PlayerDetail", {
+      playerDetail: { dataAvailability: { isFullyAuthoritative: true } },
+    }),
+    true,
+  );
   assert.equal(
     shouldCacheGraphQLData("EntryLeagues", { entryLeagues: [] }),
     true,

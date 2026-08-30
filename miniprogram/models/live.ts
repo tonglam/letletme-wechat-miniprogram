@@ -94,6 +94,7 @@ export interface LiveSnapshotStatus {
   state: LiveSnapshotState;
   publishedAt: string | null;
   sourceCheckedAt: string | null;
+  contentUpdatedAt?: string | null;
   scoreCoreRevision: string | null;
   publicationId?: string | null;
   revisions?: LiveRevisionVector | null;

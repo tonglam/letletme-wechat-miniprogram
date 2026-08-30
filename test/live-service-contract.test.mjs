@@ -2,39 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parse, visit } from "graphql";
 
-const {
-  buildLiveFixturePlayersQuery,
-  LIVE_MATCHES_QUERY,
-  mapGraphQLMatch,
-  mergeLiveFixturePlayers,
-} = await import("../miniprogram/services/live.service.ts");
+const { LIVE_MATCHES_QUERY, mapGraphQLMatch } =
+  await import("../miniprogram/services/live.service.ts");
 
-test("live matchday query uses only the published match summary fields", () => {
-  // The live desk is event-scoped. Team identity comes from the Core fixture
-  // schedule, so the live overlay only carries score/status fields.
-  assert.equal(
-    (LIVE_MATCHES_QUERY.match(/homeTeamShortName/g) || []).length,
-    0,
-  );
-  assert.equal(
-    (LIVE_MATCHES_QUERY.match(/awayTeamShortName/g) || []).length,
-    0,
-  );
+test("live matchday query is one V2 publication with embedded players", () => {
+  assert.match(LIVE_MATCHES_QUERY, /query LiveMatchday\(\$eventId: Int\)/);
+  assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
+  assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
+  assert.match(LIVE_MATCHES_QUERY, /homeTeamShortName/);
+  assert.match(LIVE_MATCHES_QUERY, /awayTeamShortName/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
   assert.match(LIVE_MATCHES_QUERY, /matches\s*\{[\s\S]*minutes[\s\S]*started/);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures/);
+  assert.doesNotMatch(
+    LIVE_MATCHES_QUERY,
+    /liveMatchdayDesk|liveFixturePlayers/,
+  );
 });
 
-test("live fixture player batches use the published player detail fields", () => {
-  const query = buildLiveFixturePlayersQuery(5);
-
-  assert.equal((query.match(/liveFixturePlayers/g) || []).length, 5);
-  assert.doesNotMatch(query, /\bavailability\b/);
-  assert.doesNotMatch(query, /\bbonusProvisional\b/);
-  assert.match(query, /players\s*\{/);
-
+test("live matchday V2 query stays within the public AST budget", () => {
   let astNodes = 0;
-  visit(parse(query), { enter: () => void (astNodes += 1) });
+  visit(parse(LIVE_MATCHES_QUERY), { enter: () => void (astNodes += 1) });
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
 });
 
@@ -67,7 +55,7 @@ test("live match mapping carries the authoritative fixture minutes", () => {
 
   assert.equal(mapped.minutes, 48);
   assert.equal(mapped.playStatus, "playing");
-  assert.equal(mapped.homeTeamShortName, "Home");
+  assert.equal(mapped.homeTeamShortName, "HOM");
   assert.equal(mapped.awayTeamShortName, "Away");
 });
 
@@ -93,34 +81,7 @@ test("live match mapping presents provisional completion without mutating the co
   assert.equal(source.finished, false);
 });
 
-function performance(playerId, teamId, teamName, teamShortName) {
-  return {
-    player: {
-      id: playerId,
-      webName: `Player ${playerId}`,
-      position: "MIDFIELDER",
-      team: { id: teamId, name: teamName, shortName: teamShortName },
-    },
-    minutes: 48,
-    goalsScored: 0,
-    assists: 0,
-    cleanSheets: 0,
-    goalsConceded: 0,
-    ownGoals: 0,
-    penaltiesSaved: 0,
-    penaltiesMissed: 0,
-    yellowCards: 0,
-    redCards: 0,
-    saves: 0,
-    bonus: 0,
-    bps: 10,
-    defensiveContribution: 0,
-    totalPoints: 2,
-  };
-}
-
-test("live fixture players are merged by team after revision validation", () => {
-  const ref = { season: "2627", eventId: 1, revision: "88" };
+test("embedded live players are mapped into the authoritative fixture teams", () => {
   const match = mapGraphQLMatch({
     fixtureId: 10,
     eventId: 1,
@@ -135,58 +96,36 @@ test("live fixture players are merged by team after revision validation", () => 
     started: true,
     finished: false,
     finishedProvisional: false,
-  });
-  const detail = {
-    ...ref,
-    fixtureId: 10,
     players: [
-      performance(1, 1, "Home", "HOM"),
-      performance(2, 2, "Away", "AWY"),
+      {
+        id: 1,
+        webName: "Home Player",
+        position: "MIDFIELDER",
+        teamId: 1,
+        totalPoints: 2,
+        stats: [
+          {
+            identifier: "minutes",
+            value: 48,
+            points: 2,
+            pointsModification: null,
+          },
+        ],
+      },
+      {
+        id: 2,
+        webName: "Away Player",
+        position: "FORWARD",
+        teamId: 2,
+        totalPoints: 1,
+        stats: [],
+      },
     ],
-  };
-
-  const [merged] = mergeLiveFixturePlayers(
-    [match],
-    new Map([[10, detail]]),
-    ref,
-  );
-
-  assert.equal(merged?.homeTeamDataList?.length, 1);
-  assert.equal(merged?.awayTeamDataList?.length, 1);
-  assert.equal(merged?.homeTeamDataList?.[0]?.teamShortName, "HOM");
-  assert.equal(merged?.awayTeamDataList?.[0]?.teamShortName, "AWY");
-});
-
-test("live fixture players ignore a stale score revision without erasing the desk", () => {
-  const ref = { season: "2627", eventId: 1, scoreCoreRevision: "88" };
-  const match = mapGraphQLMatch({
-    fixtureId: 10,
-    eventId: 1,
-    homeTeamId: 1,
-    homeTeamName: "Home",
-    awayTeamId: 2,
-    awayTeamName: "Away",
-    homeScore: 1,
-    awayScore: 0,
-    kickoffTime: null,
-    minutes: 48,
-    started: true,
-    finished: false,
-    finishedProvisional: false,
   });
-  const stale = {
-    season: "2627",
-    eventId: 1,
-    scoreCoreRevision: "87",
-    fixtureId: 10,
-    players: [performance(1, 1, "Home", "HOM")],
-  };
 
-  const [merged] = mergeLiveFixturePlayers(
-    [match],
-    new Map([[10, stale]]),
-    ref,
-  );
-
-  assert.deepEqual(merged, match);
+  assert.equal(match.homeTeamDataList?.length, 1);
+  assert.equal(match.awayTeamDataList?.length, 1);
+  assert.equal(match.homeTeamDataList?.[0]?.webName, "Home Player");
+  assert.equal(match.awayTeamDataList?.[0]?.webName, "Away Player");
+  assert.equal(match.homeTeamDataList?.[0]?.minutes, 48);
 });

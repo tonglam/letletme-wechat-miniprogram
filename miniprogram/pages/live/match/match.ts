@@ -5,6 +5,7 @@ import {
 import type {
   LiveMatch,
   LivePlayerRow,
+  LiveSnapshotResult,
   LiveSnapshotStatus,
 } from "../../../models/live";
 import { readCoreEventFixtureSchedule } from "../../../services/fixture.service";
@@ -76,6 +77,7 @@ interface LiveMatchLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
   trackNavigation?: boolean;
+  prefetchedLiveResult?: LiveSnapshotResult<LiveMatch[]>;
 }
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -853,19 +855,44 @@ Page({
 
   initLiveRefresh() {
     if (this.liveRefresh) return;
+    let prefetchedLiveResult: LiveSnapshotResult<LiveMatch[]> | null = null;
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
-      probe: () => getLiveSnapshot(),
-      reload: () => this.loadData({ background: true, forceRefresh: true }),
+      probe: async () => {
+        const liveResult = await getLiveMatchByStatusSnapshot(
+          "all",
+          true,
+          undefined,
+          this.currentEventId,
+        );
+        prefetchedLiveResult = liveResult;
+        if (!liveResult.snapshot) {
+          // A failed publication observation must preserve the accepted
+          // matchday; the controller records the probe error and retries
+          // without clearing the full payload.
+          throw new Error("实时比赛 publication 暂不可用");
+        }
+        return liveResult.snapshot;
+      },
+      reload: () => {
+        const liveResult = prefetchedLiveResult;
+        prefetchedLiveResult = null;
+        return this.loadData({
+          background: true,
+          forceRefresh: true,
+          prefetchedLiveResult: liveResult ?? undefined,
+        });
+      },
       getNextRefreshAt: () => this.liveSnapshot?.nextRefreshAt || null,
-      reloadOnDeadline: true,
+      // Publication revision, not a heartbeat deadline, owns content reloads.
+      reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.sourceCheckedAt
-            ? { lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)) }
+          ...(snapshot?.contentUpdatedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.contentUpdatedAt)) }
             : {}),
         });
         this.syncDisplayState();
@@ -1398,11 +1425,14 @@ Page({
           // Live acquisition after kickoff still recovers automatically.
           this.liveRefresh?.sync();
           this.setData({ errorWorkload: "gameweek" });
-          const liveResult = await getLiveMatchByStatusSnapshot(
-            "all",
-            options.forceRefresh === true,
-            requestTrace,
-          );
+          const liveResult =
+            options.prefetchedLiveResult ??
+            (await getLiveMatchByStatusSnapshot(
+              "all",
+              options.forceRefresh === true,
+              requestTrace,
+              targetEvent,
+            ));
           if (!this.pageVisible || requestId !== this.liveRequestId) return;
           this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
@@ -1427,7 +1457,11 @@ Page({
             groups: groupMatches(overlaid, overlayStatus),
             error: "",
             lastUpdated: formatTime(
-              new Date(liveResult.servedStoredAt || Date.now()),
+              new Date(
+                liveResult.snapshot?.contentUpdatedAt ||
+                  liveResult.servedStoredAt ||
+                  Date.now(),
+              ),
             ),
           });
           this.liveRefresh?.sync();

@@ -98,8 +98,8 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   SummaryPlayerTeams: { authMode: "public", cachePolicy: "historical" },
   GetLiveContext: { authMode: "public", cachePolicy: "live" },
   LiveSnapshotByEvent: { authMode: "public", cachePolicy: "live" },
-  LiveMatchdayDesk: { authMode: "public", cachePolicy: "live" },
-  LiveFixturePlayersBatch: { authMode: "public", cachePolicy: "live" },
+  LiveMatchday: { authMode: "public", cachePolicy: "live" },
+  LiveMatchdayHead: { authMode: "public", cachePolicy: "live" },
   EntryLookup: { authMode: "session", cachePolicy: "reporting" },
   SearchEntries: { authMode: "public", cachePolicy: "reporting" },
   OwnEntry: { authMode: "session", cachePolicy: "reporting" },
@@ -115,9 +115,18 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   MyFplCompetitionBoard: { authMode: "session", cachePolicy: "reporting" },
   MyFplCompetitionSeasonPath: { authMode: "session", cachePolicy: "reporting" },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
-  GetEntryLiveCompetitionBoard: { authMode: "session", cachePolicy: "network-only" },
-  GetTournamentSelectionIndex: { authMode: "session", cachePolicy: "network-only" },
-  GetTournamentEntrySquads: { authMode: "session", cachePolicy: "network-only" },
+  GetEntryLiveCompetitionBoard: {
+    authMode: "session",
+    cachePolicy: "network-only",
+  },
+  GetTournamentSelectionIndex: {
+    authMode: "session",
+    cachePolicy: "network-only",
+  },
+  GetTournamentEntrySquads: {
+    authMode: "session",
+    cachePolicy: "network-only",
+  },
 };
 
 function workloadForCachePolicy(

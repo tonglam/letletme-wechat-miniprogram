@@ -12,6 +12,7 @@ import {
   buildGraphQLRequestHeaders,
   GraphQLTransportError,
   isClientUpgradeRequired,
+  isLiveMatchesV2Query,
   isLivePointsV2Query,
 } from "../miniprogram/services/graphql.service";
 import type { LiveScore, LiveSnapshotStatus } from "../miniprogram/models/live";
@@ -106,6 +107,16 @@ assertEqual(
   isLivePointsV2Query("query { liveContext { eventId } }"),
   true,
   "context is gated",
+);
+assertEqual(
+  isLivePointsV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
+  false,
+  "matchday uses its own contract",
+);
+assertEqual(
+  isLiveMatchesV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
+  true,
+  "matchday is gated",
 );
 assertEqual(
   isLivePointsV2Query("query { events { id } }"),
