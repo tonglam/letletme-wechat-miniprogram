@@ -1383,7 +1383,6 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
-        this.coreMatches = core;
         this.liveWindow =
           Boolean(
             this.liveSnapshot && this.liveSnapshot.windowState !== "OFFSEASON",
@@ -1391,35 +1390,39 @@ Page({
           coreRead.data.some(
             (fixture) => !fixture.finished && fixture.started === true,
           );
+        const retainLiveBoardUntilCandidate = preserveData && this.liveWindow;
+        if (!retainLiveBoardUntilCandidate) this.coreMatches = core;
         this.armKickoffTransition(coreRead.data);
         const activeStatus = this.resolveActiveStatus(core);
         const activeStatusLabel =
           STATUS_OPTIONS.find((item) => item.key === activeStatus)?.label ||
           "比赛";
         const matches = filterMatches(core, activeStatus);
-        this.setData(
-          {
-            status: activeStatus,
-            statusTabs: buildStatusTabs(core),
-            activeStatusLabel,
-            emptyDescription: emptyDescription(activeStatus),
-            matches,
-            groups: groupMatches(matches, activeStatus),
-            hasData: true,
-            scheduleEmpty: false,
-            error: "",
-            fixtureStaleMessage: coreRead.meta.stale
-              ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
-              : "",
-            lastUpdated: formatTime(
-              new Date(coreRead.meta.storedAt || Date.now()),
-            ),
-          },
-          () => {
-            navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
-          },
-        );
+        if (!retainLiveBoardUntilCandidate) {
+          this.setData(
+            {
+              status: activeStatus,
+              statusTabs: buildStatusTabs(core),
+              activeStatusLabel,
+              emptyDescription: emptyDescription(activeStatus),
+              matches,
+              groups: groupMatches(matches, activeStatus),
+              hasData: true,
+              scheduleEmpty: false,
+              error: "",
+              fixtureStaleMessage: coreRead.meta.stale
+                ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
+                : "",
+              lastUpdated: formatTime(
+                new Date(coreRead.meta.storedAt || Date.now()),
+              ),
+            },
+            () => {
+              navigationTracker?.mark("primarySetDataAt");
+              wx.nextTick(() => navigationTracker?.observePrimary());
+            },
+          );
+        }
         if (this.liveWindow) {
           // Arm revision recovery before the overlay request so a failed first
           // Live acquisition after kickoff still recovers automatically.
@@ -1434,6 +1437,12 @@ Page({
               targetEvent,
             ));
           if (!this.pageVisible || requestId !== this.liveRequestId) return;
+          if (!liveResult.snapshot && retainLiveBoardUntilCandidate) {
+            this.setData({ error: "实时比赛 publication 暂不可用" });
+            this.liveRefresh?.sync();
+            this.syncDisplayState();
+            return;
+          }
           this.liveSnapshot = liveResult.snapshot ?? liveWindowSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           this.coreMatches = appendNextEventRows(

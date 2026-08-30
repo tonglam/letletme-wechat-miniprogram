@@ -121,6 +121,26 @@ test("Live Matches reads one coherent V2 publication without fixture fan-out", (
   assert.doesNotMatch(service, /liveMatchdayDesk|liveFixturePlayers/);
 });
 
+test("an unavailable background publication cannot overwrite the accepted match board", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  assert.match(
+    page,
+    /const retainLiveBoardUntilCandidate = preserveData && this\.liveWindow/,
+  );
+  assert.match(
+    page,
+    /if \(!retainLiveBoardUntilCandidate\) \{[\s\S]*this\.setData\([\s\S]*matches,[\s\S]*groups:/,
+  );
+  assert.match(
+    page,
+    /if \(!liveResult\.snapshot && retainLiveBoardUntilCandidate\) \{[\s\S]*return;/,
+  );
+  assert.match(
+    page,
+    /if \(!liveResult\.snapshot && retainLiveBoardUntilCandidate\)[\s\S]*this\.liveSnapshot = liveResult\.snapshot \?\? liveWindowSnapshot/,
+  );
+});
+
 test("Live Match surfaces a stale Core fixture fallback", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const template = source("miniprogram/pages/live/match/match.wxml");
