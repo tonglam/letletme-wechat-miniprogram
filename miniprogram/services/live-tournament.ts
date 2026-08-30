@@ -1,16 +1,17 @@
 import type {
-  LiveManagerScore,
-  LiveManagerScoreState,
+  LiveDeliveryState,
   LivePlayerRow,
+  LiveScore,
   LiveTournamentRow,
 } from "../models/live";
 import {
-  officialManagerEventPoints,
-  officialManagerNetPoints,
-  officialManagerTotalPoints,
-  managerScoreNextRefreshAt,
-  traceableOfficialManagerScore,
-} from "./live-manager-score";
+  liveScoreDeliveryState,
+  liveScoreEventPoints,
+  liveScoreNetPoints,
+  liveScoreNextRefreshAt,
+  liveScoreTotalPoints,
+  traceableLiveScore,
+} from "./live-score-v2";
 
 export type TournamentOwnershipScope = "any" | "starter" | "bench";
 export type TournamentCaptainMode = "any" | "captain" | "vice";
@@ -19,20 +20,15 @@ export interface TournamentLiveGraphQLRow {
   entry: number;
   entryName: string;
   playerName: string;
-  rank?: number;
-  overallRank?: number;
+  rank?: number | { eventRank: number | null; overallRank: number | null; leagueRank: number | null; revision: string | null; contentUpdatedAt: string | null; state: string } | null;
+  overallRank?: number | null;
   chip?: string | null;
-  livePoints: number;
-  transferCost: number;
-  liveNetPoints: number;
-  liveTotalPoints: number;
   played: number;
   toPlay: number;
   captainName: string;
-  /** Live-board pipeline only; the legacy desk leaves both undefined. */
   teamValue?: number | null;
   captainPoints?: number | null;
-  score?: LiveManagerScore;
+  score: LiveScore;
   pickList?: Array<{
     element: number;
     webName: string;
@@ -75,7 +71,7 @@ export interface TournamentTeamOption {
 export interface TournamentManagerCoverage {
   officialCoverage?: number;
   traceableEntries?: number;
-  traceableScoreStates?: readonly LiveManagerScoreState[];
+  traceableScoreStates?: readonly LiveDeliveryState[];
   unavailableEntryIds?: readonly number[];
   totalEntries?: number;
 }
@@ -97,7 +93,7 @@ export function combinedTournamentTraceableEntries(
     Number.isFinite(refreshedTraceableEntries) &&
     refreshedTraceableEntries >= 0;
   const retainedTraceableEntries = retainedRows.filter(
-    (row) => officialManagerEventPoints(row.score) !== undefined,
+    (row) => liveScoreEventPoints(row.score) !== undefined,
   ).length;
   if (!hasRefreshedCount && retainedTraceableEntries === 0) {
     return undefined;
@@ -116,11 +112,11 @@ export function combinedTournamentTraceableEntries(
 }
 
 export function combinedTournamentTraceableScoreStates(
-  refreshedStates: readonly LiveManagerScoreState[] | undefined,
+  refreshedStates: readonly LiveDeliveryState[] | undefined,
   retainedRows: readonly LiveTournamentRow[],
-): LiveManagerScoreState[] | undefined {
+): LiveDeliveryState[] | undefined {
   const retainedStates = retainedRows.flatMap((row) => {
-    const state = traceableOfficialManagerScore(row.score)?.state;
+    const state = liveScoreDeliveryState(row.score);
     return state ? [state] : [];
   });
   if (refreshedStates === undefined && retainedStates.length === 0) {
@@ -130,9 +126,9 @@ export function combinedTournamentTraceableScoreStates(
 }
 
 export function officialTournamentTotalPoints(
-  score?: LiveManagerScore,
+  score?: LiveScore,
 ): number | undefined {
-  return officialManagerTotalPoints(score);
+  return liveScoreTotalPoints(score);
 }
 
 export function tournamentManagerScoreStatus(
@@ -140,14 +136,14 @@ export function tournamentManagerScoreStatus(
   coverage: TournamentManagerCoverage = {},
 ): string {
   const traceableScores = rows
-    .map((row) => traceableOfficialManagerScore(row.score))
-    .filter((score): score is LiveManagerScore => score !== undefined);
+    .map((row) => traceableLiveScore(row.score))
+    .filter((score): score is LiveScore => score !== undefined);
   const observedStates = traceableScores
-    .map((score) => score.state)
-    .filter((state): state is LiveManagerScoreState => state !== undefined);
+    .map((score) => score.delivery.state)
+    .filter((state): state is LiveDeliveryState => state !== undefined);
   const states = coverage.traceableScoreStates ?? observedStates;
   const observedAvailable = rows.filter(
-    (row) => officialManagerEventPoints(row.score) !== undefined,
+    (row) => liveScoreEventPoints(row.score) !== undefined,
   ).length;
   const total =
     typeof coverage.totalEntries === "number" &&
@@ -172,7 +168,7 @@ export function tournamentManagerScoreStatus(
           Math.max(0, Math.round(coverage.officialCoverage * total)),
         )
       : 0;
-  if (states.includes("SETTLING")) return "结算中";
+  if (states.includes("DEGRADED")) return "正在使用最近一次完整数据";
   if (states.includes("STALE")) return "官方数据延迟";
   if (verifiedAvailable === 0) return "官方分数不可用";
   const metadataAvailable = unavailableCount > 0
@@ -250,7 +246,7 @@ function finiteNumber(value: unknown): number | undefined {
  */
 export function effectiveTournamentCaptainPoints(
   picks: readonly LivePlayerRow[],
-  scoreState: string | undefined,
+    scoreState: string | undefined,
 ): number | undefined {
   const flagged = picks.find((pick) => pick.captain);
   const effective =
@@ -265,16 +261,18 @@ export function effectiveTournamentCaptainPoints(
 
 export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTournamentRow[] {
   return rows.map((row) => {
-    const officialScore = traceableOfficialManagerScore(row.score);
-    const officialEventPoints = officialManagerEventPoints(officialScore);
-    const officialNetPoints = officialManagerNetPoints(officialScore);
-    const officialTotal = officialManagerTotalPoints(officialScore);
+    const officialScore = traceableLiveScore(row.score);
+    const officialEventPoints = liveScoreEventPoints(officialScore);
+    const officialNetPoints = liveScoreNetPoints(officialScore);
+    const officialTotal = liveScoreTotalPoints(officialScore);
     const picks = (row.pickList || []).map(mapTournamentPick);
     const mapped: LiveTournamentRow = {
       entry: row.entry,
       entryName: row.entryName,
       playerName: row.playerName,
-      rank: officialScore ? row.rank : undefined,
+      rank: officialScore
+        ? (typeof row.rank === "number" ? row.rank : row.rank?.eventRank ?? undefined)
+        : undefined,
       livePoints: officialEventPoints,
       transferCost: officialScore?.transferCost,
       liveNetPoints: officialNetPoints,
@@ -287,13 +285,15 @@ export function mapTournamentLiveRows(rows: TournamentLiveGraphQLRow[]): LiveTou
       // The score carries the official overall rank; the desk row's own
       // overallRank is a flat standings rank and must not leak in here (the
       // live-board pipeline re-adds its trustworthy value downstream).
-      overallRank: officialScore?.overallRank ?? undefined,
+      overallRank: officialScore
+        ? (row.overallRank ?? (typeof row.rank === "object" && row.rank ? row.rank.overallRank : undefined) ?? undefined)
+        : undefined,
       teamValue: finiteNumber(row.teamValue),
       captainPoints:
         finiteNumber(row.captainPoints) ??
-        effectiveTournamentCaptainPoints(picks, officialScore?.state),
+        effectiveTournamentCaptainPoints(picks, officialScore?.delivery.state),
       score: officialScore,
-      scoreNextRefreshAt: managerScoreNextRefreshAt(row.score),
+      scoreNextRefreshAt: liveScoreNextRefreshAt(row.score),
       picks
     };
     return {
@@ -310,7 +310,7 @@ export function tournamentScoreNextRefreshAt(
     .map((row) => {
       const retained = row.scoreNextRefreshAt;
       if (retained && Number.isFinite(Date.parse(retained))) return retained;
-      return managerScoreNextRefreshAt(row.score);
+      return liveScoreNextRefreshAt(row.score);
     })
     .filter((value): value is string => Boolean(value))
     .sort()[0];

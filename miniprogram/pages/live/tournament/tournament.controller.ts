@@ -20,7 +20,7 @@ import {
   type LiveBoardVariables,
 } from "../../../services/live-board.service";
 import type {
-  LiveManagerScoreState,
+  LiveDeliveryState,
   LiveSnapshotStatus,
   LiveTournamentRow,
 } from "../../../models/live";
@@ -526,12 +526,12 @@ function boardChipOf(code: string): string {
   return code;
 }
 
-function managerStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string {
-  if (lastGood || page.managerDataAvailability === "LAST_GOOD") {
+function liveStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string {
+  if (lastGood || page.delivery.state === "DEGRADED") {
     return "官方数据延迟";
   }
   if (
-    page.managerDataAvailability === "PARTIAL" ||
+    page.coverageState === "PARTIAL" ||
     (page.officialCoverage > 0 && page.officialCoverage < 1)
   ) {
     const available = Math.round(page.officialCoverage * page.totalEntries);
@@ -539,10 +539,7 @@ function managerStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string 
       ? `部分可用：${available}/${page.totalEntries} 支球队已有官方分数`
       : "部分可用";
   }
-  if (
-    page.managerDataAvailability === "UNAVAILABLE" ||
-    page.officialCoverage === 0
-  ) {
+  if (page.delivery.state === "UNAVAILABLE" || page.officialCoverage === 0) {
     return "官方分数不可用";
   }
   return "官方实时";
@@ -654,9 +651,9 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
     playedText: `${played}/${played + toPlay}`,
     overallRankText: overallRankKnown ? formatRank(row.overallRank) : "",
     teamValueText: teamValueKnown
-      // The live-board payload exposes squad value in £m already (web
-      // formatTeamMoney parity) — no /10 rescale here.
-      ? `£${numberValue(row.teamValue).toFixed(1)}m`
+      ? // The live-board payload exposes squad value in £m already (web
+        // formatTeamMoney parity) — no /10 rescale here.
+        `£${numberValue(row.teamValue).toFixed(1)}m`
       : "",
     topRank: false,
     isMe: false,
@@ -936,13 +933,11 @@ function displayH2HMatch(
   viewerEntryId?: number,
 ): DisplayH2HMatch {
   const homePoints =
-    typeof match.home.points === "number" &&
-    Number.isFinite(match.home.points)
+    typeof match.home.points === "number" && Number.isFinite(match.home.points)
       ? match.home.points
       : null;
   const awayPoints =
-    typeof match.away.points === "number" &&
-    Number.isFinite(match.away.points)
+    typeof match.away.points === "number" && Number.isFinite(match.away.points)
       ? match.away.points
       : null;
   const hasScore = homePoints != null && awayPoints != null;
@@ -980,13 +975,11 @@ function displayH2HMatchup(
   desk: EntryOfficialH2HMatchupsItem | null,
 ): DisplayH2HMatchup {
   const homePoints =
-    typeof match.home.points === "number" &&
-    Number.isFinite(match.home.points)
+    typeof match.home.points === "number" && Number.isFinite(match.home.points)
       ? match.home.points
       : null;
   const awayPoints =
-    typeof match.away.points === "number" &&
-    Number.isFinite(match.away.points)
+    typeof match.away.points === "number" && Number.isFinite(match.away.points)
       ? match.away.points
       : null;
   const hasScore = homePoints != null && awayPoints != null;
@@ -1026,7 +1019,7 @@ function clearTournamentBoard(page: object): void {
     shareRows?: DisplayTournamentRow[];
     officialCoverage?: number;
     officialTraceableEntries?: number;
-    officialTraceableScoreStates?: LiveManagerScoreState[];
+    officialTraceableScoreStates?: LiveDeliveryState[];
     officialTotalEntries?: number;
     unavailableEntryIds?: number[];
     boardPage?: LiveBoardPage | null;
@@ -1117,7 +1110,10 @@ PerformancePage({
     teamExposureRules: [],
     pendingExposureTeamIndex: 0,
     pendingExposureTeam: null,
-    teamExposureCountNames: Array.from({ length: 15 }, (_, index) => `${index + 1} 人`),
+    teamExposureCountNames: Array.from(
+      { length: 15 },
+      (_, index) => `${index + 1} 人`,
+    ),
     teamExposureSummary: "未筛选",
     pageSize: 20,
     hasMore: false,
@@ -1210,9 +1206,7 @@ PerformancePage({
   retainedRowCount: 0,
   officialCoverage: undefined as number | undefined,
   officialTraceableEntries: undefined as number | undefined,
-  officialTraceableScoreStates: undefined as
-    | LiveManagerScoreState[]
-    | undefined,
+  officialTraceableScoreStates: undefined as LiveDeliveryState[] | undefined,
   officialTotalEntries: undefined as number | undefined,
   unavailableEntryIds: [] as number[],
   boardPage: null as LiveBoardPage | null,
@@ -1328,16 +1322,11 @@ PerformancePage({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(),
-      shouldReloadOnUnchangedProbe: () =>
-        Boolean(
-          this.data.scoreStatusText === "结算中" ||
-          (this.data.scoreNextRefreshAt &&
-            Date.parse(this.data.scoreNextRefreshAt) <= Date.now()),
-        ),
       getNextRefreshAt: () =>
         this.data.scoreNextRefreshAt ||
         this.liveSnapshot?.nextRefreshAt ||
         null,
+      reloadOnDeadline: true,
       reload: () => this.loadRows({ background: true, forceRefresh: true }),
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
@@ -1347,13 +1336,13 @@ PerformancePage({
           this.setData({
             error: "",
             errorSuffix: "",
-            ...(snapshot?.checkedAt
-              ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+            ...(snapshot?.sourceCheckedAt
+              ? { lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)) }
               : {}),
           });
-        } else if (snapshot?.checkedAt) {
+        } else if (snapshot?.sourceCheckedAt) {
           this.setData({
-            lastUpdated: formatTime(new Date(snapshot.checkedAt)),
+            lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)),
           });
         }
         this.syncDisplayState();
@@ -1382,7 +1371,6 @@ PerformancePage({
             this.data.event === Number(getApp<IAppOption>().globalData.gw),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
-          coverageFailed: this.liveSnapshot?.coverageFailed,
           retainedRowCount: this.retainedRowCount,
           probeDurationBucket: durationBucket(info.probeDurationMs),
           fullFetchDurationBucket:
@@ -1447,8 +1435,9 @@ PerformancePage({
         /* keep the last known event */
       }
       if (!this.pageVisible) return;
-      const principalChanged =
-        this.restartForPrincipalChange(previousEntryId, false);
+      // Keep this call shape stable for the source-level recovery contract.
+      // prettier-ignore
+      const principalChanged = this.restartForPrincipalChange(previousEntryId, false);
       const nextSeason = context?.season || app.globalData.season || undefined;
       const seasonChanged = Boolean(
         this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
@@ -1952,8 +1941,7 @@ PerformancePage({
       selectedOwnershipTeam: this.data.selectedOwnershipTeam
         ? { ...this.data.selectedOwnershipTeam }
         : null,
-      selectedOwnershipPositionIndex:
-        this.data.selectedOwnershipPositionIndex,
+      selectedOwnershipPositionIndex: this.data.selectedOwnershipPositionIndex,
       selectedOwnershipPosition: this.data.selectedOwnershipPosition,
       ownershipAvailablePlayers: this.data.ownershipAvailablePlayers.map(
         (player) => ({ ...player }),
@@ -1962,11 +1950,15 @@ PerformancePage({
         ...this.data.ownershipAvailablePlayerNames,
       ],
       ownershipSearch: this.data.ownershipSearch,
-      ownershipSearchResults: this.data.ownershipSearchResults.map((player) => ({
-        ...player,
-      })),
+      ownershipSearchResults: this.data.ownershipSearchResults.map(
+        (player) => ({
+          ...player,
+        }),
+      ),
       teamExposureScope: this.data.teamExposureScope,
-      teamExposureRules: this.data.teamExposureRules.map((rule) => ({ ...rule })),
+      teamExposureRules: this.data.teamExposureRules.map((rule) => ({
+        ...rule,
+      })),
       pendingExposureTeamIndex: this.data.pendingExposureTeamIndex,
       pendingExposureTeam: this.data.pendingExposureTeam
         ? { ...this.data.pendingExposureTeam }
@@ -2011,8 +2003,7 @@ PerformancePage({
       selectedOwnershipTeam: committed.selectedOwnershipTeam
         ? { ...committed.selectedOwnershipTeam }
         : null,
-      selectedOwnershipPositionIndex:
-        committed.selectedOwnershipPositionIndex,
+      selectedOwnershipPositionIndex: committed.selectedOwnershipPositionIndex,
       selectedOwnershipPosition: committed.selectedOwnershipPosition,
       ownershipAvailablePlayers: committed.ownershipAvailablePlayers.map(
         (player) => ({ ...player }),
@@ -2021,9 +2012,11 @@ PerformancePage({
         ...committed.ownershipAvailablePlayerNames,
       ],
       ownershipSearch: committed.ownershipSearch,
-      ownershipSearchResults: committed.ownershipSearchResults.map((player) => ({
-        ...player,
-      })),
+      ownershipSearchResults: committed.ownershipSearchResults.map(
+        (player) => ({
+          ...player,
+        }),
+      ),
       ownershipPlayerNames: selectedOwnershipPlayers.map(
         (player) => `${player.name}${player.meta ? ` (${player.meta})` : ""}`,
       ),
@@ -2094,13 +2087,15 @@ PerformancePage({
   },
 
   hasDefaultBoardQuery(): boolean {
-    return !this._submittedKeyword.trim() &&
+    return (
+      !this._submittedKeyword.trim() &&
       this.data.sortKey === "livePoints" &&
       this.data.sortDesc &&
       this.data.chipFilters.length === 0 &&
       this.data.captainFilters.length === 0 &&
       this.data.selectedOwnershipPlayers.length === 0 &&
-      this.data.teamExposureRules.length === 0;
+      this.data.teamExposureRules.length === 0
+    );
   },
 
   buildBoardVariables(
@@ -2166,7 +2161,8 @@ PerformancePage({
     options: { lastGood?: boolean } = {},
   ) {
     const playerRevisionChanged = Boolean(
-      this.boardPage && this.boardPage.playerRevision !== page.playerRevision,
+      this.boardPage &&
+      this.boardPage.scoreCoreRevision !== page.scoreCoreRevision,
     );
     const incoming = boardRowsToLiveRows(page).map(normalizeRow);
     const byEntry = new Map<number, DisplayTournamentRow>();
@@ -2180,7 +2176,8 @@ PerformancePage({
     const compareIds = this.data.compareIds || [];
     const rows = [...byEntry.values()].map((row, index) => {
       const compared = compareIds.includes(numberValue(row.entry));
-      const visibleRank = numberValue(row.rank, index + 1);
+      const visibleRank =
+        page.rankScope === "FULL_FIELD" ? numberValue(row.rank, index + 1) : 0;
       return {
         ...row,
         visibleRank,
@@ -2195,10 +2192,11 @@ PerformancePage({
     });
     const resultsFiltered = !this.hasDefaultBoardQuery();
     const captainNames = this.data.captainFilters
-      .map((element) =>
-        this.ownershipPlayers.find(
-          (player: OwnershipPlayerOption) => player.element === element,
-        )?.name,
+      .map(
+        (element) =>
+          this.ownershipPlayers.find(
+            (player: OwnershipPlayerOption) => player.element === element,
+          )?.name,
       )
       .filter((name): name is string => Boolean(name));
     this.boardPage = page;
@@ -2210,8 +2208,16 @@ PerformancePage({
       page.failedEntryIds,
       page.unavailableEntryIds,
     );
+    const identifiedMissingEntryCount = new Set([
+      ...page.failedEntryIds,
+      ...page.unavailableEntryIds,
+    ]).size;
+    const reportedMissingEntryCount =
+      page.deferredEntryCount +
+      page.failedEntryCount +
+      page.unavailableEntryCount;
     this.failedEntryCount = page.partial
-      ? Math.max(1, this.unavailableEntryIds.length)
+      ? Math.max(identifiedMissingEntryCount, reportedMissingEntryCount)
       : 0;
     this.retainedRowCount = options.lastGood ? rows.length : 0;
     if (playerRevisionChanged) this.compareRequestId += 1;
@@ -2225,18 +2231,20 @@ PerformancePage({
         page.highestEventPoints == null ? "—" : String(page.highestEventPoints),
       averageText: formatBoardAveragePoints(page.averageEventPoints),
       entriesText: String(page.totalEntries),
-      scoreStatusText: managerStatusFromBoard(page, options.lastGood === true),
-      scoreNextRefreshAt: page.managerNextRefreshAt || "",
-      lastUpdated: exactUpdatedTime(page.managerCheckedAt),
+      scoreStatusText: liveStatusFromBoard(page, options.lastGood === true),
+      scoreNextRefreshAt: page.times.nextRefreshAt || "",
+      lastUpdated: exactUpdatedTime(page.times.contentUpdatedAt),
       captainValues: this.ownershipPlayers.map(
         (player: OwnershipPlayerOption) => player.name,
       ),
       captainFilterNames: captainNames,
-      captainOptions: this.ownershipPlayers.map((player: OwnershipPlayerOption) => ({
-        element: player.element,
-        name: player.name,
-        on: this.data.captainFilters.includes(player.element),
-      })),
+      captainOptions: this.ownershipPlayers.map(
+        (player: OwnershipPlayerOption) => ({
+          element: player.element,
+          name: player.name,
+          on: this.data.captainFilters.includes(player.element),
+        }),
+      ),
       chipOptions: CHIP_VALUES.map((value) => ({
         value,
         label: value,
@@ -2254,7 +2262,9 @@ PerformancePage({
         (player) => `${player.name}${player.meta ? ` (${player.meta})` : ""}`,
       ),
       ownershipSummary: this.data.selectedOwnershipPlayers.length
-        ? this.data.selectedOwnershipPlayers.map((player) => player.name).join("、")
+        ? this.data.selectedOwnershipPlayers
+            .map((player) => player.name)
+            .join("、")
         : "未筛选",
       ownershipMatchedText: this.data.selectedOwnershipPlayers.length
         ? ` · 匹配 ${page.filteredEntries}/${page.totalEntries}`
@@ -2273,7 +2283,7 @@ PerformancePage({
         this.data.selectedOwnershipPlayers.length +
         this.data.teamExposureRules.length,
       error: page.partial
-        ? `部分结果不可用：${Math.max(1, this.unavailableEntryIds.length)}/${page.totalEntries} 支参赛球队暂不可用`
+        ? `部分结果不可用：${Math.max(1, this.failedEntryCount)}/${page.totalEntries} 支参赛球队暂不可用`
         : "",
       errorSuffix: page.partial ? "其余榜单仍可查看" : "",
       ...(playerRevisionChanged
@@ -2296,8 +2306,16 @@ PerformancePage({
     const page = this.boardPage;
     const scope = this.currentBoardScope();
     if (!page || !scope) return;
-    const key = `${scope.tournamentId}:${scope.eventId}:${page.playerRevision}`;
+    if (!page.scoreCoreRevision) {
+      this.setData({
+        filterOptionsLoading: false,
+        filterOptionsError: "当前榜单版本暂不可用",
+      });
+      return;
+    }
+    const key = `${scope.tournamentId}:${scope.eventId}:${page.scoreCoreRevision}`;
     if (this.selectionIndexKey === key && this.ownershipPlayers.length > 0) {
+      this.setData({ filterOptionsLoading: false, filterOptionsError: "" });
       return;
     }
     const requestId = this.selectionIndexRequestId + 1;
@@ -2310,7 +2328,7 @@ PerformancePage({
         ref: {
           season: page.season,
           eventId: page.eventId,
-          revision: page.playerRevision,
+          scoreCoreRevision: page.scoreCoreRevision,
         },
         trace: capturePageRequestTrace({
           callerSurface: "live-tournament-filter-index",
@@ -2319,7 +2337,7 @@ PerformancePage({
       });
       if (
         requestId !== this.selectionIndexRequestId ||
-        this.boardPage?.playerRevision !== page.playerRevision
+        this.boardPage?.scoreCoreRevision !== page.scoreCoreRevision
       ) {
         return;
       }
@@ -2346,7 +2364,10 @@ PerformancePage({
         teamExposureTeamNames: teams.map(formatTeamName),
         captainValues: players.map((player) => player.name),
         captainFilterNames: captainFilters
-          .map((element) => players.find((player) => player.element === element)?.name)
+          .map(
+            (element) =>
+              players.find((player) => player.element === element)?.name,
+          )
           .filter((name): name is string => Boolean(name)),
         captainOptions: players.map((player) => ({
           element: player.element,
@@ -2362,10 +2383,13 @@ PerformancePage({
     } catch (error) {
       if (requestId !== this.selectionIndexRequestId) return;
       if (
-        hasLiveBoardErrorCode(error, "LIVE_REVISION_GONE") ||
+        hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE") ||
         hasLiveBoardErrorCode(error, "LIVE_BOARD_REVISION_GONE")
       ) {
-        void this.loadRows({ background: this.data.hasData, forceRefresh: true });
+        void this.loadRows({
+          background: this.data.hasData,
+          forceRefresh: true,
+        });
       }
       this.setData({
         filterOptionsError: "筛选选项暂时加载失败，当前榜单和筛选已保留",
@@ -2383,9 +2407,21 @@ PerformancePage({
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
     if (comparedEntryIds.length !== 2) return;
     if (!page || !scope) return;
+    if (!page.scoreCoreRevision) {
+      this.setData({
+        compareLoading: false,
+        compareError: "当前榜单版本暂不可用",
+        compareOpen: false,
+      });
+      return;
+    }
     const requestId = this.compareRequestId + 1;
     this.compareRequestId = requestId;
-    this.setData({ compareLoading: true, compareError: "", compareOpen: false });
+    this.setData({
+      compareLoading: true,
+      compareError: "",
+      compareOpen: false,
+    });
     try {
       const rows = await getTournamentEntrySquads({
         entryId: scope.entryId,
@@ -2394,7 +2430,7 @@ PerformancePage({
         ref: {
           season: page.season,
           eventId: page.eventId,
-          revision: page.playerRevision,
+          scoreCoreRevision: page.scoreCoreRevision,
         },
         trace: capturePageRequestTrace({
           callerSurface: "live-tournament-compare",
@@ -2403,7 +2439,7 @@ PerformancePage({
       });
       if (
         requestId !== this.compareRequestId ||
-        this.boardPage?.playerRevision !== page.playerRevision ||
+        this.boardPage?.scoreCoreRevision !== page.scoreCoreRevision ||
         this.data.compareIds.length !== 2 ||
         this.data.compareIds[0] !== comparedEntryIds[0] ||
         this.data.compareIds[1] !== comparedEntryIds[1]
@@ -2421,11 +2457,15 @@ PerformancePage({
       this.setData({ ...compareSelection, compareOpen: true });
     } catch (error) {
       if (requestId !== this.compareRequestId) return;
-      const message = error instanceof Error ? error.message : "阵容对比加载失败";
+      const message =
+        error instanceof Error ? error.message : "阵容对比加载失败";
       this.setData({ compareError: message, compareOpen: false });
       wx.showToast({ title: "阵容对比加载失败，已保留选择", icon: "none" });
-      if (hasLiveBoardErrorCode(error, "LIVE_REVISION_GONE")) {
-        void this.loadRows({ background: this.data.hasData, forceRefresh: true });
+      if (hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE")) {
+        void this.loadRows({
+          background: this.data.hasData,
+          forceRefresh: true,
+        });
       }
     } finally {
       if (requestId === this.compareRequestId) {
@@ -2467,9 +2507,7 @@ PerformancePage({
         error: error.message,
         errorSuffix: this.data.hasData ? "当前显示上次成功结果" : "",
       });
-      return options.propagateError
-        ? Promise.reject(error)
-        : Promise.resolve();
+      return options.propagateError ? Promise.reject(error) : Promise.resolve();
     }
     const trace =
       options.trace ||
@@ -2496,7 +2534,8 @@ PerformancePage({
         if (cached) this.applyBoardPage(cached.page, true, { lastGood: true });
       }
     }
-    const preserveData = this.data.hasData || options.background === true || Boolean(cached);
+    const preserveData =
+      this.data.hasData || options.background === true || Boolean(cached);
     this.setData(
       preserveData
         ? {
@@ -3103,8 +3142,8 @@ PerformancePage({
       selectedEventId: this.data.event,
       snapshot: this.liveSnapshot,
       windowState: this.liveSnapshot?.windowState,
-      nextRefreshAt: this.liveSnapshot?.nextRefreshAt,
-      managerNextRefreshAt: this.data.scoreNextRefreshAt,
+      nextRefreshAt:
+        this.data.scoreNextRefreshAt || this.liveSnapshot?.nextRefreshAt,
     });
   },
 
@@ -3252,9 +3291,7 @@ PerformancePage({
     if (captainFilters.length) {
       filteredRows = filteredRows.filter((row) =>
         captainFilters.includes(
-          numberValue(
-            row.picks?.find((pick) => pick.captain)?.element,
-          ),
+          numberValue(row.picks?.find((pick) => pick.captain)?.element),
         ),
       );
     }
@@ -3515,9 +3552,7 @@ PerformancePage({
     const groupIndex = Number(event.detail.value);
     if (!Number.isFinite(groupIndex)) return;
     const groupTournaments =
-      group === "h2h"
-        ? this.data.h2hTournaments
-        : this.data.classicTournaments;
+      group === "h2h" ? this.data.h2hTournaments : this.data.classicTournaments;
     const selectedTournament = groupTournaments[groupIndex];
     if (!selectedTournament) return;
     this.liveRefresh?.stop();
@@ -3931,12 +3966,14 @@ PerformancePage({
       return;
     }
     if (!this.boardPage) return;
-    if (!canPaginateTournamentBoard({
-      loading: this.data.loading,
-      refreshing: this.data.refreshing,
-      boardControlRequestId: this.boardControlRequestId,
-      committedBoardControlRequestId: this.committedBoardControlRequestId,
-    })) {
+    if (
+      !canPaginateTournamentBoard({
+        loading: this.data.loading,
+        refreshing: this.data.refreshing,
+        boardControlRequestId: this.boardControlRequestId,
+        committedBoardControlRequestId: this.committedBoardControlRequestId,
+      })
+    ) {
       return;
     }
     const currentPage = this.boardPage;
@@ -4038,29 +4075,31 @@ PerformancePage({
         : this.data.displayedRows || [];
     const board = this.boardPage;
     const scope = this.currentBoardScope();
-    if (
-      !board ||
-      !scope ||
-      currentRows.length >= board.filteredEntries
-    ) {
+    if (!board || !scope || currentRows.length >= board.filteredEntries) {
       return currentRows;
     }
 
     const variables = this.buildBoardVariables(1, board.boardRevision);
     if (!variables) throw new Error("当前赛事范围已变化");
     const boardControlRequestId = this.boardControlRequestId;
-    if (!isTournamentBoardControlGenerationCurrent({
-      boardControlRequestId,
-      committedBoardControlRequestId: this.committedBoardControlRequestId,
-      expectedBoardControlRequestId: boardControlRequestId,
-    })) {
+    if (
+      !isTournamentBoardControlGenerationCurrent({
+        boardControlRequestId,
+        committedBoardControlRequestId: this.committedBoardControlRequestId,
+        expectedBoardControlRequestId: boardControlRequestId,
+      })
+    ) {
       throw new Error("榜单筛选正在更新，请稍后分享");
     }
     const scopeKey = liveBoardLastGoodKey(scope);
     const maximumPages = Math.min(10, Math.ceil(board.filteredEntries / 50));
     const allRows: DisplayTournamentRow[] = [];
     let hasMore = true;
-    for (let pageNumber = 1; pageNumber <= maximumPages && hasMore; pageNumber += 1) {
+    for (
+      let pageNumber = 1;
+      pageNumber <= maximumPages && hasMore;
+      pageNumber += 1
+    ) {
       const result = await getEntryLiveCompetitionBoardPage(
         { ...variables, page: pageNumber, pageSize: 50 },
         {
@@ -4078,8 +4117,7 @@ PerformancePage({
         liveBoardLastGoodKey(activeScope) !== scopeKey ||
         !isTournamentBoardControlGenerationCurrent({
           boardControlRequestId: this.boardControlRequestId,
-          committedBoardControlRequestId:
-            this.committedBoardControlRequestId,
+          committedBoardControlRequestId: this.committedBoardControlRequestId,
           expectedBoardControlRequestId: boardControlRequestId,
         }) ||
         this.boardPage?.boardRevision !== board.boardRevision ||
@@ -4129,11 +4167,11 @@ PerformancePage({
           wx.showToast({ title: "还没有可分享的榜单", icon: "none" });
           return;
         }
-        const expectedRows = this.boardPage?.filteredEntries || this.data.filteredCount;
-        const entriesText =
-          complete
-            ? this.data.entriesText
-            : `${rows.length}/${expectedRows}（当前已加载）`;
+        const expectedRows =
+          this.boardPage?.filteredEntries || this.data.filteredCount;
+        const entriesText = complete
+          ? this.data.entriesText
+          : `${rows.length}/${expectedRows}（当前已加载）`;
         const text = formatLiveTournamentShareText({
           gameweek: this.data.event,
           tournamentName: this.data.selectedTournament?.name,
@@ -4196,7 +4234,9 @@ PerformancePage({
             ? String(
                 numberValue(row.rank) > 0
                   ? numberValue(row.rank)
-                  : numberValue(row.visibleRank),
+                  : numberValue(row.visibleRank) > 0
+                    ? numberValue(row.visibleRank)
+                    : "—",
               )
             : "—",
           entryName: textValue(row.entryName, "-"),
@@ -4256,9 +4296,7 @@ PerformancePage({
           }))
         : this.data.h2hMatches.map((row) => ({
             labelText: row.orderText,
-            statusText: row.isBye
-              ? `${row.phaseLabel} · 轮空`
-              : row.phaseLabel,
+            statusText: row.isBye ? `${row.phaseLabel} · 轮空` : row.phaseLabel,
             homeName: row.homeName,
             awayName: row.awayName,
             scoreText: row.hasScore

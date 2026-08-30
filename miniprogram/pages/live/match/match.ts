@@ -182,8 +182,7 @@ function queryLiveMatchShareCanvas(
       .fields({ node: true, size: true })
       .exec((result) => {
         const canvas = result?.[0]?.node as
-          | WechatMiniprogram.Canvas
-          | undefined;
+          WechatMiniprogram.Canvas | undefined;
         if (!canvas) {
           reject(new Error("share canvas missing"));
           return;
@@ -366,30 +365,29 @@ function hasMatchPlayerData(player: LivePlayerRow): boolean {
 export function buildMatchPlayerRows(
   players: LivePlayerRow[] | undefined,
 ): LivePlayerRow[] {
-  return (players || [])
-    .filter(hasMatchPlayerData)
-    .sort((left, right) => {
-      const pointsDifference =
-        matchPlayerPoints(right) - matchPlayerPoints(left);
-      if (pointsDifference !== 0) return pointsDifference;
-      const minutesDifference =
-        numberValue(right.minutes) - numberValue(left.minutes);
-      if (minutesDifference !== 0) return minutesDifference;
-      return playerShortName(left).localeCompare(playerShortName(right));
-    });
+  return (players || []).filter(hasMatchPlayerData).sort((left, right) => {
+    const pointsDifference = matchPlayerPoints(right) - matchPlayerPoints(left);
+    if (pointsDifference !== 0) return pointsDifference;
+    const minutesDifference =
+      numberValue(right.minutes) - numberValue(left.minutes);
+    if (minutesDifference !== 0) return minutesDifference;
+    return playerShortName(left).localeCompare(playerShortName(right));
+  });
 }
 
 export function findMatchPlayer(
   matches: readonly LiveMatch[],
   matchId: number | string,
-  element: number
+  element: number,
 ): LivePlayerRow | undefined {
-  const match = matches.find((item) =>
-    String(item.matchId || item.id || "") === String(matchId)
+  const match = matches.find(
+    (item) => String(item.matchId || item.id || "") === String(matchId),
   );
   if (!match) return undefined;
-  return [...(match.homeTeamDataList || []), ...(match.awayTeamDataList || [])]
-    .find((row) => Number(row.element) === element);
+  return [
+    ...(match.homeTeamDataList || []),
+    ...(match.awayTeamDataList || []),
+  ].find((row) => Number(row.element) === element);
 }
 
 /** Same groups as the Website match card: bonus, goals, assists, DC, BPS, saves, cards. */
@@ -861,12 +859,13 @@ Page({
       probe: () => getLiveSnapshot(),
       reload: () => this.loadData({ background: true, forceRefresh: true }),
       getNextRefreshAt: () => this.liveSnapshot?.nextRefreshAt || null,
+      reloadOnDeadline: true,
       acceptSnapshot: (snapshot) => {
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.checkedAt
-            ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+          ...(snapshot?.sourceCheckedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)) }
             : {}),
         });
         this.syncDisplayState();
@@ -892,7 +891,6 @@ Page({
             this.currentEventId === Number(getApp<IAppOption>().globalData.gw),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
-          coverageFailed: this.liveSnapshot?.coverageFailed,
           probeDurationBucket: durationBucket(info.probeDurationMs),
           fullFetchDurationBucket:
             info.reloadDurationMs === undefined
@@ -1585,7 +1583,8 @@ Page({
     >,
   ) {
     this.setData({
-      expandedTeam: event.currentTarget.dataset.team === "away" ? "away" : "home",
+      expandedTeam:
+        event.currentTarget.dataset.team === "away" ? "away" : "home",
     });
   },
 

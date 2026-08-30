@@ -49,8 +49,8 @@ export function normalizeLiveDisplayState(input: LiveDisplayInput): LiveDisplayS
   if (!online && hasData) return "offline";
   if (!hasData && lastError) return "unavailable";
   if (hasData && partialFailedCount > 0) return "partial";
-  if (snapshot?.state === "SETTLED") return "final";
-  if (snapshot?.state === "SCHEDULED" && !hasData) return "scheduled";
+  if (snapshot?.state === "FINALIZED") return "final";
+  if (snapshot?.state === "PRE_DEADLINE" && !hasData) return "scheduled";
   if (loading || probing) return "refreshing";
   if (lastError && hasData) return "delayed";
   return "fresh";

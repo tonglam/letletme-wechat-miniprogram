@@ -63,7 +63,10 @@ test("completed personal pages revalidate authority on warm show", () => {
     "miniprogram/pages/summary/tournament/tournament.ts",
   ]) {
     const page = source(path);
-    const onShow = page.slice(page.indexOf("onShow()"), page.indexOf("onHide()"));
+    const onShow = page.slice(
+      page.indexOf("onShow()"),
+      page.indexOf("onHide()"),
+    );
     assert.match(
       onShow,
       /(?:await waitForAuthoritativeFollow\(\)|if \(!this\.routeEntry\)[\s\S]*await waitForAuthoritativeFollow\(\))[\s\S]*if \(!this\.resumeOnShow\)/,
@@ -78,7 +81,10 @@ test("completed personal pages revalidate authority on warm show", () => {
 test("Live landing refreshes the displayed entry name after authority changes", () => {
   const page = source("miniprogram/pages/live/index/index.ts");
   assert.match(page, /const entryChanged = this\.data\.entryId !== entryId/);
-  assert.match(page, /let entryName = entryChanged \? "" : this\.data\.entryName \|\| ""/);
+  assert.match(
+    page,
+    /let entryName = entryChanged \? "" : this\.data\.entryName \|\| ""/,
+  );
 });
 
 test("initial request failures do not also claim an empty list", () => {
@@ -146,7 +152,10 @@ test("player directory completion preserves edits made during the request", () =
     /const responseKeyword = append \? this\.data\.keyword : resolveKeywordAfterPlayerLoad\(/,
   );
   assert.match(players, /activeKeyword: snapshot\.activeKeyword/);
-  assert.doesNotMatch(players, /keyword\.trim\(\) !== snapshot\.activeKeyword\.trim\(\)/);
+  assert.doesNotMatch(
+    players,
+    /keyword\.trim\(\) !== snapshot\.activeKeyword\.trim\(\)/,
+  );
   assert.match(players, /if \(append && this\.pendingSearchSnapshot\) return/);
   assert.match(players, /loading: Boolean\(this\.pendingSearchSnapshot\)/);
   assert.match(
@@ -192,7 +201,11 @@ test("direct personal Live reads refresh viewer authority before entry snapshots
   ]) {
     const page = source(path);
     assert.match(page, /waitForAuthoritativeFollow\(\)/, path);
-    assert.match(page, /await waitForAuthoritativeFollow\(\)[\s\S]*entryId/, path);
+    assert.match(
+      page,
+      /await waitForAuthoritativeFollow\(\)[\s\S]*entryId/,
+      path,
+    );
   }
 });
 
@@ -231,7 +244,10 @@ test("GraphQL in-flight cleanup preserves a replacement request", () => {
 
 test("Players prioritize a queued replacement search when resuming", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
-  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  const onShow = players.slice(
+    players.indexOf("onShow()"),
+    players.indexOf("onHide()"),
+  );
   assert.match(
     onShow,
     /const resumeSearch = resumed && \([\s\S]*Boolean\(this\.pendingSearchSnapshot\)/,
@@ -248,7 +264,10 @@ test("Players prioritize a queued replacement search when resuming", () => {
 
 test("Players resume the saved snapshot without submitting a draft", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
-  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  const onShow = players.slice(
+    players.indexOf("onShow()"),
+    players.indexOf("onHide()"),
+  );
   const resumeBlock = onShow.slice(
     onShow.indexOf("if (resumeSearch)"),
     onShow.indexOf("if (resumePagination && resumeCursor !== null)"),
@@ -281,7 +300,10 @@ test("Players pull-to-refresh reloads the submitted snapshot without committing 
 
 test("Players preserve a pagination resume when hidden during deferred start", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
-  const onShow = players.slice(players.indexOf("onShow()"), players.indexOf("onHide()"));
+  const onShow = players.slice(
+    players.indexOf("onShow()"),
+    players.indexOf("onHide()"),
+  );
   assert.match(
     onShow,
     /const resumeRevision = this\.requestRevision[\s\S]*!this\.pageVisible[\s\S]*this\.requestRevision !== resumeRevision[\s\S]*this\.resumePaginationAfterShow = true[\s\S]*this\.resumePaginationCursor = resumeCursor/,
@@ -318,7 +340,10 @@ test("entry lookup results are guarded by request generation and input identity"
   assert.match(search, /getEntryInfo\(entryId, true\)/);
   assert.doesNotMatch(search, /enqueueMiniProgramEntrySync/);
   assert.match(entryService, /persistenceState: lookup\.persistenceState/);
-  assert.match(search, /entryPersistencePresentation\(entry\.persistenceState\)/);
+  assert.match(
+    search,
+    /entryPersistencePresentation\(entry\.persistenceState\)/,
+  );
   assert.match(
     search,
     /requestId !== this\.lookupRequestId \|\| Number\(this\.data\.manualEntryId\) !== entryId/,
@@ -357,7 +382,10 @@ test("entry persistence recovery keeps valid UI state actionable", () => {
     /preservePreview && retryable \? \{\} : emptyEntryPreviewData\(\)/,
   );
   assert.match(liveEntry, /isDeterministicEntryIdentityFailure/);
-  assert.match(liveEntryTemplate, /retryText="\{\{entryLookupRetryable \? '重试球队查询' : '更换球队'\}\}"/);
+  assert.match(
+    liveEntryTemplate,
+    /retryText="\{\{entryLookupRetryable \? '重试球队查询' : '更换球队'\}\}"/,
+  );
   assert.match(liveEntryTemplate, /bind:retry="onEntryLookupAction"/);
 });
 
@@ -370,7 +398,10 @@ test("tournament status reports only rows actually retained", () => {
   assert.match(tournament, /options\.lastGood \? rows\.length : 0/);
   assert.match(template, /retainedCount="\{\{retainedRowCount\}\}"/);
   assert.doesNotMatch(template, /retainedCount="\{\{failedRowCount\}\}"/);
-  assert.doesNotMatch(tournament, /overallRank: row\.overallRank \?\? row\.rank/);
+  assert.doesNotMatch(
+    tournament,
+    /overallRank: row\.overallRank \?\? row\.rank/,
+  );
 });
 
 test("team summary requests discard older GW responses", () => {
@@ -411,7 +442,7 @@ test("unchanged live probes refresh the displayed check time", () => {
     const page = source(path);
     assert.match(
       page,
-      /acceptSnapshot:[\s\S]*snapshot\?\.checkedAt[\s\S]*lastUpdated: formatTime\(new Date\(snapshot\.checkedAt\)\)/,
+      /acceptSnapshot:[\s\S]*snapshot\?\.sourceCheckedAt[\s\S]*lastUpdated: formatTime\(new Date\(snapshot\.sourceCheckedAt\)\)/,
       path,
     );
   }
@@ -857,7 +888,10 @@ test("viewer freshness reaches live entry, team and home banners", () => {
 test("Players block pagination while a replacement search is errored", () => {
   const players = source("miniprogram/pages/data/players/players.ts");
   const loadMoreStart = players.lastIndexOf("loadMore(): Promise");
-  const loadMore = players.slice(loadMoreStart, players.indexOf("onRetryLoadMore", loadMoreStart));
+  const loadMore = players.slice(
+    loadMoreStart,
+    players.indexOf("onRetryLoadMore", loadMoreStart),
+  );
   assert.match(loadMore, /this\.data\.error/);
 });
 

@@ -246,6 +246,11 @@ export function isViewerEntryAuthorizationError(error: unknown): boolean {
   return hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED");
 }
 
+/** Live Points is a hard cutover; old clients must show an upgrade state. */
+export function isClientUpgradeRequired(error: unknown): boolean {
+  return hasGraphQLCode(error, "CLIENT_UPGRADE_REQUIRED");
+}
+
 const SEASON_SCOPED_POLICIES = new Set<GraphQLCachePolicyName>([
   "fixtures",
   "player-picker",
@@ -497,7 +502,9 @@ function toHttpError(
   return new GraphQLTransportError(
     code === "VIEWER_ENTRY_REQUIRED"
       ? "请先选择我的球队"
-      : httpErrorMessage(statusCode),
+      : code === "CLIENT_UPGRADE_REQUIRED"
+        ? "当前版本不支持实时积分，请升级小程序后继续"
+        : httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
     statusCode,
     { code, requestId, rateLimitPolicy, rateLimitScope, rateLimitWorkload },
@@ -526,6 +533,13 @@ export function buildGraphQLRequestHeaders(
     header.Authorization = `Bearer ${token}`;
   }
   return header;
+}
+
+/** Every Live Points operation is hard-gated to the V2 contract. */
+export function isLivePointsV2Query(query: string): boolean {
+  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|liveMatchdayDesk|liveFixturePlayers|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
+    query,
+  );
 }
 
 function makeRequest<T>(
@@ -569,6 +583,9 @@ function makeRequest<T>(
       token,
       getMiniProgramDeviceId(),
     );
+    if (isLivePointsV2Query(query)) {
+      header["X-LetLetMe-Contract"] = "live-points-v2";
+    }
 
     onNetworkAttempt?.();
     wx.request<GraphQLResponse<T>>({
@@ -748,20 +765,27 @@ export function shouldCacheGraphQLData(
     return false;
   }
   if (operationName === "EntryLookup") {
-    const lookup = (data as { entryLookup?: Record<string, unknown> }).entryLookup;
+    const lookup = (data as { entryLookup?: Record<string, unknown> })
+      .entryLookup;
     return Boolean(
-      lookup
-      && lookup.status === "FOUND"
-      && lookup.entry != null
-      && lookup.source === "DATABASE"
-      && lookup.persistenceState === "NOT_REQUIRED"
+      lookup &&
+      lookup.status === "FOUND" &&
+      lookup.entry != null &&
+      lookup.source === "DATABASE" &&
+      lookup.persistenceState === "NOT_REQUIRED",
     );
   }
   if (operationName === "PlayerDetail") {
-    const detail = (data as {
-      playerDetail?: { dataAvailability?: { isFullyAuthoritative?: unknown } } | null;
-    }).playerDetail;
-    return detail == null || detail.dataAvailability?.isFullyAuthoritative === true;
+    const detail = (
+      data as {
+        playerDetail?: {
+          dataAvailability?: { isFullyAuthoritative?: unknown };
+        } | null;
+      }
+    ).playerDetail;
+    return (
+      detail == null || detail.dataAvailability?.isFullyAuthoritative === true
+    );
   }
   return true;
 }
@@ -1075,10 +1099,7 @@ export async function graphqlRead<T>(
           response.body.data,
         );
 
-        if (
-          producingSessionStillActive &&
-          cacheableData
-        ) {
+        if (producingSessionStillActive && cacheableData) {
           const freshUntil = resolveFreshUntil(
             response.body.data,
             policy,
@@ -1135,9 +1156,7 @@ export async function graphqlRead<T>(
       };
     } catch (error) {
       if (error instanceof GraphQLInFlightJoin) {
-        return joinInFlight(
-          error.request as Promise<GraphQLReadResult<T>>,
-        );
+        return joinInFlight(error.request as Promise<GraphQLReadResult<T>>);
       }
       if (staleCandidate && isTransientFailure(error)) {
         const transportError =

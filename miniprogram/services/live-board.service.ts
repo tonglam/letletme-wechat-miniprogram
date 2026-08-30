@@ -1,6 +1,9 @@
 import type {
   LiveDataAvailability,
-  LiveManagerScore,
+  LiveDelivery,
+  LiveRevisionVector,
+  LiveScore,
+  LiveTimes,
   LiveTournamentRow,
 } from "../models/live";
 import { storagePrefixes } from "../config/storage-keys";
@@ -38,7 +41,6 @@ export type LiveBoardSort =
 export type LiveBoardDirection = "ASC" | "DESC";
 export type LiveBoardPickScope = "ANY" | "STARTER" | "BENCH";
 export type LiveBoardCaptainMode = "ANY" | "CAPTAIN" | "VICE";
-export type ManagerLiveServedFrom = "REDIS" | "POSTGRES" | "MIXED" | "NONE";
 
 export interface LiveBoardOwnershipFilter {
   playerIds: number[];
@@ -56,7 +58,7 @@ export interface LiveBoardVariables {
   entryId: number;
   tournamentId: number;
   eventId: number;
-  ref?: { season: string; eventId: number; revision: string } | null;
+  ref?: { season: string; eventId: number; scoreCoreRevision: string } | null;
   page?: number;
   pageSize?: number;
   sort?: LiveBoardSort;
@@ -69,13 +71,21 @@ export interface LiveBoardVariables {
   expectedBoardRevision?: string | null;
 }
 
-export interface LiveBoardRow extends TournamentLiveGraphQLRow {
+export interface LiveBoardRow {
+  entry: number;
+  entryName: string;
+  playerName: string;
   rank: number;
   overallRank: number;
   teamValue: number;
+  chip: string;
+  transferCost: number;
+  played: number;
+  toPlay: number;
   captainId: number;
+  captainName: string;
   captainPoints: number;
-  score: LiveManagerScore;
+  score: LiveScore;
 }
 
 export interface LiveBoardPage {
@@ -83,14 +93,17 @@ export interface LiveBoardPage {
   eventId: number;
   tournamentId: number;
   boardRevision: string;
-  playerRevision: string;
-  managerRevision: string | null;
+  scoreCoreRevision: string | null;
   dataAvailability: LiveDataAvailability;
-  managerDataAvailability: LiveDataAvailability;
-  managerServedFrom: ManagerLiveServedFrom;
-  managerRefreshQueued: boolean;
-  managerCheckedAt: string | null;
-  managerNextRefreshAt: string | null;
+  revisions: LiveRevisionVector;
+  times: LiveTimes;
+  delivery: LiveDelivery;
+  coverageState: "WARMING" | "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+  rankScope: "FULL_FIELD" | "AVAILABLE_ROWS";
+  computedEntries: number;
+  deferredEntryCount: number;
+  failedEntryCount: number;
+  unavailableEntryCount: number;
   officialCoverage: number;
   unavailableEntryIds: number[];
   failedEntryIds: number[];
@@ -124,7 +137,7 @@ export interface LiveBoardSelectionIndexRow {
 export interface LiveBoardSelectionIndex {
   tournamentId: number;
   eventId: number;
-  revision: string;
+  scoreCoreRevision: string;
   rows: LiveBoardSelectionIndexRow[];
 }
 
@@ -166,7 +179,7 @@ export const ENTRY_LIVE_COMPETITION_BOARD_QUERY = `
     $entryId: Int!
     $tournamentId: Int!
     $eventId: Int!
-    $ref: LiveRevisionRefInput
+    $ref: LivePublicationRefInput
     $page: Int
     $pageSize: Int
     $sort: EntryLiveCompetitionBoardSort
@@ -194,19 +207,23 @@ export const ENTRY_LIVE_COMPETITION_BOARD_QUERY = `
       teamCountRules: $teamCountRules
       expectedBoardRevision: $expectedBoardRevision
     ) {
-      season eventId tournamentId boardRevision playerRevision managerRevision
-      dataAvailability managerDataAvailability managerServedFrom managerRefreshQueued
-      managerCheckedAt managerNextRefreshAt officialCoverage unavailableEntryIds
+      season eventId tournamentId boardRevision scoreCoreRevision
+      dataAvailability
+      revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
+      times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
+      delivery { state servedFrom reasonCodes }
+      coverageState rankScope computedEntries deferredEntryCount failedEntryCount unavailableEntryCount
+      officialCoverage unavailableEntryIds
       failedEntryIds partial totalEntries filteredEntries page pageSize hasMore
       highestEventPoints averageEventPoints
       rows {
-        entry entryName playerName rank overallRank teamValue chip livePoints
-        transferCost liveNetPoints liveTotalPoints played toPlay captainId
+        entry entryName playerName rank overallRank teamValue chip transferCost played toPlay captainId
         captainName captainPoints
         score {
-          eventPoints netEventPoints totalPoints totalScope eventRank overallRank leagueRank
-          transferCost source state eventPointSemantics revision checkedAt upstreamUpdatedAt
-          staleAt nextRefreshAt reconciliation reasonCodes
+          eventPoints netEventPoints totalPoints totalScope transferCost source calculationMode
+          revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
+          times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
+          delivery { state servedFrom reasonCodes }
         }
       }
     }
@@ -217,14 +234,14 @@ export const TOURNAMENT_SELECTION_INDEX_QUERY = `
   query GetTournamentSelectionIndex(
     $entryId: Int!
     $tournamentId: Int!
-    $ref: LiveRevisionRefInput!
+    $ref: LivePublicationRefInput!
   ) {
     tournamentSelectionIndex(
       entryId: $entryId
       tournamentId: $tournamentId
       ref: $ref
     ) {
-      tournamentId eventId revision
+      tournamentId eventId scoreCoreRevision
       rows { playerId playerName teamId teamName teamShortName position count percentage }
     }
   }
@@ -235,7 +252,7 @@ export const TOURNAMENT_ENTRY_SQUADS_QUERY = `
     $entryId: Int!
     $tournamentId: Int!
     $comparedEntryIds: [Int!]!
-    $ref: LiveRevisionRefInput!
+    $ref: LivePublicationRefInput!
   ) {
     tournamentEntrySquads(
       entryId: $entryId
@@ -243,14 +260,15 @@ export const TOURNAMENT_ENTRY_SQUADS_QUERY = `
       comparedEntryIds: $comparedEntryIds
       ref: $ref
     ) {
-      tournamentId eventId revision
+      tournamentId eventId scoreCoreRevision
       entries {
-        entry entryName playerName livePoints liveNetPoints liveTotalPoints transferCost
-        played toPlay captainName chip rank overallRank
+        entry entryName playerName played toPlay captainName chip
+        rank { eventRank overallRank leagueRank revision contentUpdatedAt state }
         score {
-          eventPoints netEventPoints totalPoints totalScope eventRank overallRank leagueRank
-          transferCost source state eventPointSemantics revision checkedAt upstreamUpdatedAt
-          staleAt nextRefreshAt reconciliation reasonCodes
+          eventPoints netEventPoints totalPoints totalScope transferCost source calculationMode
+          revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
+          times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
+          delivery { state servedFrom reasonCodes }
         }
         pickList {
           element webName elementTypeName position multiplier pickActive autoSub
@@ -263,14 +281,12 @@ export const TOURNAMENT_ENTRY_SQUADS_QUERY = `
 `;
 
 const AVAILABILITY = new Set([
-  "SCHEDULED",
   "FRESH",
-  "LAST_GOOD",
+  "STALE",
+  "DEGRADED",
   "FINAL",
-  "PARTIAL",
   "UNAVAILABLE",
 ]);
-const SERVED_FROM = new Set(["REDIS", "POSTGRES", "MIXED", "NONE"]);
 const TRANSIENT_STATUSES = new Set([502, 503, 504]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -302,7 +318,7 @@ function isNullableDate(value: unknown): value is string | null {
     (typeof value === "string" && Number.isFinite(Date.parse(value)));
 }
 
-function validateManagerScore(
+function validateRevisionVector(
   value: unknown,
   path: string,
   missing: string[],
@@ -312,25 +328,95 @@ function validateManagerScore(
     return;
   }
   for (const field of [
-    "eventPoints",
-    "netEventPoints",
-    "totalPoints",
-    "eventRank",
-    "overallRank",
-    "leagueRank",
+    "publicationId",
+    "lifecycle",
+    "fixtureIdentity",
+    "scoreCore",
+    "displayStats",
+    "explain",
+    "rules",
+    "algorithm",
+    "input",
   ]) {
-    if (!isNullableNumber(value[field])) missing.push(`${path}.${field}`);
+    if (typeof value[field] !== "string" || !value[field]) {
+      missing.push(`${path}.${field}`);
+    }
   }
-  if (!isInteger(value.transferCost)) missing.push(`${path}.transferCost`);
-  for (const field of ["source", "state", "eventPointSemantics"]) {
-    if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
+  if (!isInteger(value.generation) || value.generation < 0) {
+    missing.push(`${path}.generation`);
   }
-  for (const field of ["totalScope", "reconciliation"]) {
-    if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
+  for (const field of [
+    "picksBase",
+    "officialAdjustment",
+    "previousTotals",
+    "finalResult",
+  ]) {
+    if (!isNullableString(value[field])) {
+      missing.push(`${path}.${field}`);
+    } else if (value[field] !== null && value[field] === "") {
+      missing.push(`${path}.${field}`);
+    }
   }
-  if (!isNullableString(value.revision)) missing.push(`${path}.revision`);
-  for (const field of ["checkedAt", "upstreamUpdatedAt", "staleAt", "nextRefreshAt"]) {
-    if (!isNullableDate(value[field])) missing.push(`${path}.${field}`);
+}
+
+function validateLiveTimes(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  for (const field of [
+    "sourceCheckedAt",
+    "contentUpdatedAt",
+    "publishedAt",
+    "servedAt",
+    "staleAt",
+  ]) {
+    if (!isNullableDate(value[field]) || value[field] === null) {
+      missing.push(`${path}.${field}`);
+    }
+  }
+  for (const field of ["checkpointedAt", "nextRefreshAt"]) {
+    if (!isNullableDate(value[field])) {
+      missing.push(`${path}.${field}`);
+    }
+  }
+}
+
+function validateLiveDelivery(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  if (
+    ![
+      "FRESH",
+      "STALE",
+      "DEGRADED",
+      "FINAL",
+      "UNAVAILABLE",
+    ].includes(String(value.state))
+  ) {
+    missing.push(`${path}.state`);
+  }
+  if (
+    ![
+      "REDIS_CURRENT",
+      "REDIS_PREVIOUS",
+      "PROCESS_LKG",
+      "POSTGRES_CHECKPOINT",
+      "FINAL_RESULT",
+      "UNAVAILABLE",
+    ].includes(String(value.servedFrom))
+  ) {
+    missing.push(`${path}.servedFrom`);
   }
   if (
     !Array.isArray(value.reasonCodes) ||
@@ -338,6 +424,28 @@ function validateManagerScore(
   ) {
     missing.push(`${path}.reasonCodes`);
   }
+}
+
+function validateLiveScore(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  for (const field of ["eventPoints", "netEventPoints", "totalPoints"]) {
+    if (!isNullableNumber(value[field])) missing.push(`${path}.${field}`);
+  }
+  if (!isInteger(value.transferCost)) missing.push(`${path}.transferCost`);
+  for (const field of ["source", "calculationMode"]) {
+    if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
+  }
+  if (value.totalScope !== "OVERALL" && value.totalScope !== "UNKNOWN") missing.push(`${path}.totalScope`);
+  validateRevisionVector(value.revisions, `${path}.revisions`, missing);
+  validateLiveTimes(value.times, `${path}.times`, missing);
+  validateLiveDelivery(value.delivery, `${path}.delivery`, missing);
 }
 
 function validateBoardRow(
@@ -350,19 +458,7 @@ function validateBoardRow(
     missing.push(path);
     return;
   }
-  for (const field of [
-    "entry",
-    "rank",
-    "overallRank",
-    "livePoints",
-    "transferCost",
-    "liveNetPoints",
-    "liveTotalPoints",
-    "played",
-    "toPlay",
-    "captainId",
-    "captainPoints",
-  ]) {
+  for (const field of ["entry", "rank", "overallRank", "transferCost", "played", "toPlay", "captainId", "captainPoints"]) {
     if (!isInteger(value[field])) missing.push(`${path}.${field}`);
   }
   if (typeof value.teamValue !== "number" || !Number.isFinite(value.teamValue)) {
@@ -371,7 +467,7 @@ function validateBoardRow(
   for (const field of ["entryName", "playerName", "chip", "captainName"]) {
     if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
   }
-  validateManagerScore(value.score, `${path}.score`, missing);
+  validateLiveScore(value.score, `${path}.score`, missing);
 }
 
 export function parseLiveBoardPage(
@@ -401,27 +497,25 @@ export function parseLiveBoardPage(
   ) {
     missing.push("filteredEntries:range");
   }
-  for (const field of ["season", "boardRevision", "playerRevision"]) {
+  for (const field of ["season", "boardRevision"]) {
     if (typeof root[field] !== "string" || root[field].length === 0) {
       missing.push(field);
     }
   }
-  if (!isNullableString(root.managerRevision)) missing.push("managerRevision");
+  if (!isNullableString(root.scoreCoreRevision)) missing.push("scoreCoreRevision");
   if (!AVAILABILITY.has(String(root.dataAvailability))) {
     missing.push("dataAvailability");
   }
-  if (!AVAILABILITY.has(String(root.managerDataAvailability))) {
-    missing.push("managerDataAvailability");
+  validateRevisionVector(root.revisions, "revisions", missing);
+  validateLiveTimes(root.times, "times", missing);
+  validateLiveDelivery(root.delivery, "delivery", missing);
+  if (!new Set(["WARMING", "COMPLETE", "PARTIAL", "UNAVAILABLE"]).has(String(root.coverageState))) missing.push("coverageState");
+  if (!new Set(["FULL_FIELD", "AVAILABLE_ROWS"]).has(String(root.rankScope))) missing.push("rankScope");
+  for (const field of ["computedEntries", "deferredEntryCount", "failedEntryCount", "unavailableEntryCount"]) {
+    if (!isNonNegativeInteger(root[field])) missing.push(field);
   }
-  if (!SERVED_FROM.has(String(root.managerServedFrom))) {
-    missing.push("managerServedFrom");
-  }
-  for (const field of ["managerRefreshQueued", "partial", "hasMore"]) {
+  for (const field of ["partial", "hasMore"]) {
     if (typeof root[field] !== "boolean") missing.push(field);
-  }
-  if (!isNullableDate(root.managerCheckedAt)) missing.push("managerCheckedAt");
-  if (!isNullableDate(root.managerNextRefreshAt)) {
-    missing.push("managerNextRefreshAt");
   }
   if (typeof root.officialCoverage !== "number" ||
       !Number.isFinite(root.officialCoverage) ||
@@ -606,7 +700,7 @@ function validateSelectionIndex(
   }
   if (!isPositiveInteger(root.tournamentId)) missing.push("tournamentId");
   if (!isPositiveInteger(root.eventId)) missing.push("eventId");
-  if (typeof root.revision !== "string" || !root.revision) missing.push("revision");
+  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision) missing.push("scoreCoreRevision");
   if (!Array.isArray(root.rows)) {
     missing.push("rows");
   } else {
@@ -642,7 +736,7 @@ function validateSelectionIndex(
 export async function getTournamentSelectionIndex(options: {
   entryId: number;
   tournamentId: number;
-  ref: { season: string; eventId: number; revision: string };
+  ref: { season: string; eventId: number; scoreCoreRevision: string };
   trace?: PageRequestTrace;
 }): Promise<LiveBoardSelectionIndex> {
   const startedAt = Date.now();
@@ -661,7 +755,7 @@ export async function getTournamentSelectionIndex(options: {
     const parsed = validateSelectionIndex(result.data, errorOptions);
     if (parsed.eventId !== options.ref.eventId ||
         parsed.tournamentId !== options.tournamentId ||
-        parsed.revision !== options.ref.revision) {
+        parsed.scoreCoreRevision !== options.ref.scoreCoreRevision) {
       throw new LiveBoardInvalidResponseError(
         ["selectionIndex:scope-mismatch"],
         errorOptions,
@@ -682,7 +776,7 @@ function validateSquads(
 ): {
   tournamentId: number;
   eventId: number;
-  revision: string;
+  scoreCoreRevision: string;
   entries: TournamentLiveGraphQLRow[];
 } {
   const root = isRecord(value) && "tournamentEntrySquads" in value
@@ -694,7 +788,7 @@ function validateSquads(
   }
   if (!isPositiveInteger(root.tournamentId)) missing.push("tournamentId");
   if (!isPositiveInteger(root.eventId)) missing.push("eventId");
-  if (typeof root.revision !== "string" || !root.revision) missing.push("revision");
+  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision) missing.push("scoreCoreRevision");
   if (!Array.isArray(root.entries) || root.entries.length < 1 || root.entries.length > 2) {
     missing.push("entries");
   } else {
@@ -704,23 +798,14 @@ function validateSquads(
         missing.push(path);
         return;
       }
-      for (const field of [
-        "entry",
-        "rank",
-        "overallRank",
-        "livePoints",
-        "liveNetPoints",
-        "liveTotalPoints",
-        "transferCost",
-        "played",
-        "toPlay",
-      ]) {
+      for (const field of ["entry", "played", "toPlay"]) {
         if (!isInteger(entry[field])) missing.push(`${path}.${field}`);
       }
       for (const field of ["entryName", "playerName", "captainName", "chip"]) {
         if (typeof entry[field] !== "string") missing.push(`${path}.${field}`);
       }
-      validateManagerScore(entry.score, `${path}.score`, missing);
+      validateLiveScore(entry.score, `${path}.score`, missing);
+      if (!isRecord(entry.rank) || !isNullableNumber(entry.rank.overallRank) || !isNullableNumber(entry.rank.eventRank)) missing.push(`${path}.rank`);
       const picks = entry.pickList;
       if (!Array.isArray(picks) || picks.length > 15) {
         missing.push(`${path}.pickList`);
@@ -741,7 +826,7 @@ function validateSquads(
   return root as unknown as {
     tournamentId: number;
     eventId: number;
-    revision: string;
+    scoreCoreRevision: string;
     entries: TournamentLiveGraphQLRow[];
   };
 }
@@ -750,7 +835,7 @@ export async function getTournamentEntrySquads(options: {
   entryId: number;
   tournamentId: number;
   comparedEntryIds: number[];
-  ref: { season: string; eventId: number; revision: string };
+  ref: { season: string; eventId: number; scoreCoreRevision: string };
   trace?: PageRequestTrace;
 }): Promise<LiveTournamentRow[]> {
   const comparedEntryIds = [...new Set(options.comparedEntryIds)]
@@ -776,7 +861,7 @@ export async function getTournamentEntrySquads(options: {
     const responseIds = new Set(parsed.entries.map((entry) => entry.entry));
     if (parsed.tournamentId !== options.tournamentId ||
         parsed.eventId !== options.ref.eventId ||
-        parsed.revision !== options.ref.revision ||
+        parsed.scoreCoreRevision !== options.ref.scoreCoreRevision ||
         comparedEntryIds.some((entryId) => !responseIds.has(entryId))) {
       throw new LiveBoardInvalidResponseError(
         ["tournamentEntrySquads:scope-mismatch"],
@@ -893,7 +978,10 @@ export function clearAllLiveBoardLastGood(): void {
 export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
   return mapTournamentLiveRows(page.rows).map((row, index) => ({
     ...row,
-    rank: page.rows[index]?.rank ?? row.rank,
+    rank:
+      page.rankScope === "FULL_FIELD"
+        ? page.rows[index]?.rank ?? row.rank
+        : 0,
     // The mapped row already prefers score.overallRank (fresher); the raw
     // board value is only the fallback (web liveEntries parity).
     overallRank: row.overallRank ?? page.rows[index]?.overallRank,

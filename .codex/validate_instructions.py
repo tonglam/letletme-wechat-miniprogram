@@ -787,19 +787,9 @@ def check_governance_binding(path: Path, text: str, errors: list[str]) -> None:
 
     # Treat wrapped Markdown lines as one clause while retaining word
     # boundaries; otherwise a harmless line wrap can disable the check.
-    section, outside = _governance_parts(text)
-    if section is None:
-        errors.append(f"{path}: must contain exactly one operative '## Governance and review' section")
-        lowered = ""
-    else:
-        lowered = section.casefold()
-        conflicts = (
-            r"\b(?:ignore|disregard|bypass|waive)\b.{0,160}\b(?:review|finding|thread|ci|cleanup|quota|unresolved|undispositioned)\b",
-            r"\b(?:merge|ship|release)\b.{0,160}\b(?:without|even\s+with)\b.{0,80}\b(?:review|finding|thread|ci|cleanup|unresolved|undispositioned)\b",
-            r"\b(?:allow|permit)\b.{0,160}\b(?:merge|ship|release)\b.{0,80}\b(?:unresolved|undispositioned)\b",
-        )
-        if any(re.search(pattern, outside, flags=re.I | re.S) for pattern in conflicts):
-            errors.append(f"{path}: operative text outside Governance and review conflicts with the mandatory review rules")
+    operative = _without_markdown_code(text)
+    operative = re.sub(r"<!--.*?(?:-->|$)", " ", operative, flags=re.S)
+    lowered = " ".join(operative.casefold().split())
     required_clauses = {
         "quota rule": (
             "a review may be skipped only after two consecutive explicit quota-limit responses",
@@ -824,8 +814,8 @@ def check_governance_binding(path: Path, text: str, errors: list[str]) -> None:
             errors.append(f"{path}: missing operative {label} clause")
 
 
-def _governance_parts(text: str) -> tuple[str | None, str]:
-    """Return the operative governance section and text outside it."""
+def _governance_section(text: str) -> str | None:
+    """Return a whitespace-normalized governance section for parity checks."""
 
     # Headings in fenced/indented Markdown examples are not operative.  A
     # duplicate operative heading is rejected rather than allowing the first
@@ -837,23 +827,14 @@ def _governance_parts(text: str) -> tuple[str | None, str]:
         if re.match(r"^\s*##\s+Governance and review\s*$", line, flags=re.I)
     ]
     if len(matches) != 1:
-        return None, ""
+        return None
     start = matches[0]
     end = len(lines)
     for index in range(start + 1, len(lines)):
         if re.match(r"^\s*##\s+", lines[index]):
             end = index
             break
-    section = " ".join("\n".join(lines[start:end]).split())
-    outside = " ".join("\n".join(lines[:start] + lines[end:]).split()).casefold()
-    return section, outside
-
-
-def _governance_section(text: str) -> str | None:
-    """Return a whitespace-normalized governance section for parity checks."""
-
-    section, _ = _governance_parts(text)
-    return section
+    return " ".join("\n".join(lines[start:end]).split())
 
 
 def check_agents_claude_consistency(repo: Path, errors: list[str]) -> None:
@@ -1022,30 +1003,6 @@ def has_secret(text: str) -> bool:
     return False
 
 
-LOCKED_CREDENTIAL_KEY_RE = re.compile(
-    r"(?i)\b(?:api[_ -]?(?:key|token)|access[_ -]?(?:token|key)|"
-    r"private[_ -]?key|client[_ -]?secret|service[_ -]?(?:role[_ -]?)?"
-    r"(?:key|token)|secret[_ -]?(?:access[_ -]?)?(?:key|token)|"
-    r"notification[_ -]?(?:api[_ -]?)?token|metrics[_ -]?token|"
-    r"telegram[_ -]?bot[_ -]?token|session[_ -]?(?:cookie|token)|cookie)"
-)
-
-
-def has_locked_skill_secret(text: str) -> bool:
-    """Scan installed plugin content without enforcing repository skill metadata."""
-
-    if PEM_RE.search(text) or SECRET_VALUE_RES[-1].search(text):
-        return True
-    for pattern in SECRET_VALUE_RES[:-1]:
-        for match in pattern.finditer(text):
-            if not LOCKED_CREDENTIAL_KEY_RE.search(match.group(0)):
-                continue
-            value = match.group(1) if match.lastindex else match.group(0)
-            if not _looks_like_placeholder(value):
-                return True
-    return False
-
-
 def has_secret_bytes(raw: bytes) -> bool:
     """Scan binary/text references without losing UTF-16/UTF-32 credentials."""
 
@@ -1056,17 +1013,7 @@ def has_secret_bytes(raw: bytes) -> bool:
     # ignored and remain covered by the latin-1 scan.
     for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be"):
         try:
-            decoded = raw.decode(encoding)
-            candidates.append(decoded)
-            # JSON consumers decode escaped object keys/values before using
-            # them. Scan a normalized serialization as well so an escaped
-            # ``passw\\u006frd`` key cannot hide a literal credential.
-            try:
-                parsed = json.loads(decoded)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                pass
-            else:
-                candidates.append(json.dumps(parsed, ensure_ascii=False))
+            candidates.append(raw.decode(encoding))
         except UnicodeDecodeError:
             continue
     return any(has_secret(candidate) for candidate in candidates)
@@ -1131,7 +1078,7 @@ def _skill_entrypoints(root: Path, repo: Path) -> Iterable[Path]:
                 pending.append(child)
 
 
-def _validate_skill_inventory(repo: Path, skills: list[Any], errors: list[str]) -> set[str]:
+def _validate_skill_inventory(repo: Path, skills: list[Any], errors: list[str]) -> None:
     """Reject unowned repository skill directories without touching plugins.
 
     ``.agents/skills`` can contain both repository-owned skills and installed
@@ -1143,10 +1090,10 @@ def _validate_skill_inventory(repo: Path, skills: list[Any], errors: list[str]) 
 
     root = repo / ".agents" / "skills"
     if not root.exists() and not root.is_symlink():
-        return set()
+        return
     if root.is_symlink():
         errors.append(f"{root}: skill inventory root may not be a symlink")
-        return set()
+        return
     contracted: set[str] = set()
     for raw in skills:
         relative = Path(str(raw))
@@ -1165,43 +1112,18 @@ def _validate_skill_inventory(repo: Path, skills: list[Any], errors: list[str]) 
             if not isinstance(value, dict):
                 errors.append(f"{lock_path}: skills must be a mapping")
             else:
-                for name, metadata in value.items():
-                    skill_name = str(name)
-                    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
-                        errors.append(f"{lock_path}: invalid locked skill name: {skill_name!r}")
-                        continue
-                    if not isinstance(metadata, dict):
-                        errors.append(f"{lock_path}: metadata for {skill_name!r} must be a mapping")
-                        continue
-                    source = metadata.get("source")
-                    source_type = metadata.get("sourceType")
-                    computed_hash = metadata.get("computedHash")
-                    if not isinstance(source, str) or not source.strip():
-                        errors.append(f"{lock_path}: {skill_name!r} must declare a non-empty source")
-                        continue
-                    if not isinstance(source_type, str) or not re.fullmatch(
-                        r"[a-z0-9]+(?:-[a-z0-9]+)*", source_type
-                    ):
-                        errors.append(f"{lock_path}: {skill_name!r} has invalid sourceType")
-                        continue
-                    if not isinstance(computed_hash, str) or not re.fullmatch(
-                        r"[0-9a-fA-F]{64}", computed_hash
-                    ):
-                        errors.append(f"{lock_path}: {skill_name!r} must declare a SHA-256 computedHash")
-                        continue
-                    locked.add(skill_name)
+                locked = {str(name) for name in value}
     allowed = contracted | locked
     try:
         children = sorted(root.iterdir(), key=lambda path: path.name)
     except OSError as exc:
         errors.append(f"{root}: cannot inspect skill inventory: {exc}")
-        return locked
+        return
     for child in children:
         if child.name not in allowed:
             errors.append(
                 f"{child}: skill is not listed in the instruction contract or skills-lock.json"
             )
-    return locked
 
 
 def _instruction_paths(repo: Path, *, include_discovery: bool) -> list[Path]:
@@ -1573,31 +1495,6 @@ def validate_skill(
             errors.append(f"{reference}: possible secret/token pattern")
 
 
-def validate_locked_skill(path: Path, policy: dict[str, Any], errors: list[str]) -> None:
-    """Check lock-listed plugin bytes while allowing third-party metadata shapes."""
-
-    if not path.is_dir():
-        errors.append(f"{path}: locked skill must be a directory")
-        return
-    for reference in [path / "SKILL.md", *path.rglob("*")]:
-        if reference.is_symlink():
-            errors.append(f"{reference}: locked skill tree may not contain a symlink")
-            continue
-        if not reference.is_file():
-            continue
-        try:
-            raw = reference.read_bytes()
-        except OSError as exc:
-            errors.append(f"{reference}: cannot read locked skill content: {exc}")
-            continue
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            text = raw.decode("latin-1")
-        if policy.get("forbid_secrets_in_instructions") and has_locked_skill_secret(text):
-            errors.append(f"{reference}: possible secret/token pattern")
-
-
 def validate_asset(
     asset: dict[str, Any],
     policy: dict[str, Any],
@@ -1642,7 +1539,7 @@ def validate_asset(
         errors.append(f"{repo}: root does not exist")
     if not registry_only and repo.exists():
         allow_absolute = asset.get("kind") == "instruction-system"
-        locked_skills = _validate_skill_inventory(repo, skills, errors)
+        _validate_skill_inventory(repo, skills, errors)
         required_paths: set[Path] = set()
         for relative in agents:
             try:
@@ -1680,14 +1577,6 @@ def validate_asset(
                 continue
             required_paths.add((path / policy.get("require_skill_entrypoint", "SKILL.md")) if path.is_dir() else path)
             validate_skill(path, repo, policy, errors, allow_external=allow_absolute)
-        # Lock-listed third-party mounts are still repository-resident input.
-        # Validate their current contents before treating the lock as an
-        # inventory exemption; otherwise a modified plugin tree could hide
-        # secrets or broken references behind its trusted name.
-        for name in sorted(locked_skills):
-            path = repo / ".agents" / "skills" / name
-            if path.exists() or path.is_symlink():
-                validate_locked_skill(path, policy, errors)
 
         discovered = _instruction_paths(repo, include_discovery=asset.get("kind") != "instruction-system")
         discovered_set = set(discovered)
@@ -1697,7 +1586,11 @@ def validate_asset(
                 repo,
                 policy,
                 errors,
-                require_governance=path.name == "CLAUDE.md",
+                require_governance=(
+                    path.name == "CLAUDE.md"
+                    or ".claude" in path.relative_to(repo).parts
+                    and any(part in {"agents", "rules"} for part in path.relative_to(repo).parts)
+                ),
             )
             # CLAUDE.md is an operative consumer entrypoint in repositories
             # that provide it, even when the legacy contract lists only

@@ -10,22 +10,19 @@ const {
 } = await import("../miniprogram/services/live.service.ts");
 
 test("live matchday query uses only the published match summary fields", () => {
-  // Team short names ride along for the next-event fixture rows (the web desk
-  // selects them too); everything else stays the minimal published set.
+  // The live desk is event-scoped. Team identity comes from the Core fixture
+  // schedule, so the live overlay only carries score/status fields.
   assert.equal(
     (LIVE_MATCHES_QUERY.match(/homeTeamShortName/g) || []).length,
-    2,
+    0,
   );
   assert.equal(
     (LIVE_MATCHES_QUERY.match(/awayTeamShortName/g) || []).length,
-    2,
+    0,
   );
-  assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 2);
+  assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
   assert.match(LIVE_MATCHES_QUERY, /matches\s*\{[\s\S]*minutes[\s\S]*started/);
-  assert.match(
-    LIVE_MATCHES_QUERY,
-    /nextFixtures\s*\{[\s\S]*minutes[\s\S]*started/,
-  );
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures/);
 });
 
 test("live fixture player batches use the published player detail fields", () => {
@@ -70,8 +67,8 @@ test("live match mapping carries the authoritative fixture minutes", () => {
 
   assert.equal(mapped.minutes, 48);
   assert.equal(mapped.playStatus, "playing");
-  assert.equal(mapped.homeTeamShortName, "HOM");
-  assert.equal(mapped.awayTeamShortName, undefined);
+  assert.equal(mapped.homeTeamShortName, "Home");
+  assert.equal(mapped.awayTeamShortName, "Away");
 });
 
 test("live match mapping presents provisional completion without mutating the contract", () => {
@@ -160,8 +157,8 @@ test("live fixture players are merged by team after revision validation", () => 
   assert.equal(merged?.awayTeamDataList?.[0]?.teamShortName, "AWY");
 });
 
-test("live fixture players ignore a stale revision without erasing the desk", () => {
-  const ref = { season: "2627", eventId: 1, revision: "88" };
+test("live fixture players ignore a stale score revision without erasing the desk", () => {
+  const ref = { season: "2627", eventId: 1, scoreCoreRevision: "88" };
   const match = mapGraphQLMatch({
     fixtureId: 10,
     eventId: 1,
@@ -180,7 +177,7 @@ test("live fixture players ignore a stale revision without erasing the desk", ()
   const stale = {
     season: "2627",
     eventId: 1,
-    revision: "87",
+    scoreCoreRevision: "87",
     fixtureId: 10,
     players: [performance(1, 1, "Home", "HOM")],
   };

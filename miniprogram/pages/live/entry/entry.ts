@@ -7,8 +7,10 @@ import {
   getLivePointsByEntrySnapshot,
   getLiveSnapshot,
 } from "../../../services/live.service";
+import { traceableLiveScore } from "../../../services/live-score-v2";
+import { isClientUpgradeRequired } from "../../../services/graphql.service";
 import type {
-  LiveManagerScore,
+  LiveScore,
   LivePlayerRow,
   LiveSnapshotStatus,
 } from "../../../models/live";
@@ -196,10 +198,11 @@ function textValue(value: unknown, fallback = "-"): string {
   return String(value);
 }
 
-function managerScoreStatusText(score?: LiveManagerScore): string {
-  if (!score || score.state === "UNAVAILABLE") return "官方分数不可用";
-  if (score.state === "SETTLING") return "结算中";
-  if (score.state === "STALE") return "官方数据延迟";
+function liveScoreStatusText(score?: LiveScore): string {
+  if (!score || score.delivery.state === "UNAVAILABLE") return "官方分数不可用";
+  if (score.delivery.state === "DEGRADED") return "正在使用最近一次完整数据";
+  if (score.delivery.state === "STALE") return "官方数据延迟";
+  if (score.delivery.state === "FINAL") return "官方最终数据";
   return "官方实时";
 }
 
@@ -217,8 +220,7 @@ function firstRefreshDeadline(...values: unknown[]): string {
 // First-sync race (web parity): the calc can answer READY before picks
 // materialize — retry with backoff instead of flashing an empty squad.
 const EMPTY_PICKS_RETRY_DELAYS_MS = [1500, 3000, 7000, 12000];
-const LIVE_LINEUP_UNAVAILABLE_ERROR =
-  "本轮阵容数据暂不可用，请稍后重试";
+const LIVE_POINTS_UNAVAILABLE_ERROR = "本轮实时数据暂不可用，请稍后重试";
 
 function captainDisplayName(
   players: Array<{
@@ -435,21 +437,12 @@ Page({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
       probe: () => getLiveSnapshot(),
-      shouldReloadOnUnchangedProbe: () => {
-        const nextRefreshAt = firstRefreshDeadline(
-          this.data.scoreNextRefreshAt,
-          this.liveSnapshot?.nextRefreshAt,
-        );
-        return Boolean(
-          this.data.scoreState === "SETTLING" ||
-          (nextRefreshAt && Date.parse(nextRefreshAt) <= Date.now()),
-        );
-      },
       getNextRefreshAt: () =>
         firstRefreshDeadline(
           this.data.scoreNextRefreshAt,
           this.liveSnapshot?.nextRefreshAt,
         ) || null,
+      reloadOnDeadline: true,
       reload: async () => {
         await this.revalidateEntryPersistence();
         return this.loadData({ background: true, forceRefresh: true });
@@ -458,8 +451,8 @@ Page({
         this.liveSnapshot = snapshot;
         this.setData({
           error: "",
-          ...(snapshot?.checkedAt
-            ? { lastUpdated: formatTime(new Date(snapshot.checkedAt)) }
+          ...(snapshot?.sourceCheckedAt
+            ? { lastUpdated: formatTime(new Date(snapshot.sourceCheckedAt)) }
             : {}),
         });
         this.syncDisplayState();
@@ -484,7 +477,6 @@ Page({
           isCurrentEvent: this.data.event === currentLiveEventId(),
           snapshotState: info.snapshotState,
           revisionChanged: info.revisionChanged,
-          coverageFailed: this.liveSnapshot?.coverageFailed,
           probeDurationBucket: durationBucket(info.probeDurationMs),
           fullFetchDurationBucket:
             info.reloadDurationMs === undefined
@@ -1133,20 +1125,29 @@ Page({
         if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
+        const renderableScore = traceableLiveScore(result.score);
         navigationTracker?.mark("primaryResponseAt");
-        if (result.availability === "LINEUP_UNAVAILABLE") {
+        if (
+          result.availability === "UNAVAILABLE" ||
+          result.availability === "PENDING" ||
+          (result.availability === "READY" && !renderableScore)
+        ) {
           this.emptyPicksRetryCount = 0;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
           this.cachedLiveStoredAt = liveResult.servedStoredAt;
           const scoreNextRefreshAt = firstRefreshDeadline(
-            result.score?.nextRefreshAt,
+            result.score?.times.nextRefreshAt,
             result.scoreNextRefreshAt,
             liveResult.snapshot?.nextRefreshAt,
             this.liveSnapshot?.eventId === eventId
               ? this.liveSnapshot.nextRefreshAt
               : undefined,
           );
-          const retainExisting = background && this.data.hasData;
+          // A refresh failure must never erase a complete same-event pitch.
+          // Background and manual refreshes share this rule; a different
+          // event is cleared earlier by the event-switch path.
+          const retainExisting =
+            this.data.hasData && this.data.event === eventId;
           this.setData(
             {
               ...(retainExisting
@@ -1175,11 +1176,17 @@ Page({
                   }),
               entryName: result.entryName || this.data.entryName || "",
               playerName: result.playerName || this.data.playerName || "",
-              scoreState: result.score?.state || "UNAVAILABLE",
-              scoreStatusText: managerScoreStatusText(result.score),
-              scoreDetailText: "阵容同步中",
+              scoreState: result.score?.delivery.state || "UNAVAILABLE",
+              scoreStatusText: liveScoreStatusText(result.score),
+              scoreDetailText:
+                result.availability === "PENDING"
+                  ? "阵容同步中"
+                  : "实时数据暂不可用",
               scoreNextRefreshAt,
-              error: LIVE_LINEUP_UNAVAILABLE_ERROR,
+              error:
+                result.availability === "PENDING"
+                  ? ""
+                  : LIVE_POINTS_UNAVAILABLE_ERROR,
               errorWorkload: "gameweek" as const,
               transfersLoading: false,
               transfersError: "",
@@ -1193,25 +1200,26 @@ Page({
             },
           );
           this.loadTransfersAfterLive = false;
-          // The response explicitly says the lineup is unavailable. Waiting
-          // for a future snapshot here would recreate the endless spinner;
-          // the error state offers a bounded, user-controlled retry instead.
-          this.liveRefresh?.stop();
+          // Keep a complete same-event response visible during a failed refresh;
+          // a cold PENDING/UNAVAILABLE result remains retryable.
+          if (retainExisting || result.availability === "PENDING")
+            this.liveRefresh?.sync();
+          else this.liveRefresh?.stop();
           this.syncDisplayState();
           return;
         }
         if (result.availability === "NO_PICKS") {
           this.emptyPicksRetryCount = 0;
-          const officialEventPoints = result.score?.eventPoints;
+          const officialEventPoints = renderableScore?.eventPoints;
           const headlinePoints = numberValue(officialEventPoints);
-          const netPointsKnown = result.score?.netEventPoints != null;
+          const netPointsKnown = renderableScore?.netEventPoints != null;
           const netPoints = netPointsKnown
-            ? numberValue(result.score?.netEventPoints)
+            ? numberValue(renderableScore?.netEventPoints)
             : 0;
           const total = numberValue(
-            result.score?.totalScope === "OVERALL" &&
-              result.score.totalPoints != null
-              ? result.score.totalPoints
+            renderableScore?.totalScope === "OVERALL" &&
+              renderableScore.totalPoints != null
+              ? renderableScore.totalPoints
               : 0,
           );
           const hasOfficialHeadline = typeof officialEventPoints === "number";
@@ -1219,12 +1227,12 @@ Page({
             ? `${headlinePoints}`
             : "—";
           const totalKnown =
-            result.score?.totalScope === "OVERALL" &&
-            typeof result.score.totalPoints === "number";
+            renderableScore?.totalScope === "OVERALL" &&
+            typeof renderableScore.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
           const transferCostKnown =
-            typeof result.score?.transferCost === "number" &&
-            Number.isFinite(result.score.transferCost);
+            typeof renderableScore?.transferCost === "number" &&
+            Number.isFinite(renderableScore.transferCost);
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
@@ -1234,7 +1242,7 @@ Page({
               : undefined;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
           const scoreNextRefreshAt = firstRefreshDeadline(
-            result.score?.nextRefreshAt,
+            result.score?.times.nextRefreshAt,
             result.scoreNextRefreshAt,
             liveResult.snapshot?.nextRefreshAt,
             priorSnapshotNextRefreshAt,
@@ -1246,12 +1254,13 @@ Page({
               noPicks: true,
               entryName: result.entryName || "",
               playerName: result.playerName || "",
-              scoreState: result.score?.state || "UNAVAILABLE",
-              scoreStatusText: managerScoreStatusText(result.score),
-              scoreDetailText:
-                result.score?.reconciliation === "SOURCE_SKEW"
-                  ? "明细同步中"
-                  : "",
+              scoreState: renderableScore?.delivery.state || "UNAVAILABLE",
+              scoreStatusText: liveScoreStatusText(renderableScore),
+              scoreDetailText: renderableScore?.delivery.reasonCodes.includes(
+                "FALLBACK_SERVED",
+              )
+                ? "明细同步中"
+                : "",
               scoreNextRefreshAt,
               error: "",
               total,
@@ -1261,7 +1270,7 @@ Page({
               netPoints,
               netPointsKnown,
               transferCost: transferCostKnown
-                ? numberValue(result.score?.transferCost)
+                ? numberValue(renderableScore?.transferCost)
                 : 0,
               transferCostKnown,
               summaryTiles: hasOfficialHeadline
@@ -1290,11 +1299,7 @@ Page({
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
-          if (
-            hasOfficialHeadline ||
-            result.score?.state === "SETTLING" ||
-            hasRefreshDeadline(scoreNextRefreshAt)
-          ) {
+          if (hasOfficialHeadline || hasRefreshDeadline(scoreNextRefreshAt)) {
             this.liveRefresh?.sync();
           } else {
             this.liveRefresh?.stop();
@@ -1329,7 +1334,7 @@ Page({
         const autoSubProjection = deriveLiveAutoSubProjection({
           chip: result.chip,
           pickList: rawFieldPlayers,
-          score: result.score,
+          score: renderableScore,
           snapshot: liveResult.snapshot,
         });
         const players = [
@@ -1345,25 +1350,28 @@ Page({
           (player) => numberValue(player.elementType) !== 5,
         );
         const { starters, bench } = splitLiveSquadPlayers(fieldPlayers);
-        const livePoints = numberValue(result.score?.eventPoints);
-        const livePointsKnown = typeof result.score?.eventPoints === "number";
+        const livePoints = numberValue(renderableScore?.eventPoints);
+        const livePointsKnown =
+          typeof renderableScore?.eventPoints === "number";
         const total = numberValue(
-          result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0,
+          renderableScore?.totalScope === "OVERALL"
+            ? renderableScore.totalPoints
+            : 0,
         );
         const totalKnown =
-          result.score?.totalScope === "OVERALL" &&
-          typeof result.score.totalPoints === "number";
+          renderableScore?.totalScope === "OVERALL" &&
+          typeof renderableScore.totalPoints === "number";
         const livePointsText = livePointsKnown ? `${livePoints}` : "—";
         const totalText = totalKnown ? `${total}` : "—";
-        const netPointsKnown = result.score?.netEventPoints != null;
+        const netPointsKnown = renderableScore?.netEventPoints != null;
         const netPoints = netPointsKnown
-          ? numberValue(result.score?.netEventPoints)
+          ? numberValue(renderableScore?.netEventPoints)
           : 0;
         const transferCostKnown =
-          typeof result.score?.transferCost === "number" &&
-          Number.isFinite(result.score.transferCost);
+          typeof renderableScore?.transferCost === "number" &&
+          Number.isFinite(renderableScore.transferCost);
         const transferCost = transferCostKnown
-          ? numberValue(result.score?.transferCost)
+          ? numberValue(renderableScore?.transferCost)
           : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
         const priorSnapshotNextRefreshAt =
@@ -1372,7 +1380,7 @@ Page({
             : undefined;
         this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
         const scoreNextRefreshAt = firstRefreshDeadline(
-          result.score?.nextRefreshAt,
+          result.score?.times.nextRefreshAt,
           result.scoreNextRefreshAt,
           liveResult.snapshot?.nextRefreshAt,
           priorSnapshotNextRefreshAt,
@@ -1382,12 +1390,13 @@ Page({
           {
             hasData: true,
             noPicks: false,
-            scoreState: result.score?.state || "UNAVAILABLE",
-            scoreStatusText: managerScoreStatusText(result.score),
-            scoreDetailText:
-              result.score?.reconciliation === "SOURCE_SKEW"
-                ? "明细同步中"
-                : "",
+            scoreState: renderableScore?.delivery.state || "UNAVAILABLE",
+            scoreStatusText: liveScoreStatusText(renderableScore),
+            scoreDetailText: renderableScore?.delivery.reasonCodes.includes(
+              "FALLBACK_SERVED",
+            )
+              ? "明细同步中"
+              : "",
             scoreNextRefreshAt,
             error: "",
             total,
@@ -1399,7 +1408,8 @@ Page({
             transferCost,
             transferCostKnown,
             captainText:
-              autoSubProjection.captainPromotion?.playerInName ??
+              result.activeCaptain?.name ||
+              autoSubProjection.captainPromotion?.playerInName ||
               captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,
@@ -1460,9 +1470,22 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return;
         if (this.restartForPrincipalChange(entryId)) return;
         this.emptyPicksRetryCount = 0;
+        const upgradeRequired = isClientUpgradeRequired(error);
         this.setData({
-          error: error instanceof Error ? error.message : "实时积分加载失败",
+          error: upgradeRequired
+            ? "当前版本已停止支持实时积分，请更新小程序后继续"
+            : error instanceof Error
+              ? error.message
+              : "实时积分加载失败",
         });
+        if (upgradeRequired && typeof wx.showModal === "function") {
+          void wx.showModal({
+            title: "需要更新",
+            content: "实时积分服务已升级，请更新小程序后继续使用。",
+            showCancel: false,
+            confirmText: "知道了",
+          });
+        }
         this.loadTransfersAfterLive = false;
         wx.nextTick(() => navigationTracker?.observePrimary());
         this.syncDisplayState();
@@ -1553,20 +1576,12 @@ Page({
     if (!this.data.entryId) return false;
     if (
       !this.data.hasData &&
-      this.data.error === LIVE_LINEUP_UNAVAILABLE_ERROR
+      this.data.error === LIVE_POINTS_UNAVAILABLE_ERROR
     ) {
       return false;
     }
-    const hasManagerRetry = hasRefreshDeadline(
-      firstRefreshDeadline(
-        this.data.scoreNextRefreshAt,
-        this.liveSnapshot?.nextRefreshAt,
-      ),
-    );
     if (
       this.data.noPicks &&
-      !hasManagerRetry &&
-      this.data.scoreState !== "SETTLING" &&
       (!this.data.hasData || this.data.scoreState === "UNAVAILABLE")
     )
       return false;
@@ -1577,9 +1592,8 @@ Page({
       selectedEventId: this.data.event,
       snapshot: this.liveSnapshot,
       windowState: this.liveSnapshot?.windowState,
-      nextRefreshAt: this.liveSnapshot?.nextRefreshAt,
-      managerScoreState: this.data.scoreState,
-      managerNextRefreshAt: this.data.scoreNextRefreshAt,
+      nextRefreshAt:
+        this.data.scoreNextRefreshAt || this.liveSnapshot?.nextRefreshAt,
     });
   },
 

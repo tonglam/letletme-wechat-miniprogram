@@ -67,10 +67,9 @@ import {
 export function phaseBannerFromSnapshot(
   snapshotState: LiveSnapshotState | undefined,
 ): "" | "live" | "settling" {
-  // The current snapshot contract has no explicit SETTLING state. Without a
-  // successful probe (or a deadline passed into this page), absence is
-  // unknown rather than evidence that processing has begun.
-  return snapshotState === "LIVE" ? "live" : "";
+  if (snapshotState === "LIVE_ACTIVE") return "live";
+  if (snapshotState === "DAY_SETTLING") return "settling";
+  return "";
 }
 
 type EntrySummaryTab = "squad" | "transfer" | "chips" | "history";

@@ -30,7 +30,7 @@ const {
 const {
   GET_TOURNAMENT_DETAIL_DESK,
   GET_TOURNAMENT_OFFICIAL_H2H,
-  GET_ENTRY_OFFICIAL_H2H_MATCHUPS
+  GET_ENTRY_OFFICIAL_H2H_MATCHUPS,
 } = await import("../miniprogram/services/tournament-detail.service.ts");
 const {
   ENTRY_LIVE_COMPETITION_BOARD_QUERY,
@@ -101,8 +101,12 @@ const astNodeLimit = (document) => {
   return roots.length === 1 &&
     roots[0].kind === Kind.FIELD &&
     !roots[0].alias &&
-    roots[0].name.value === "entryLiveCompetitionBoard"
-    ? 400
+    ["calcLivePointsByEntry", "entryLiveCompetitionBoard"].includes(
+      roots[0].name.value,
+    )
+    ? roots[0].name.value === "calcLivePointsByEntry"
+      ? 320
+      : 400
     : 200;
 };
 

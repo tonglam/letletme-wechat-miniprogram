@@ -12,7 +12,6 @@ export interface EntryPersistencePresentation {
   message: string;
   retryable: boolean;
 }
-
 export function entryLookupPresentation(status: EntryLookupStatus): EntryLookupPresentation | null {
   switch (status) {
     case "FOUND":
