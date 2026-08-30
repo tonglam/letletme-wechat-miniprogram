@@ -38,14 +38,25 @@ test("Tournament and Match do not chain hidden-page reads", () => {
     tournament,
     /await getEntryPointsRaceTournament[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.tournamentListRequestId\) return[\s\S]*await this\.loadRows/
   );
-  assert.match(
-    match,
-    /await readCoreEventFixtureSchedule[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.liveRequestId\) return[\s\S]*getLiveMatchByStatusSnapshot/
+  const publicationRead = match.indexOf("(await getLiveMatchByStatusSnapshot(");
+  const publicationVisibilityFence = match.indexOf(
+    "if (!this.pageVisible || requestId !== this.liveRequestId) return",
+    publicationRead,
   );
-  assert.match(
-    match,
-    /await getLiveMatchByStatusSnapshot[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.liveRequestId\) return/
+  const publicationBranch = match.indexOf(
+    "if (publishedMatchday?.snapshot)",
+    publicationVisibilityFence,
   );
+  const coreRead = match.indexOf("await readCoreEventFixtureSchedule(", publicationBranch);
+  const coreVisibilityFence = match.indexOf(
+    "if (!this.pageVisible || requestId !== this.liveRequestId) return",
+    coreRead,
+  );
+  assert.ok(publicationRead >= 0);
+  assert.ok(publicationVisibilityFence > publicationRead);
+  assert.ok(publicationBranch > publicationVisibilityFence);
+  assert.ok(coreRead > publicationBranch);
+  assert.ok(coreVisibilityFence > coreRead);
   assert.match(tournament, /if \(this\.pageVisible && requestId === this\.tournamentListRequestId\)[\s\S]*loading: false/);
   assert.match(match, /if \(this\.pageVisible && requestId === this\.liveRequestId\)[\s\S]*loading: false/);
 });
