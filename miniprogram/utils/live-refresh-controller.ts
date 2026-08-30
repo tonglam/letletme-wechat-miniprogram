@@ -149,7 +149,7 @@ export function createLiveRefreshController(
         if (isResponseStale(requestId)) return;
         options.onProbeSettled?.({
           snapshotState: observed?.state,
-          revisionChanged: true,
+          revisionChanged,
           reloaded: true,
           probeDurationMs,
           reloadDurationMs: Date.now() - reloadStart,
