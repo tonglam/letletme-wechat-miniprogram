@@ -105,19 +105,21 @@ test("does not expose raw HTTP status codes to users", () => {
 
 test("keeps the live matchday desk query compact", () => {
   assert.match(LIVE_MATCHES_QUERY, /liveMatchdayDesk/);
-  assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 2);
-  assert.ok(LIVE_MATCHES_QUERY.length < 1_000);
-  assert.doesNotMatch(LIVE_MATCHES_QUERY, /upcoming\s*:/);
+  assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 1);
+  assert.ok(LIVE_MATCHES_QUERY.length < 1_200);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures|upcoming\s*:/);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEvent\b/);
 });
 
-test("uses a metadata-only query for automatic live freshness checks", () => {
+test("uses a revision-aware context query for automatic live freshness checks", () => {
   assert.match(LIVE_SNAPSHOT_QUERY, /liveContext/);
   assert.doesNotMatch(
     LIVE_SNAPSHOT_QUERY,
     /liveSnapshot|liveMatches|calcLivePoints/,
   );
-  assert.ok(LIVE_SNAPSHOT_QUERY.length < 300);
+  assert.match(LIVE_SNAPSHOT_QUERY, /revisions/);
+  assert.match(LIVE_SNAPSHOT_QUERY, /times/);
+  assert.match(LIVE_SNAPSHOT_QUERY, /delivery/);
 });
 
 test("sends operationName and classifies public/session operations explicitly", () => {

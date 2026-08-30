@@ -5,7 +5,7 @@
  * - lib/tournament/liveTournament.ts isOfficialH2HTournament — kind detection
  *   from list fields: leagueType H2H + rosterMode OFFICIAL_SYNC + groupMode
  *   BATTLE_RACES.
- * - lib/live-manager-score.ts traceableOfficialH2HScore — standings/match
+ * - live-score-v2.ts traceableLiveScore — standings/match
  *   scores only render when the score has a traceable source + revision +
  *   checkedAt; otherwise the table is empty and matches render as VS.
  * - OfficialH2HCompetitionView — standings sort (rank asc, then matchPoints
@@ -110,7 +110,7 @@ function hasCheckedAt(value?: string | null): boolean {
   return Boolean(value && Number.isFinite(Date.parse(value)));
 }
 
-/** lib/live-manager-score.ts traceableOfficialH2HScore. */
+/** live-score-v2.ts traceableLiveScore. */
 export function traceableOfficialH2HBoard(
   board?: Pick<
     OfficialH2HBoard,

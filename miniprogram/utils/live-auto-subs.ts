@@ -2,17 +2,12 @@
  * Live auto-substitution projection — a faithful port of the web engine
  * (app/live/points/_lib/live-auto-subs.ts) onto the mini program models.
  *
- * Three truth tiers, in order:
- *  1. score.effectiveLineup — server-materialized XI; the client never
- *     re-derives scoring state when it is present.
- *  2. Terminal pick flags (pickActive/multiplier) once the score or snapshot
- *     is FINAL/SETTLED/FINALIZED — state OFFICIAL.
- *  3. Minute-based prediction while the GW is live — state PREDICTED.
+ * Two truth tiers, in order:
+ *  1. Terminal pick flags (pickActive/multiplier) once the score or snapshot
+ *     is FINAL/FINALIZED — state OFFICIAL.
+ *  2. Minute-based prediction while the GW is live — state PREDICTED.
  */
-import type {
-  LiveManagerScore,
-  LivePlayerRow,
-} from "../models/live";
+import type { LivePlayerRow, LiveScore } from "../models/live";
 import { isBenchBoostChip } from "./squad-pitch";
 
 export type LiveAutoSubState = "NONE" | "PREDICTED" | "OFFICIAL";
@@ -47,7 +42,7 @@ export interface LiveAutoSubProjection {
 export interface LiveAutoSubInput {
   chip?: string | null;
   pickList: readonly LivePlayerRow[];
-  score?: Pick<LiveManagerScore, "state" | "effectiveLineup"> | null;
+  score?: Pick<LiveScore, "delivery"> | null;
   snapshot?: { state?: string } | null;
 }
 
@@ -115,8 +110,7 @@ function isValidFormation(
 
 function isOfficialLineup(live: LiveAutoSubInput): boolean {
   return (
-    live.score?.state === "FINAL" ||
-    live.snapshot?.state === "SETTLED" ||
+    live.score?.delivery.state === "FINAL" ||
     live.snapshot?.state === "FINALIZED"
   );
 }
@@ -249,56 +243,12 @@ function authoritativeProjection(
   live: LiveAutoSubInput,
   picks: LivePlayerRow[],
 ): LiveAutoSubProjection | null {
-  const publishedLineup = live.score?.effectiveLineup;
-  if (!publishedLineup || publishedLineup.length !== picks.length) return null;
-  const byElement = new Map(
-    publishedLineup.map((row) => [row.elementId, row] as const),
-  );
-  if (
-    byElement.size !== picks.length ||
-    picks.some((pick) => !byElement.has(Number(pick.element)))
-  ) {
-    return null;
-  }
-
-  // The server materialization owns active status, effective multipliers,
-  // captain fallback and lineup slots. Feed those values into the same
-  // presentation projection so the client never re-derives scoring state.
-  const authoritativePicks = picks.map((pick) => {
-    const row = byElement.get(Number(pick.element));
-    if (!row) return pick;
-    return {
-      ...pick,
-      squadPosition: row.position,
-      multiplier: row.effectiveMultiplier,
-      pickActive: row.pickActive,
-      autoSub: row.autoSub,
-      isCaptain: row.isCaptain,
-      isViceCaptain: row.isViceCaptain,
-    };
-  });
-  const projection = deriveOfficialProjection({
-    picks: authoritativePicks,
-    picksById: new Map(
-      authoritativePicks.map((pick) => [pickId(pick), pick] as const),
-    ),
-    effectivePositions: Object.fromEntries(
-      publishedLineup.map((row) => [String(row.elementId), row.position]),
-    ),
-    benchBoostActive: isBenchBoostChip(live.chip),
-  });
-  if (isOfficialLineup(live)) return projection;
-  return {
-    ...projection,
-    state: projection.state === "NONE" ? "NONE" : "PREDICTED",
-    substitutions: projection.substitutions.map((substitution) => ({
-      ...substitution,
-      state: "PREDICTED" as const,
-    })),
-    captainPromotion: projection.captainPromotion
-      ? { ...projection.captainPromotion, state: "PREDICTED" as const }
-      : null,
-  };
+  // V2 publishes complete picks and score facts; it intentionally does not
+  // publish a second server-materialized lineup. Keep one projection owner in
+  // this pure function so a partial response can never mix two vectors.
+  void live;
+  void picks;
+  return null;
 }
 
 /**

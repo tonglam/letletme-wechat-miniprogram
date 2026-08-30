@@ -291,8 +291,9 @@ function requestWebAuth(
 }
 
 function positiveEntryId(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : null;
 }
 
 function readLocalEntryId(): number | null {
@@ -795,6 +796,9 @@ export function getStoredMiniProgramProfile(): MiniProgramProfile | null {
 
 function persistMiniProgramProfile(profile: MiniProgramProfile): void {
   wx.setStorageSync(storageKeys.apiProfile, profile);
+  try {
+    wx.removeStorageSync(RETIRED_API_PROFILE_STORAGE_KEY);
+  } catch {}
   wx.setStorageSync(storageKeys.apiProfileCheckedAt, Date.now());
   wx.setStorageSync(
     storageKeys.apiProfileFplEntryId,

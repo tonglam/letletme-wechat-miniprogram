@@ -1,7 +1,4 @@
 export type LiveSnapshotState =
-  | "SCHEDULED"
-  | "LIVE"
-  | "SETTLED"
   | "PRE_DEADLINE"
   | "PICKS_WAIT"
   | "PICKS_PROBE"
@@ -12,13 +9,14 @@ export type LiveSnapshotState =
   | "GW_REVIEW"
   | "FINALIZED"
   | "PRESEASON"
-  | "EVENT_SCHEDULED"
+  | "PRE_DEADLINE"
   | "BETWEEN_GAMEWEEKS"
-  | "OFFSEASON";
+  | "OFFSEASON"
+  | "UNAVAILABLE";
 
 export type LiveWindowState =
   | "PRESEASON"
-  | "EVENT_SCHEDULED"
+  | "PRE_DEADLINE"
   | "LIVE_ACTIVE"
   | "DAY_SETTLING"
   | "BETWEEN_FIXTURES"
@@ -28,47 +26,82 @@ export type LiveWindowState =
   | "OFFSEASON";
 
 export type LiveDataAvailability =
-  | "SCHEDULED"
-  | "FRESH"
-  | "LAST_GOOD"
-  | "FINAL"
-  | "PARTIAL"
+  "FRESH" | "STALE" | "DEGRADED" | "FINAL" | "UNAVAILABLE";
+
+export type LiveScoreSource =
+  "FPL_EVENT_LIVE" | "FPL_FINAL_RESULT" | "UNAVAILABLE";
+
+export type LiveDeliveryState =
+  "FRESH" | "STALE" | "DEGRADED" | "FINAL" | "UNAVAILABLE";
+
+export type LiveServedFrom =
+  | "REDIS_CURRENT"
+  | "REDIS_PREVIOUS"
+  | "PROCESS_LKG"
+  | "POSTGRES_CHECKPOINT"
+  | "FINAL_RESULT"
   | "UNAVAILABLE";
 
-export type LiveAuthority = "OFFICIAL_FPL" | "LETLETME_RULES" | "MIXED";
+export interface LiveRevisionVector {
+  publicationId: string;
+  generation: number;
+  lifecycle: string;
+  fixtureIdentity: string;
+  scoreCore: string;
+  displayStats: string;
+  explain: string;
+  picksBase: string | null;
+  officialAdjustment: string | null;
+  previousTotals: string | null;
+  finalResult: string | null;
+  rules: string;
+  algorithm: string;
+  input: string;
+}
 
-export type LiveManagerScoreSource =
-  | "FPL_EVENT_LIVE"
-  | "FPL_ENTRY_SUMMARY"
-  | "FPL_CLASSIC_STANDINGS"
-  | "FPL_FINAL_RESULT"
-  | "UNAVAILABLE";
+export interface LiveTimes {
+  sourceCheckedAt: string;
+  contentUpdatedAt: string;
+  publishedAt: string;
+  checkpointedAt: string | null;
+  servedAt: string;
+  staleAt: string;
+  nextRefreshAt: string | null;
+}
 
-export type LiveManagerScoreState =
-  | "FRESH"
-  | "STALE"
-  | "SETTLING"
-  | "FINAL"
-  | "UNAVAILABLE";
+export interface LiveDelivery {
+  state: LiveDeliveryState;
+  servedFrom: LiveServedFrom;
+  reasonCodes: string[];
+}
+
+export interface LiveScore {
+  eventPoints: number;
+  netEventPoints: number;
+  totalPoints: number | null;
+  totalScope: "OVERALL" | "UNKNOWN";
+  transferCost: number;
+  source: LiveScoreSource;
+  calculationMode: "PROJECTED_AUTOSUBS" | "FINAL_RESULT";
+  revisions: LiveRevisionVector;
+  times: LiveTimes;
+  delivery: LiveDelivery;
+}
 
 export interface LiveSnapshotStatus {
+  season: string;
   eventId: number;
-  revision: string | null;
   state: LiveSnapshotState;
   publishedAt: string | null;
-  checkedAt: string | null;
+  sourceCheckedAt: string | null;
+  scoreCoreRevision: string | null;
+  publicationId?: string | null;
+  revisions?: LiveRevisionVector | null;
+  times?: LiveTimes | null;
+  delivery?: LiveDelivery | null;
   windowState?: LiveWindowState | null;
   dataAvailability?: LiveDataAvailability | null;
   nextRefreshAt?: string | null;
-  // Additive shared Live contract fields, present only after the GraphQL
-  // contract ships them. Presentation must degrade when they are absent —
-  // never invent authority or coverage client-side.
-  season?: string;
-  authority?: LiveAuthority;
-  coverageExpected?: number;
-  coverageSucceeded?: number;
-  coverageFailed?: number;
-  reasonCode?: string | null;
 }
 
 export interface LiveSnapshotResult<T> {
@@ -82,48 +115,13 @@ export interface LiveSnapshotResult<T> {
   /** Traceable rows before any client-side search narrows the returned data. */
   traceableEntries?: number;
   /** Traceable score states before any client-side search narrows the rows. */
-  traceableScoreStates?: LiveManagerScoreState[];
+  traceableScoreStates?: LiveDeliveryState[];
   totalEntries?: number;
   partialError?: string;
 }
 
-export interface LiveManagerScore {
-  eventPoints?: number | null;
-  netEventPoints?: number | null;
-  totalPoints?: number | null;
-  totalScope?: "OVERALL" | "CLASSIC_PHASE" | "UNKNOWN";
-  eventRank?: number | null;
-  overallRank?: number | null;
-  leagueRank?: number | null;
-  transferCost?: number;
-  source?: LiveManagerScoreSource;
-  state?: LiveManagerScoreState;
-  eventPointSemantics?: string;
-  /** Server-materialized effective XI: authoritative active/captain/sub state. */
-  effectiveLineup?: LiveEffectiveLineupRow[];
-  revision?: string | null;
-  checkedAt?: string | null;
-  upstreamUpdatedAt?: string | null;
-  staleAt?: string | null;
-  nextRefreshAt?: string | null;
-  reconciliation?: string;
-  reasonCodes?: string[];
-}
-
-export interface LiveEffectiveLineupRow {
-  elementId: number;
-  position: number;
-  effectiveMultiplier?: number;
-  pickActive?: boolean;
-  autoSub?: boolean;
-  isCaptain?: boolean;
-  isViceCaptain?: boolean;
-}
-
 export type LiveEntryAvailability =
-  | "READY"
-  | "NO_PICKS"
-  | "LINEUP_UNAVAILABLE";
+  "READY" | "PENDING" | "NO_PICKS" | "UNAVAILABLE";
 
 export interface LivePlayerRow {
   element?: number;
@@ -188,11 +186,20 @@ export interface LivePlayerRow {
 }
 
 export interface LiveEntryResult {
-	availability?: LiveEntryAvailability;
-	entry?: number;
-	event?: number;
-	entryName?: string;
-	playerName?: string;
+  availability?: LiveEntryAvailability;
+  entry?: number;
+  event?: number;
+  entryName?: string;
+  playerName?: string;
+  region?: string | null;
+  startedEvent?: number | null;
+  value?: number | null;
+  bank?: number | null;
+  teamValue?: number | null;
+  totalTransfers?: number | null;
+  lastValue?: number | null;
+  playedCaptain?: number | null;
+  activeCaptain?: { id: number; name: string; points: number } | null;
   total?: number;
   livePoints?: number;
   liveNetPoints?: number;
@@ -209,7 +216,7 @@ export interface LiveEntryResult {
   pickList?: LivePlayerRow[];
   /** Fetch time when this result was served from cache; undefined on a fresh network response. */
   servedStoredAt?: number;
-  score?: LiveManagerScore;
+  score?: LiveScore;
 }
 
 export interface LiveMatch {
@@ -274,7 +281,7 @@ export interface LiveTournamentRow {
   captainPoints?: number;
   picks?: LivePlayerRow[];
   searchText?: string;
-  score?: LiveManagerScore;
+  score?: LiveScore;
   /** Retry metadata retained even when an untraceable score payload is rejected. */
   scoreNextRefreshAt?: string;
 }
