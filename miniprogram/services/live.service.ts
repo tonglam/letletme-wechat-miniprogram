@@ -13,6 +13,7 @@ import type {
   LiveSnapshotResult,
   LiveSnapshotStatus,
 } from "../models/live";
+import { traceableLiveScore } from "./live-score-v2";
 
 // Live payloads are expensive enough to deduplicate rapid page revisits, but
 // short-lived enough to stay process-local (graphql.service does not persist
@@ -326,16 +327,17 @@ export async function getLivePointsByEntrySnapshot(
     variables,
   );
   const score = result.score;
-  const eventPoints = Number.isFinite(score.eventPoints)
-    ? score.eventPoints
+  const renderableScore = traceableLiveScore(score);
+  const eventPoints = renderableScore && Number.isFinite(renderableScore.eventPoints)
+    ? renderableScore.eventPoints
     : undefined;
-  const netEventPoints = Number.isFinite(score.netEventPoints)
-    ? score.netEventPoints
+  const netEventPoints = renderableScore && Number.isFinite(renderableScore.netEventPoints)
+    ? renderableScore.netEventPoints
     : undefined;
   const totalPoints =
-    score.totalScope === "OVERALL" &&
-    Number.isFinite(score.totalPoints ?? Number.NaN)
-      ? (score.totalPoints ?? undefined)
+    renderableScore?.totalScope === "OVERALL" &&
+    Number.isFinite(renderableScore.totalPoints ?? Number.NaN)
+      ? (renderableScore.totalPoints ?? undefined)
       : undefined;
   return {
     data: {
@@ -349,7 +351,7 @@ export async function getLivePointsByEntrySnapshot(
       liveNetPoints: netEventPoints,
       netPointsKnown: netEventPoints !== undefined,
       liveTotalPoints: totalPoints,
-      transferCost: score.transferCost,
+      transferCost: renderableScore?.transferCost,
       scoreNextRefreshAt: score.times.nextRefreshAt ?? undefined,
       region: result.region,
       startedEvent: result.startedEvent,

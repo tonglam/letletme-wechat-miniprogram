@@ -7,6 +7,7 @@ import {
   getLivePointsByEntrySnapshot,
   getLiveSnapshot,
 } from "../../../services/live.service";
+import { traceableLiveScore } from "../../../services/live-score-v2";
 import { isClientUpgradeRequired } from "../../../services/graphql.service";
 import type {
   LiveScore,
@@ -1198,23 +1199,25 @@ Page({
           this.loadTransfersAfterLive = false;
           // Keep a complete same-event response visible during a failed refresh;
           // a cold PENDING/UNAVAILABLE result remains retryable.
-          if (retainExisting) this.liveRefresh?.sync();
+          if (retainExisting || result.availability === "PENDING")
+            this.liveRefresh?.sync();
           else this.liveRefresh?.stop();
           this.syncDisplayState();
           return;
         }
         if (result.availability === "NO_PICKS") {
           this.emptyPicksRetryCount = 0;
-          const officialEventPoints = result.score?.eventPoints;
+          const renderableScore = traceableLiveScore(result.score);
+          const officialEventPoints = renderableScore?.eventPoints;
           const headlinePoints = numberValue(officialEventPoints);
-          const netPointsKnown = result.score?.netEventPoints != null;
+          const netPointsKnown = renderableScore?.netEventPoints != null;
           const netPoints = netPointsKnown
-            ? numberValue(result.score?.netEventPoints)
+            ? numberValue(renderableScore?.netEventPoints)
             : 0;
           const total = numberValue(
-            result.score?.totalScope === "OVERALL" &&
-              result.score.totalPoints != null
-              ? result.score.totalPoints
+            renderableScore?.totalScope === "OVERALL" &&
+              renderableScore.totalPoints != null
+              ? renderableScore.totalPoints
               : 0,
           );
           const hasOfficialHeadline = typeof officialEventPoints === "number";
@@ -1222,12 +1225,12 @@ Page({
             ? `${headlinePoints}`
             : "—";
           const totalKnown =
-            result.score?.totalScope === "OVERALL" &&
-            typeof result.score.totalPoints === "number";
+            renderableScore?.totalScope === "OVERALL" &&
+            typeof renderableScore.totalPoints === "number";
           const totalText = totalKnown ? `${total}` : "—";
           const transferCostKnown =
-            typeof result.score?.transferCost === "number" &&
-            Number.isFinite(result.score.transferCost);
+            typeof renderableScore?.transferCost === "number" &&
+            Number.isFinite(renderableScore.transferCost);
           // A score-only NO_PICKS response still carries the authoritative
           // player snapshot. Keep it so unchanged probes do not force a full
           // reload forever once the official score has settled.
@@ -1249,9 +1252,9 @@ Page({
               noPicks: true,
               entryName: result.entryName || "",
               playerName: result.playerName || "",
-              scoreState: result.score?.delivery.state || "UNAVAILABLE",
-              scoreStatusText: liveScoreStatusText(result.score),
-              scoreDetailText: result.score?.delivery.reasonCodes.includes(
+              scoreState: renderableScore?.delivery.state || "UNAVAILABLE",
+              scoreStatusText: liveScoreStatusText(renderableScore),
+              scoreDetailText: renderableScore?.delivery.reasonCodes.includes(
                 "FALLBACK_SERVED",
               )
                 ? "明细同步中"
@@ -1265,7 +1268,7 @@ Page({
               netPoints,
               netPointsKnown,
               transferCost: transferCostKnown
-                ? numberValue(result.score?.transferCost)
+                ? numberValue(renderableScore?.transferCost)
                 : 0,
               transferCostKnown,
               summaryTiles: hasOfficialHeadline
@@ -1321,6 +1324,7 @@ Page({
         }
         this.emptyPicksRetryCount = 0;
         const rawPlayers = rawRoster;
+        const renderableScore = traceableLiveScore(result.score);
         const rawFieldPlayers = rawPlayers.filter(
           (player) => numberValue(player.elementType) !== 5,
         );
@@ -1329,7 +1333,7 @@ Page({
         const autoSubProjection = deriveLiveAutoSubProjection({
           chip: result.chip,
           pickList: rawFieldPlayers,
-          score: result.score,
+          score: renderableScore,
           snapshot: liveResult.snapshot,
         });
         const players = [
@@ -1345,25 +1349,27 @@ Page({
           (player) => numberValue(player.elementType) !== 5,
         );
         const { starters, bench } = splitLiveSquadPlayers(fieldPlayers);
-        const livePoints = numberValue(result.score?.eventPoints);
-        const livePointsKnown = typeof result.score?.eventPoints === "number";
+        const livePoints = numberValue(renderableScore?.eventPoints);
+        const livePointsKnown = typeof renderableScore?.eventPoints === "number";
         const total = numberValue(
-          result.score?.totalScope === "OVERALL" ? result.score.totalPoints : 0,
+          renderableScore?.totalScope === "OVERALL"
+            ? renderableScore.totalPoints
+            : 0,
         );
         const totalKnown =
-          result.score?.totalScope === "OVERALL" &&
-          typeof result.score.totalPoints === "number";
+          renderableScore?.totalScope === "OVERALL" &&
+          typeof renderableScore.totalPoints === "number";
         const livePointsText = livePointsKnown ? `${livePoints}` : "—";
         const totalText = totalKnown ? `${total}` : "—";
-        const netPointsKnown = result.score?.netEventPoints != null;
+        const netPointsKnown = renderableScore?.netEventPoints != null;
         const netPoints = netPointsKnown
-          ? numberValue(result.score?.netEventPoints)
+          ? numberValue(renderableScore?.netEventPoints)
           : 0;
         const transferCostKnown =
-          typeof result.score?.transferCost === "number" &&
-          Number.isFinite(result.score.transferCost);
+          typeof renderableScore?.transferCost === "number" &&
+          Number.isFinite(renderableScore.transferCost);
         const transferCost = transferCostKnown
-          ? numberValue(result.score?.transferCost)
+          ? numberValue(renderableScore?.transferCost)
           : 0;
         const fetchedAt = liveResult.servedStoredAt || Date.now();
         const priorSnapshotNextRefreshAt =
@@ -1382,9 +1388,9 @@ Page({
           {
             hasData: true,
             noPicks: false,
-            scoreState: result.score?.delivery.state || "UNAVAILABLE",
-            scoreStatusText: liveScoreStatusText(result.score),
-            scoreDetailText: result.score?.delivery.reasonCodes.includes(
+            scoreState: renderableScore?.delivery.state || "UNAVAILABLE",
+            scoreStatusText: liveScoreStatusText(renderableScore),
+            scoreDetailText: renderableScore?.delivery.reasonCodes.includes(
               "FALLBACK_SERVED",
             )
               ? "明细同步中"
@@ -1400,7 +1406,8 @@ Page({
             transferCost,
             transferCostKnown,
             captainText:
-              autoSubProjection.captainPromotion?.playerInName ??
+              result.activeCaptain?.name ||
+              autoSubProjection.captainPromotion?.playerInName ||
               captainDisplayName(players, result.captainName),
             chipText: chipShareLabel(textValue(result.chip, "无")),
             playedText: `${numberValue(result.played)}/${numberValue(result.played) + numberValue(result.toPlay)}`,

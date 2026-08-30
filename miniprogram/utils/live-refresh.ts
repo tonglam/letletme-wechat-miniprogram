@@ -3,7 +3,10 @@ import type { LiveSnapshotStatus } from "../models/live";
 export const LIVE_REFRESH_INTERVAL_MS = 30_000;
 
 const contentRevision = (snapshot: LiveSnapshotStatus): string =>
-  snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "";
+  [
+    snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "",
+    snapshot.revisions?.lifecycle ?? "",
+  ].join(":");
 
 export function liveSnapshotNeedsRefresh(
   accepted?: LiveSnapshotStatus | null,
@@ -36,12 +39,11 @@ export function shouldPollLiveSnapshot(options: {
   if (!pageVisible || !currentEventId || selectedEventId !== currentEventId)
     return false;
   if (!snapshot || snapshot.eventId !== selectedEventId) return true;
-  if (windowState === "OFFSEASON" || windowState === "BETWEEN_GAMEWEEKS")
-    return false;
+  const effectiveState = windowState ?? snapshot.state;
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
-  return !["FINALIZED", "OFFSEASON", "BETWEEN_GAMEWEEKS"].includes(
-    windowState ?? snapshot.state,
-  );
+  if (effectiveState === "OFFSEASON") return false;
+  if (effectiveState === "BETWEEN_GAMEWEEKS") return false;
+  return !["FINALIZED", "OFFSEASON", "BETWEEN_GAMEWEEKS"].includes(effectiveState);
 }
 
 export function shouldRevalidateCachedLiveSnapshot(options: {

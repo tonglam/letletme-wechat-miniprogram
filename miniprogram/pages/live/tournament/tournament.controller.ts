@@ -2203,8 +2203,16 @@ PerformancePage({
       page.failedEntryIds,
       page.unavailableEntryIds,
     );
+    const identifiedMissingEntryCount = new Set([
+      ...page.failedEntryIds,
+      ...page.unavailableEntryIds,
+    ]).size;
+    const reportedMissingEntryCount =
+      page.deferredEntryCount +
+      page.failedEntryCount +
+      page.unavailableEntryCount;
     this.failedEntryCount = page.partial
-      ? Math.max(1, this.unavailableEntryIds.length)
+      ? Math.max(identifiedMissingEntryCount, reportedMissingEntryCount)
       : 0;
     this.retainedRowCount = options.lastGood ? rows.length : 0;
     if (playerRevisionChanged) this.compareRequestId += 1;
@@ -2355,7 +2363,7 @@ PerformancePage({
     } catch (error) {
       if (requestId !== this.selectionIndexRequestId) return;
       if (
-        hasLiveBoardErrorCode(error, "LIVE_REVISION_GONE") ||
+        hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE") ||
         hasLiveBoardErrorCode(error, "LIVE_BOARD_REVISION_GONE")
       ) {
         void this.loadRows({ background: this.data.hasData, forceRefresh: true });
@@ -2417,7 +2425,7 @@ PerformancePage({
       const message = error instanceof Error ? error.message : "阵容对比加载失败";
       this.setData({ compareError: message, compareOpen: false });
       wx.showToast({ title: "阵容对比加载失败，已保留选择", icon: "none" });
-      if (hasLiveBoardErrorCode(error, "LIVE_REVISION_GONE")) {
+      if (hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE")) {
         void this.loadRows({ background: this.data.hasData, forceRefresh: true });
       }
     } finally {

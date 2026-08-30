@@ -977,7 +977,10 @@ export function clearAllLiveBoardLastGood(): void {
 export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
   return mapTournamentLiveRows(page.rows).map((row, index) => ({
     ...row,
-    rank: page.rows[index]?.rank ?? row.rank,
+    rank:
+      page.rankScope === "FULL_FIELD"
+        ? page.rows[index]?.rank ?? row.rank
+        : 0,
     // The mapped row already prefers score.overallRank (fresher); the raw
     // board value is only the fallback (web liveEntries parity).
     overallRank: row.overallRank ?? page.rows[index]?.overallRank,
