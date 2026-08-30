@@ -1124,10 +1124,12 @@ Page({
         if (this.restartForPrincipalChange(entryId)) return;
 
         const result = liveResult.data;
+        const renderableScore = traceableLiveScore(result.score);
         navigationTracker?.mark("primaryResponseAt");
         if (
           result.availability === "UNAVAILABLE" ||
-          result.availability === "PENDING"
+          result.availability === "PENDING" ||
+          (result.availability === "READY" && !renderableScore)
         ) {
           this.emptyPicksRetryCount = 0;
           this.liveSnapshot = liveResult.snapshot ?? this.liveSnapshot;
@@ -1207,7 +1209,6 @@ Page({
         }
         if (result.availability === "NO_PICKS") {
           this.emptyPicksRetryCount = 0;
-          const renderableScore = traceableLiveScore(result.score);
           const officialEventPoints = renderableScore?.eventPoints;
           const headlinePoints = numberValue(officialEventPoints);
           const netPointsKnown = renderableScore?.netEventPoints != null;
@@ -1324,7 +1325,6 @@ Page({
         }
         this.emptyPicksRetryCount = 0;
         const rawPlayers = rawRoster;
-        const renderableScore = traceableLiveScore(result.score);
         const rawFieldPlayers = rawPlayers.filter(
           (player) => numberValue(player.elementType) !== 5,
         );

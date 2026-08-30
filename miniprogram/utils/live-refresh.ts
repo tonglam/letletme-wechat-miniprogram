@@ -6,6 +6,7 @@ const contentRevision = (snapshot: LiveSnapshotStatus): string =>
   [
     snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "",
     snapshot.revisions?.lifecycle ?? "",
+    snapshot.revisions?.picksBase ?? "",
   ].join(":");
 
 export function liveSnapshotNeedsRefresh(

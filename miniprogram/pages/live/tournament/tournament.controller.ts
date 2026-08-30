@@ -2173,7 +2173,8 @@ PerformancePage({
     const compareIds = this.data.compareIds || [];
     const rows = [...byEntry.values()].map((row, index) => {
       const compared = compareIds.includes(numberValue(row.entry));
-      const visibleRank = numberValue(row.rank, index + 1);
+      const visibleRank =
+        page.rankScope === "FULL_FIELD" ? numberValue(row.rank, index + 1) : 0;
       return {
         ...row,
         visibleRank,
@@ -2274,7 +2275,7 @@ PerformancePage({
         this.data.selectedOwnershipPlayers.length +
         this.data.teamExposureRules.length,
       error: page.partial
-        ? `部分结果不可用：${Math.max(1, this.unavailableEntryIds.length)}/${page.totalEntries} 支参赛球队暂不可用`
+        ? `部分结果不可用：${Math.max(1, this.failedEntryCount)}/${page.totalEntries} 支参赛球队暂不可用`
         : "",
       errorSuffix: page.partial ? "其余榜单仍可查看" : "",
       ...(playerRevisionChanged
@@ -4196,7 +4197,9 @@ PerformancePage({
             ? String(
                 numberValue(row.rank) > 0
                   ? numberValue(row.rank)
-                  : numberValue(row.visibleRank),
+                  : numberValue(row.visibleRank) > 0
+                    ? numberValue(row.visibleRank)
+                    : "—",
               )
             : "—",
           entryName: textValue(row.entryName, "-"),

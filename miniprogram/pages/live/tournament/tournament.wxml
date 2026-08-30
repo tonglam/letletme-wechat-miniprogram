@@ -341,7 +341,7 @@
               <image wx:if="{{item.compared}}" class="row-check-icon" src="/assets/icons/check.svg" mode="aspectFit" />
             </view>
           </view>
-          <text class="col-rank {{item.topRank ? 'top3' : ''}}">{{item.eventPointsKnown ? (item.rank > 0 ? item.rank : item.visibleRank) : '—'}}</text>
+          <text class="col-rank {{item.topRank ? 'top3' : ''}}">{{item.eventPointsKnown ? (item.rank > 0 ? item.rank : (item.visibleRank > 0 ? item.visibleRank : '—')) : '—'}}</text>
           <view class="col-team">
             <view class="team-line">
               <text class="team-name">{{item.entryName || '-'}}</text>
