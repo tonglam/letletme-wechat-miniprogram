@@ -366,7 +366,7 @@ export interface MyTournamentReviewH2H {
     isBye: boolean;
     home: MyTournamentReviewH2HSide | null;
     away: MyTournamentReviewH2HSide | null;
-	}>;
+  }>;
   standings: Array<{
     groupId: number;
     entryId: number;
@@ -450,6 +450,56 @@ const MY_TOURNAMENT_REVIEW_CONTRACT = "my-tournament-review-v2" as const;
 const MY_TOURNAMENT_REVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 const MY_TOURNAMENT_REVIEW_STALE_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Keep stale-while-revalidate useful for an offline/read-heavy page without
+ * presenting the old snapshot as current. graphqlRequest intentionally keeps
+ * the normal service return shape, so mark the published review state as
+ * degraded when it serves a stale candidate. The page already renders this
+ * state as "快照延迟，已安排补偿" and therefore surfaces the fallback without
+ * leaking transport/cache implementation details into the UI contract.
+ */
+function mapStaleTournamentReviewData(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const response = { ...(data as Record<string, unknown>) };
+  for (const field of [
+    "myTournamentReviewCatalog",
+    "myTournamentGameweekReview",
+    "myTournamentSeasonReview",
+  ]) {
+    const payload = response[field];
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      continue;
+    }
+    const marked: Record<string, unknown> = {
+      ...(payload as Record<string, unknown>),
+      state: "DEGRADED",
+    };
+    if (
+      field === "myTournamentReviewCatalog" &&
+      Array.isArray(marked.tournaments)
+    ) {
+      marked.tournaments = marked.tournaments.map((tournament: unknown) =>
+        tournament && typeof tournament === "object"
+          ? { ...(tournament as Record<string, unknown>), state: "DEGRADED" }
+          : tournament,
+      );
+    }
+    if (
+      field === "myTournamentGameweekReview" &&
+      marked.scope &&
+      typeof marked.scope === "object" &&
+      !Array.isArray(marked.scope)
+    ) {
+      marked.scope = {
+        ...(marked.scope as Record<string, unknown>),
+        state: "DEGRADED",
+      };
+    }
+    response[field] = marked;
+  }
+  return response;
+}
+
 const REVIEW_SCOPE_META_FIELDS = `
   tournamentId eventId revision format state
   freshness { eventDataCheckedAt sourceMinCheckedAt sourceMaxCheckedAt publishedAt ageSeconds }
@@ -525,6 +575,7 @@ const myTournamentReviewOptions = (
   forceRefresh,
   trace,
   contract: MY_TOURNAMENT_REVIEW_CONTRACT,
+  mapStaleData: mapStaleTournamentReviewData,
 });
 
 export async function getMyTournamentReviewCatalog(

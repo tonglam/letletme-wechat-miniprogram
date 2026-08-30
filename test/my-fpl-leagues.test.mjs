@@ -113,21 +113,34 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(service, /revision: \$revision/);
   assert.match(page, /next\.scope\?\.revision !== gameweekRevision/);
   assert.match(page, /next\.latestRevision !== seasonRevision/);
+  assert.match(
+    page,
+    /error\.message === "赛事复盘快照已更新，请刷新后重试"[\s\S]*\? "review"/,
+  );
   assert.match(page, /\[latestEventId, eventId\]/);
   assert.match(page, /this\.v2RetryOperation = "loadMore"/);
   assert.match(page, /async retryV2Operation\(forceRefresh = true\)/);
-  assert.match(page, /this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;[\s\S]*retryV2Operation/);
+  assert.match(
+    page,
+    /this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;[\s\S]*retryV2Operation/,
+  );
   assert.match(
     page,
     /this\.data\.v2Loading \|\|[\s\S]*this\.data\.v2LoadingMore/,
   );
   assert.match(page, /this\.loadedContextRevision =\s*getAppContextSnapshot/);
   assert.match(page, /this\.loadedEvent = eventId/);
+  assert.match(
+    page,
+    /if \(entryId !== this\.loadedEntryId\)[\s\S]*clearV2EntryScopedViewState\(true\)/,
+  );
+  assert.match(page, /clearV2EntryScopedViewState\(loading = false\)/);
   assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);
   assert.match(
     page,
     /catalog\.tournaments\.length === 0 && catalog\.state !== "READY"/,
   );
+  assert.match(page, /catalog\.state !== "DEGRADED"/);
   assert.match(
     page,
     /finally \{[\s\S]*this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;/,
@@ -146,11 +159,17 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
     template,
     /<data-status[^>]*wx:if="\{\{v2Error\}\}"[\s\S]*<app-loading wx:if="\{\{v2Loading\}\}"/,
   );
-  assert.match(template, /transferCost === null \|\| item\.transferCost === undefined \? '—'/);
+  assert.match(
+    template,
+    /transferCost === null \|\| item\.transferCost === undefined \? '—'/,
+  );
   assert.match(template, /winnerEntryId/);
   assert.match(template, /review-v2-match-winner/);
   assert.match(template, /perf-primary-content/);
   assert.match(template, /review-v2-h2h-row/);
+  assert.doesNotMatch(template, /freshness\.ageSeconds/);
+  assert.match(service, /mapStaleData: mapStaleTournamentReviewData/);
+  assert.match(service, /state: "DEGRADED"/);
   assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
 });
 

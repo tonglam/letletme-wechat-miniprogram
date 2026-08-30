@@ -69,8 +69,7 @@ type LeagueEmptyState = "" | "entry" | "tournaments" | "view";
 type BoardSortKey = "rank" | "c1" | "c2" | "c3";
 type V2RetryOperation = "catalog" | "review" | "loadMore";
 
-interface TournamentReviewPointsDisplayRow
-  extends MyTournamentReviewPointsRow {
+interface TournamentReviewPointsDisplayRow extends MyTournamentReviewPointsRow {
   headlineValue: number | null;
 }
 
@@ -822,6 +821,12 @@ PerformancePage({
     const requestId = ++this.requestId;
     let entryId = currentMyFplEntryId() || 0;
     const scope = scopeOverride ?? this.data.v2Scope;
+    if (entryId !== this.loadedEntryId) {
+      // Do not keep a prior viewer's catalog or review visible while the new
+      // catalog is in flight. This also covers an entry switch whose catalog
+      // request fails: no old authorized payload remains on screen.
+      this.clearV2EntryScopedViewState(true);
+    }
     const isActiveRequest = () =>
       this.pageVisible && requestId === this.requestId;
     this.loadPending = true;
@@ -875,19 +880,8 @@ PerformancePage({
           return;
         }
         entryId = refreshedEntryId;
-        this.viewRequestId += 1;
-        this.setData({
-          entryId,
-          v2Catalog: null,
-          v2TournamentNames: [],
-          v2SelectedTournament: null,
-          v2EventIds: [],
-          v2Event: 0,
-          v2Gameweek: null,
-          v2Season: null,
-          v2GameweekRows: [],
-          v2HasNextPage: false,
-        });
+        this.clearV2EntryScopedViewState(true);
+        this.setData({ entryId });
         catalog = await getMyTournamentReviewCatalog(
           scope,
           true,
@@ -935,7 +929,9 @@ PerformancePage({
       const eventId = retainedEventId || latestEventId;
       const eventIds = mergeTournamentReviewEventIds(
         retainedEventIds,
-        [latestEventId, eventId].filter((candidate): candidate is number => candidate > 0),
+        [latestEventId, eventId].filter(
+          (candidate): candidate is number => candidate > 0,
+        ),
       );
       this.setData({
         loading: false,
@@ -955,9 +951,7 @@ PerformancePage({
         v2StatusText: tournamentReviewStateText(
           selected?.state ?? "UNAVAILABLE",
         ),
-        v2TransferCostTotal: sameTournament
-          ? this.data.v2TransferCostTotal
-          : 0,
+        v2TransferCostTotal: sameTournament ? this.data.v2TransferCostTotal : 0,
         v2HeadlineLabel: sameTournament ? this.data.v2HeadlineLabel : "Gross",
         v2GameweekRows: sameTournament ? this.data.v2GameweekRows : [],
         v2Gameweek: sameTournament ? this.data.v2Gameweek : null,
@@ -971,7 +965,12 @@ PerformancePage({
         getApp<IAppOption>().globalData.season || this.loadedSeason;
       this.loadedContextRevision =
         getAppContextSnapshot()?.contextRevision ?? 0;
-      this.lastLoadAt = Date.now();
+      // A stale-while-revalidate catalog is useful as a degraded view but it
+      // must not reset the warm-refresh deadline. Keep retrying the failed
+      // refresh instead of treating the cache fallback as a fresh load.
+      if (catalog.state !== "DEGRADED") {
+        this.lastLoadAt = Date.now();
+      }
       if (selected && eventId) {
         await this.loadV2Review(
           selected.tournamentId,
@@ -1196,7 +1195,11 @@ PerformancePage({
         this.data.activeView !== requestView
       )
         return;
-      this.v2RetryOperation = "loadMore";
+      this.v2RetryOperation =
+        error instanceof Error &&
+        error.message === "赛事复盘快照已更新，请刷新后重试"
+          ? "review"
+          : "loadMore";
       this.setData({
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
@@ -1205,6 +1208,31 @@ PerformancePage({
         this.setData({ v2LoadingMore: false });
       }
     }
+  },
+
+  clearV2EntryScopedViewState(loading = false) {
+    this.viewRequestId += 1;
+    this.setData({
+      v2Catalog: null,
+      v2TournamentNames: [],
+      v2SelectedTournamentIndex: 0,
+      v2SelectedTournament: null,
+      v2EventIds: [],
+      v2SelectedEventIndex: 0,
+      v2Event: 0,
+      v2Format: null,
+      v2State: "UNAVAILABLE",
+      v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
+      v2TransferCostTotal: 0,
+      v2HeadlineLabel: "Gross",
+      v2GameweekRows: [],
+      v2Gameweek: null,
+      v2Season: null,
+      v2Loading: loading,
+      v2LoadingMore: false,
+      v2HasNextPage: false,
+      v2Error: "",
+    });
   },
 
   selectV2Tournament(index: number) {
@@ -2244,12 +2272,7 @@ PerformancePage({
       const tournamentId = this.data.v2SelectedTournament?.tournamentId;
       const eventId = this.data.v2Event;
       if (tournamentId && eventId > 0) {
-        await this.loadV2Review(
-          tournamentId,
-          eventId,
-          forceRefresh,
-          trace,
-        );
+        await this.loadV2Review(tournamentId, eventId, forceRefresh, trace);
         return;
       }
     }
