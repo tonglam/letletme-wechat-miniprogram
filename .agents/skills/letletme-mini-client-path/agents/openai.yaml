@@ -1,0 +1,4 @@
+interface:
+  display_name: LetLetMe Mini Client Path
+  short_description: Trace Mini routes, services, auth, cache, and lifecycle
+  default_prompt: Use $letletme-mini-client-path to trace this LetLetMe Mini Program change through the exact route, page lifecycle, service/auth/cache path, and narrow DevTools verification.
