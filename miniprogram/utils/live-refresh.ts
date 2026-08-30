@@ -7,6 +7,7 @@ const contentRevision = (snapshot: LiveSnapshotStatus): string =>
     snapshot.revisions?.scoreCore ?? snapshot.scoreCoreRevision ?? "",
     snapshot.revisions?.lifecycle ?? "",
     snapshot.revisions?.fixtureIdentity ?? "",
+    snapshot.revisions?.displayStats ?? "",
     snapshot.revisions?.picksBase ?? "",
     snapshot.revisions?.officialAdjustment ?? "",
     snapshot.revisions?.finalResult ?? "",
