@@ -442,6 +442,7 @@ Page({
           this.data.scoreNextRefreshAt,
           this.liveSnapshot?.nextRefreshAt,
         ) || null,
+      reloadOnDeadline: true,
       reload: async () => {
         await this.revalidateEntryPersistence();
         return this.loadData({ background: true, forceRefresh: true });
@@ -1350,7 +1351,8 @@ Page({
         );
         const { starters, bench } = splitLiveSquadPlayers(fieldPlayers);
         const livePoints = numberValue(renderableScore?.eventPoints);
-        const livePointsKnown = typeof renderableScore?.eventPoints === "number";
+        const livePointsKnown =
+          typeof renderableScore?.eventPoints === "number";
         const total = numberValue(
           renderableScore?.totalScope === "OVERALL"
             ? renderableScore.totalPoints

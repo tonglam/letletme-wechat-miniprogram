@@ -111,7 +111,6 @@ export function createLiveRefreshController(
     const deadline = nextRefreshAt ? Date.parse(nextRefreshAt) : Number.NaN;
     const deadlineExpired =
       Boolean(nextRefreshAt) &&
-      nextRefreshAt !== consumedDeadline &&
       Number.isFinite(deadline) &&
       deadline <= Date.now();
     if (deadlineExpired && nextRefreshAt) {
