@@ -9,6 +9,7 @@ import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
 import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
 import { isOfficialH2HTournamentRow } from "../utils/official-h2h";
+import { currentMyFplEntryId } from "../utils/follow";
 
 export const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -281,6 +282,394 @@ export const GET_MY_FPL_COMPETITION_SEASON_PATH = `
     }
   }
 `;
+
+/** V2 finalized-snapshot contract. Live and legacy reporting roots are not
+ * used by the My FPL tournament review page. */
+export type MyTournamentReviewScope = "ACCESSIBLE" | "MANAGED" | "ALL";
+export type MyTournamentReviewFormat = "POINTS" | "H2H" | "KNOCKOUT";
+export type MyTournamentReviewState =
+  "PENDING" | "WAITING_SOURCE" | "READY" | "DEGRADED" | "UNAVAILABLE";
+
+export interface MyTournamentReviewCatalogItem {
+  tournamentId: number;
+  name: string;
+  creator: string;
+  leagueId: number;
+  leagueType: string;
+  totalTeamNum: number;
+  latestFinalizedEventId: number | null;
+  latestAvailableEventId: number | null;
+  latestRevision: string | null;
+  latestFormat: MyTournamentReviewFormat | null;
+  state: MyTournamentReviewState;
+  publishedAt: string | null;
+}
+
+export interface MyTournamentReviewCatalog {
+  state: MyTournamentReviewState;
+  asOf: string;
+  viewerEntryId: number | null;
+  adminReadAll: boolean;
+  tournaments: MyTournamentReviewCatalogItem[];
+}
+
+export interface MyTournamentReviewScopeMeta {
+  tournamentId: number;
+  eventId: number;
+  revision: string;
+  format: MyTournamentReviewFormat;
+  state: MyTournamentReviewState;
+  freshness: {
+    eventDataCheckedAt: string;
+    sourceMinCheckedAt: string;
+    sourceMaxCheckedAt: string;
+    publishedAt: string;
+    ageSeconds: number;
+  } | null;
+  rowCount: number;
+  expectedSubjectCount: number;
+  readySubjectCount: number;
+  notApplicableSubjectCount: number;
+  contentSha256: string | null;
+}
+
+export interface MyTournamentReviewPointsRow {
+  entryId: number;
+  entryName: string;
+  playerName: string;
+  applicable: boolean;
+  rank: number | null;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  tournamentScore: number | null;
+  seasonGrossPoints: number | null;
+  seasonNetPoints: number | null;
+}
+
+export interface MyTournamentReviewPoints {
+  headlineMetric: string;
+  grossPointsTotal: number;
+  grossPointsAverage: number;
+  netPointsTotal: number;
+  seasonGrossPointsTotal: number;
+  seasonGrossPointsAverage: number;
+  seasonNetPointsTotal: number;
+  rows: MyTournamentReviewPointsRow[];
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewH2H {
+  matches: Array<{
+    matchId: string;
+    groupId: number;
+    isBye: boolean;
+    home: MyTournamentReviewH2HSide | null;
+    away: MyTournamentReviewH2HSide | null;
+  }>;
+  standings: Array<{
+    groupId: number;
+    entryId: number;
+    entryName: string;
+    rank: number;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    matchPoints: number;
+    pointsFor: number;
+    pointsAgainst: number;
+  }>;
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewH2HSide {
+  entryId: number | null;
+  entryName: string;
+  isAverage: boolean;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  matchPoints: number | null;
+}
+
+export interface MyTournamentReviewKnockout {
+  matches: Array<{
+    round: number | null;
+    name: string | null;
+    matchId: number;
+    playAgainstId: number;
+    winnerEntryId: number | null;
+    home: MyTournamentReviewKnockoutSide | null;
+    away: MyTournamentReviewKnockoutSide | null;
+  }>;
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface MyTournamentReviewKnockoutSide {
+  entryId: number;
+  entryName: string;
+  grossPoints: number | null;
+  transferCost: number | null;
+  netPoints: number | null;
+  goalsScored: number | null;
+  goalsConceded: number | null;
+}
+
+export interface MyTournamentGameweekReview {
+  state: MyTournamentReviewState;
+  scope: MyTournamentReviewScopeMeta | null;
+  points: MyTournamentReviewPoints | null;
+  h2h: MyTournamentReviewH2H | null;
+  knockout: MyTournamentReviewKnockout | null;
+}
+
+export interface MyTournamentSeasonReview {
+  state: MyTournamentReviewState;
+  tournamentId: number;
+  throughEventId: number;
+  latestEventId: number | null;
+  latestRevision: string | null;
+  format: MyTournamentReviewFormat | null;
+  freshness: {
+    eventDataCheckedAt: string;
+    sourceMinCheckedAt: string;
+    sourceMaxCheckedAt: string;
+    publishedAt: string;
+    ageSeconds: number;
+  } | null;
+  finalizedEventIds: number[];
+  points: MyTournamentReviewPoints | null;
+  h2h: MyTournamentReviewH2H | null;
+  knockout: MyTournamentReviewKnockout | null;
+}
+
+const MY_TOURNAMENT_REVIEW_CONTRACT = "my-tournament-review-v2" as const;
+const MY_TOURNAMENT_REVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+const MY_TOURNAMENT_REVIEW_STALE_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Keep stale-while-revalidate useful for an offline/read-heavy page without
+ * presenting the old snapshot as current. graphqlRequest intentionally keeps
+ * the normal service return shape, so mark the published review state as
+ * degraded when it serves a stale candidate. The page already renders this
+ * state as "快照延迟，已安排补偿" and therefore surfaces the fallback without
+ * leaking transport/cache implementation details into the UI contract.
+ */
+function mapStaleTournamentReviewData(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const response = { ...(data as Record<string, unknown>) };
+  for (const field of [
+    "myTournamentReviewCatalog",
+    "myTournamentGameweekReview",
+    "myTournamentSeasonReview",
+  ]) {
+    const payload = response[field];
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      continue;
+    }
+    const marked: Record<string, unknown> = {
+      ...(payload as Record<string, unknown>),
+      state: "DEGRADED",
+    };
+    if (
+      field === "myTournamentReviewCatalog" &&
+      Array.isArray(marked.tournaments)
+    ) {
+      marked.tournaments = marked.tournaments.map((tournament: unknown) =>
+        tournament && typeof tournament === "object"
+          ? { ...(tournament as Record<string, unknown>), state: "DEGRADED" }
+          : tournament,
+      );
+    }
+    if (
+      field === "myTournamentGameweekReview" &&
+      marked.scope &&
+      typeof marked.scope === "object" &&
+      !Array.isArray(marked.scope)
+    ) {
+      marked.scope = {
+        ...(marked.scope as Record<string, unknown>),
+        state: "DEGRADED",
+      };
+    }
+    response[field] = marked;
+  }
+  return response;
+}
+
+const REVIEW_SCOPE_META_FIELDS = `
+  tournamentId eventId revision format state
+  freshness { eventDataCheckedAt sourceMinCheckedAt sourceMaxCheckedAt publishedAt ageSeconds }
+  rowCount expectedSubjectCount readySubjectCount notApplicableSubjectCount contentSha256
+`;
+const REVIEW_POINTS_FIELDS = `
+  headlineMetric grossPointsTotal grossPointsAverage netPointsTotal
+  seasonGrossPointsTotal seasonGrossPointsAverage seasonNetPointsTotal nextCursor hasNextPage
+  rows { entryId entryName playerName applicable rank grossPoints transferCost netPoints tournamentScore seasonGrossPoints seasonNetPoints }
+`;
+const REVIEW_H2H_FIELDS = `
+  nextCursor hasNextPage
+  matches {
+    matchId groupId isBye
+    home { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
+    away { entryId entryName isAverage grossPoints transferCost netPoints matchPoints }
+  }
+  standings { groupId entryId entryName rank played won drawn lost matchPoints pointsFor pointsAgainst }
+`;
+const REVIEW_KNOCKOUT_FIELDS = `
+  nextCursor hasNextPage
+  matches {
+    round name matchId playAgainstId winnerEntryId
+    home { entryId entryName grossPoints transferCost netPoints goalsScored goalsConceded }
+    away { entryId entryName grossPoints transferCost netPoints goalsScored goalsConceded }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_REVIEW_CATALOG = `
+  query MyTournamentReviewCatalog($scope: MyTournamentReviewScope = ACCESSIBLE) {
+    myTournamentReviewCatalog(scope: $scope) {
+      state asOf viewerEntryId adminReadAll
+      tournaments {
+        tournamentId name creator leagueId leagueType totalTeamNum
+        latestFinalizedEventId latestAvailableEventId latestRevision latestFormat state publishedAt
+      }
+    }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_GAMEWEEK_REVIEW = `
+  query MyTournamentGameweekReview($tournamentId: Int!, $eventId: Int!, $first: Int = 100, $after: String, $revision: String) {
+    myTournamentGameweekReview(tournamentId: $tournamentId, eventId: $eventId, first: $first, after: $after, revision: $revision) {
+      state
+      scope {${REVIEW_SCOPE_META_FIELDS}}
+      points {${REVIEW_POINTS_FIELDS}}
+      h2h {${REVIEW_H2H_FIELDS}}
+      knockout {${REVIEW_KNOCKOUT_FIELDS}}
+    }
+  }
+`;
+
+export const GET_MY_TOURNAMENT_SEASON_REVIEW = `
+  query MyTournamentSeasonReview($tournamentId: Int!, $throughEventId: Int!, $first: Int = 100, $after: String) {
+    myTournamentSeasonReview(tournamentId: $tournamentId, throughEventId: $throughEventId, first: $first, after: $after) {
+      state tournamentId throughEventId latestEventId latestRevision format
+      freshness { eventDataCheckedAt sourceMinCheckedAt sourceMaxCheckedAt publishedAt ageSeconds }
+      finalizedEventIds
+      points {${REVIEW_POINTS_FIELDS}}
+      h2h {${REVIEW_H2H_FIELDS}}
+      knockout {${REVIEW_KNOCKOUT_FIELDS}}
+    }
+  }
+`;
+
+const myTournamentReviewOptions = (
+  forceRefresh: boolean,
+  trace?: PageRequestTrace,
+  viewerEntryId?: number | null,
+  validateCatalogViewer = false,
+) => ({
+  cachePolicy: "reporting" as const,
+  // An unverified viewer must not use a persisted personal cache. The page
+  // refreshes the authoritative follow before supplying this variant.
+  cacheTtl:
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? MY_TOURNAMENT_REVIEW_CACHE_TTL_MS
+      : 0,
+  staleTtl:
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? MY_TOURNAMENT_REVIEW_STALE_TTL_MS
+      : 0,
+  forceRefresh,
+  trace,
+  cacheVariant: `viewer-entry:${
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? Number(viewerEntryId)
+      : "none"
+  }`,
+  contract: MY_TOURNAMENT_REVIEW_CONTRACT,
+  mapStaleData: mapStaleTournamentReviewData,
+  ...(Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+    ? {
+        // Validate every cache read against the current local authority. The
+        // page refreshes that authority before a personal review request;
+        // this second guard also prevents an old entry variant from being
+        // returned after an external rebind while the page remains resident.
+        validateCacheData: (data: unknown) => {
+          if (currentMyFplEntryId() !== Number(viewerEntryId)) return false;
+          if (!validateCatalogViewer) return true;
+          const catalog =
+            data && typeof data === "object" && !Array.isArray(data)
+              ? (data as { myTournamentReviewCatalog?: unknown })
+                  .myTournamentReviewCatalog
+              : null;
+          const responseViewerEntryId =
+            catalog &&
+            typeof catalog === "object" &&
+            !Array.isArray(catalog)
+              ? Number((catalog as { viewerEntryId?: unknown }).viewerEntryId)
+              : 0;
+          return responseViewerEntryId === Number(viewerEntryId);
+        },
+      }
+    : {}),
+});
+
+export async function getMyTournamentReviewCatalog(
+  scope: MyTournamentReviewScope = "ACCESSIBLE",
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  viewerEntryId?: number | null,
+): Promise<MyTournamentReviewCatalog> {
+  const data = await graphqlRequest<{
+    myTournamentReviewCatalog: MyTournamentReviewCatalog;
+  }>(
+    GET_MY_TOURNAMENT_REVIEW_CATALOG,
+    { scope },
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId, true),
+  );
+  return data.myTournamentReviewCatalog;
+}
+
+export async function getMyTournamentGameweekReview(
+  tournamentId: number,
+  eventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  after: string | null = null,
+  revision: string | null = null,
+  viewerEntryId?: number | null,
+): Promise<MyTournamentGameweekReview> {
+  const data = await graphqlRequest<{
+    myTournamentGameweekReview: MyTournamentGameweekReview;
+  }>(
+    GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
+    { tournamentId, eventId, first: 100, after, revision },
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
+  );
+  return data.myTournamentGameweekReview;
+}
+
+export async function getMyTournamentSeasonReview(
+  tournamentId: number,
+  throughEventId: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace,
+  after: string | null = null,
+  viewerEntryId?: number | null,
+): Promise<MyTournamentSeasonReview> {
+  const data = await graphqlRequest<{
+    myTournamentSeasonReview: MyTournamentSeasonReview;
+  }>(
+    GET_MY_TOURNAMENT_SEASON_REVIEW,
+    { tournamentId, throughEventId, first: 100, after },
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
+  );
+  return data.myTournamentSeasonReview;
+}
 
 const GET_TOURNAMENT_SELECTION_STATS = `
   query TournamentSelectionStats($tournamentId: Int!, $eventId: Int!, $limit: Int) {
@@ -753,7 +1142,7 @@ export async function getEntryPointsRaceTournament(
       (t) =>
         !t.groupMode ||
         t.groupMode === "POINTS_RACES" ||
-        isOfficialH2HTournamentRow(t)
+        isOfficialH2HTournamentRow(t),
     )
     .map((t) => ({
       id: Number(t.id),
@@ -761,7 +1150,7 @@ export async function getEntryPointsRaceTournament(
       participantCount: t.totalTeamNum ?? undefined,
       groupMode: t.groupMode,
       leagueType: t.leagueType,
-      rosterMode: t.rosterMode
+      rosterMode: t.rosterMode,
     }));
 }
 

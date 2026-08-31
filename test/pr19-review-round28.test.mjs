@@ -7,16 +7,23 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path) => readFileSync(resolve(root, path), "utf8");
 
-for (const [label, path, loadMethod] of [
-  ["Leagues", "miniprogram/pages/my-fpl/leagues/leagues.ts", "loadLeagues"]
-]) {
-  test(`${label} cancels cold startup and resumes with a visible lifecycle`, () => {
-    const page = source(path);
-    assert.match(page, /await waitForAuthoritativeFollow\(\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision[\s\S]*initAppData\(false\)[\s\S]*lifecycleRevision !== this\.lifecycleRevision/);
-    assert.match(page, new RegExp(`${loadMethod}\\((?:false|forceRefresh), trace, lifecycleRevision\\)`));
-    assert.match(page, /onHide\(\)[\s\S]*resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending[\s\S]*lifecycleRevision \+= 1[\s\S]*requestId \+= 1/);
-  });
-}
+test("Leagues cancels cold startup and resumes the V2 lifecycle", () => {
+  const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const compact = page.replace(/\s+/g, " ");
+  assert.match(
+    compact,
+    /await waitForAuthoritativeFollow\(\).*?lifecycleRevision !== this\.lifecycleRevision.*?initAppData\(false\).*?lifecycleRevision !== this\.lifecycleRevision/,
+  );
+  assert.match(compact, /loadLeagues\(false, trace, lifecycleRevision\)/);
+  assert.match(
+    compact,
+    /async loadLeagues\(.*?this\.data\.v2Enabled.*?loadV2Leagues\(forceRefresh, trace\)/,
+  );
+  assert.match(
+    compact,
+    /onHide\(\).*?resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending.*?lifecycleRevision \+= 1.*?requestId \+= 1/,
+  );
+});
 
 test("Entry Profile owns auth and entry reads for its visible lifecycle", () => {
   const page = source("miniprogram/pages/entry/profile/profile.ts");

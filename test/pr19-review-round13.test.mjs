@@ -4,21 +4,33 @@ import test from "node:test";
 
 const source = (path) => readFileSync(path, "utf8");
 
-for (const [name, path, loadMethod, surface] of [
-  ["My FPL Leagues", "miniprogram/pages/my-fpl/leagues/leagues.ts", "loadLeagues", "my-fpl-leagues"]
-]) {
-  test(`${name} captures traces before authoritative context waits`, () => {
-    const page = source(path);
-    assert.match(
-      page,
-      new RegExp(`async onLoad\\(\\)[\\s\\S]*?const trace = capturePageRequestTrace\\(\\{ callerSurface: "${surface}", trigger: "load" \\}\\);[\\s\\S]*?await waitForAuthoritativeFollow\\(\\);[\\s\\S]*?${loadMethod}\\(false, trace, lifecycleRevision\\)`)
-    );
-    assert.match(
-      page,
-      new RegExp(`async onPullDownRefresh\\(\\)[\\s\\S]*?const trace = capturePageRequestTrace[\\s\\S]*?initAppData\\(true\\)[\\s\\S]*?${loadMethod}\\(true, trace\\)`)
-    );
-  });
-}
+test("My FPL Leagues captures V2 traces before authoritative context waits", () => {
+  const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const compact = page.replace(/\s+/g, " ");
+  assert.match(compact, /v2Enabled: true/);
+  const startup = compact.slice(
+    compact.indexOf("async onLoad()"),
+    compact.indexOf("async onShow()"),
+  );
+  assert.match(
+    startup,
+    /capturePageRequestTrace\(\{ callerSurface: "my-fpl-leagues", trigger: "load"/,
+  );
+  assert.match(startup, /await waitForAuthoritativeFollow\(\)/);
+  assert.match(startup, /loadLeagues\(false, trace, lifecycleRevision\)/);
+  const refresh = compact.slice(compact.indexOf("async onPullDownRefresh()"));
+  assert.match(
+    refresh,
+    /capturePageRequestTrace/,
+  );
+  assert.match(refresh, /initAppData\(true\)/);
+  assert.match(refresh, /loadLeagues\(true, trace\)/);
+  assert.match(
+    compact,
+    /async loadLeagues\(.*?if \(this\.data\.v2Enabled\) \{ await this\.loadV2Leagues\(forceRefresh, trace\); return; \}/,
+  );
+  assert.match(compact, /callerSurface: "my-fpl-leagues-v2"/);
+});
 
 test("League service wrappers pass explicit traces to GraphQL", () => {
   const tournament = source("miniprogram/services/tournament.service.ts");

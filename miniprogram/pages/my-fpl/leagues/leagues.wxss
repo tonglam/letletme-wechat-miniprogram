@@ -65,7 +65,7 @@
 }
 
 .league-switch::after {
-  content: '';
+  content: "";
   flex-shrink: 0;
   width: 0;
   height: 0;
@@ -133,7 +133,11 @@
   border: 1rpx solid var(--electric-a28);
   border-radius: 14rpx;
   background:
-    radial-gradient(ellipse 120% 90% at 50% -30%, var(--plum-a70), rgba(56, 0, 60, 0) 60%),
+    radial-gradient(
+      ellipse 120% 90% at 50% -30%,
+      var(--plum-a70),
+      rgba(56, 0, 60, 0) 60%
+    ),
     linear-gradient(180deg, var(--fascia-hi), var(--fascia));
   box-shadow: inset 0 1rpx 0 var(--electric-a28);
 }
@@ -590,4 +594,203 @@
   color: var(--muted-ink);
   font-size: 22rpx;
   text-align: center;
+}
+
+/* V2 settled tournament review */
+.review-v2-page {
+  padding-bottom: 16rpx;
+}
+
+.review-v2-toolbar {
+  position: relative;
+}
+
+.review-event-picker {
+  flex-shrink: 0;
+}
+
+.review-event-pill {
+  min-width: 88rpx;
+  padding: 18rpx 14rpx;
+  border-radius: 14rpx;
+  background: var(--ink);
+  color: var(--card);
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.review-admin-scope {
+  margin-top: 10rpx;
+  color: var(--green-ink);
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: right;
+}
+
+.review-v2-header {
+  padding: 24rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 16rpx;
+  background: var(--card);
+}
+
+.review-v2-eyebrow {
+  color: var(--green-ink);
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.review-v2-title {
+  margin-top: 8rpx;
+  color: var(--ink);
+  font-size: 38rpx;
+  font-weight: 900;
+  line-height: 1.18;
+}
+
+.review-v2-meta,
+.review-v2-hint,
+.review-v2-freshness {
+  margin-top: 10rpx;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+  line-height: 1.45;
+}
+
+.review-v2-hint {
+  padding-top: 12rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.review-v2-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+  margin-bottom: 14rpx;
+}
+
+.review-v2-stat {
+  min-width: 0;
+  padding: 16rpx 10rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+  text-align: center;
+}
+
+.review-v2-stat-value {
+  display: block;
+  margin-top: 6rpx;
+  color: var(--ink);
+  font-size: 30rpx;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-v2-table {
+  overflow: hidden;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--card);
+}
+
+.review-v2-table-head,
+.review-v2-table-row {
+  display: grid;
+  grid-template-columns: 56rpx minmax(0, 1fr) 100rpx 132rpx;
+  align-items: center;
+  gap: 8rpx;
+  min-height: 68rpx;
+  padding: 0 14rpx;
+  box-sizing: border-box;
+  font-size: 20rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-v2-table-head {
+  background: var(--track);
+  color: var(--muted-ink);
+  font-weight: 800;
+}
+
+.review-v2-table-row {
+  border-top: 1rpx solid var(--line);
+  color: var(--ink);
+}
+
+.review-v2-h2h-row {
+  grid-template-columns: 48rpx 52rpx minmax(0, 1fr) 90rpx 116rpx;
+}
+
+.review-v2-team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.review-v2-match-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-top: 10rpx;
+  padding: 16rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.review-v2-match-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4rpx;
+  align-items: baseline;
+}
+
+.review-v2-match-winner {
+  color: var(--green-ink);
+  font-weight: 800;
+}
+
+.review-v2-freshness {
+  padding: 12rpx 14rpx;
+  border-radius: 10rpx;
+  background: var(--track);
+}
+
+.review-v2-load-more {
+  display: flex;
+  justify-content: center;
+}
+
+.review-v2-load-more button {
+  min-width: 220rpx;
+}
+
+@media (max-width: 680rpx) {
+  .review-v2-table-head,
+  .review-v2-table-row {
+    grid-template-columns: 44rpx minmax(0, 1fr) 86rpx 112rpx;
+    padding: 0 10rpx;
+    font-size: 18rpx;
+  }
+
+  .review-v2-h2h-row {
+    grid-template-columns: 36rpx 42rpx minmax(0, 1fr) 72rpx 96rpx;
+  }
+
+  .review-v2-stat-grid {
+    gap: 8rpx;
+  }
+
+  .review-v2-stat {
+    padding: 14rpx 6rpx;
+    font-size: 18rpx;
+  }
 }

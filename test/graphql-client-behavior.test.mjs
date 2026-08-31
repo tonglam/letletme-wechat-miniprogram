@@ -7,7 +7,8 @@ import {
   graphqlRead,
   graphqlRequest,
   liveContractVersionForQuery,
-  purgeGraphQLStorageCache
+  purgeGraphQLStorageCache,
+  shouldCacheGraphQLData,
 } from "../miniprogram/services/graphql.service.ts";
 import {
   clearSessionCredentials,
@@ -109,6 +110,163 @@ test("Live Points and Live Matches use distinct hard-cut contracts", () => {
       ),
     /LIVE_CONTRACT_MIXED_OPERATION/,
   );
+});
+
+test("V2 review requests carry an explicit contract header", () => {
+  assert.equal(
+    buildGraphQLRequestHeaders(
+      "session",
+      "secret-token",
+      "wx-device-123",
+      "my-tournament-review-v2",
+    )["X-LetLetMe-Contract"],
+    "my-tournament-review-v2",
+  );
+});
+
+test("V2 review cache accepts only fully READY snapshots", () => {
+  const transientStates = [
+    "PENDING",
+    "WAITING_SOURCE",
+    "DEGRADED",
+    "UNAVAILABLE",
+  ];
+  for (const state of transientStates) {
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentGameweekReview", {
+        myTournamentGameweekReview: { state },
+      }),
+      false,
+    );
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentSeasonReview", {
+        myTournamentSeasonReview: { state },
+      }),
+      false,
+    );
+    assert.equal(
+      shouldCacheGraphQLData("MyTournamentReviewCatalog", {
+        myTournamentReviewCatalog: {
+          state: "READY",
+          tournaments: [{ state: "READY" }, { state }],
+        },
+      }),
+      false,
+    );
+  }
+
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentGameweekReview", {
+      myTournamentGameweekReview: { state: "READY" },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentSeasonReview", {
+      myTournamentSeasonReview: { state: "READY" },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentReviewCatalog", {
+      myTournamentReviewCatalog: {
+        state: "READY",
+        tournaments: [{ state: "READY" }],
+      },
+    }),
+    true,
+  );
+});
+
+test("cache identity validation evicts a mismatched V2 catalog", async () => {
+  let responseViewerEntryId = 222;
+  const runtime = installRuntime((options) =>
+    options.success({
+      statusCode: 200,
+      data: {
+        data: {
+          myTournamentReviewCatalog: {
+            state: "READY",
+            viewerEntryId: responseViewerEntryId,
+            adminReadAll: false,
+            tournaments: [{ state: "READY", tournamentId: 6953 }],
+          },
+        },
+      },
+    }),
+  );
+  const query =
+    "query MyTournamentReviewCatalog { myTournamentReviewCatalog { state viewerEntryId } }";
+  const options = {
+    ...publicReporting,
+    cacheVariant: "viewer-entry:111",
+    validateCacheData: (data) =>
+      data?.myTournamentReviewCatalog?.viewerEntryId === 111,
+  };
+
+  const mismatched = await graphqlRead(query, {}, options);
+  assert.equal(mismatched.meta.source, "network");
+  assert.equal(runtime.requests.length, 1);
+
+  responseViewerEntryId = 111;
+  const matching = await graphqlRead(query, {}, options);
+  assert.equal(matching.meta.source, "network");
+  assert.equal(runtime.requests.length, 2);
+
+  const cached = await graphqlRead(query, {}, options);
+  assert.equal(cached.meta.source, "memory");
+  assert.equal(runtime.requests.length, 2);
+});
+
+test("cache identity validation rejects fresh and stale viewer candidates", async () => {
+  let expectedViewer = 111;
+  let responseViewer = 111;
+  let failRequests = false;
+  const runtime = installRuntime((request) => {
+    if (failRequests) {
+      request.fail({ errMsg: "request:fail timeout" });
+      return;
+    }
+    request.success({
+      statusCode: 200,
+      data: { data: { value: { viewer: responseViewer } } },
+    });
+  });
+  const validateViewer = (data) => data?.value?.viewer === expectedViewer;
+  const query = "query ViewerCacheFreshValidation { value { viewer } }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 60_000,
+    staleTtl: 60_000,
+    cacheVariant: "viewer-entry:111",
+    validateCacheData: validateViewer,
+  };
+
+  await graphqlRead(query, {}, options);
+  expectedViewer = 222;
+  responseViewer = 222;
+  const refreshed = await graphqlRead(query, {}, options);
+  assert.equal(refreshed.meta.source, "network");
+  assert.equal(runtime.requests.length, 2);
+
+  const staleQuery = "query ViewerCacheStaleValidation { value { viewer } }";
+  expectedViewer = 111;
+  responseViewer = 111;
+  const staleOptions = {
+    ...options,
+    cacheTtl: 1,
+    cacheVariant: "viewer-entry:111-stale",
+  };
+  await graphqlRead(staleQuery, {}, staleOptions);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expectedViewer = 222;
+  failRequests = true;
+  // The invalid validator evicts the expired entry before stale fallback is
+  // selected, so a transient failure cannot return the wrong viewer payload.
+  await assert.rejects(
+    graphqlRead(staleQuery, {}, { ...staleOptions, forceRefresh: true }),
+  );
+  assert.equal(runtime.requests.length, 4);
 });
 
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {

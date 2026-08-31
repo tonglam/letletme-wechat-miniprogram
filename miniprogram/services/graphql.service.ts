@@ -87,6 +87,10 @@ export interface GraphQLOptions {
   trace?: PageRequestTrace | null;
   /** Explicitly map cached data when a stale result is served. */
   mapStaleData?: (data: unknown) => unknown;
+  /** Reject a successful response before it is admitted to the cache. */
+  validateCacheData?: (data: unknown) => boolean;
+  /** Explicit consumer contract required by version-gated GraphQL roots. */
+  contract?: "my-tournament-review-v2";
 }
 
 export interface PageRequestTrace {
@@ -176,6 +180,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
+  contract?: "my-tournament-review-v2";
 }
 
 export class GraphQLTransportError extends Error {
@@ -324,7 +329,15 @@ function resolvePolicy(
     throw new Error("赛季信息暂时不可用，请稍后重试");
   }
   const seasonVariant = season ? `season:${season}` : "";
-  const cacheVariant = [cachePolicy, seasonVariant, options?.cacheVariant || ""]
+  const contractVariant = options?.contract
+    ? `contract:${options.contract}`
+    : "";
+  const cacheVariant = [
+    cachePolicy,
+    seasonVariant,
+    contractVariant,
+    options?.cacheVariant || "",
+  ]
     .filter(Boolean)
     .join("|");
   const freshTtl = mutation
@@ -345,6 +358,7 @@ function resolvePolicy(
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
     workload: getGraphQLWorkload(operationName, cachePolicy),
+    contract: options?.contract,
   };
 }
 
@@ -523,6 +537,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
+  contract?: "my-tournament-review-v2",
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -532,6 +547,7 @@ export function buildGraphQLRequestHeaders(
   if (authMode === "session" && token) {
     header.Authorization = `Bearer ${token}`;
   }
+  if (contract) header["X-LetLetMe-Contract"] = contract;
   return header;
 }
 
@@ -565,6 +581,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
+  contract: "my-tournament-review-v2" | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
@@ -599,6 +616,7 @@ function makeRequest<T>(
       authMode,
       token,
       getMiniProgramDeviceId(),
+      contract,
     );
     const liveContractVersion = liveContractVersionForQuery(query);
     if (liveContractVersion) {
@@ -637,6 +655,7 @@ function makeRequest<T>(
               operationName,
               authMode,
               workload,
+              contract,
               false,
               currentToken,
               onNetworkAttempt,
@@ -662,6 +681,7 @@ function makeRequest<T>(
               operationName,
               authMode,
               workload,
+              contract,
               false,
               freshToken,
               onNetworkAttempt,
@@ -806,6 +826,39 @@ export function shouldCacheGraphQLData(
       detail == null || detail.dataAvailability?.isFullyAuthoritative === true
     );
   }
+  if (operationName === "MyTournamentReviewCatalog") {
+    const catalog = (
+      data as {
+        myTournamentReviewCatalog?: {
+          state?: unknown;
+          tournaments?: Array<{ state?: unknown }>;
+        } | null;
+      }
+    ).myTournamentReviewCatalog;
+    return Boolean(
+      catalog?.state === "READY" &&
+        Array.isArray(catalog.tournaments) &&
+        catalog.tournaments.every((tournament) => tournament.state === "READY"),
+    );
+  }
+  if (operationName === "MyTournamentGameweekReview") {
+    return (
+      (
+        data as {
+          myTournamentGameweekReview?: { state?: unknown } | null;
+        }
+      ).myTournamentGameweekReview?.state === "READY"
+    );
+  }
+  if (operationName === "MyTournamentSeasonReview") {
+    return (
+      (
+        data as {
+          myTournamentSeasonReview?: { state?: unknown } | null;
+        }
+      ).myTournamentSeasonReview?.state === "READY"
+    );
+  }
   return true;
 }
 
@@ -830,10 +883,29 @@ export async function graphqlRead<T>(
   }
 
   const identity = requestIdentity(query, variables, policy, token);
-  const cached = policy.cacheable
+  let cached = policy.cacheable
     ? readCacheEntry(identity.cacheKey, identity.requestKey)
     : undefined;
   const now = Date.now();
+
+  // Cache identity/integrity validators apply to reads as well as network
+  // responses.  A viewer-scoped response can outlive the local follow
+  // binding, so never return a fresh or stale candidate until the caller has
+  // confirmed that it still belongs to the current authority.  Evict the
+  // complete entry before continuing so a rate-limit/offline fallback cannot
+  // re-use the rejected payload.
+  if (cached && options?.validateCacheData) {
+    let cacheValid = false;
+    try {
+      cacheValid = options.validateCacheData(cached.entry.data);
+    } catch {
+      cacheValid = false;
+    }
+    if (!cacheValid) {
+      removeCacheEntry(identity.cacheKey, identity.requestKey);
+      cached = undefined;
+    }
+  }
 
   if (cached && !options?.forceRefresh && now < cached.entry.freshUntil) {
     recordServedFromCache(identity.requestKey, cached.entry.storedAt);
@@ -1085,6 +1157,7 @@ export async function graphqlRead<T>(
         policy.operationName,
         policy.authMode,
         policy.workload,
+        policy.contract,
         true,
         token,
         () => {
@@ -1113,10 +1186,18 @@ export async function graphqlRead<T>(
         const producingSessionStillActive =
           policy.authMode === "public" ||
           response.token === getApiSessionToken();
-        const cacheableData = shouldCacheGraphQLData(
+        let cacheableData = shouldCacheGraphQLData(
           policy.operationName,
           response.body.data,
         );
+        if (cacheableData && options?.validateCacheData) {
+          try {
+            cacheableData = options.validateCacheData(response.body.data);
+          } catch {
+            // A failed identity/integrity check must never admit the response.
+            cacheableData = false;
+          }
+        }
 
         if (producingSessionStillActive && cacheableData) {
           const freshUntil = resolveFreshUntil(

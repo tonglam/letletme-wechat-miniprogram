@@ -24,6 +24,9 @@ const {
   GET_MY_FPL_COMPETITION_BOARD,
   GET_MY_FPL_COMPETITION_SEASON_PATH,
   GET_ENTRY_TOURNAMENTS,
+  GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
+  GET_MY_TOURNAMENT_REVIEW_CATALOG,
+  GET_MY_TOURNAMENT_SEASON_REVIEW,
 } = await import("../miniprogram/services/tournament.service.ts");
 const {
   GET_TOURNAMENT_DETAIL_DESK,
@@ -66,6 +69,9 @@ const operations = [
   ["GET_TOURNAMENT_OFFICIAL_H2H", GET_TOURNAMENT_OFFICIAL_H2H],
   ["GET_ENTRY_OFFICIAL_H2H_MATCHUPS", GET_ENTRY_OFFICIAL_H2H_MATCHUPS],
   ["GET_ENTRY_TOURNAMENTS", GET_ENTRY_TOURNAMENTS],
+  ["GET_MY_TOURNAMENT_REVIEW_CATALOG", GET_MY_TOURNAMENT_REVIEW_CATALOG],
+  ["GET_MY_TOURNAMENT_GAMEWEEK_REVIEW", GET_MY_TOURNAMENT_GAMEWEEK_REVIEW],
+  ["GET_MY_TOURNAMENT_SEASON_REVIEW", GET_MY_TOURNAMENT_SEASON_REVIEW],
   ["ENTRY_LIVE_COMPETITION_BOARD_QUERY", ENTRY_LIVE_COMPETITION_BOARD_QUERY],
   ["TOURNAMENT_SELECTION_INDEX_QUERY", TOURNAMENT_SELECTION_INDEX_QUERY],
   ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY],
@@ -96,6 +102,19 @@ const astNodeLimit = (document) => {
   );
   if (operations.length !== 1) return 200;
   const roots = operations[0].selectionSet.selections;
+  const rootName =
+    roots.length === 1 &&
+    roots[0].kind === Kind.FIELD &&
+    !roots[0].alias
+      ? roots[0].name.value
+      : null;
+  // Tournament review is a bounded, server-paginated read model. Its
+  // nested shape is intentionally larger than the generic 200-node client
+  // budget, but remains below the same production ceiling used by the live
+  // points operations.
+  if (["myTournamentGameweekReview", "myTournamentSeasonReview"].includes(rootName)) {
+    return 320;
+  }
   return roots.length === 1 &&
     roots[0].kind === Kind.FIELD &&
     !roots[0].alias &&
