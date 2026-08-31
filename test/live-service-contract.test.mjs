@@ -128,6 +128,16 @@ test("live matchday uses native Match metadata without fabricated Live Points fi
   assert.equal("nextEventId" in snapshot, false);
 });
 
+test("live matchday accepts nullable team abbreviations and maps full names", () => {
+  const result = matchdayResult();
+  result.snapshot.matches[0].homeTeamShortName = null;
+  result.snapshot.matches[0].awayTeamShortName = null;
+  validateLiveMatchday(result);
+  const mapped = mapGraphQLMatch(result.snapshot.matches[0]);
+  assert.equal(mapped.homeTeamShortName, "Home");
+  assert.equal(mapped.awayTeamShortName, "Away");
+});
+
 test("live matchday rejects partial detail vectors and fake unavailable snapshots", () => {
   const partialDetail = matchdayResult();
   partialDetail.snapshot.revisions.detailPublicationId = "detail-1";

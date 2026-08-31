@@ -78,6 +78,7 @@ interface LiveMatchLoadOptions {
   forceRefresh?: boolean;
   trackNavigation?: boolean;
   prefetchedLiveResult?: LiveSnapshotResult<LiveMatch[], LiveMatchdayStatus>;
+  useActiveEventPointer?: boolean;
 }
 
 interface KickoffFixture {
@@ -1147,13 +1148,23 @@ Page({
     this.forcedRefreshPending = true;
     this.forcedRefreshBackground = background;
     this.refreshContextPending = true;
+    let useActiveEventPointer = false;
     let eventChanged = false;
     try {
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
-        context = await this.ensureContext("pull-refresh", true).catch(
-          () => context,
-        );
+        try {
+          const refreshedContext = await this.ensureContext("pull-refresh", true);
+          context = shouldRefreshAppContext(refreshedContext)
+            ? null
+            : refreshedContext;
+        } catch {
+          // Do not reuse the stale snapshot to pin the next publication read.
+          // The active pointer can prove a rollover without throwing away the
+          // already-rendered board while that read is in flight.
+          context = null;
+        }
+        useActiveEventPointer = context === null;
       }
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
@@ -1211,6 +1222,7 @@ Page({
         background,
         forceRefresh: true,
         trackNavigation: true,
+        useActiveEventPointer,
       });
     } catch (error) {
       if (this.pageVisible && this.perfTracker === tracker)
@@ -1423,7 +1435,7 @@ Page({
   loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
     const tracksNavigation =
       options.background !== true || options.trackNavigation === true;
-    const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}`;
+    const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}:${options.useActiveEventPointer === true}`;
     if (this.liveRequest && this.liveRequestKey === requestKey) {
       return this.liveRequest;
     }
@@ -1445,7 +1457,9 @@ Page({
 
     const request = (async () => {
       try {
-        const cachedContext = getAppContextSnapshot();
+        const cachedContext = options.useActiveEventPointer
+          ? null
+          : getAppContextSnapshot();
         const requestTrace =
           options.background === true && options.trackNavigation !== true
             ? null
@@ -1478,8 +1492,11 @@ Page({
           // that event. An explicit key prevents a rollover replacement from
           // joining an older active-pointer request still in graphqlRead's
           // in-flight map.
-          const expectedEventId =
-            this.currentEventId > 0 ? this.currentEventId : undefined;
+          const expectedEventId = options.useActiveEventPointer
+            ? undefined
+            : this.currentEventId > 0
+              ? this.currentEventId
+              : undefined;
           publishedMatchday =
             options.prefetchedLiveResult ??
             (await getLiveMatchByStatusSnapshot(

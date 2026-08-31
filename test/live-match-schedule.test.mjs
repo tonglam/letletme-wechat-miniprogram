@@ -23,7 +23,7 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
   );
   assert.match(
     page,
-    /const expectedEventId =\s*this\.currentEventId > 0 \? this\.currentEventId : undefined/,
+    /const expectedEventId =\s*options\.useActiveEventPointer\s*\?\s*undefined[\s\S]*this\.currentEventId > 0/,
   );
   assert.match(page, /requestTrace, expectedEventId/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
@@ -49,6 +49,30 @@ test("stale app context is refreshed before it can pin a cold Match read", () =>
   assert.match(
     onLoad,
     /context = null[\s\S]*if \(context\) \{[\s\S]*this\.currentEventId = context\.currentEvent/,
+  );
+});
+
+test("forced context refresh failure switches Match reads to the active pointer", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const refresh = page.slice(
+    page.indexOf("async runForcedRefresh"),
+    page.indexOf("async onShow"),
+  );
+  assert.match(
+    refresh,
+    /let useActiveEventPointer = false[\s\S]*context = null[\s\S]*useActiveEventPointer = context === null/,
+  );
+  assert.match(
+    refresh,
+    /trackNavigation: true,[\s\S]*useActiveEventPointer/,
+  );
+  assert.match(
+    page,
+    /const cachedContext = options\.useActiveEventPointer\s*\?\s*null\s*:\s*getAppContextSnapshot\(\)/,
+  );
+  assert.match(
+    page,
+    /const expectedEventId = options\.useActiveEventPointer\s*\?\s*undefined[\s\S]*this\.currentEventId > 0/,
   );
 });
 

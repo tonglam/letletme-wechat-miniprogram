@@ -21,7 +21,7 @@ for (const [name, source] of [["Live Entry", liveEntry], ["My FPL Team", myFpl]]
 test("Live Matches does not let CurrentEventInfo gate a forced publication read", () => {
   assert.match(
     liveMatch,
-    /let context = getAppContextSnapshot\(\);[\s\S]*if \(shouldRefreshAppContext\(context\)\)[\s\S]*ensureContext\("pull-refresh", true\)\.catch\([\s\S]*=> context/,
+    /let context = getAppContextSnapshot\(\);[\s\S]*if \(shouldRefreshAppContext\(context\)\)[\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*context = null[\s\S]*useActiveEventPointer/,
   );
   assert.match(
     liveMatch,

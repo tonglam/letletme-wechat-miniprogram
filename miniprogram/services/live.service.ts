@@ -808,9 +808,7 @@ export function validateLiveMatchday(
       fixture.awayTeamId <= 0 ||
       fixture.homeTeamId === fixture.awayTeamId ||
       !fixture.homeTeamName ||
-      !fixture.homeTeamShortName ||
       !fixture.awayTeamName ||
-      !fixture.awayTeamShortName ||
       (fixture.homeScore !== null &&
         (!Number.isSafeInteger(fixture.homeScore) || fixture.homeScore < 0)) ||
       (fixture.awayScore !== null &&
