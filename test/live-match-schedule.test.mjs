@@ -50,6 +50,10 @@ test("stale app context is refreshed before it can pin a cold Match read", () =>
     onLoad,
     /context = null[\s\S]*if \(context\) \{[\s\S]*this\.currentEventId = context\.currentEvent/,
   );
+  assert.match(
+    onLoad,
+    /finally \{[\s\S]*this\.refreshContextPending = false[\s\S]*if \(!this\.pageVisible \|\| this\.perfTracker !== tracker\) return;/,
+  );
 });
 
 test("forced context refresh failure switches Match reads to the active pointer", () => {
@@ -150,6 +154,22 @@ test("scheduled Match context never inherits the previous event snapshot", () =>
   assert.match(
     onShow,
     /const nextTargetEventId = context !== null\s*\?\s*\(context\?\.displayEvent \?\? context\?\.currentEvent \?\? 0\)/,
+  );
+  const forcedRefresh = page.slice(
+    page.indexOf("async runForcedRefresh"),
+    page.indexOf("async onShow()"),
+  );
+  assert.match(
+    forcedRefresh,
+    /const scheduledWithoutCurrent = context\.currentEvent === null[\s\S]*const nextCurrentEventId =\s*scheduledWithoutCurrent\s*\?\s*0/,
+  );
+  assert.match(
+    forcedRefresh,
+    /const nextTargetEventId =\s*scheduledWithoutCurrent\s*\?\s*\(context\.displayEvent \?\? 0\)/,
+  );
+  assert.match(
+    forcedRefresh,
+    /Boolean\(scheduledWithoutCurrent && previousEventId\)[\s\S]*if \(scheduledWithoutCurrent\) useActiveEventPointer = true;/,
   );
 });
 

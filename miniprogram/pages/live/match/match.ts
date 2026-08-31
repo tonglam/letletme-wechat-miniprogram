@@ -872,6 +872,10 @@ Page({
         this.refreshContextPending = false;
       }
     }
+    // onUnload/onHide may win while the context request is in flight. Do not
+    // let a cold-load continuation create refresh controllers or issue a
+    // publication read for a page that is no longer the active lifecycle.
+    if (!this.pageVisible || this.perfTracker !== tracker) return;
     if (context) {
       this.currentEventId = context.currentEvent ?? 0;
       this.targetEventId = context.displayEvent ?? 0;
@@ -1172,21 +1176,28 @@ Page({
         const previousEventId =
           this.liveSnapshot?.eventId || this.targetEventId || 0;
         const previousSeason = this.loadedSeason;
+        const scheduledWithoutCurrent = context.currentEvent === null;
         const nextCurrentEventId =
-          context.currentEvent ?? this.liveSnapshot?.eventId ?? 0;
+          scheduledWithoutCurrent
+            ? 0
+            : (context.currentEvent ?? this.liveSnapshot?.eventId ?? 0);
         const nextTargetEventId =
-          context.displayEvent ?? this.liveSnapshot?.eventId ?? 0;
+          scheduledWithoutCurrent
+            ? (context.displayEvent ?? 0)
+            : (context.displayEvent ?? this.liveSnapshot?.eventId ?? 0);
         eventChanged =
           Boolean(
             previousEventId &&
             nextTargetEventId &&
             previousEventId !== nextTargetEventId,
           ) ||
+          Boolean(scheduledWithoutCurrent && previousEventId) ||
           Boolean(
             previousSeason &&
             context.season &&
             previousSeason !== context.season,
           );
+        if (scheduledWithoutCurrent) useActiveEventPointer = true;
         if (eventChanged) {
           this.liveRefresh?.stop();
           this.clearKickoffTransition();
