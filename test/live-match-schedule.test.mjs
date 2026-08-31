@@ -164,6 +164,26 @@ test("deadline recovery rejects stale context before it can roll back the active
   );
 });
 
+test("cold Match fallback rejects a stale replacement context and keeps pointer recovery armed", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const fallback = page.slice(
+    page.indexOf("// No accepted Match publication exists"),
+    page.indexOf("resolveActiveStatus", page.indexOf("// No accepted Match publication exists")),
+  );
+  assert.match(
+    fallback,
+    /const resolvedContext =[\s\n]*cachedContext && !shouldRefreshAppContext\(cachedContext\)[\s\n]*\? cachedContext[\s\n]*: await this\.ensureContext\("page-load", Boolean\(cachedContext\)\)/,
+  );
+  assert.match(
+    fallback,
+    /const context = shouldRefreshAppContext\(resolvedContext\) \? null : resolvedContext; if \(!context\) \{.*this\.targetEventId = 0.*this\.armContextDeadline\(undefined, true\)/,
+  );
+  assert.ok(
+    fallback.indexOf("if (!context)") < fallback.indexOf("const targetEvent"),
+    "the stale-context guard must run before selecting a Core event",
+  );
+});
+
 test("first Match onShow does not mutate context during cold startup", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const onShow = page.slice(

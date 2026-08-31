@@ -1673,10 +1673,38 @@ Page({
 
         // No accepted Match publication exists on this cold page. Fall back to
         // the retained Core schedule without fabricating live player detail.
-        const context =
+        const resolvedContext =
           cachedContext && !shouldRefreshAppContext(cachedContext)
             ? cachedContext
             : await this.ensureContext("page-load", Boolean(cachedContext));
+        // ensureContext may return the centralized stale fallback during an
+        // outage. Never use that result to pin an old event or its Core
+        // schedule; keep active-pointer recovery armed instead.
+        const context = shouldRefreshAppContext(resolvedContext)
+          ? null
+          : resolvedContext;
+        if (!context) {
+          this.liveRefresh?.stop();
+          this.currentEventId = 0;
+          this.targetEventId = 0;
+          this.loadedSeason = undefined;
+          this.liveSnapshot = null;
+          this.cachedLiveStoredAt = undefined;
+          this.coreMatches = [];
+          this.liveWindow = false;
+          this.armContextDeadline(undefined, true);
+          this.setData({
+            ...noScheduleState(),
+            scheduleEmpty: false,
+            displayState: "unavailable" as const,
+            error:
+              publicationError instanceof Error
+                ? publicationError.message
+                : "实时比赛 publication 暂不可用",
+          });
+          this.syncDisplayState();
+          return false;
+        }
         const targetEvent = context.displayEvent ?? this.targetEventId ?? 0;
         if (!targetEvent) {
           this.liveRefresh?.stop();
