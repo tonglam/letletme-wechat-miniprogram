@@ -4,16 +4,14 @@ import { pathToFileURL } from "node:url";
 import { buildSchema, Kind, parse, validate, visit } from "graphql";
 
 const {
-  buildLiveFixturePlayersQuery,
   CALC_LIVE_POINTS_BY_ENTRY,
+  LIVE_MATCHDAY_HEAD_QUERY,
   LIVE_MATCHES_QUERY,
   LIVE_SNAPSHOT_QUERY,
   PLAYER_LIVE_STATS_QUERY,
 } = await import("../miniprogram/services/live.service.ts");
-const {
-  MINI_HOME_MARKET_QUERY,
-  MINI_HOME_PERSONAL_LEAGUES_QUERY,
-} = await import("../miniprogram/services/home.service.ts");
+const { MINI_HOME_MARKET_QUERY, MINI_HOME_PERSONAL_LEAGUES_QUERY } =
+  await import("../miniprogram/services/home.service.ts");
 const {
   PRICE_CHANGE_BOARD_QUERY,
   PRICE_CHANGE_LIVE_BOARD_QUERY,
@@ -52,7 +50,7 @@ const operations = [
   ["LIVE_SNAPSHOT_QUERY", LIVE_SNAPSHOT_QUERY],
   ["CALC_LIVE_POINTS_BY_ENTRY", CALC_LIVE_POINTS_BY_ENTRY],
   ["LIVE_MATCHES_QUERY", LIVE_MATCHES_QUERY],
-  ["LIVE_FIXTURE_PLAYERS_BATCH", buildLiveFixturePlayersQuery(5)],
+  ["LIVE_MATCHDAY_HEAD_QUERY", LIVE_MATCHDAY_HEAD_QUERY],
   ["PLAYER_LIVE_STATS_QUERY", PLAYER_LIVE_STATS_QUERY],
   ["MINI_HOME_PERSONAL_LEAGUES_QUERY", MINI_HOME_PERSONAL_LEAGUES_QUERY],
   ["MINI_HOME_MARKET_QUERY", MINI_HOME_MARKET_QUERY],

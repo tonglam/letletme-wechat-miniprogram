@@ -535,11 +535,28 @@ export function buildGraphQLRequestHeaders(
   return header;
 }
 
+export const LIVE_MATCHES_CONTRACT_VERSION = "live-matches-v2";
+
 /** Every Live Points operation is hard-gated to the V2 contract. */
 export function isLivePointsV2Query(query: string): boolean {
-  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|liveMatchdayDesk|liveFixturePlayers|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
+  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
     query,
   );
+}
+
+export function isLiveMatchesV2Query(query: string): boolean {
+  return /\bliveMatchday\s*(?:\(|\{)/.test(query);
+}
+
+export function liveContractVersionForQuery(query: string): string | null {
+  const matches = isLiveMatchesV2Query(query);
+  const points = isLivePointsV2Query(query);
+  if (matches && points) {
+    throw new Error("LIVE_CONTRACT_MIXED_OPERATION");
+  }
+  if (matches) return LIVE_MATCHES_CONTRACT_VERSION;
+  if (points) return "live-points-v2";
+  return null;
 }
 
 function makeRequest<T>(
@@ -583,8 +600,9 @@ function makeRequest<T>(
       token,
       getMiniProgramDeviceId(),
     );
-    if (isLivePointsV2Query(query)) {
-      header["X-LetLetMe-Contract"] = "live-points-v2";
+    const liveContractVersion = liveContractVersionForQuery(query);
+    if (liveContractVersion) {
+      header["X-LetLetMe-Contract"] = liveContractVersion;
     }
 
     onNetworkAttempt?.();
@@ -721,8 +739,9 @@ function requestIdentity(
 export function getServedCacheStoredAt(
   query: string,
   variables: Record<string, unknown>,
+  options?: GraphQLOptions,
 ): number | undefined {
-  const policy = resolvePolicy(query);
+  const policy = resolvePolicy(query, options);
   const token = policy.authMode === "session" ? getApiSessionToken() : null;
   const { requestKey } = requestIdentity(query, variables, policy, token);
   return getServedStoredAt(requestKey);

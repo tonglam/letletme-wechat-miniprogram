@@ -9,7 +9,6 @@ export type LiveSnapshotState =
   | "GW_REVIEW"
   | "FINALIZED"
   | "PRESEASON"
-  | "PRE_DEADLINE"
   | "BETWEEN_GAMEWEEKS"
   | "OFFSEASON"
   | "UNAVAILABLE";
@@ -94,6 +93,7 @@ export interface LiveSnapshotStatus {
   state: LiveSnapshotState;
   publishedAt: string | null;
   sourceCheckedAt: string | null;
+  contentUpdatedAt?: string | null;
   scoreCoreRevision: string | null;
   publicationId?: string | null;
   revisions?: LiveRevisionVector | null;
@@ -104,9 +104,60 @@ export interface LiveSnapshotStatus {
   nextRefreshAt?: string | null;
 }
 
-export interface LiveSnapshotResult<T> {
+export type LiveMatchdayState =
+  | "PRE_DEADLINE"
+  | "LIVE_ACTIVE"
+  | "BETWEEN_FIXTURES"
+  | "DAY_SETTLING"
+  | "GW_REVIEW"
+  | "FINALIZED";
+
+export type LiveMatchdayDeliveryState = LiveDeliveryState | "PENDING";
+
+export interface LiveMatchdayDelivery {
+  state: LiveMatchdayDeliveryState;
+  servedFrom: Exclude<LiveServedFrom, "FINAL_RESULT" | "UNAVAILABLE"> | null;
+  reasonCodes: string[];
+}
+
+export interface LiveMatchdayRevisionVector {
+  deskPublicationId: string;
+  deskGeneration: number;
+  lifecycle: string;
+  fixtureIdentity: string;
+  scoreState: string;
+  detailPublicationId: string | null;
+  detailGeneration: number | null;
+  playerDetail: string | null;
+}
+
+export interface LiveMatchdayTimes {
+  deskSourceCheckedAt: string;
+  deskContentUpdatedAt: string;
+  deskPublishedAt: string;
+  deskStaleAt: string | null;
+  detailSourceCheckedAt: string | null;
+  detailContentUpdatedAt: string | null;
+  detailPublishedAt: string | null;
+  detailStaleAt: string | null;
+  servedAt: string;
+  nextRefreshAt: string | null;
+}
+
+export interface LiveMatchdayStatus {
+  season: string;
+  eventId: number;
+  state: LiveMatchdayState;
+  revisions: LiveMatchdayRevisionVector;
+  times: LiveMatchdayTimes;
+  availability: "READY" | "UNAVAILABLE";
+  delivery: LiveMatchdayDelivery;
+  detailDelivery: LiveMatchdayDelivery;
+}
+
+export interface LiveSnapshotResult<T, S = LiveSnapshotStatus> {
   data: T;
-  snapshot: LiveSnapshotStatus | null;
+  snapshot: S | null;
   /** Fetch time when the payload was served from the short-lived client cache. */
   servedStoredAt?: number;
   failedEntryIds?: number[];
@@ -122,6 +173,11 @@ export interface LiveSnapshotResult<T> {
 
 export type LiveEntryAvailability =
   "READY" | "PENDING" | "NO_PICKS" | "UNAVAILABLE";
+
+export interface LivePlayerStatPoints {
+  points: number;
+  pointsModification: number | null;
+}
 
 export interface LivePlayerRow {
   element?: number;
@@ -171,6 +227,8 @@ export interface LivePlayerRow {
   expectedAssists?: number;
   expectedGoalInvolvements?: number;
   expectedGoalsConceded?: number;
+  /** Authoritative per-stat points from the live-match publication. */
+  statPoints?: Record<string, LivePlayerStatPoints>;
   /** Auto-sub annotation: OFFICIAL_IN/OUT or PREDICTED_IN/OUT, plus partner. */
   autoSubRole?: string;
   autoSubPartnerName?: string;

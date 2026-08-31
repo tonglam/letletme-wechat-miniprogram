@@ -1,4 +1,7 @@
-import type { LiveSnapshotStatus } from "../models/live";
+import type {
+  LiveMatchdayStatus,
+  LiveSnapshotStatus,
+} from "../models/live";
 
 export const LIVE_REFRESH_INTERVAL_MS = 30_000;
 
@@ -23,6 +26,54 @@ export function liveSnapshotNeedsRefresh(
     accepted.eventId !== observed.eventId ||
     contentRevision(accepted) !== contentRevision(observed)
   );
+}
+
+export function liveMatchdayNeedsRefresh(
+  accepted?: LiveMatchdayStatus | null,
+  observed?: LiveMatchdayStatus | null,
+): boolean {
+  if (!accepted || !observed) return true;
+  return (
+    accepted.eventId !== observed.eventId ||
+    accepted.revisions.lifecycle !== observed.revisions.lifecycle ||
+    accepted.revisions.fixtureIdentity !==
+      observed.revisions.fixtureIdentity ||
+    accepted.revisions.scoreState !== observed.revisions.scoreState ||
+    accepted.revisions.playerDetail !== observed.revisions.playerDetail
+  );
+}
+
+export function shouldPollLiveMatchday(options: {
+  pageVisible: boolean;
+  currentEventId?: number;
+  selectedEventId?: number;
+  snapshot?: LiveMatchdayStatus | null;
+}): boolean {
+  const { pageVisible, currentEventId, selectedEventId, snapshot } = options;
+  if (!pageVisible || !currentEventId || selectedEventId !== currentEventId)
+    return false;
+  // Keep the recovery loop alive when no publication has been accepted yet.
+  // A missing snapshot is a pending/unavailable state, not a terminal one.
+  if (!snapshot) return true;
+  if (snapshot.eventId !== selectedEventId) return false;
+  const nextRefreshAt = snapshot.times.nextRefreshAt;
+  if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
+  if (snapshot.state === "FINALIZED") {
+    // A finalized desk can still be waiting for the exact Match detail
+    // publication/checkpoint. Keep the bounded recovery loop alive until
+    // detail is final; the server's final publication remains authoritative.
+    return snapshot.detailDelivery.state !== "FINAL";
+  }
+  return true;
+}
+
+export function shouldRevalidateCachedLiveMatchday(
+  options: Parameters<typeof shouldPollLiveMatchday>[0] & {
+    servedStoredAt?: number;
+  },
+): boolean {
+  const { servedStoredAt, ...pollOptions } = options;
+  return servedStoredAt !== undefined && shouldPollLiveMatchday(pollOptions);
 }
 
 /** Only the server's next-refresh deadline controls score polling. */
