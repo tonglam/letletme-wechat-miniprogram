@@ -16,7 +16,11 @@ const checks = [
     url: `${origin}/api/graphql`,
     init: {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        "X-LetLetMe-Contract": "live-points-v2",
+      },
       body: JSON.stringify({ query: "query OriginProbe { liveContext { season } }" }),
     },
   },
