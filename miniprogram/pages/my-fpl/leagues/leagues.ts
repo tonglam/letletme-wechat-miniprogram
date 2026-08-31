@@ -883,6 +883,7 @@ PerformancePage({
           refreshedEntryId = await refreshAuthoritativeFollow();
         } catch {
           if (isActiveRequest()) {
+            this.clearV2EntryScopedViewState();
             this.setData({
               loading: false,
               v2Loading: false,
@@ -898,6 +899,7 @@ PerformancePage({
           return;
         }
         if (refreshedEntryId === entryId) {
+          this.clearV2EntryScopedViewState();
           this.setData({
             loading: false,
             v2Loading: false,
@@ -1096,6 +1098,7 @@ PerformancePage({
           authoritativeEntryId = await refreshAuthoritativeFollow();
         } catch {
           if (isActiveRequest()) {
+            this.clearV2EntryScopedViewState();
             this.v2RetryOperation = "review";
             this.setData({
               v2Loading: false,
@@ -1140,6 +1143,7 @@ PerformancePage({
         try {
           authoritativeEntryId = await refreshAuthoritativeFollow();
         } catch {
+          this.clearV2EntryScopedViewState();
           this.v2RetryOperation = "review";
           this.setData({
             v2Loading: false,
@@ -1222,6 +1226,7 @@ PerformancePage({
         }
         if (!isActiveRequest()) return;
         this.v2RetryOperation = "review";
+        this.clearV2EntryScopedViewState();
         this.setData({
           v2Loading: false,
           v2State: "UNAVAILABLE",

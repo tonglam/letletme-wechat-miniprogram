@@ -185,6 +185,10 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
     page,
     /this\.setData\(\{ v2LoadingMore: true, v2Error: "" \}\);[\s\S]*await refreshAuthoritativeFollow\(\)/,
   );
+  assert.match(
+    page,
+    /clearV2EntryScopedViewState\(\);[\s\S]*v2State: "UNAVAILABLE"[\s\S]*v2StatusText: tournamentReviewStateText\("UNAVAILABLE"\)/,
+  );
   assert.match(page, /if \(!isActiveRequest\(\)\) return;/);
   assert.match(
     page,
