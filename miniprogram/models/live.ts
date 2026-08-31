@@ -174,6 +174,11 @@ export interface LiveSnapshotResult<T, S = LiveSnapshotStatus> {
 export type LiveEntryAvailability =
   "READY" | "PENDING" | "NO_PICKS" | "UNAVAILABLE";
 
+export interface LivePlayerStatPoints {
+  points: number;
+  pointsModification: number | null;
+}
+
 export interface LivePlayerRow {
   element?: number;
   teamId?: number;
@@ -222,6 +227,8 @@ export interface LivePlayerRow {
   expectedAssists?: number;
   expectedGoalInvolvements?: number;
   expectedGoalsConceded?: number;
+  /** Authoritative per-stat points from the live-match publication. */
+  statPoints?: Record<string, LivePlayerStatPoints>;
   /** Auto-sub annotation: OFFICIAL_IN/OUT or PREDICTED_IN/OUT, plus partner. */
   autoSubRole?: string;
   autoSubPartnerName?: string;

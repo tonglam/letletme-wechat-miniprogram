@@ -150,7 +150,7 @@ test("cold context failures settle Home and all Live page loading states", () =>
   );
   assert.match(
     match,
-    /const context = cachedContext \|\| \(await this\.ensureContext\("page-load"\)\)/,
+    /const context = cachedContext && !shouldRefreshAppContext\(cachedContext\)[\s\S]*await this\.ensureContext\("page-load", Boolean\(cachedContext\)\)/,
   );
 });
 

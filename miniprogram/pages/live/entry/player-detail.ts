@@ -134,6 +134,19 @@ function defensiveContributionThreshold(position: string): number {
   return 0;
 }
 
+function authoritativePoints(
+  player: LivePlayerRow,
+  identifiers: readonly string[],
+  fallback: number,
+): number {
+  for (const identifier of identifiers) {
+    const stat = player.statPoints?.[identifier.toLowerCase()];
+    if (!stat) continue;
+    return numberValue(stat.points) + numberValue(stat.pointsModification);
+  }
+  return fallback;
+}
+
 export function buildProvisionalBreakdown(player: LivePlayerRow): PlayerLiveBreakdownRow[] {
   const position = normalizeLivePosition(player);
   const minutes = numberValue(player.minutes);
@@ -151,44 +164,120 @@ export function buildProvisionalBreakdown(player: LivePlayerRow): PlayerLiveBrea
   const rows: PlayerLiveBreakdownRow[] = [];
 
   if (minutes > 0) {
-    pushBreakdown(rows, "minutes", "出场", minutes >= 60 ? 2 : 1, minutes, `${minutes}分钟`);
+    pushBreakdown(
+      rows,
+      "minutes",
+      "出场",
+      authoritativePoints(player, ["minutes", "mins"], minutes >= 60 ? 2 : 1),
+      minutes,
+      `${minutes}分钟`,
+    );
   }
   if (goals > 0) {
     const per = position === "GKP" || position === "DEF" ? 6 : position === "MID" ? 5 : 4;
-    pushBreakdown(rows, "goals", "进球", goals * per, goals);
+    pushBreakdown(
+      rows,
+      "goals",
+      "进球",
+      authoritativePoints(player, ["goals", "goals_scored", "goalsScored"], goals * per),
+      goals,
+    );
   }
   if (assists > 0) {
-    pushBreakdown(rows, "assists", "助攻", assists * 3, assists);
+    pushBreakdown(
+      rows,
+      "assists",
+      "助攻",
+      authoritativePoints(player, ["assists"], assists * 3),
+      assists,
+    );
   }
   if (cleanSheets > 0) {
     const per = position === "GKP" || position === "DEF" ? 4 : position === "MID" ? 1 : 0;
-    if (per > 0) pushBreakdown(rows, "cleansheet", "零封", cleanSheets * per, cleanSheets);
+    if (per > 0) {
+      pushBreakdown(
+        rows,
+        "cleansheet",
+        "零封",
+        authoritativePoints(player, ["clean_sheets", "cleanSheets"], cleanSheets * per),
+        cleanSheets,
+      );
+    }
   }
   const dcThreshold = defensiveContributionThreshold(position);
   if (dcThreshold > 0 && defensiveContribution >= dcThreshold) {
-    pushBreakdown(rows, "defensive", "防守贡献", 2);
+    pushBreakdown(
+      rows,
+      "defensive",
+      "防守贡献",
+      authoritativePoints(player, ["defensive_contribution", "defensiveContribution"], 2),
+    );
   }
   if (position === "GKP" && saves > 0) {
     const pts = Math.floor(saves / 3);
-    if (pts !== 0) pushBreakdown(rows, "saves", "扑救", pts, saves, `${saves}次`);
+    if (pts !== 0) {
+      pushBreakdown(
+        rows,
+        "saves",
+        "扑救",
+        authoritativePoints(player, ["saves"], pts),
+        saves,
+        `${saves}次`,
+      );
+    }
   }
   if (penaltiesSaved > 0) {
-    pushBreakdown(rows, "pensaved", "扑点", penaltiesSaved * 5, penaltiesSaved);
+    pushBreakdown(
+      rows,
+      "pensaved",
+      "扑点",
+      authoritativePoints(player, ["penalties_saved", "penaltiesSaved"], penaltiesSaved * 5),
+      penaltiesSaved,
+    );
   }
   if (penaltiesMissed > 0) {
-    pushBreakdown(rows, "penmissed", "失点", penaltiesMissed * -2, penaltiesMissed);
+    pushBreakdown(
+      rows,
+      "penmissed",
+      "失点",
+      authoritativePoints(player, ["penalties_missed", "penaltiesMissed"], penaltiesMissed * -2),
+      penaltiesMissed,
+    );
   }
   if (ownGoals > 0) {
-    pushBreakdown(rows, "owngoal", "乌龙", ownGoals * -2, ownGoals);
+    pushBreakdown(
+      rows,
+      "owngoal",
+      "乌龙",
+      authoritativePoints(player, ["own_goals", "ownGoals"], ownGoals * -2),
+      ownGoals,
+    );
   }
   if (yellowCards > 0) {
-    pushBreakdown(rows, "yellow", "黄牌", yellowCards * -1, yellowCards);
+    pushBreakdown(
+      rows,
+      "yellow",
+      "黄牌",
+      authoritativePoints(player, ["yellow_cards", "yellowCards"], yellowCards * -1),
+      yellowCards,
+    );
   }
   if (redCards > 0) {
-    pushBreakdown(rows, "red", "红牌", redCards * -3, redCards);
+    pushBreakdown(
+      rows,
+      "red",
+      "红牌",
+      authoritativePoints(player, ["red_cards", "redCards"], redCards * -3),
+      redCards,
+    );
   }
   if (bonus > 0) {
-    pushBreakdown(rows, "bonus", "奖励分", bonus);
+    pushBreakdown(
+      rows,
+      "bonus",
+      "奖励分",
+      authoritativePoints(player, ["bonus"], bonus),
+    );
   }
   return rows;
 }

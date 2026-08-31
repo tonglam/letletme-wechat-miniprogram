@@ -253,4 +253,9 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
   assert.equal(match.homeTeamDataList?.[0]?.webName, "Home Player");
   assert.equal(match.awayTeamDataList?.[0]?.webName, "Away Player");
   assert.equal(match.homeTeamDataList?.[0]?.minutes, 48);
+  assert.equal(match.homeTeamDataList?.[0]?.team, "Home");
+  assert.equal(match.homeTeamDataList?.[0]?.teamShortName, "Home");
+  assert.deepEqual(match.homeTeamDataList?.[0]?.statPoints, {
+    minutes: { points: 2, pointsModification: null },
+  });
 });

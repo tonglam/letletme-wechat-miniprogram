@@ -1,6 +1,7 @@
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
+  shouldPollLiveMatchday,
   shouldPollLiveSnapshot,
 } from "../miniprogram/utils/live-refresh";
 import {
@@ -194,6 +195,16 @@ assertEqual(
   }),
   false,
   "cross-event polling is forbidden",
+);
+assertEqual(
+  shouldPollLiveMatchday({
+    pageVisible: true,
+    currentEventId: 1,
+    selectedEventId: 1,
+    snapshot: null,
+  }),
+  true,
+  "matchday recovery keeps polling before the first publication",
 );
 
 const traceable = traceableLiveScore(score());

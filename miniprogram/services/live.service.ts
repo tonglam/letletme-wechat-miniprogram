@@ -10,6 +10,7 @@ import type {
   LiveMatchdayStatus,
   LiveMatchdayTimes,
   LivePlayerRow,
+  LivePlayerStatPoints,
   LiveScore,
   LiveSnapshotResult,
   LiveSnapshotStatus,
@@ -520,10 +521,33 @@ function statValue(
   );
 }
 
-function mapLiveMatchdayPlayer(player: GraphQLMatchdayPlayer): LivePlayerRow {
+function mapLiveMatchdayPlayer(
+  player: GraphQLMatchdayPlayer,
+  match: GraphQLMatchData,
+): LivePlayerRow {
+  const statPoints: Record<string, LivePlayerStatPoints> = {};
+  for (const stat of player.stats) {
+    const identifier = stat.identifier.toLowerCase();
+    statPoints[identifier] = {
+      points: stat.points,
+      pointsModification: stat.pointsModification,
+    };
+  }
+  const isHomePlayer = player.teamId === match.homeTeamId;
+  const isAwayPlayer = player.teamId === match.awayTeamId;
   return {
     element: player.id,
     teamId: player.teamId,
+    team: isHomePlayer
+      ? match.homeTeamName
+      : isAwayPlayer
+        ? match.awayTeamName
+        : undefined,
+    teamShortName: isHomePlayer
+      ? match.homeTeamShortName ?? match.homeTeamName
+      : isAwayPlayer
+        ? match.awayTeamShortName ?? match.awayTeamName
+        : undefined,
     webName: player.webName,
     name: player.webName,
     position: player.position,
@@ -548,6 +572,7 @@ function mapLiveMatchdayPlayer(player: GraphQLMatchdayPlayer): LivePlayerRow {
       "defensive_contribution",
       "defensiveContribution",
     ]),
+    statPoints,
   };
 }
 
@@ -780,7 +805,9 @@ export function liveMatchdayRequestOptions(
 }
 
 export function mapGraphQLMatch(match: GraphQLMatchData): LiveMatch {
-  const players = (match.players ?? []).map(mapLiveMatchdayPlayer);
+  const players = (match.players ?? []).map((player) =>
+    mapLiveMatchdayPlayer(player, match),
+  );
   return {
     matchId: match.fixtureId,
     homeTeamId: match.homeTeamId,

@@ -52,7 +52,10 @@ export function shouldPollLiveMatchday(options: {
   const { pageVisible, currentEventId, selectedEventId, snapshot } = options;
   if (!pageVisible || !currentEventId || selectedEventId !== currentEventId)
     return false;
-  if (!snapshot || snapshot.eventId !== selectedEventId) return false;
+  // Keep the recovery loop alive when no publication has been accepted yet.
+  // A missing snapshot is a pending/unavailable state, not a terminal one.
+  if (!snapshot) return true;
+  if (snapshot.eventId !== selectedEventId) return false;
   const nextRefreshAt = snapshot.times.nextRefreshAt;
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
   return snapshot.state !== "FINALIZED";

@@ -1101,6 +1101,7 @@ Page({
     this.forcedRefreshPending = true;
     this.forcedRefreshBackground = background;
     this.refreshContextPending = true;
+    let eventChanged = false;
     try {
       let context = getAppContextSnapshot();
       if (shouldRefreshAppContext(context)) {
@@ -1111,24 +1112,55 @@ Page({
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
       if (context) {
+        const previousEventId =
+          this.liveSnapshot?.eventId || this.targetEventId || 0;
+        const previousSeason = this.loadedSeason;
         const nextCurrentEventId =
           context.currentEvent ?? this.liveSnapshot?.eventId ?? 0;
         const nextTargetEventId =
           context.displayEvent ?? this.liveSnapshot?.eventId ?? 0;
-        if (
-          this.liveSnapshot &&
-          this.liveSnapshot.eventId !== nextTargetEventId
-        ) {
+        eventChanged =
+          Boolean(
+            previousEventId &&
+              nextTargetEventId &&
+              previousEventId !== nextTargetEventId,
+          ) ||
+          Boolean(
+            previousSeason &&
+              context.season &&
+              previousSeason !== context.season,
+          );
+        if (eventChanged) {
+          this.liveRefresh?.stop();
+          this.clearKickoffTransition();
+          // Invalidate any in-flight request before clearing the old event.
+          // A previous event must never re-enter this page after rollover.
+          this.liveRequestId += 1;
+          this.liveRequest = null;
+          this.liveRequestKey = "";
           this.liveSnapshot = null;
           this.cachedLiveStoredAt = undefined;
+          this.coreMatches = [];
+          this.liveWindow = false;
+          this.setData({
+            matches: [],
+            groups: [],
+            statusTabs: buildStatusTabs([]),
+            hasData: false,
+            fixtureStaleMessage: "",
+            lastUpdated: "",
+          });
         }
         this.currentEventId = nextCurrentEventId;
         this.targetEventId = nextTargetEventId;
         this.loadedSeason = context.season || this.loadedSeason;
         this.armContextDeadline(context.nextDeadlineAt);
+        if (eventChanged) background = false;
       }
       tracker.mark("contextReadyAt");
       this.initLiveRefresh();
+      // Event rollover is a foreground recovery: do not leave the cleared
+      // page looking like a successful background refresh.
       await this.loadData({
         background,
         forceRefresh: true,
@@ -1461,7 +1493,9 @@ Page({
         // No accepted Match publication exists on this cold page. Fall back to
         // the retained Core schedule without fabricating live player detail.
         const context =
-          cachedContext || (await this.ensureContext("page-load"));
+          cachedContext && !shouldRefreshAppContext(cachedContext)
+            ? cachedContext
+            : await this.ensureContext("page-load", Boolean(cachedContext));
         const targetEvent = context.displayEvent ?? this.targetEventId ?? 0;
         if (!targetEvent) {
           this.liveRefresh?.stop();
@@ -1513,7 +1547,9 @@ Page({
             error:
               publicationError instanceof Error
                 ? publicationError.message
-                : "",
+                : publishedMatchday
+                  ? "实时比赛 publication 暂不可用"
+                  : "",
             fixtureStaleMessage: coreRead.meta.stale
               ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
               : "",
