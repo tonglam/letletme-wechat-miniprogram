@@ -77,6 +77,14 @@ interface LiveMatchLoadOptions {
   prefetchedLiveResult?: LiveSnapshotResult<LiveMatch[], LiveMatchdayStatus>;
 }
 
+interface KickoffFixture {
+  finished?: boolean;
+  started?: boolean;
+  status?: string;
+  playStatus?: string;
+  kickoffTime?: string;
+}
+
 const STATUS_OPTIONS: StatusOption[] = [
   { key: "playing", label: "比赛中" },
   { key: "not_start", label: "未开始" },
@@ -96,6 +104,21 @@ function isValidStatus(value: unknown): value is string {
 function numberValue(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function hasUnprocessedKickoff(
+  fixtures: readonly KickoffFixture[],
+  now = Date.now(),
+): boolean {
+  return fixtures.some((fixture) => {
+    if (fixture.finished || fixture.started === true) return false;
+    if (fixture.status === "playing" || fixture.playStatus === "playing") {
+      return false;
+    }
+    if (!fixture.kickoffTime) return false;
+    const kickoff = new Date(fixture.kickoffTime).getTime();
+    return Number.isFinite(kickoff) && kickoff <= now;
+  });
 }
 
 function formatTime(date: Date): string {
@@ -1035,7 +1058,7 @@ Page({
   },
 
   armKickoffTransition(
-    fixtures: Array<{ finished?: boolean; kickoffTime?: string }>,
+    fixtures: Array<KickoffFixture>,
     retry = false,
   ) {
     this.clearKickoffTransition();
@@ -1055,7 +1078,10 @@ Page({
     const nextKickoff = kickoffTimes
       .filter((kickoff) => kickoff > now)
       .sort((left, right) => left - right)[0];
-    const targetAt = retry ? now + 30_000 : nextKickoff;
+    const targetAt =
+      retry || hasUnprocessedKickoff(fixtures, now)
+        ? now + 30_000
+        : nextKickoff;
     if (targetAt === undefined) return;
 
     // Long timers are chunked so a far-away kickoff does not overflow the
@@ -1279,6 +1305,22 @@ Page({
       wx.nextTick(() => this.perfTracker?.observePrimary());
     }
     this.armKickoffTransition(this.coreMatches);
+    if (
+      resumed &&
+      !this.liveSnapshot &&
+      this.currentEventId > 0 &&
+      this.targetEventId === this.currentEventId &&
+      hasUnprocessedKickoff(this.coreMatches)
+    ) {
+      // The page may have been hidden across kickoff while the publication was
+      // unavailable. Force one publication read on resume instead of waiting
+      // for a kickoff timer that has already passed.
+      void this.loadData({
+        background: this.data.hasData,
+        forceRefresh: true,
+      });
+      return;
+    }
     this.liveRefresh?.sync();
     if (
       !this.revalidateCachedSnapshot() &&
@@ -1526,7 +1568,8 @@ Page({
           Boolean(this.liveSnapshot) ||
           coreRead.data.some(
             (fixture) => !fixture.finished && fixture.started === true,
-          );
+          ) ||
+          hasUnprocessedKickoff(coreRead.data);
         this.coreMatches = core;
         this.armKickoffTransition(coreRead.data);
         const activeStatus = this.resolveActiveStatus(core);

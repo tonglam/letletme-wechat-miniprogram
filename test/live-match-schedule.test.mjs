@@ -96,6 +96,22 @@ test("current-event schedule arms a kickoff transition without preseason Live wo
   );
 });
 
+test("resumed no-snapshot pages probe after an overdue kickoff", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onShow = page.slice(
+    page.indexOf("async onShow()"),
+    page.indexOf("onHide()"),
+  );
+  assert.match(
+    onShow,
+    /resumed[\s\S]*!this\.liveSnapshot[\s\S]*hasUnprocessedKickoff\(this\.coreMatches\)[\s\S]*void this\.loadData\([\s\S]*forceRefresh: true/,
+  );
+  assert.match(
+    page,
+    /function hasUnprocessedKickoff\([\s\S]*fixture\.kickoffTime[\s\S]*kickoff <= now/,
+  );
+});
+
 test("fixture service rejects partial errors before mapping an empty schedule", () => {
   const service = source("miniprogram/services/fixture.service.ts");
   const read = service.indexOf(
