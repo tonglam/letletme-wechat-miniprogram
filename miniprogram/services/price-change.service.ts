@@ -7,18 +7,15 @@ import { currentMyFplEntryId } from "../utils/follow";
 import { storageKeys } from "../config/storage-keys";
 import { recordLastGoodAge } from "./client-telemetry.service";
 import type {
-  PersonalPriceState,
   PriceChangeBoard,
   PriceChangeBoardRead,
   PriceChangePersonalContext,
   PriceChangePersonalPick,
-  PriceChangePlayer,
   PriceChangeTransferGameweek,
 } from "../models/price-change";
 import {
   buildPersonalPurchasePrices,
   isFreeHitChip,
-  resolveTransferPlayerIds,
 } from "../utils/price-change";
 
 const MINUTE = 60 * 1000;
@@ -62,34 +59,30 @@ export const PRICE_CHANGE_BOARD_QUERY = `
 `;
 
 export const PRICE_CHANGE_PERSONAL_QUERY = `
-  query GetPriceChangePersonal($eventId: Int!) {
-    myFplTeamGameweek(eventId: $eventId) {
+  query GetPriceChangePersonal {
+    myFplManagerReview {
       state
-      result {
-        picks {
-          element
-          webName
-          teamShortName
-          elementTypeName
+      currentGameweek {
+        state
+        eventId
+        result {
+          picks {
+            element
+            webName
+            teamShortName
+            elementTypeName
+          }
         }
       }
-    }
-    myFplTeamDesk(eventId: $eventId) {
-      state
-      history {
+      timeline {
         eventId
         eventChip
       }
-    }
-    myFplTeamTransfers {
-      state
-      gameweeks {
+      transfers {
         eventId
         transfers {
           eventId
-          elementInWebName
-          elementInTypeName
-          elementInTeamShortName
+          elementIn
           elementInCost
           time
         }
@@ -135,17 +128,15 @@ interface PriceChangeBoardResponse {
 type MyFplReviewState = "PRESEASON" | "PENDING" | "READY" | "EMPTY" | "UNAVAILABLE";
 
 interface PriceChangePersonalResponse {
-  myFplTeamGameweek?: {
+  myFplManagerReview?: {
     state: MyFplReviewState;
-    result?: { picks?: PriceChangePersonalPick[] } | null;
-  } | null;
-  myFplTeamDesk?: {
-    state: MyFplReviewState;
-    history?: Array<{ eventId: number; eventChip: string }>;
-  } | null;
-  myFplTeamTransfers?: {
-    state: MyFplReviewState;
-    gameweeks?: PriceChangeTransferGameweek[];
+    currentGameweek?: {
+      state: MyFplReviewState;
+      eventId: number;
+      result?: { picks?: PriceChangePersonalPick[] } | null;
+    } | null;
+    timeline?: Array<{ eventId: number; eventChip: string }>;
+    transfers?: PriceChangeTransferGameweek[];
   } | null;
 }
 
@@ -461,18 +452,10 @@ function unavailablePersonalContext(
   };
 }
 
-function personalPriceState(
-  value: PersonalPriceState,
-  historyAvailable: boolean,
-): PersonalPriceState {
-  return value === "READY" && !historyAvailable ? "PARTIAL" : value;
-}
-
 export async function getPriceChangePersonalContext(input: {
   eventId: number;
   season: string;
   entryId: number | null;
-  players: readonly PriceChangePlayer[];
   forceRefresh?: boolean;
   trace?: PageRequestTrace;
 }): Promise<PriceChangePersonalContext> {
@@ -484,7 +467,7 @@ export async function getPriceChangePersonalContext(input: {
   try {
     read = await graphqlRead<PriceChangePersonalResponse>(
       PRICE_CHANGE_PERSONAL_QUERY,
-      { eventId: input.eventId },
+      {},
       {
         authMode: "session",
         cachePolicy: "reporting",
@@ -504,7 +487,13 @@ export async function getPriceChangePersonalContext(input: {
     return unavailablePersonalContext("unavailable");
   }
 
-  const gameweek = read.data.myFplTeamGameweek;
+  const review = read.data.myFplManagerReview;
+  const gameweek = review?.currentGameweek;
+  if (gameweek?.eventId !== input.eventId) {
+    const unavailable = review?.state === "UNAVAILABLE"
+      || read.errors.some((error) => String(error.path?.[0] || "") === "myFplManagerReview");
+    return unavailablePersonalContext(unavailable ? "unavailable" : "not-published");
+  }
   const picks = Array.isArray(gameweek?.result?.picks) ? gameweek.result.picks : [];
   const squadElementIds = Array.from(new Set(
     picks.map((pick) => Number(pick.element))
@@ -512,19 +501,15 @@ export async function getPriceChangePersonalContext(input: {
   ));
   if (squadElementIds.length === 0) {
     const unavailable = gameweek?.state === "UNAVAILABLE"
-      || read.errors.some((error) => String(error.path?.[0] || "") === "myFplTeamGameweek");
+      || read.errors.some((error) => String(error.path?.[0] || "") === "myFplManagerReview");
     return unavailablePersonalContext(unavailable ? "unavailable" : "not-published");
   }
 
-  const transfersRoot = read.data.myFplTeamTransfers;
-  const transfersAvailable = transfersRoot?.state === "READY"
-    || transfersRoot?.state === "EMPTY"
-    || transfersRoot?.state === "PRESEASON";
-  if (!transfersAvailable) return unavailablePersonalContext("ready", squadElementIds);
-
-  const desk = read.data.myFplTeamDesk;
-  const history = desk?.history;
-  const historyAvailable = desk?.state === "READY" && Array.isArray(history);
+  const history = review?.timeline;
+  const transfers = review?.transfers;
+  const historyAvailable = review?.state === "READY"
+    && Array.isArray(history)
+    && Array.isArray(transfers);
   if (!historyAvailable) return unavailablePersonalContext("ready", squadElementIds);
   const historyChips: Record<string, string> = {};
   (history || []).forEach((row) => {
@@ -543,21 +528,17 @@ export async function getPriceChangePersonalContext(input: {
     forceRefresh: input.forceRefresh === true,
     trace: input.trace,
   });
-  const resolvedTransfers = resolveTransferPlayerIds(
-    transfersRoot?.gameweeks || [],
-    input.players,
-  );
   const prices = buildPersonalPurchasePrices({
     selectedEventId: input.eventId,
     squadElementIds,
     startPrices,
-    transfers: resolvedTransfers,
+    transfers: (transfers || []).flatMap((gameweekTransfers) => gameweekTransfers.transfers),
     historyChips,
   });
   return {
     squadState: "ready",
     squadElementIds,
     purchasePrices: prices.purchasePrices,
-    personalPriceState: personalPriceState(prices.state, historyAvailable),
+    personalPriceState: prices.state,
   };
 }

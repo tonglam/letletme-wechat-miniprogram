@@ -7,7 +7,6 @@ import {
   DEFAULT_PRICE_CHANGE_SORT,
   filterPriceChangePlayers,
   formatPriceChangeShareText,
-  resolveTransferPlayerIds,
   sortPriceChangePlayers,
 } from "../miniprogram/utils/price-change";
 
@@ -140,32 +139,18 @@ scenario("price change prediction parity", () => {
     assert.deepEqual(sorted.map((item) => item.playerId), [2, 1]);
   });
 
-  scenario("resolves transferred players after a club move and ignores free-hit prices", () => {
-    const board = [
-      player(9, { webName: "Example", teamShortName: "NEW", position: "DEF" }),
-    ];
-    const resolved = resolveTransferPlayerIds([{
+  scenario("uses canonical transfer player IDs and ignores free-hit prices", () => {
+    const transfers = [{
       eventId: 2,
-      transfers: [{
-        eventId: 2,
-        elementInWebName: "Example",
-        elementInTypeName: "DEFENDER",
-        elementInTeamShortName: "OLD",
-        elementInCost: 52,
-        time: "2026-08-20T10:00:00Z",
-      }],
-    }], board);
-    assert.deepEqual(resolved, [{
-      eventId: 2,
-      elementInId: 9,
+      elementIn: 9,
       elementInCost: 52,
       time: "2026-08-20T10:00:00Z",
-    }]);
+    }];
     const freeHit = buildPersonalPurchasePrices({
       selectedEventId: 2,
       squadElementIds: [9],
       startPrices: { "9": 50 },
-      transfers: resolved,
+      transfers,
       historyChips: { "2": "FREE_HIT" },
     });
     assert.deepEqual(freeHit, { state: "UNAVAILABLE", purchasePrices: {} });
@@ -174,8 +159,8 @@ scenario("price change prediction parity", () => {
       selectedEventId: 3,
       squadElementIds: [9],
       startPrices: { "9": 50 },
-      transfers: resolved,
-      historyChips: { "2": "FH" },
+      transfers,
+      historyChips: { "2": "FREE_HIT" },
     });
     assert.deepEqual(restoredSquad, { state: "READY", purchasePrices: { "9": 50 } });
   });
