@@ -239,6 +239,16 @@ function tournamentReviewStateText(state: MyTournamentReviewState): string {
   }
 }
 
+export function tournamentReviewVisibleState(
+  reviewState: MyTournamentReviewState,
+  catalogState?: MyTournamentReviewState | null,
+): MyTournamentReviewState {
+  // A stale catalog can still contain a usable nested review, but the page
+  // must not present that response as fully current while the directory/head
+  // itself is degraded.
+  return catalogState === "DEGRADED" ? "DEGRADED" : reviewState;
+}
+
 function tournamentReviewNextCursor(
   review: MyTournamentGameweekReview | MyTournamentSeasonReview | null,
 ): string | null {
@@ -822,11 +832,15 @@ PerformancePage({
     const localEntryId = currentMyFplEntryId() || 0;
     let entryId = localEntryId;
     const scope = scopeOverride ?? this.data.v2Scope;
-    if (entryId !== this.loadedEntryId) {
+    const currentSeason = getApp<IAppOption>().globalData.season || undefined;
+    const seasonChanged =
+      this.loadedSeason !== undefined && this.loadedSeason !== currentSeason;
+    if (entryId !== this.loadedEntryId || seasonChanged) {
       // Do not keep a prior viewer's catalog or review visible while the new
-      // catalog is in flight. This also covers an entry switch whose catalog
-      // request fails: no old authorized payload remains on screen.
+      // catalog is in flight. This also covers an entry/season switch whose
+      // catalog request fails: no old authorized payload remains on screen.
       this.clearV2EntryScopedViewState(true);
+      if (seasonChanged) this.loadedEvent = 0;
     }
     const isActiveRequest = () =>
       this.pageVisible && requestId === this.requestId;
@@ -1135,6 +1149,17 @@ PerformancePage({
         ),
       ]);
       if (!isActiveRequest()) return;
+      const gameweekRevision = gameweek.scope?.revision ?? null;
+      const seasonRevision = season.latestRevision ?? null;
+      if (
+        gameweek.state === "READY" &&
+        season.state === "READY" &&
+        (!gameweekRevision ||
+          !seasonRevision ||
+          gameweekRevision !== seasonRevision)
+      ) {
+        throw new Error("赛事复盘快照版本不一致，请刷新后重试");
+      }
       // A binding can change while both reads are in flight. Reconcile again
       // before committing the payload so a later Retry cannot keep using the
       // stale entry selection.
@@ -1172,6 +1197,13 @@ PerformancePage({
             ? [eventId]
             : [],
       );
+      const reviewState =
+        ((this.data.activeView === "season" ? season.state : gameweek.state) ||
+          "UNAVAILABLE") as MyTournamentReviewState;
+      const visibleState = tournamentReviewVisibleState(
+        reviewState,
+        this.data.v2Catalog?.state,
+      );
       this.v2RetryOperation = null;
       this.loadedEvent = eventId;
       this.setData({
@@ -1192,14 +1224,8 @@ PerformancePage({
           season.format ??
           selected?.latestFormat ??
           null,
-        v2State:
-          (this.data.activeView === "season" ? season.state : gameweek.state) ||
-          "UNAVAILABLE",
-        v2StatusText: tournamentReviewStateText(
-          ((this.data.activeView === "season"
-            ? season.state
-            : gameweek.state) || "UNAVAILABLE") as MyTournamentReviewState,
-        ),
+        v2State: visibleState,
+        v2StatusText: tournamentReviewStateText(visibleState),
         hasGwData: gameweek.state === "READY",
         hasSeasonData: season.state === "READY",
         v2HasNextPage:
@@ -1331,8 +1357,16 @@ PerformancePage({
           : next;
         this.setData({
           v2Season: merged,
-          v2State: merged.state,
-          v2StatusText: tournamentReviewStateText(merged.state),
+          v2State: tournamentReviewVisibleState(
+            merged.state,
+            this.data.v2Catalog?.state,
+          ),
+          v2StatusText: tournamentReviewStateText(
+            tournamentReviewVisibleState(
+              merged.state,
+              this.data.v2Catalog?.state,
+            ),
+          ),
           v2HasNextPage: Boolean(tournamentReviewNextCursor(merged)),
         });
         this.v2RetryOperation = null;
@@ -1359,8 +1393,16 @@ PerformancePage({
           : next;
         this.setData({
           v2Gameweek: merged,
-          v2State: merged.state,
-          v2StatusText: tournamentReviewStateText(merged.state),
+          v2State: tournamentReviewVisibleState(
+            merged.state,
+            this.data.v2Catalog?.state,
+          ),
+          v2StatusText: tournamentReviewStateText(
+            tournamentReviewVisibleState(
+              merged.state,
+              this.data.v2Catalog?.state,
+            ),
+          ),
           v2TransferCostTotal: tournamentReviewTransferCostTotal(merged.points),
           v2HeadlineLabel: tournamentReviewHeadlineLabel(
             merged.points?.headlineMetric ?? "gross",

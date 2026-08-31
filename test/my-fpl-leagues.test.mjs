@@ -82,6 +82,14 @@ test("V2 review presentation uses complete aggregates and contract-selected scor
     leaguesModule.tournamentReviewHeadlineLabel("custom-score"),
     "赛事分",
   );
+  assert.equal(
+    leaguesModule.tournamentReviewVisibleState("READY", "DEGRADED"),
+    "DEGRADED",
+  );
+  assert.equal(
+    leaguesModule.tournamentReviewVisibleState("READY", "READY"),
+    "READY",
+  );
 });
 
 test("V2 review pins pagination and resumes the failed operation", async () => {
@@ -132,8 +140,13 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(page, /this\.loadedEvent = eventId/);
   assert.match(
     page,
-    /if \(entryId !== this\.loadedEntryId\)[\s\S]*clearV2EntryScopedViewState\(true\)/,
+    /const seasonChanged =[\s\S]*if \(entryId !== this\.loadedEntryId \|\| seasonChanged\)[\s\S]*clearV2EntryScopedViewState\(true\)/,
   );
+  assert.match(
+    page,
+    /gameweek\.state === "READY"[\s\S]*season\.state === "READY"[\s\S]*gameweekRevision !== seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
+  );
+  assert.match(page, /tournamentReviewVisibleState\([\s\S]*reviewState/);
   assert.match(page, /clearV2EntryScopedViewState\(loading = false\)/);
   assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);
   assert.match(
@@ -174,7 +187,7 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(service, /validateCacheData: \(data: unknown\)/);
   assert.match(service, /currentMyFplEntryId\(\) !== Number\(viewerEntryId\)/);
   assert.match(page, /requestView === "season" && !seasonRevision/);
-  assert.match(page, /v2State: merged\.state/);
+  assert.match(page, /v2State: tournamentReviewVisibleState\([\s\S]*merged\.state/);
   assert.match(page, /const expectedEntryId = Number\(this\.data\.entryId\) \|\| 0/);
   assert.match(page, /await refreshAuthoritativeFollow\(\)/);
   assert.match(
