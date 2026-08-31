@@ -1143,6 +1143,7 @@ PerformancePage({
         try {
           authoritativeEntryId = await refreshAuthoritativeFollow();
         } catch {
+          if (!isActiveRequest()) return;
           this.clearV2EntryScopedViewState();
           this.v2RetryOperation = "review";
           this.setData({
@@ -1282,24 +1283,32 @@ PerformancePage({
     });
     this.v2RetryOperation = "loadMore";
     this.setData({ v2LoadingMore: true, v2Error: "" });
-    try {
-      if (expectedEntryId > 0) {
-        let authoritativeEntryId: number | null;
-        try {
-          authoritativeEntryId = await refreshAuthoritativeFollow();
-        } catch {
-          if (!isActiveRequest()) return;
-          this.v2RetryOperation = "loadMore";
-          this.setData({ v2Error: "球队状态尚未同步，请稍后重试" });
-          return;
-        }
-        if (!isActiveRequest()) return;
-        if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
-          void this.loadV2Leagues(true);
-          return;
-        }
+    const revalidateReviewAuthority = async () => {
+      if (expectedEntryId <= 0) return true;
+      let authoritativeEntryId: number | null;
+      try {
+        authoritativeEntryId = await refreshAuthoritativeFollow();
+      } catch {
+        if (!isActiveRequest()) return false;
+        this.clearV2EntryScopedViewState();
+        this.v2RetryOperation = "review";
+        this.setData({
+          v2Loading: false,
+          v2State: "UNAVAILABLE",
+          v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
+          v2Error: "球队状态尚未同步，请稍后重试",
+        });
+        return false;
       }
-      if (!isActiveRequest()) return;
+      if (!isActiveRequest()) return false;
+      if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
+        void this.loadV2Leagues(true);
+        return false;
+      }
+      return true;
+    };
+    try {
+      if (!(await revalidateReviewAuthority())) return;
       if (requestView === "season") {
         const next = await getMyTournamentSeasonReview(
           tournamentId,
@@ -1310,6 +1319,7 @@ PerformancePage({
           expectedEntryId,
         );
         if (!isActiveRequest()) return;
+        if (!(await revalidateReviewAuthority())) return;
         if (next.latestRevision !== seasonRevision) {
           throw new Error("赛事复盘快照已更新，请刷新后重试");
         }
@@ -1337,6 +1347,7 @@ PerformancePage({
           expectedEntryId,
         );
         if (!isActiveRequest()) return;
+        if (!(await revalidateReviewAuthority())) return;
         if (next.scope?.revision !== gameweekRevision) {
           throw new Error("赛事复盘快照已更新，请刷新后重试");
         }
