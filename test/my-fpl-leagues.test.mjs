@@ -144,9 +144,17 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   );
   assert.match(
     page,
-    /gameweek\.state === "READY"[\s\S]*season\.state === "READY"[\s\S]*gameweekRevision !== seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
+    /gameweekRevision &&[\s\S]*seasonRevision &&[\s\S]*gameweekRevision !== seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
+  );
+  assert.match(
+    page,
+    /gameweek\.state === "READY"[\s\S]*season\.state === "READY"[\s\S]*!gameweekRevision \|\| !seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
   );
   assert.match(page, /tournamentReviewVisibleState\([\s\S]*reviewState/);
+  assert.match(
+    page,
+    /const nextState = tournamentReviewVisibleState\([\s\S]*this\.data\.v2Catalog\?\.state/,
+  );
   assert.match(page, /clearV2EntryScopedViewState\(loading = false\)/);
   assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);
   assert.match(

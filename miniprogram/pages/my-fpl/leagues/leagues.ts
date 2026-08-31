@@ -1152,11 +1152,16 @@ PerformancePage({
       const gameweekRevision = gameweek.scope?.revision ?? null;
       const seasonRevision = season.latestRevision ?? null;
       if (
+        gameweekRevision &&
+        seasonRevision &&
+        gameweekRevision !== seasonRevision
+      ) {
+        throw new Error("赛事复盘快照版本不一致，请刷新后重试");
+      }
+      if (
         gameweek.state === "READY" &&
         season.state === "READY" &&
-        (!gameweekRevision ||
-          !seasonRevision ||
-          gameweekRevision !== seasonRevision)
+        (!gameweekRevision || !seasonRevision)
       ) {
         throw new Error("赛事复盘快照版本不一致，请刷新后重试");
       }
@@ -1956,10 +1961,14 @@ PerformancePage({
       if (this.data.v2Loading) return;
       this.viewRequestId += 1;
       this.v2RetryOperation = null;
-      const nextState =
+      const reviewState =
         (view === "season"
           ? this.data.v2Season?.state
           : this.data.v2Gameweek?.state) || "UNAVAILABLE";
+      const nextState = tournamentReviewVisibleState(
+        reviewState as MyTournamentReviewState,
+        this.data.v2Catalog?.state,
+      );
       this.setData({
         activeView: view,
         showSeason: view === "season",
