@@ -150,6 +150,9 @@ jobs:
             --appid "$WECHAT_APPID" \
             --uv "$RELEASE_VERSION" \
             --ud "$RELEASE_DESCRIPTION" \
+            --project-ignores 'miniprogram/assets/squad-pitch/kits/**/*' \
+            --project-ignores 'miniprogram/assets/squad-pitch/pitch-background.jpg' \
+            --project-ignores 'miniprogram/assets/squad-pitch/pitch-background.svg' \
             --use-project-config true \
             --enable-es6 true
       - name: Submit uploaded version for audit when supported

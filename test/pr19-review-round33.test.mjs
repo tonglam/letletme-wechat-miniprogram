@@ -8,7 +8,7 @@ const read = (path) =>
 test("Live Match pull refresh bypasses unresolved AppContext backoff", () => {
   const page = read("miniprogram/pages/live/match/match.ts");
   assert.match(page, /async onPullDownRefresh\(\)[\s\S]*runForcedRefresh\(tracker, true\)/);
-  assert.match(page, /runForcedRefresh\([\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true,? \}\)/);
+  assert.match(page, /runForcedRefresh\([\s\S]*ensureContext\("pull-refresh", true\)[\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true,[\s\S]*useActiveEventPointer[\s\S]*\}\)/);
 });
 
 test("My FPL Team retry recovers both failed and unresolved context", () => {

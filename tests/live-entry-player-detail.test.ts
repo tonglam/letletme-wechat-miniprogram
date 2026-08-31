@@ -65,4 +65,30 @@ const gkpLines = buildProvisionalBreakdown({
 assertEqual(gkpLines.find((row) => row.label === "扑救")?.pointsText, "+1", "save points");
 assertEqual(gkpLines.find((row) => row.label === "零封")?.pointsText, "+4", "gkp clean sheet");
 
+const authoritative = buildPlayerLiveDetail({
+  name: "Authoritative",
+  position: "MID",
+  points: 10,
+  minutes: 90,
+  goalsScored: 1,
+  bonus: 1,
+  statPoints: {
+    minutes: { points: 2, pointsModification: null },
+    goals: { points: 5, pointsModification: 1 },
+    bonus: { points: 1, pointsModification: 1 },
+  },
+} as LivePlayerRow);
+assertEqual(
+  authoritative.breakdownRows.find((row) => row.label === "进球")?.pointsText,
+  "+6",
+  "authoritative goal points include modification",
+);
+assertEqual(
+  authoritative.breakdownRows.find((row) => row.label === "奖励分")?.pointsText,
+  "+2",
+  "authoritative bonus points include modification",
+);
+assertEqual(authoritative.breakdownSumText, "+10", "authoritative breakdown sum");
+assertEqual(authoritative.breakdownHint, "", "authoritative breakdown reconciles");
+
 console.log("live-entry-player-detail tests passed");
