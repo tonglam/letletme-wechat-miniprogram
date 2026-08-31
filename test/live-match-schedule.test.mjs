@@ -35,6 +35,23 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
   assert.doesNotMatch(page.slice(core), /await getLiveMatchByStatusSnapshot/);
 });
 
+test("stale app context is refreshed before it can pin a cold Match read", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onLoad = page.slice(
+    page.indexOf("async onLoad()"),
+    page.indexOf("initLiveRefresh()"),
+  );
+  assert.match(onLoad, /let context = getAppContextSnapshot\(\)/);
+  assert.match(
+    onLoad,
+    /if \(context && shouldRefreshAppContext\(context\)\) \{[\s\S]*await this\.ensureContext\("page-load", true\)[\s\S]*context = shouldRefreshAppContext\(refreshedContext\)[\s\S]*\? null[\s\S]*: refreshedContext[\s\S]*catch \{[\s\S]*context = null/,
+  );
+  assert.match(
+    onLoad,
+    /context = null[\s\S]*if \(context\) \{[\s\S]*this\.currentEventId = context\.currentEvent/,
+  );
+});
+
 test("preseason uses displayEvent schedule without a Live overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   assert.match(page, /currentEventId = context\.currentEvent \?\? 0/);

@@ -19,7 +19,7 @@ test("Live Match owns publication-first cold startup and resumes it after hide",
     page.indexOf("initLiveRefresh() {"),
   );
   assert.match(onLoad, /this\.pageVisible = true[\s\S]*startupPending = true[\s\S]*getAppContextSnapshot\(\)[\s\S]*startupPending = false[\s\S]*void this\.loadData\(\)/);
-  assert.doesNotMatch(onLoad, /await this\.ensureContext/);
+  assert.match(onLoad, /if \(context && shouldRefreshAppContext\(context\)[\s\S]*await this\.ensureContext\("page-load", true\)[\s\S]*context = null/);
   assert.match(page, /onHide\(\)[\s\S]*resumeForcedRefreshAfterShow = this\.forcedRefreshPending[\s\S]*resumeLoadAfterShow = this\.resumeLoadAfterShow[\s\S]*\|\| \(!this\.resumeForcedRefreshAfterShow[\s\S]*Boolean\(this\.liveRequest\)/);
   assert.match(page, /const resumeInterruptedLoad = resumed && this\.resumeLoadAfterShow[\s\S]*if \(resumeInterruptedLoad\)[\s\S]*loadData\(\{ background: this\.data\.hasData, forceRefresh: true,? \}\)/);
 });

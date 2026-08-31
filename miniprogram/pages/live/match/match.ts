@@ -852,11 +852,25 @@ Page({
         emptyDescription: emptyDescription(storedStatus),
       });
     }
-    // Match V2's active-event pointer is the cold-start authority. App context
-    // is consumed only when already available; an unavailable publication may
-    // fetch it later for the retained Core schedule fallback.
+    // Match V2's active-event pointer is the cold-start authority. A stale app
+    // context must be refreshed before it can pin the first read; if that
+    // refresh cannot produce a valid context, leave the event unset so the
+    // active pointer can select the event instead of crossing a GW boundary.
     this.setData({ loading: true });
-    const context = getAppContextSnapshot();
+    let context = getAppContextSnapshot();
+    if (context && shouldRefreshAppContext(context)) {
+      this.refreshContextPending = true;
+      try {
+        const refreshedContext = await this.ensureContext("page-load", true);
+        context = shouldRefreshAppContext(refreshedContext)
+          ? null
+          : refreshedContext;
+      } catch {
+        context = null;
+      } finally {
+        this.refreshContextPending = false;
+      }
+    }
     if (context) {
       this.currentEventId = context.currentEvent ?? 0;
       this.targetEventId = context.displayEvent ?? 0;
