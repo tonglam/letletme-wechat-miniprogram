@@ -171,8 +171,18 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(service, /mapStaleData: mapStaleTournamentReviewData/);
   assert.match(service, /state: "DEGRADED"/);
   assert.match(service, /cacheVariant: `viewer-entry:/);
+  assert.match(service, /validateCacheData: \(data: unknown\)/);
+  assert.match(service, /currentMyFplEntryId\(\) !== Number\(viewerEntryId\)/);
   assert.match(page, /requestView === "season" && !seasonRevision/);
   assert.match(page, /v2State: merged\.state/);
+  assert.match(page, /const expectedEntryId = Number\(this\.data\.entryId\) \|\| 0/);
+  assert.match(page, /await refreshAuthoritativeFollow\(\)/);
+  assert.match(page, /!viewerRecoveryAttempted && isViewerEntryAuthorizationError/);
+  assert.match(page, /this\.loadedEvent = 0/);
+  assert.match(
+    page,
+    /v2LoadingMore: false,[\s\S]*v2HasNextPage:[\s\S]*v2Error: ""/,
+  );
   assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
 });
 

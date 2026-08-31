@@ -218,6 +218,57 @@ test("cache identity validation evicts a mismatched V2 catalog", async () => {
   assert.equal(runtime.requests.length, 2);
 });
 
+test("cache identity validation rejects fresh and stale viewer candidates", async () => {
+  let expectedViewer = 111;
+  let responseViewer = 111;
+  let failRequests = false;
+  const runtime = installRuntime((request) => {
+    if (failRequests) {
+      request.fail({ errMsg: "request:fail timeout" });
+      return;
+    }
+    request.success({
+      statusCode: 200,
+      data: { data: { value: { viewer: responseViewer } } },
+    });
+  });
+  const validateViewer = (data) => data?.value?.viewer === expectedViewer;
+  const query = "query ViewerCacheFreshValidation { value { viewer } }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 60_000,
+    staleTtl: 60_000,
+    cacheVariant: "viewer-entry:111",
+    validateCacheData: validateViewer,
+  };
+
+  await graphqlRead(query, {}, options);
+  expectedViewer = 222;
+  responseViewer = 222;
+  const refreshed = await graphqlRead(query, {}, options);
+  assert.equal(refreshed.meta.source, "network");
+  assert.equal(runtime.requests.length, 2);
+
+  const staleQuery = "query ViewerCacheStaleValidation { value { viewer } }";
+  expectedViewer = 111;
+  responseViewer = 111;
+  const staleOptions = {
+    ...options,
+    cacheTtl: 1,
+    cacheVariant: "viewer-entry:111-stale",
+  };
+  await graphqlRead(staleQuery, {}, staleOptions);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expectedViewer = 222;
+  failRequests = true;
+  // The invalid validator evicts the expired entry before stale fallback is
+  // selected, so a transient failure cannot return the wrong viewer payload.
+  await assert.rejects(
+    graphqlRead(staleQuery, {}, { ...staleOptions, forceRefresh: true }),
+  );
+  assert.equal(runtime.requests.length, 4);
+});
+
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {
   const runtime = installRuntime(success({ value: 1 }));
   const query = "query BehaviorCache { value }";

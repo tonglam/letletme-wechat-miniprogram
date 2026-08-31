@@ -1024,6 +1024,10 @@ PerformancePage({
           trace ?? undefined,
         );
       } else if (isActiveRequest()) {
+        // No selected/finalized event is a loaded zero-event state. Keeping
+        // the previous event here makes every warm show look stale and causes
+        // an unnecessary catalog reload loop.
+        this.loadedEvent = 0;
         const catalogUnavailable =
           catalog.tournaments.length === 0 && catalog.state !== "READY";
         if (catalogUnavailable) {
@@ -1066,6 +1070,7 @@ PerformancePage({
     eventId: number,
     forceRefresh = false,
     trace?: PageRequestTrace,
+    viewerRecoveryAttempted = false,
   ) {
     const requestId = ++this.viewRequestId;
     const isActiveRequest = () =>
@@ -1079,6 +1084,31 @@ PerformancePage({
       v2Event: eventId,
     });
     try {
+      // Reconcile the local display pointer with the authoritative follow
+      // before personal reads. The roots authorize the server-side entry, so
+      // an external rebind must not reuse the old entry-scoped cache variant.
+      const expectedEntryId = Number(this.data.entryId) || 0;
+      if (expectedEntryId > 0) {
+        let authoritativeEntryId: number | null;
+        try {
+          authoritativeEntryId = await refreshAuthoritativeFollow();
+        } catch {
+          if (isActiveRequest()) {
+            this.v2RetryOperation = "review";
+            this.setData({
+              v2Loading: false,
+              v2State: "UNAVAILABLE",
+              v2Error: "球队状态尚未同步，请稍后重试",
+            });
+          }
+          return;
+        }
+        if (!isActiveRequest()) return;
+        if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
+          void this.loadV2Leagues(true, trace);
+          return;
+        }
+      }
       const [gameweek, season] = await Promise.all([
         getMyTournamentGameweekReview(
           tournamentId,
@@ -1099,6 +1129,28 @@ PerformancePage({
         ),
       ]);
       if (!isActiveRequest()) return;
+      // A binding can change while both reads are in flight. Reconcile again
+      // before committing the payload so a later Retry cannot keep using the
+      // stale entry selection.
+      if (expectedEntryId > 0) {
+        let authoritativeEntryId: number | null;
+        try {
+          authoritativeEntryId = await refreshAuthoritativeFollow();
+        } catch {
+          this.v2RetryOperation = "review";
+          this.setData({
+            v2Loading: false,
+            v2State: "DEGRADED",
+            v2Error: "球队状态尚未同步，请稍后重试",
+          });
+          return;
+        }
+        if (!isActiveRequest()) return;
+        if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
+          void this.loadV2Leagues(true, trace);
+          return;
+        }
+      }
       const selected =
         this.data.v2Catalog?.tournaments.find(
           (item) => item.tournamentId === tournamentId,
@@ -1148,6 +1200,31 @@ PerformancePage({
       });
     } catch (error) {
       if (!isActiveRequest()) return;
+      if (!viewerRecoveryAttempted && isViewerEntryAuthorizationError(error)) {
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!isActiveRequest()) return;
+          if (!refreshedEntryId) {
+            this.showEntryEmptyState();
+            return;
+          }
+          if (refreshedEntryId !== (Number(this.data.entryId) || 0)) {
+            void this.loadV2Leagues(true, trace);
+            return;
+          }
+        } catch {
+          // Keep the review retry operation and show the authority-sync state
+          // below instead of replaying a request with a stale entry id.
+        }
+        if (!isActiveRequest()) return;
+        this.v2RetryOperation = "review";
+        this.setData({
+          v2Loading: false,
+          v2State: "UNAVAILABLE",
+          v2Error: "球队状态尚未同步，请稍后重试",
+        });
+        return;
+      }
       this.setData({
         v2Loading: false,
         v2State: "UNAVAILABLE",
@@ -1176,6 +1253,21 @@ PerformancePage({
       this.v2RetryOperation = "review";
       this.setData({ v2Error: "赛事复盘快照版本缺失，请重试" });
       return;
+    }
+    const expectedEntryId = Number(this.data.entryId) || 0;
+    if (expectedEntryId > 0) {
+      let authoritativeEntryId: number | null;
+      try {
+        authoritativeEntryId = await refreshAuthoritativeFollow();
+      } catch {
+        this.v2RetryOperation = "loadMore";
+        this.setData({ v2Error: "球队状态尚未同步，请稍后重试" });
+        return;
+      }
+      if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
+        void this.loadV2Leagues(true);
+        return;
+      }
     }
     const requestId = this.viewRequestId;
     const trace = capturePageRequestTrace({
@@ -1793,6 +1885,7 @@ PerformancePage({
             view === "season" ? this.data.v2Season : this.data.v2Gameweek,
           ),
         ),
+        v2Error: "",
       });
       return;
     }

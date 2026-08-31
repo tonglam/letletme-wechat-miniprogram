@@ -9,6 +9,7 @@ import type { EntryTournamentRow } from "../models/competition";
 import type { DomainRead, ServiceReadOptions } from "./service-read";
 import { ensureAppContext, getAppContextSnapshot } from "./app-context.service";
 import { isOfficialH2HTournamentRow } from "../utils/official-h2h";
+import { currentMyFplEntryId } from "../utils/follow";
 
 export const GET_ENTRY_TOURNAMENTS = `
   query EntryTournaments($entryId: Int!) {
@@ -591,11 +592,15 @@ const myTournamentReviewOptions = (
   }`,
   contract: MY_TOURNAMENT_REVIEW_CONTRACT,
   mapStaleData: mapStaleTournamentReviewData,
-  ...(validateCatalogViewer &&
-  Number.isSafeInteger(viewerEntryId) &&
-  Number(viewerEntryId) > 0
+  ...(Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
     ? {
+        // Validate every cache read against the current local authority. The
+        // page refreshes that authority before a personal review request;
+        // this second guard also prevents an old entry variant from being
+        // returned after an external rebind while the page remains resident.
         validateCacheData: (data: unknown) => {
+          if (currentMyFplEntryId() !== Number(viewerEntryId)) return false;
+          if (!validateCatalogViewer) return true;
           const catalog =
             data && typeof data === "object" && !Array.isArray(data)
               ? (data as { myTournamentReviewCatalog?: unknown })

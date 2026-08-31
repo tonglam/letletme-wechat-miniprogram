@@ -883,10 +883,29 @@ export async function graphqlRead<T>(
   }
 
   const identity = requestIdentity(query, variables, policy, token);
-  const cached = policy.cacheable
+  let cached = policy.cacheable
     ? readCacheEntry(identity.cacheKey, identity.requestKey)
     : undefined;
   const now = Date.now();
+
+  // Cache identity/integrity validators apply to reads as well as network
+  // responses.  A viewer-scoped response can outlive the local follow
+  // binding, so never return a fresh or stale candidate until the caller has
+  // confirmed that it still belongs to the current authority.  Evict the
+  // complete entry before continuing so a rate-limit/offline fallback cannot
+  // re-use the rejected payload.
+  if (cached && options?.validateCacheData) {
+    let cacheValid = false;
+    try {
+      cacheValid = options.validateCacheData(cached.entry.data);
+    } catch {
+      cacheValid = false;
+    }
+    if (!cacheValid) {
+      removeCacheEntry(identity.cacheKey, identity.requestKey);
+      cached = undefined;
+    }
+  }
 
   if (cached && !options?.forceRefresh && now < cached.entry.freshUntil) {
     recordServedFromCache(identity.requestKey, cached.entry.storedAt);
