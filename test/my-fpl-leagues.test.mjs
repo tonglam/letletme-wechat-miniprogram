@@ -87,6 +87,10 @@ test("V2 review presentation uses complete aggregates and contract-selected scor
     "DEGRADED",
   );
   assert.equal(
+    leaguesModule.tournamentReviewVisibleState("READY", "READY", "DEGRADED"),
+    "DEGRADED",
+  );
+  assert.equal(
     leaguesModule.tournamentReviewVisibleState("READY", "READY"),
     "READY",
   );
@@ -153,7 +157,11 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(page, /tournamentReviewVisibleState\([\s\S]*reviewState/);
   assert.match(
     page,
-    /const nextState = tournamentReviewVisibleState\([\s\S]*this\.data\.v2Catalog\?\.state/,
+    /const nextState = tournamentReviewVisibleState\([\s\S]*this\.data\.v2Catalog\?\.state[\s\S]*this\.data\.v2SelectedTournament\?\.state/,
+  );
+  assert.match(
+    page,
+    /previous\.state === "DEGRADED"[\s\S]*next\.state === "DEGRADED"[\s\S]*return \{ \.\.\.next, state,/,
   );
   assert.match(page, /clearV2EntryScopedViewState\(loading = false\)/);
   assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);

@@ -242,11 +242,14 @@ function tournamentReviewStateText(state: MyTournamentReviewState): string {
 export function tournamentReviewVisibleState(
   reviewState: MyTournamentReviewState,
   catalogState?: MyTournamentReviewState | null,
+  tournamentState?: MyTournamentReviewState | null,
 ): MyTournamentReviewState {
-  // A stale catalog can still contain a usable nested review, but the page
-  // must not present that response as fully current while the directory/head
-  // itself is degraded.
-  return catalogState === "DEGRADED" ? "DEGRADED" : reviewState;
+  // A stale catalog or selected tournament can still contain a usable nested
+  // review, but the page must not present that response as fully current while
+  // either the directory/head or the selected item is degraded.
+  return catalogState === "DEGRADED" || tournamentState === "DEGRADED"
+    ? "DEGRADED"
+    : reviewState;
 }
 
 function tournamentReviewNextCursor(
@@ -340,7 +343,11 @@ function mergeTournamentReviewPage(
           matches: [...previous.knockout.matches, ...next.knockout.matches],
         }
       : next.knockout;
-  return { ...next, points, h2h, knockout };
+  const state =
+    previous.state === "DEGRADED" || next.state === "DEGRADED"
+      ? "DEGRADED"
+      : next.state;
+  return { ...next, state, points, h2h, knockout };
 }
 
 const DIRECTORY_CACHE_KEY = "my-fpl:tournaments:v2";
@@ -1208,6 +1215,7 @@ PerformancePage({
       const visibleState = tournamentReviewVisibleState(
         reviewState,
         this.data.v2Catalog?.state,
+        selected?.state,
       );
       this.v2RetryOperation = null;
       this.loadedEvent = eventId;
@@ -1365,11 +1373,13 @@ PerformancePage({
           v2State: tournamentReviewVisibleState(
             merged.state,
             this.data.v2Catalog?.state,
+            this.data.v2SelectedTournament?.state,
           ),
           v2StatusText: tournamentReviewStateText(
             tournamentReviewVisibleState(
               merged.state,
               this.data.v2Catalog?.state,
+              this.data.v2SelectedTournament?.state,
             ),
           ),
           v2HasNextPage: Boolean(tournamentReviewNextCursor(merged)),
@@ -1401,11 +1411,13 @@ PerformancePage({
           v2State: tournamentReviewVisibleState(
             merged.state,
             this.data.v2Catalog?.state,
+            this.data.v2SelectedTournament?.state,
           ),
           v2StatusText: tournamentReviewStateText(
             tournamentReviewVisibleState(
               merged.state,
               this.data.v2Catalog?.state,
+              this.data.v2SelectedTournament?.state,
             ),
           ),
           v2TransferCostTotal: tournamentReviewTransferCostTotal(merged.points),
@@ -1968,6 +1980,7 @@ PerformancePage({
       const nextState = tournamentReviewVisibleState(
         reviewState as MyTournamentReviewState,
         this.data.v2Catalog?.state,
+        this.data.v2SelectedTournament?.state,
       );
       this.setData({
         activeView: view,
