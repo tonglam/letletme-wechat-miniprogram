@@ -1,7 +1,4 @@
-import type {
-  LiveMatchdayStatus,
-  LiveSnapshotStatus,
-} from "../models/live";
+import type { LiveMatchdayStatus, LiveSnapshotStatus } from "../models/live";
 
 /**
  * The single presentation vocabulary every Live surface renders. Derived
@@ -38,7 +35,9 @@ export interface LiveDisplayInput {
  * transient error, never call partial data complete, never poll-settle into
  * a stale "refreshing".
  */
-export function normalizeLiveDisplayState(input: LiveDisplayInput): LiveDisplayState {
+export function normalizeLiveDisplayState(
+  input: LiveDisplayInput,
+): LiveDisplayState {
   const {
     snapshot,
     hasData,
@@ -46,13 +45,17 @@ export function normalizeLiveDisplayState(input: LiveDisplayInput): LiveDisplayS
     probing,
     lastError,
     online,
-    partialFailedCount = 0
+    partialFailedCount = 0,
   } = input;
 
   if (!online && hasData) return "offline";
   if (!hasData && lastError) return "unavailable";
   if (hasData && partialFailedCount > 0) return "partial";
-  if (snapshot?.state === "FINALIZED") return "final";
+  const detailComplete =
+    !snapshot ||
+    !("detailDelivery" in snapshot) ||
+    snapshot.detailDelivery.state === "FINAL";
+  if (snapshot?.state === "FINALIZED" && detailComplete) return "final";
   if (snapshot?.state === "PRE_DEADLINE" && !hasData) return "scheduled";
   if (loading || probing) return "refreshing";
   if (

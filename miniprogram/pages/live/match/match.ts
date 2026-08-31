@@ -1460,13 +1460,19 @@ Page({
         > | null = null;
         let publicationError: unknown = null;
         try {
+          // Once context has established the current event, pin the read to
+          // that event. An explicit key prevents a rollover replacement from
+          // joining an older active-pointer request still in graphqlRead's
+          // in-flight map.
+          const expectedEventId =
+            this.currentEventId > 0 ? this.currentEventId : undefined;
           publishedMatchday =
             options.prefetchedLiveResult ??
             (await getLiveMatchByStatusSnapshot(
               "all",
               options.forceRefresh === true,
               requestTrace,
-              this.liveSnapshot?.eventId || undefined,
+              expectedEventId,
             ));
         } catch (error) {
           publicationError = error;

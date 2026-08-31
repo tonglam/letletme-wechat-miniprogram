@@ -21,11 +21,11 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
     page,
     /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;[\s\S]*await readCoreEventFixtureSchedule/,
   );
-  assert.match(page, /this\.liveSnapshot\?\.eventId \|\| undefined/);
-  assert.doesNotMatch(
+  assert.match(
     page,
-    /this\.liveSnapshot\?\.eventId \|\| this\.currentEventId/,
+    /const expectedEventId =\s*this\.currentEventId > 0 \? this\.currentEventId : undefined/,
   );
+  assert.match(page, /requestTrace, expectedEventId/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
   assert.match(

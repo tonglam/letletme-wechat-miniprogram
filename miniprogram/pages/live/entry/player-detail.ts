@@ -65,7 +65,9 @@ function textValue(value: unknown, fallback = ""): string {
 }
 
 export function normalizeLivePosition(player: LivePlayerRow): string {
-  const raw = textValue(player.position || player.elementTypeName).toUpperCase();
+  const raw = textValue(
+    player.position || player.elementTypeName,
+  ).toUpperCase();
   if (raw.startsWith("GK")) return "GKP";
   if (raw.startsWith("DEF")) return "DEF";
   if (raw.startsWith("MID")) return "MID";
@@ -96,7 +98,10 @@ function statRow(label: string, value: number): PlayerLiveStatRow {
 }
 
 /** Expected-goals family — fractional, shown with two decimals like the web. */
-function expectedStatRow(label: string, value: unknown): PlayerLiveStatRow | null {
+function expectedStatRow(
+  label: string,
+  value: unknown,
+): PlayerLiveStatRow | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return { label, value: parsed.toFixed(2), muted: parsed === 0 };
@@ -112,7 +117,7 @@ function pushBreakdown(
   label: string,
   points: number,
   value?: number,
-  countText = ""
+  countText = "",
 ): void {
   if (points === 0) return;
   rows.push({
@@ -120,7 +125,7 @@ function pushBreakdown(
     label,
     countText,
     pointsText: formatPoints(points),
-    negative: points < 0
+    negative: points < 0,
   });
   if (!countText && value !== undefined && value !== 0) {
     rows[rows.length - 1].countText = `${value}次`;
@@ -137,17 +142,18 @@ function defensiveContributionThreshold(position: string): number {
 function authoritativePoints(
   player: LivePlayerRow,
   identifiers: readonly string[],
-  fallback: number,
-): number {
+): number | undefined {
   for (const identifier of identifiers) {
     const stat = player.statPoints?.[identifier.toLowerCase()];
     if (!stat) continue;
     return numberValue(stat.points) + numberValue(stat.pointsModification);
   }
-  return fallback;
+  return undefined;
 }
 
-export function buildProvisionalBreakdown(player: LivePlayerRow): PlayerLiveBreakdownRow[] {
+export function buildProvisionalBreakdown(
+  player: LivePlayerRow,
+): PlayerLiveBreakdownRow[] {
   const position = normalizeLivePosition(player);
   const minutes = numberValue(player.minutes);
   const goals = numberValue(player.goalsScored);
@@ -163,126 +169,155 @@ export function buildProvisionalBreakdown(player: LivePlayerRow): PlayerLiveBrea
   const bonus = numberValue(player.bonus);
   const rows: PlayerLiveBreakdownRow[] = [];
 
-  if (minutes > 0) {
+  const minutesPoints = authoritativePoints(player, ["minutes", "mins"]);
+  if (minutesPoints !== undefined || minutes > 0) {
     pushBreakdown(
       rows,
       "minutes",
       "出场",
-      authoritativePoints(player, ["minutes", "mins"], minutes >= 60 ? 2 : 1),
+      minutesPoints ?? (minutes >= 60 ? 2 : 1),
       minutes,
       `${minutes}分钟`,
     );
   }
-  if (goals > 0) {
-    const per = position === "GKP" || position === "DEF" ? 6 : position === "MID" ? 5 : 4;
+  const goalsPer =
+    position === "GKP" || position === "DEF" ? 6 : position === "MID" ? 5 : 4;
+  const goalsPoints = authoritativePoints(player, [
+    "goals",
+    "goals_scored",
+    "goalsScored",
+  ]);
+  if (goalsPoints !== undefined || goals > 0) {
     pushBreakdown(
       rows,
       "goals",
       "进球",
-      authoritativePoints(player, ["goals", "goals_scored", "goalsScored"], goals * per),
+      goalsPoints ?? goals * goalsPer,
       goals,
     );
   }
-  if (assists > 0) {
+  const assistsPoints = authoritativePoints(player, ["assists"]);
+  if (assistsPoints !== undefined || assists > 0) {
     pushBreakdown(
       rows,
       "assists",
       "助攻",
-      authoritativePoints(player, ["assists"], assists * 3),
+      assistsPoints ?? assists * 3,
       assists,
     );
   }
-  if (cleanSheets > 0) {
-    const per = position === "GKP" || position === "DEF" ? 4 : position === "MID" ? 1 : 0;
-    if (per > 0) {
+  const cleanSheetPer =
+    position === "GKP" || position === "DEF" ? 4 : position === "MID" ? 1 : 0;
+  const cleanSheetsPoints = authoritativePoints(player, [
+    "clean_sheets",
+    "cleanSheets",
+  ]);
+  if (cleanSheetsPoints !== undefined || cleanSheets > 0) {
+    if (cleanSheetPer > 0 || cleanSheetsPoints !== undefined) {
       pushBreakdown(
         rows,
         "cleansheet",
         "零封",
-        authoritativePoints(player, ["clean_sheets", "cleanSheets"], cleanSheets * per),
+        cleanSheetsPoints ?? cleanSheets * cleanSheetPer,
         cleanSheets,
       );
     }
   }
   const dcThreshold = defensiveContributionThreshold(position);
-  if (dcThreshold > 0 && defensiveContribution >= dcThreshold) {
-    pushBreakdown(
-      rows,
-      "defensive",
-      "防守贡献",
-      authoritativePoints(player, ["defensive_contribution", "defensiveContribution"], 2),
-    );
+  const defensivePoints = authoritativePoints(player, [
+    "defensive_contribution",
+    "defensiveContribution",
+  ]);
+  if (
+    defensivePoints !== undefined ||
+    (dcThreshold > 0 && defensiveContribution >= dcThreshold)
+  ) {
+    pushBreakdown(rows, "defensive", "防守贡献", defensivePoints ?? 2);
   }
-  if (position === "GKP" && saves > 0) {
+  const savesPoints = authoritativePoints(player, ["saves"]);
+  if (savesPoints !== undefined || (position === "GKP" && saves > 0)) {
     const pts = Math.floor(saves / 3);
-    if (pts !== 0) {
+    if (savesPoints !== undefined || pts !== 0) {
       pushBreakdown(
         rows,
         "saves",
         "扑救",
-        authoritativePoints(player, ["saves"], pts),
+        savesPoints ?? pts,
         saves,
         `${saves}次`,
       );
     }
   }
-  if (penaltiesSaved > 0) {
+  const penaltiesSavedPoints = authoritativePoints(player, [
+    "penalties_saved",
+    "penaltiesSaved",
+  ]);
+  if (penaltiesSavedPoints !== undefined || penaltiesSaved > 0) {
     pushBreakdown(
       rows,
       "pensaved",
       "扑点",
-      authoritativePoints(player, ["penalties_saved", "penaltiesSaved"], penaltiesSaved * 5),
+      penaltiesSavedPoints ?? penaltiesSaved * 5,
       penaltiesSaved,
     );
   }
-  if (penaltiesMissed > 0) {
+  const penaltiesMissedPoints = authoritativePoints(player, [
+    "penalties_missed",
+    "penaltiesMissed",
+  ]);
+  if (penaltiesMissedPoints !== undefined || penaltiesMissed > 0) {
     pushBreakdown(
       rows,
       "penmissed",
       "失点",
-      authoritativePoints(player, ["penalties_missed", "penaltiesMissed"], penaltiesMissed * -2),
+      penaltiesMissedPoints ?? penaltiesMissed * -2,
       penaltiesMissed,
     );
   }
-  if (ownGoals > 0) {
+  const ownGoalsPoints = authoritativePoints(player, ["own_goals", "ownGoals"]);
+  if (ownGoalsPoints !== undefined || ownGoals > 0) {
     pushBreakdown(
       rows,
       "owngoal",
       "乌龙",
-      authoritativePoints(player, ["own_goals", "ownGoals"], ownGoals * -2),
+      ownGoalsPoints ?? ownGoals * -2,
       ownGoals,
     );
   }
-  if (yellowCards > 0) {
+  const yellowCardPoints = authoritativePoints(player, [
+    "yellow_cards",
+    "yellowCards",
+  ]);
+  if (yellowCardPoints !== undefined || yellowCards > 0) {
     pushBreakdown(
       rows,
       "yellow",
       "黄牌",
-      authoritativePoints(player, ["yellow_cards", "yellowCards"], yellowCards * -1),
+      yellowCardPoints ?? yellowCards * -1,
       yellowCards,
     );
   }
-  if (redCards > 0) {
+  const redCardPoints = authoritativePoints(player, ["red_cards", "redCards"]);
+  if (redCardPoints !== undefined || redCards > 0) {
     pushBreakdown(
       rows,
       "red",
       "红牌",
-      authoritativePoints(player, ["red_cards", "redCards"], redCards * -3),
+      redCardPoints ?? redCards * -3,
       redCards,
     );
   }
-  if (bonus > 0) {
-    pushBreakdown(
-      rows,
-      "bonus",
-      "奖励分",
-      authoritativePoints(player, ["bonus"], bonus),
-    );
+  const bonusPoints = authoritativePoints(player, ["bonus"]);
+  if (bonusPoints !== undefined || bonus > 0) {
+    pushBreakdown(rows, "bonus", "奖励分", bonusPoints ?? bonus);
   }
   return rows;
 }
 
-function matchStatRows(player: LivePlayerRow, position: string): PlayerLiveStatRow[] {
+function matchStatRows(
+  player: LivePlayerRow,
+  position: string,
+): PlayerLiveStatRow[] {
   const minutes = numberValue(player.minutes);
   const goals = numberValue(player.goalsScored);
   const assists = numberValue(player.assists);
@@ -298,11 +333,24 @@ function matchStatRows(player: LivePlayerRow, position: string): PlayerLiveStatR
 
   const rows: PlayerLiveStatRow[] = [statRow("分钟", minutes)];
   if (position === "GKP") {
-    rows.push(statRow("扑救", saves), statRow("零封", cleanSheets), statRow("扑点", penaltiesSaved));
+    rows.push(
+      statRow("扑救", saves),
+      statRow("零封", cleanSheets),
+      statRow("扑点", penaltiesSaved),
+    );
   } else if (position === "DEF" || position === "MID") {
-    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("零封", cleanSheets), statRow("防守贡献", defensiveContribution));
+    rows.push(
+      statRow("进球", goals),
+      statRow("助攻", assists),
+      statRow("零封", cleanSheets),
+      statRow("防守贡献", defensiveContribution),
+    );
   } else {
-    rows.push(statRow("进球", goals), statRow("助攻", assists), statRow("防守贡献", defensiveContribution));
+    rows.push(
+      statRow("进球", goals),
+      statRow("助攻", assists),
+      statRow("防守贡献", defensiveContribution),
+    );
   }
   // Expected-goals family (web parity): xG/xA for everyone, xGC where tracked.
   for (const expected of [
@@ -314,14 +362,21 @@ function matchStatRows(player: LivePlayerRow, position: string): PlayerLiveStatR
   ]) {
     if (expected) rows.push(expected);
   }
-  rows.push(statRow("黄牌", yellowCards), statRow("红牌", redCards), statRow("奖励分", bonus));
+  rows.push(
+    statRow("黄牌", yellowCards),
+    statRow("红牌", redCards),
+    statRow("奖励分", bonus),
+  );
   if (ownGoals > 0) rows.push(statRow("乌龙", ownGoals));
   if (penaltiesMissed > 0) rows.push(statRow("失点", penaltiesMissed));
   return rows;
 }
 
 /** Live-only "points still available" signals (比赛中 / 部分完赛). */
-function buildOpportunities(player: LivePlayerRow, position: string): PlayerLiveOpportunityRow[] {
+function buildOpportunities(
+  player: LivePlayerRow,
+  position: string,
+): PlayerLiveOpportunityRow[] {
   const status = numberValue(player.playStatus, -1);
   if (status !== 2 && status !== 3) return [];
   const rows: PlayerLiveOpportunityRow[] = [];
@@ -334,7 +389,7 @@ function buildOpportunities(player: LivePlayerRow, position: string): PlayerLive
       kind: "defensive",
       label: "防守贡献",
       text: `${dc}/${dcThreshold} · 达标 +2`,
-      progressPct: Math.round((dc / dcThreshold) * 100)
+      progressPct: Math.round((dc / dcThreshold) * 100),
     });
   }
 
@@ -351,7 +406,7 @@ function buildOpportunities(player: LivePlayerRow, position: string): PlayerLive
       kind: "cleansheet",
       label: "零封",
       text: `${minutes}/60 分钟 · 满 60 分钟 +${per}`,
-      progressPct: Math.round((minutes / 60) * 100)
+      progressPct: Math.round((minutes / 60) * 100),
     });
   }
   return rows;
@@ -365,24 +420,36 @@ function bpsToneOf(bps: number | null): PlayerLiveDetailView["bpsTone"] {
   return "low";
 }
 
-export function buildPlayerLiveDetail(player: LivePlayerRow): PlayerLiveDetailView {
+export function buildPlayerLiveDetail(
+  player: LivePlayerRow,
+): PlayerLiveDetailView {
   const position = normalizeLivePosition(player);
-  const points = numberValue(player.points ?? player.livePoints ?? player.totalPoints);
+  const points = numberValue(
+    player.points ?? player.livePoints ?? player.totalPoints,
+  );
   const bonus = numberValue(player.bonus);
   const hasBps = player.bps !== undefined && player.bps !== null;
   const bps = hasBps ? numberValue(player.bps) : null;
   const multiplier = numberValue(player.multiplier, 1);
   const rawRows = buildProvisionalBreakdown(player);
   const rawSum = rawRows.reduce((sum, row) => sum + Number(row.pointsText), 0);
-  const scale = rawSum > 0 && points === rawSum * 3 ? 3 : rawSum > 0 && points === rawSum * 2 ? 2 : 1;
+  const scale =
+    rawSum > 0 && points === rawSum * 3
+      ? 3
+      : rawSum > 0 && points === rawSum * 2
+        ? 2
+        : 1;
   const breakdownRows =
     scale > 1
       ? rawRows.map((row) => ({
           ...row,
-          pointsText: formatPoints(Number(row.pointsText) * scale)
+          pointsText: formatPoints(Number(row.pointsText) * scale),
         }))
       : rawRows;
-  const shownSum = breakdownRows.reduce((sum, row) => sum + Number(row.pointsText), 0);
+  const shownSum = breakdownRows.reduce(
+    (sum, row) => sum + Number(row.pointsText),
+    0,
+  );
   const reconciles = shownSum === points;
 
   return {
@@ -391,19 +458,29 @@ export function buildPlayerLiveDetail(player: LivePlayerRow): PlayerLiveDetailVi
     position,
     statusText: statusOf(player),
     pointsText: String(points),
-    roleBadge: player.captain ? (multiplier >= 3 ? "TC ×3" : "C ×2") : player.viceCaptain ? "V" : "",
+    roleBadge: player.captain
+      ? multiplier >= 3
+        ? "TC ×3"
+        : "C ×2"
+      : player.viceCaptain
+        ? "V"
+        : "",
     bonusText: bonus > 0 ? `+${bonus}` : "",
     bpsText: bps === null ? "" : String(bps),
     bpsTone: bpsToneOf(bps),
-    multiplierNote: multiplier > 1 && breakdownRows.length > 0 ? `明细已含队长 ×${multiplier}` : "",
+    multiplierNote:
+      multiplier > 1 && breakdownRows.length > 0
+        ? `明细已含队长 ×${multiplier}`
+        : "",
     opportunityRows: buildOpportunities(player, position),
     statRows: matchStatRows(player, position),
     breakdownRows,
     breakdownSumText: breakdownRows.length > 0 ? formatPoints(shownSum) : "",
-    breakdownHint: breakdownRows.length === 0
-      ? "官方明细同步后会显示在这里"
-      : reconciles
-        ? ""
-        : "暂估明细，可能尚未计入防守贡献等官方项"
+    breakdownHint:
+      breakdownRows.length === 0
+        ? "官方明细同步后会显示在这里"
+        : reconciles
+          ? ""
+          : "暂估明细，可能尚未计入防守贡献等官方项",
   };
 }

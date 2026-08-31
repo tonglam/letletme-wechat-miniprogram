@@ -5,8 +5,9 @@ const {
   liveMatchdayNeedsRefresh,
   liveSnapshotNeedsRefresh,
   shouldPollLiveMatchday,
-} =
-  await import("../miniprogram/utils/live-refresh.ts");
+} = await import("../miniprogram/utils/live-refresh.ts");
+const { normalizeLiveDisplayState } =
+  await import("../miniprogram/utils/live-status.ts");
 
 const snapshot = (displayStats) => ({
   eventId: 1,
@@ -122,5 +123,45 @@ test("Match recovery polling continues after the final whistle until detail is f
       snapshot: accepted,
     }),
     true,
+  );
+});
+
+test("a finalized matchday with pending detail is not presented as final", () => {
+  const accepted = matchdaySnapshot({
+    state: "FINALIZED",
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_PENDING"],
+    },
+  });
+  assert.notEqual(
+    normalizeLiveDisplayState({
+      snapshot: accepted,
+      hasData: true,
+      loading: false,
+      probing: false,
+      lastError: "",
+      online: true,
+    }),
+    "final",
+  );
+  assert.equal(
+    normalizeLiveDisplayState({
+      snapshot: matchdaySnapshot({
+        state: "FINALIZED",
+        detailDelivery: {
+          state: "FINAL",
+          servedFrom: "REDIS_CURRENT",
+          reasonCodes: [],
+        },
+      }),
+      hasData: true,
+      loading: false,
+      probing: false,
+      lastError: "",
+      online: true,
+    }),
+    "final",
   );
 });

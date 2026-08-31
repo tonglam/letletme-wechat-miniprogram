@@ -342,3 +342,31 @@ test("embedded live player details retain fixture identity and official stat poi
   assert.equal(detail.breakdownSumText, "+8");
   assert.equal(detail.breakdownHint, "");
 });
+
+test("player detail includes published adjustments even when formula guards do not match", async () => {
+  const { buildPlayerLiveDetail } =
+    await import("../miniprogram/pages/live/entry/player-detail.ts");
+  const detail = buildPlayerLiveDetail({
+    position: "DEF",
+    totalPoints: 4,
+    minutes: 90,
+    defensiveContribution: 9,
+    bonus: 0,
+    statPoints: {
+      minutes: { points: 2, pointsModification: null },
+      defensive_contribution: { points: 1, pointsModification: null },
+      bonus: { points: 0, pointsModification: 1 },
+    },
+  });
+
+  assert.deepEqual(
+    detail.breakdownRows.map((row) => [row.label, row.pointsText]),
+    [
+      ["出场", "+2"],
+      ["防守贡献", "+1"],
+      ["奖励分", "+1"],
+    ],
+  );
+  assert.equal(detail.breakdownSumText, "+4");
+  assert.equal(detail.breakdownHint, "");
+});
