@@ -1569,7 +1569,9 @@ Page({
           coreRead.data.some(
             (fixture) => !fixture.finished && fixture.started === true,
           ) ||
-          hasUnprocessedKickoff(coreRead.data);
+          hasUnprocessedKickoff(coreRead.data) ||
+          (coreRead.data.length > 0 &&
+            coreRead.data.every((fixture) => fixture.finished === true));
         this.coreMatches = core;
         this.armKickoffTransition(coreRead.data);
         const activeStatus = this.resolveActiveStatus(core);

@@ -58,7 +58,13 @@ export function shouldPollLiveMatchday(options: {
   if (snapshot.eventId !== selectedEventId) return false;
   const nextRefreshAt = snapshot.times.nextRefreshAt;
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
-  return snapshot.state !== "FINALIZED";
+  if (snapshot.state === "FINALIZED") {
+    // A finalized desk can still be waiting for the exact Match detail
+    // publication/checkpoint. Keep the bounded recovery loop alive until
+    // detail is final; the server's final publication remains authoritative.
+    return snapshot.detailDelivery.state !== "FINAL";
+  }
+  return true;
 }
 
 export function shouldRevalidateCachedLiveMatchday(

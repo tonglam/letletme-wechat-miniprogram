@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { liveMatchdayNeedsRefresh, liveSnapshotNeedsRefresh } =
+const {
+  liveMatchdayNeedsRefresh,
+  liveSnapshotNeedsRefresh,
+  shouldPollLiveMatchday,
+} =
   await import("../miniprogram/utils/live-refresh.ts");
 
 const snapshot = (displayStats) => ({
@@ -95,6 +99,27 @@ test("Match score and detail revisions independently rebuild the match list", ()
     liveMatchdayNeedsRefresh(accepted, {
       ...accepted,
       revisions: { ...accepted.revisions, playerDetail: "detail-r2" },
+    }),
+    true,
+  );
+});
+
+test("Match recovery polling continues after the final whistle until detail is final", () => {
+  const accepted = matchdaySnapshot({
+    state: "FINALIZED",
+    times: { ...matchdaySnapshot().times, nextRefreshAt: null },
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_PENDING"],
+    },
+  });
+  assert.equal(
+    shouldPollLiveMatchday({
+      pageVisible: true,
+      currentEventId: 3,
+      selectedEventId: 3,
+      snapshot: accepted,
     }),
     true,
   );

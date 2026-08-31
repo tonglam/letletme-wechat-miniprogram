@@ -46,6 +46,10 @@ test("preseason uses displayEvent schedule without a Live overlay", () => {
   assert.match(page, /currentEventId = context\.currentEvent \?\? 0/);
   assert.match(page, /targetEventId = context\.displayEvent \?\? 0/);
   assert.match(page, /this\.liveWindow = Boolean\([\s\S]*this\.liveSnapshot/);
+  assert.match(
+    page,
+    /this\.liveWindow = Boolean\([\s\S]*coreRead\.data\.every\(\(fixture\) => fixture\.finished === true\)/,
+  );
   const statusHandler = page.slice(page.indexOf("onStatusTap"));
   assert.doesNotMatch(
     statusHandler.slice(0, statusHandler.indexOf("onRetry")),
