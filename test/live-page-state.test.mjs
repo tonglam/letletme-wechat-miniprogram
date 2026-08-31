@@ -487,6 +487,7 @@ test("match cold start does not fabricate a preseason state before publication f
     initLiveRefresh() {
       this.liveRefresh = { sync() {} };
     },
+    armContextDeadline() {},
     loadData: async () => {},
     syncDisplayState() {}
   };
