@@ -1066,6 +1066,10 @@ Page({
         ? null
         : refreshedContext;
       if (!context) {
+        // The deadline callback can race the independent revision probe. Stop
+        // it before the active-pointer read so an old prefetched event cannot
+        // re-enter after the pointer has accepted a rollover.
+        this.liveRefresh?.stop();
         const publicationAccepted = await this.loadData({
           background: true,
           forceRefresh: true,

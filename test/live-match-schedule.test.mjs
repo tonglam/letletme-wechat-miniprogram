@@ -156,7 +156,7 @@ test("deadline recovery rejects stale context before it can roll back the active
   );
   assert.match(
     recovery,
-    /if \(!context\) \{[\s\S]*await this\.loadData\(\{[\s\S]*background: true,[\s\S]*forceRefresh: true,[\s\S]*useActiveEventPointer: true,[\s\S]*\}\)/,
+    /if \(!context\) \{[\s\S]*this\.liveRefresh\?\.stop\(\)[\s\S]*await this\.loadData\(\{[\s\S]*background: true,[\s\S]*forceRefresh: true,[\s\S]*useActiveEventPointer: true,[\s\S]*\}\)/,
   );
   assert.match(
     recovery,
