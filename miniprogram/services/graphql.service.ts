@@ -87,6 +87,8 @@ export interface GraphQLOptions {
   trace?: PageRequestTrace | null;
   /** Explicitly map cached data when a stale result is served. */
   mapStaleData?: (data: unknown) => unknown;
+  /** Reject a successful response before it is admitted to the cache. */
+  validateCacheData?: (data: unknown) => boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
   contract?: "my-tournament-review-v2";
 }
@@ -1146,10 +1148,18 @@ export async function graphqlRead<T>(
         const producingSessionStillActive =
           policy.authMode === "public" ||
           response.token === getApiSessionToken();
-        const cacheableData = shouldCacheGraphQLData(
+        let cacheableData = shouldCacheGraphQLData(
           policy.operationName,
           response.body.data,
         );
+        if (cacheableData && options?.validateCacheData) {
+          try {
+            cacheableData = options.validateCacheData(response.body.data);
+          } catch {
+            // A failed identity/integrity check must never admit the response.
+            cacheableData = false;
+          }
+        }
 
         if (producingSessionStillActive && cacheableData) {
           const freshUntil = resolveFreshUntil(

@@ -163,6 +163,46 @@ test("V2 review cache accepts only fully READY snapshots", () => {
   );
 });
 
+test("cache identity validation evicts a mismatched V2 catalog", async () => {
+  let responseViewerEntryId = 222;
+  const runtime = installRuntime((options) =>
+    options.success({
+      statusCode: 200,
+      data: {
+        data: {
+          myTournamentReviewCatalog: {
+            state: "READY",
+            viewerEntryId: responseViewerEntryId,
+            adminReadAll: false,
+            tournaments: [{ state: "READY", tournamentId: 6953 }],
+          },
+        },
+      },
+    }),
+  );
+  const query =
+    "query MyTournamentReviewCatalog { myTournamentReviewCatalog { state viewerEntryId } }";
+  const options = {
+    ...publicReporting,
+    cacheVariant: "viewer-entry:111",
+    validateCacheData: (data) =>
+      data?.myTournamentReviewCatalog?.viewerEntryId === 111,
+  };
+
+  const mismatched = await graphqlRead(query, {}, options);
+  assert.equal(mismatched.meta.source, "network");
+  assert.equal(runtime.requests.length, 1);
+
+  responseViewerEntryId = 111;
+  const matching = await graphqlRead(query, {}, options);
+  assert.equal(matching.meta.source, "network");
+  assert.equal(runtime.requests.length, 2);
+
+  const cached = await graphqlRead(query, {}, options);
+  assert.equal(cached.meta.source, "memory");
+  assert.equal(runtime.requests.length, 2);
+});
+
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {
   const runtime = installRuntime(success({ value: 1 }));
   const query = "query BehaviorCache { value }";

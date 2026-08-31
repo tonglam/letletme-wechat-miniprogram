@@ -569,10 +569,19 @@ const myTournamentReviewOptions = (
   forceRefresh: boolean,
   trace?: PageRequestTrace,
   viewerEntryId?: number | null,
+  validateCatalogViewer = false,
 ) => ({
   cachePolicy: "reporting" as const,
-  cacheTtl: MY_TOURNAMENT_REVIEW_CACHE_TTL_MS,
-  staleTtl: MY_TOURNAMENT_REVIEW_STALE_TTL_MS,
+  // An unverified viewer must not use a persisted personal cache. The page
+  // refreshes the authoritative follow before supplying this variant.
+  cacheTtl:
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? MY_TOURNAMENT_REVIEW_CACHE_TTL_MS
+      : 0,
+  staleTtl:
+    Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+      ? MY_TOURNAMENT_REVIEW_STALE_TTL_MS
+      : 0,
   forceRefresh,
   trace,
   cacheVariant: `viewer-entry:${
@@ -582,6 +591,26 @@ const myTournamentReviewOptions = (
   }`,
   contract: MY_TOURNAMENT_REVIEW_CONTRACT,
   mapStaleData: mapStaleTournamentReviewData,
+  ...(validateCatalogViewer &&
+  Number.isSafeInteger(viewerEntryId) &&
+  Number(viewerEntryId) > 0
+    ? {
+        validateCacheData: (data: unknown) => {
+          const catalog =
+            data && typeof data === "object" && !Array.isArray(data)
+              ? (data as { myTournamentReviewCatalog?: unknown })
+                  .myTournamentReviewCatalog
+              : null;
+          const responseViewerEntryId =
+            catalog &&
+            typeof catalog === "object" &&
+            !Array.isArray(catalog)
+              ? Number((catalog as { viewerEntryId?: unknown }).viewerEntryId)
+              : 0;
+          return responseViewerEntryId === Number(viewerEntryId);
+        },
+      }
+    : {}),
 });
 
 export async function getMyTournamentReviewCatalog(
@@ -595,7 +624,7 @@ export async function getMyTournamentReviewCatalog(
   }>(
     GET_MY_TOURNAMENT_REVIEW_CATALOG,
     { scope },
-    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
+    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId, true),
   );
   return data.myTournamentReviewCatalog;
 }

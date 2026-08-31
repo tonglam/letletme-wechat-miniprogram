@@ -819,7 +819,8 @@ PerformancePage({
     scopeOverride?: MyTournamentReviewScope,
   ) {
     const requestId = ++this.requestId;
-    let entryId = currentMyFplEntryId() || 0;
+    const localEntryId = currentMyFplEntryId() || 0;
+    let entryId = localEntryId;
     const scope = scopeOverride ?? this.data.v2Scope;
     if (entryId !== this.loadedEntryId) {
       // Do not keep a prior viewer's catalog or review visible while the new
@@ -843,6 +844,29 @@ PerformancePage({
       emptyState: "",
     });
     try {
+      // A local follow pointer is display state only. Refresh the standalone
+      // account before selecting a cache variant so an external rebind cannot
+      // admit another entry's catalog into this entry's persisted cache.
+      try {
+        entryId = (await refreshAuthoritativeFollow()) || 0;
+      } catch {
+        if (isActiveRequest()) {
+          this.clearV2EntryScopedViewState(true);
+          this.v2RetryOperation = "catalog";
+          this.setData({
+            loading: false,
+            v2Loading: false,
+            v2State: "UNAVAILABLE",
+            v2Error: "球队状态尚未同步，请稍后重试",
+            error: "球队状态尚未同步，请稍后重试",
+          });
+        }
+        return;
+      }
+      if (entryId !== localEntryId) {
+        this.clearV2EntryScopedViewState(true);
+        if (isActiveRequest()) this.setData({ entryId });
+      }
       let catalog: MyTournamentReviewCatalog;
       try {
         catalog = await getMyTournamentReviewCatalog(
@@ -891,6 +915,25 @@ PerformancePage({
         );
       }
       if (!isActiveRequest()) return;
+      const catalogViewerEntryId = Number(catalog.viewerEntryId) || 0;
+      if (entryId > 0 && catalogViewerEntryId !== entryId) {
+        // The binding may have changed between the profile read and the
+        // catalog response. Reconcile once; never render or cache the
+        // mismatched response.
+        this.clearV2EntryScopedViewState(true);
+        const refreshedEntryId = await refreshAuthoritativeFollow().catch(
+          () => null,
+        );
+        if (
+          refreshedEntryId &&
+          refreshedEntryId !== entryId &&
+          isActiveRequest()
+        ) {
+          void this.loadV2Leagues(true, trace, scope);
+          return;
+        }
+        throw new Error("球队绑定已变更，请稍后重试");
+      }
       if (!entryId && !catalog.adminReadAll) {
         this.showEntryEmptyState();
         this.v2RetryOperation = null;
