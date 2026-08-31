@@ -1057,8 +1057,25 @@ Page({
 
   async refreshContextAtDeadline() {
     try {
-      const context = await this.ensureContext("page-show", true);
+      const refreshedContext = await this.ensureContext("page-show", true);
       if (!this.pageVisible) return;
+      // A forced context read can resolve with the centralized stale fallback
+      // during a transient outage. It must not overwrite an event already
+      // proven by Match V2's active pointer; retry the pointer instead.
+      const context = shouldRefreshAppContext(refreshedContext)
+        ? null
+        : refreshedContext;
+      if (!context) {
+        const publicationAccepted = await this.loadData({
+          background: true,
+          forceRefresh: true,
+          useActiveEventPointer: true,
+        });
+        if (!publicationAccepted && this.pageVisible) {
+          this.armContextDeadline(undefined, true);
+        }
+        return;
+      }
       const nextCurrentEventId = context.currentEvent ?? 0;
       const nextTargetEventId = context.displayEvent ?? nextCurrentEventId;
       const nextSeason = context.season || undefined;

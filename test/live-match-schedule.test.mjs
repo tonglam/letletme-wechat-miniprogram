@@ -144,6 +144,26 @@ test("warm Match resume retries the active pointer after context failure", () =>
   );
 });
 
+test("deadline recovery rejects stale context before it can roll back the active event", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const recovery = page.slice(
+    page.indexOf("async refreshContextAtDeadline"),
+    page.indexOf("armKickoffTransition", page.indexOf("async refreshContextAtDeadline")),
+  );
+  assert.match(
+    recovery,
+    /const refreshedContext = await this\.ensureContext\("page-show", true\)[\s\S]*const context = shouldRefreshAppContext\(refreshedContext\)[\s\S]*\? null[\s\S]*: refreshedContext/,
+  );
+  assert.match(
+    recovery,
+    /if \(!context\) \{[\s\S]*await this\.loadData\(\{[\s\S]*background: true,[\s\S]*forceRefresh: true,[\s\S]*useActiveEventPointer: true,[\s\S]*\}\)/,
+  );
+  assert.match(
+    recovery,
+    /!publicationAccepted && this\.pageVisible[\s\S]*this\.armContextDeadline\(undefined, true\)/,
+  );
+});
+
 test("first Match onShow does not mutate context during cold startup", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const onShow = page.slice(
