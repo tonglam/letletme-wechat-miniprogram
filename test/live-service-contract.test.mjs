@@ -4,12 +4,14 @@ import { parse, visit } from "graphql";
 
 const {
   LIVE_MATCHES_QUERY,
+  LIVE_MATCHDAY_HEAD_QUERY,
   liveMatchdayRequestOptions,
   mapGraphQLMatch,
+  snapshotFromLiveMatchdayHead,
   snapshotFromLiveMatchday,
+  validateLiveMatchdayHead,
   validateLiveMatchday,
-} =
-  await import("../miniprogram/services/live.service.ts");
+} = await import("../miniprogram/services/live.service.ts");
 
 const ISO = "2026-08-31T12:00:00.000Z";
 
@@ -92,6 +94,25 @@ test("live matchday query is one V2 publication with embedded players", () => {
     LIVE_MATCHES_QUERY,
     /liveMatchdayDesk|liveFixturePlayers/,
   );
+});
+
+test("live matchday heartbeat is metadata-only and uses the V2 validator", () => {
+  assert.match(
+    LIVE_MATCHDAY_HEAD_QUERY,
+    /query LiveMatchdayHead\(\$eventId: Int\)/,
+  );
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /revisions\s*\{/);
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /times\s*\{/);
+  assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /matches\s*\{/);
+  assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /players\s*\{/);
+
+  const result = matchdayResult();
+  delete result.snapshot.matches;
+  validateLiveMatchdayHead(result);
+  const snapshot = snapshotFromLiveMatchdayHead(result);
+  assert.equal(snapshot?.eventId, 3);
+  assert.equal(snapshot?.revisions.scoreState, "score-1");
+  assert.equal(snapshot?.times.nextRefreshAt, null);
 });
 
 test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
@@ -261,9 +282,8 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
 });
 
 test("embedded live player details retain fixture identity and official stat points", async () => {
-  const { buildPlayerLiveDetail } = await import(
-    "../miniprogram/pages/live/entry/player-detail.ts"
-  );
+  const { buildPlayerLiveDetail } =
+    await import("../miniprogram/pages/live/entry/player-detail.ts");
   const match = mapGraphQLMatch({
     fixtureId: 10,
     eventId: 1,

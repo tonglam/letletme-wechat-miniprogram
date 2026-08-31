@@ -448,6 +448,44 @@ export const LIVE_MATCHES_QUERY = `
   }
 `;
 
+/** Metadata-only probe used by the live refresh controller. */
+export const LIVE_MATCHDAY_HEAD_QUERY = `
+  query LiveMatchdayHead($eventId: Int) {
+    liveMatchday(eventId: $eventId) {
+      availability
+      delivery { state servedFrom reasonCodes }
+      snapshot {
+        season
+        eventId
+        state
+        revisions {
+          deskPublicationId
+          deskGeneration
+          lifecycle
+          fixtureIdentity
+          scoreState
+          detailPublicationId
+          detailGeneration
+          playerDetail
+        }
+        times {
+          deskSourceCheckedAt
+          deskContentUpdatedAt
+          deskPublishedAt
+          deskStaleAt
+          detailSourceCheckedAt
+          detailContentUpdatedAt
+          detailPublishedAt
+          detailStaleAt
+          servedAt
+          nextRefreshAt
+        }
+        detailDelivery { state servedFrom reasonCodes }
+      }
+    }
+  }
+`;
+
 export interface GraphQLMatchdayPlayerStat {
   identifier: string;
   value: number;
@@ -501,6 +539,16 @@ interface LiveMatchesResponse {
   };
 }
 
+type LiveMatchdayHeadSnapshot = Omit<LiveMatchdaySnapshot, "matches">;
+
+interface LiveMatchdayHeadResponse {
+  liveMatchday: {
+    availability: "READY" | "UNAVAILABLE";
+    delivery: LiveMatchdayDelivery;
+    snapshot: LiveMatchdayHeadSnapshot | null;
+  };
+}
+
 const POSITION_TYPE: Record<GraphQLMatchdayPlayer["position"], number> = {
   GOALKEEPER: 1,
   DEFENDER: 2,
@@ -544,9 +592,9 @@ function mapLiveMatchdayPlayer(
         ? match.awayTeamName
         : undefined,
     teamShortName: isHomePlayer
-      ? match.homeTeamShortName ?? match.homeTeamName
+      ? (match.homeTeamShortName ?? match.homeTeamName)
       : isAwayPlayer
-        ? match.awayTeamShortName ?? match.awayTeamName
+        ? (match.awayTeamShortName ?? match.awayTeamName)
         : undefined,
     webName: player.webName,
     name: player.webName,
@@ -614,9 +662,12 @@ function isMatchDelivery(value: unknown): value is LiveMatchdayDelivery {
   const delivery = value as LiveMatchdayDelivery;
   return (
     MATCH_DELIVERY_STATES.has(delivery.state) &&
-    (delivery.servedFrom === null || MATCH_SERVED_FROM.has(delivery.servedFrom)) &&
+    (delivery.servedFrom === null ||
+      MATCH_SERVED_FROM.has(delivery.servedFrom)) &&
     Array.isArray(delivery.reasonCodes) &&
-    delivery.reasonCodes.every((reason) => typeof reason === "string" && reason.length > 0)
+    delivery.reasonCodes.every(
+      (reason) => typeof reason === "string" && reason.length > 0,
+    )
   );
 }
 
@@ -637,12 +688,30 @@ export function snapshotFromLiveMatchday(
   };
 }
 
+export function snapshotFromLiveMatchdayHead(
+  result: LiveMatchdayHeadResponse["liveMatchday"],
+): LiveMatchdayStatus | null {
+  const snapshot = result.snapshot;
+  if (!snapshot) return null;
+  return {
+    season: snapshot.season,
+    eventId: snapshot.eventId,
+    state: snapshot.state,
+    revisions: snapshot.revisions,
+    times: snapshot.times,
+    availability: result.availability,
+    delivery: result.delivery,
+    detailDelivery: snapshot.detailDelivery,
+  };
+}
+
 export function validateLiveMatchday(
   result: LiveMatchesResponse["liveMatchday"] | null | undefined,
 ): asserts result is LiveMatchesResponse["liveMatchday"] {
   if (
     !result ||
-    (result.availability !== "READY" && result.availability !== "UNAVAILABLE") ||
+    (result.availability !== "READY" &&
+      result.availability !== "UNAVAILABLE") ||
     !isMatchDelivery(result.delivery)
   ) {
     throw new Error("LIVE_MATCHDAY_INCOHERENT");
@@ -786,6 +855,19 @@ export function validateLiveMatchday(
       }
     }
   }
+}
+
+export function validateLiveMatchdayHead(
+  result: LiveMatchdayHeadResponse["liveMatchday"] | null | undefined,
+): asserts result is LiveMatchdayHeadResponse["liveMatchday"] {
+  if (!result) throw new Error("LIVE_MATCHDAY_INCOHERENT");
+  // Reuse the full publication validator for the shared metadata envelope.
+  // The head deliberately omits the expensive fixture/player arrays, so an
+  // empty synthetic array is sufficient for the common structural checks.
+  validateLiveMatchday({
+    ...result,
+    snapshot: result.snapshot ? { ...result.snapshot, matches: [] } : null,
+  });
 }
 
 export function liveMatchdayRequestOptions(
@@ -970,6 +1052,27 @@ export async function getLiveMatchByStatusSnapshot(
       requestOptions,
     ),
   };
+}
+
+export async function getLiveMatchdayHead(
+  expectedEventId?: number,
+  forceRefresh = false,
+  trace?: PageRequestTrace | null,
+): Promise<LiveMatchdayStatus | null> {
+  const variables = { eventId: expectedEventId ?? null };
+  const requestOptions = liveMatchdayRequestOptions(
+    expectedEventId,
+    forceRefresh,
+    trace,
+  );
+  const data = await graphqlRequest<LiveMatchdayHeadResponse>(
+    LIVE_MATCHDAY_HEAD_QUERY,
+    variables,
+    requestOptions,
+  );
+  const result = data.liveMatchday;
+  validateLiveMatchdayHead(result);
+  return snapshotFromLiveMatchdayHead(result);
 }
 
 function filterLiveMatchesByStatus(

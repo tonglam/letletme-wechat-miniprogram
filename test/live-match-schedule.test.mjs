@@ -21,10 +21,7 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
     page,
     /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;[\s\S]*await readCoreEventFixtureSchedule/,
   );
-  assert.match(
-    page,
-    /this\.liveSnapshot\?\.eventId \|\| undefined/,
-  );
+  assert.match(page, /this\.liveSnapshot\?\.eventId \|\| undefined/);
   assert.doesNotMatch(
     page,
     /this\.liveSnapshot\?\.eventId \|\| this\.currentEventId/,
@@ -35,10 +32,7 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
     page,
     /await readCoreEventFixtureSchedule[\s\S]*const activeStatus = this\.resolveActiveStatus\(core\)[\s\S]*filterMatches\(core, activeStatus\)/,
   );
-  assert.doesNotMatch(
-    page.slice(core),
-    /await getLiveMatchByStatusSnapshot/,
-  );
+  assert.doesNotMatch(page.slice(core), /await getLiveMatchByStatusSnapshot/);
 });
 
 test("preseason uses displayEvent schedule without a Live overlay", () => {
@@ -167,6 +161,26 @@ test("heartbeat-only Match probes update metadata without rebuilding matches", (
   assert.match(accept, /fixtureStaleMessage: matchDetailUpdateMessage/);
   assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
   assert.doesNotMatch(accept, /\bmatches\s*:|\bgroups\s*:/);
+});
+
+test("Match refresh probes the head and fetches the full publication only on revision change", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const refresh = page.slice(
+    page.indexOf("initLiveRefresh()"),
+    page.indexOf("loadData(options"),
+  );
+  assert.match(
+    refresh,
+    /await getLiveMatchdayHead\(this\.currentEventId, true\)/,
+  );
+  assert.match(
+    refresh,
+    /if \(liveMatchdayNeedsRefresh\(this\.liveSnapshot, head\)\) \{[\s\S]*await getLiveMatchByStatusSnapshot\(/,
+  );
+  assert.match(
+    page,
+    /this\.armContextDeadline\(\s*cachedContext\?\.nextDeadlineAt,\s*cachedContext === null,/,
+  );
 });
 
 test("Live Match surfaces a stale Core fixture fallback", () => {

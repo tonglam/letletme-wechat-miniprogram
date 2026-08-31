@@ -15,7 +15,9 @@ import {
   isClientUpgradeRequired,
   isLiveMatchesV2Query,
   isLivePointsV2Query,
+  extractGraphQLOperationName,
 } from "../miniprogram/services/graphql.service";
+import { LIVE_MATCHDAY_HEAD_QUERY } from "../miniprogram/services/live.service";
 import type { LiveScore, LiveSnapshotStatus } from "../miniprogram/models/live";
 
 function assertEqual(
@@ -118,6 +120,16 @@ assertEqual(
   isLiveMatchesV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
   true,
   "matchday is gated",
+);
+assertEqual(
+  extractGraphQLOperationName(LIVE_MATCHDAY_HEAD_QUERY),
+  "LiveMatchdayHead",
+  "matchday heartbeat uses the dedicated operation",
+);
+assertEqual(
+  LIVE_MATCHDAY_HEAD_QUERY.includes("matches"),
+  false,
+  "matchday heartbeat does not download fixture payloads",
 );
 assertEqual(
   isLivePointsV2Query("query { events { id } }"),

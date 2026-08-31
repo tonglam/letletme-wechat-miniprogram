@@ -1,4 +1,7 @@
-import { getLiveMatchByStatusSnapshot } from "../../../services/live.service";
+import {
+  getLiveMatchByStatusSnapshot,
+  getLiveMatchdayHead,
+} from "../../../services/live.service";
 import type {
   LiveMatch,
   LiveMatchdayStatus,
@@ -134,9 +137,7 @@ export function matchDetailUpdateMessage(
   if (
     !snapshot ||
     !matches.some((match) => match.playStatus !== "not_started") ||
-    !["PENDING", "STALE", "DEGRADED"].includes(
-      snapshot.detailDelivery.state,
-    )
+    !["PENDING", "STALE", "DEGRADED"].includes(snapshot.detailDelivery.state)
   ) {
     return "";
   }
@@ -893,32 +894,40 @@ Page({
       getAcceptedSnapshot: () => this.liveSnapshot,
       hasRevisionChanged: liveMatchdayNeedsRefresh,
       probe: async () => {
-        const liveResult = await getLiveMatchByStatusSnapshot(
-          "all",
-          true,
-          undefined,
-          this.currentEventId,
-        );
-        prefetchedLiveResult = liveResult;
-        if (!liveResult.snapshot) {
+        prefetchedLiveResult = null;
+        const head = await getLiveMatchdayHead(this.currentEventId, true);
+        if (!head) {
           // A failed publication observation must preserve the accepted
           // matchday; the controller records the probe error and retries
           // without clearing the full payload.
           throw new Error("实时比赛 publication 暂不可用");
         }
-        return liveResult.snapshot;
+        if (liveMatchdayNeedsRefresh(this.liveSnapshot, head)) {
+          const liveResult = await getLiveMatchByStatusSnapshot(
+            "all",
+            true,
+            undefined,
+            this.currentEventId,
+          );
+          prefetchedLiveResult = liveResult;
+          if (!liveResult.snapshot) {
+            throw new Error("实时比赛 publication 暂不可用");
+          }
+        }
+        return head;
       },
       reload: () => {
         const liveResult = prefetchedLiveResult;
         prefetchedLiveResult = null;
+        if (!liveResult)
+          return this.loadData({ background: true, forceRefresh: true });
         return this.loadData({
           background: true,
           forceRefresh: true,
           prefetchedLiveResult: liveResult ?? undefined,
         });
       },
-      getNextRefreshAt: () =>
-        this.liveSnapshot?.times.nextRefreshAt || null,
+      getNextRefreshAt: () => this.liveSnapshot?.times.nextRefreshAt || null,
       // Publication revision, not a heartbeat deadline, owns content reloads.
       reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
@@ -1057,10 +1066,7 @@ Page({
     }
   },
 
-  armKickoffTransition(
-    fixtures: Array<KickoffFixture>,
-    retry = false,
-  ) {
+  armKickoffTransition(fixtures: Array<KickoffFixture>, retry = false) {
     this.clearKickoffTransition();
     if (
       !this.pageVisible ||
@@ -1148,13 +1154,13 @@ Page({
         eventChanged =
           Boolean(
             previousEventId &&
-              nextTargetEventId &&
-              previousEventId !== nextTargetEventId,
+            nextTargetEventId &&
+            previousEventId !== nextTargetEventId,
           ) ||
           Boolean(
             previousSeason &&
-              context.season &&
-              previousSeason !== context.season,
+            context.season &&
+            previousSeason !== context.season,
           );
         if (eventChanged) {
           this.liveRefresh?.stop();
@@ -1246,7 +1252,9 @@ Page({
       this.initLiveRefresh();
     }
     const nextCurrentEventId =
-      context?.currentEvent ?? this.liveSnapshot?.eventId ?? this.currentEventId;
+      context?.currentEvent ??
+      this.liveSnapshot?.eventId ??
+      this.currentEventId;
     const nextTargetEventId =
       context?.displayEvent ?? this.liveSnapshot?.eventId ?? this.targetEventId;
     const nextSeason = context?.season || undefined;
@@ -1468,19 +1476,24 @@ Page({
         if (publishedMatchday?.snapshot) {
           navigationTracker?.mark("primaryResponseAt");
           const publicationMatches = publishedMatchday.data.map((match) =>
-            normalizeMatch(match, match.playStatus || match.status || "not_start"),
+            normalizeMatch(
+              match,
+              match.playStatus || match.status || "not_start",
+            ),
           );
           this.liveWindow = true;
           this.liveSnapshot = publishedMatchday.snapshot;
           this.currentEventId = publishedMatchday.snapshot.eventId;
           this.targetEventId = publishedMatchday.snapshot.eventId;
           this.loadedSeason = publishedMatchday.snapshot.season;
-          if (cachedContext) {
-            this.armContextDeadline(cachedContext.nextDeadlineAt);
-          }
+          this.armContextDeadline(
+            cachedContext?.nextDeadlineAt,
+            cachedContext === null,
+          );
           this.cachedLiveStoredAt = publishedMatchday.servedStoredAt;
           this.coreMatches = publicationMatches;
-          const publicationStatus = this.resolveActiveStatus(publicationMatches);
+          const publicationStatus =
+            this.resolveActiveStatus(publicationMatches);
           const visibleMatches = filterMatches(
             publicationMatches,
             publicationStatus,
