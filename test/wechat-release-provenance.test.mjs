@@ -35,3 +35,18 @@ test("release verifies the successful upload run and its audit id", () => {
   assert.match(release, /version: \$RELEASE_VERSION/);
   assert.match(release, /commit: \$RELEASE_COMMIT_SHA/);
 });
+
+test("signed upload explicitly excludes CDN-owned pitch assets", () => {
+  assert.match(
+    upload,
+    /--project-ignores 'miniprogram\/assets\/squad-pitch\/kits\/\*\*\/\*'/
+  );
+  assert.match(
+    upload,
+    /--project-ignores 'miniprogram\/assets\/squad-pitch\/pitch-background\.jpg'/
+  );
+  assert.match(
+    upload,
+    /--project-ignores 'miniprogram\/assets\/squad-pitch\/pitch-background\.svg'/
+  );
+});
