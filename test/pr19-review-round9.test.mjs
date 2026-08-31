@@ -34,7 +34,7 @@ test("Match automatic background work does not mutate a completed navigation tra
   assert.match(match, /trace: requestTrace/);
   assert.match(match, /getLiveMatchByStatusSnapshot\([\s\S]*requestTrace/);
   assert.match(match, /onPullDownRefresh\(\)[\s\S]*runForcedRefresh\(tracker, true\)/);
-  assert.match(match, /runForcedRefresh\([\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true,? \}\)/);
+  assert.match(match, /runForcedRefresh\([\s\S]*loadData\(\{ background, forceRefresh: true, trackNavigation: true,[\s\S]*useActiveEventPointer[\s\S]*\}\)/);
 });
 
 test("My FPL GW switches clear primary identity before the replacement read", () => {
