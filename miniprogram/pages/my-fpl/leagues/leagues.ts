@@ -857,6 +857,7 @@ PerformancePage({
             loading: false,
             v2Loading: false,
             v2State: "UNAVAILABLE",
+            v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
             v2Error: "球队状态尚未同步，请稍后重试",
             error: "球队状态尚未同步，请稍后重试",
           });
@@ -1054,6 +1055,7 @@ PerformancePage({
         loading: false,
         v2Loading: false,
         v2State: "UNAVAILABLE",
+        v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
         error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
@@ -1098,6 +1100,7 @@ PerformancePage({
             this.setData({
               v2Loading: false,
               v2State: "UNAVAILABLE",
+              v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
               v2Error: "球队状态尚未同步，请稍后重试",
             });
           }
@@ -1141,6 +1144,7 @@ PerformancePage({
           this.setData({
             v2Loading: false,
             v2State: "DEGRADED",
+            v2StatusText: tournamentReviewStateText("DEGRADED"),
             v2Error: "球队状态尚未同步，请稍后重试",
           });
           return;
@@ -1221,6 +1225,7 @@ PerformancePage({
         this.setData({
           v2Loading: false,
           v2State: "UNAVAILABLE",
+          v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
           v2Error: "球队状态尚未同步，请稍后重试",
         });
         return;
@@ -1228,6 +1233,7 @@ PerformancePage({
       this.setData({
         v2Loading: false,
         v2State: "UNAVAILABLE",
+        v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
     }
@@ -1254,22 +1260,17 @@ PerformancePage({
       this.setData({ v2Error: "赛事复盘快照版本缺失，请重试" });
       return;
     }
-    const expectedEntryId = Number(this.data.entryId) || 0;
-    if (expectedEntryId > 0) {
-      let authoritativeEntryId: number | null;
-      try {
-        authoritativeEntryId = await refreshAuthoritativeFollow();
-      } catch {
-        this.v2RetryOperation = "loadMore";
-        this.setData({ v2Error: "球队状态尚未同步，请稍后重试" });
-        return;
-      }
-      if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
-        void this.loadV2Leagues(true);
-        return;
-      }
-    }
+    // Claim the request before any awaited authority refresh. A tournament
+    // switch or a second tap must invalidate this continuation instead of
+    // allowing it to merge a page into a new selection or append twice.
     const requestId = this.viewRequestId;
+    const expectedEntryId = Number(this.data.entryId) || 0;
+    const isActiveRequest = () =>
+      this.pageVisible &&
+      requestId === this.viewRequestId &&
+      this.data.activeView === requestView &&
+      this.data.v2SelectedTournament?.tournamentId === tournamentId &&
+      this.data.v2Event === eventId;
     const trace = capturePageRequestTrace({
       callerSurface: "my-fpl-leagues-v2",
       trigger: "pagination",
@@ -1277,6 +1278,23 @@ PerformancePage({
     this.v2RetryOperation = "loadMore";
     this.setData({ v2LoadingMore: true, v2Error: "" });
     try {
+      if (expectedEntryId > 0) {
+        let authoritativeEntryId: number | null;
+        try {
+          authoritativeEntryId = await refreshAuthoritativeFollow();
+        } catch {
+          if (!isActiveRequest()) return;
+          this.v2RetryOperation = "loadMore";
+          this.setData({ v2Error: "球队状态尚未同步，请稍后重试" });
+          return;
+        }
+        if (!isActiveRequest()) return;
+        if ((authoritativeEntryId ?? 0) !== expectedEntryId) {
+          void this.loadV2Leagues(true);
+          return;
+        }
+      }
+      if (!isActiveRequest()) return;
       if (requestView === "season") {
         const next = await getMyTournamentSeasonReview(
           tournamentId,
@@ -1284,14 +1302,9 @@ PerformancePage({
           true,
           trace,
           after,
-          this.data.entryId,
+          expectedEntryId,
         );
-        if (
-          !this.pageVisible ||
-          requestId !== this.viewRequestId ||
-          this.data.activeView !== requestView
-        )
-          return;
+        if (!isActiveRequest()) return;
         if (next.latestRevision !== seasonRevision) {
           throw new Error("赛事复盘快照已更新，请刷新后重试");
         }
@@ -1316,14 +1329,9 @@ PerformancePage({
           trace,
           after,
           gameweekRevision,
-          this.data.entryId,
+          expectedEntryId,
         );
-        if (
-          !this.pageVisible ||
-          requestId !== this.viewRequestId ||
-          this.data.activeView !== requestView
-        )
-          return;
+        if (!isActiveRequest()) return;
         if (next.scope?.revision !== gameweekRevision) {
           throw new Error("赛事复盘快照已更新，请刷新后重试");
         }
@@ -1347,12 +1355,7 @@ PerformancePage({
         this.v2RetryOperation = null;
       }
     } catch (error) {
-      if (
-        !this.pageVisible ||
-        requestId !== this.viewRequestId ||
-        this.data.activeView !== requestView
-      )
-        return;
+      if (!isActiveRequest()) return;
       this.v2RetryOperation =
         error instanceof Error &&
         error.message === "赛事复盘快照已更新，请刷新后重试"
@@ -1362,7 +1365,7 @@ PerformancePage({
         v2Error: error instanceof Error ? error.message : "赛事复盘加载失败",
       });
     } finally {
-      if (this.pageVisible && requestId === this.viewRequestId) {
+      if (isActiveRequest()) {
         this.setData({ v2LoadingMore: false });
       }
     }

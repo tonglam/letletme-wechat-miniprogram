@@ -177,6 +177,23 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
   assert.match(page, /v2State: merged\.state/);
   assert.match(page, /const expectedEntryId = Number\(this\.data\.entryId\) \|\| 0/);
   assert.match(page, /await refreshAuthoritativeFollow\(\)/);
+  assert.match(
+    page,
+    /const requestId = this\.viewRequestId;[\s\S]*const isActiveRequest = \(\) =>[\s\S]*this\.data\.v2SelectedTournament\?\.tournamentId === tournamentId/,
+  );
+  assert.match(
+    page,
+    /this\.setData\(\{ v2LoadingMore: true, v2Error: "" \}\);[\s\S]*await refreshAuthoritativeFollow\(\)/,
+  );
+  assert.match(page, /if \(!isActiveRequest\(\)\) return;/);
+  assert.match(
+    page,
+    /v2State: "UNAVAILABLE",[\s\S]*v2StatusText: tournamentReviewStateText\("UNAVAILABLE"\)/,
+  );
+  assert.match(
+    page,
+    /v2State: "DEGRADED",[\s\S]*v2StatusText: tournamentReviewStateText\("DEGRADED"\)/,
+  );
   assert.match(page, /!viewerRecoveryAttempted && isViewerEntryAuthorizationError/);
   assert.match(page, /this\.loadedEvent = 0/);
   assert.match(
