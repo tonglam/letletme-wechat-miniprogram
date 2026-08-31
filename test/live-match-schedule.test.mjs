@@ -25,6 +25,9 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
     page,
     /const expectedEventId =\s*options\.useActiveEventPointer\s*\?\s*undefined[\s\S]*this\.currentEventId > 0/,
   );
+  assert.match(page, /const useActiveEventPointer = context === null/);
+  assert.match(page, /this\.armContextDeadline\(undefined, true\)/);
+  assert.match(page, /void this\.loadData\(\{ useActiveEventPointer \}\)/);
   assert.match(page, /requestTrace, expectedEventId/);
   assert.match(page, /fixture\.started === true[\s\S]*fixture\.kickoffTime/);
   assert.match(page, /return core\.map/);
@@ -134,6 +137,22 @@ test("warm Match resume retries the active pointer after context failure", () =>
   assert.match(
     onShow,
     /if \(useActiveEventPointer\) \{[\s\S]*forceRefresh: true,[\s\S]*useActiveEventPointer: true/,
+  );
+  assert.match(
+    onShow,
+    /const resolvedContext = await this\.ensureContext\("page-show"\)[\s\S]*context = shouldRefreshAppContext\(resolvedContext\)[\s\S]*useActiveEventPointer = context === null/,
+  );
+});
+
+test("first Match onShow does not mutate context during cold startup", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onShow = page.slice(
+    page.indexOf("async onShow()"),
+    page.indexOf("onHide()"),
+  );
+  assert.match(
+    onShow,
+    /if \(!resumed && this\.startupPending\) \{[\s\S]*return;/,
   );
 });
 

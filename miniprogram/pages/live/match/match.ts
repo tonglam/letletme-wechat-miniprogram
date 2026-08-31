@@ -872,6 +872,7 @@ Page({
         this.refreshContextPending = false;
       }
     }
+    const useActiveEventPointer = context === null;
     // onUnload/onHide may win while the context request is in flight. Do not
     // let a cold-load continuation create refresh controllers or issue a
     // publication read for a page that is no longer the active lifecycle.
@@ -881,6 +882,11 @@ Page({
       this.targetEventId = context.displayEvent ?? 0;
       this.loadedSeason = context.season || undefined;
       this.armContextDeadline(context.nextDeadlineAt);
+    } else {
+      // The active publication is the cold-start authority when context was
+      // stale or could not be refreshed. Keep a bounded rollover retry even
+      // when the publication itself is accepted successfully.
+      this.armContextDeadline(undefined, true);
     }
     this.startupPending = false;
     tracker.mark("contextReadyAt");
@@ -898,7 +904,7 @@ Page({
       });
     }
     this.initLiveRefresh();
-    void this.loadData();
+    void this.loadData({ useActiveEventPointer });
     this.syncDisplayState();
   },
 
@@ -1288,7 +1294,11 @@ Page({
         return;
       }
       try {
-        context = await this.ensureContext("page-show");
+        const resolvedContext = await this.ensureContext("page-show");
+        context = shouldRefreshAppContext(resolvedContext)
+          ? null
+          : resolvedContext;
+        useActiveEventPointer = context === null;
         this.perfTracker.mark("contextReadyAt");
       } catch {
         // A stale/expired context cannot pin the next read. Keep the rendered
@@ -1298,6 +1308,12 @@ Page({
         useActiveEventPointer = true;
       }
       if (!this.pageVisible) return;
+    }
+    if (!resumed && this.startupPending) {
+      // Native onShow can arrive while onLoad is refreshing an expired
+      // context. Let the cold-load continuation own the first event decision;
+      // otherwise this lifecycle can re-pin the stale event mid-flight.
+      return;
     }
     if (resumeInterruptedLoad) {
       this.resumeLoadAfterShow = false;
