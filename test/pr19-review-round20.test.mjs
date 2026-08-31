@@ -65,7 +65,7 @@ test("tracked Match refreshes do not join untracked background requests", () => 
   const match = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     match,
-    /const tracksNavigation = options\.background !== true \|\| options\.trackNavigation === true[\s\S]*requestKey = `\$\{this\.targetEventId\}:\$\{options\.forceRefresh === true\}:\$\{tracksNavigation\}`/
+    /const tracksNavigation = options\.background !== true \|\| options\.trackNavigation === true[\s\S]*requestKey = `\$\{this\.targetEventId\}:\$\{options\.forceRefresh === true\}:\$\{tracksNavigation\}:\$\{options\.useActiveEventPointer === true\}`/
   );
   assert.match(match, /navigationTracker = tracksNavigation \? this\.perfTracker : undefined/);
 });

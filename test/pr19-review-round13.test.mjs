@@ -29,11 +29,14 @@ test("League service wrappers pass explicit traces to GraphQL", () => {
   assert.match(entry, /getEntryLeagueInfo[\s\S]*?trace\?: PageRequestTrace[\s\S]*?forceRefresh,\s+trace/);
 });
 
-test("Match clears a soft-timeout error when current data succeeds", () => {
+test("Match V2 publication clears a soft-timeout error when current data succeeds", () => {
   const match = source("miniprogram/pages/live/match/match.ts");
-  const core = match.indexOf("const matches = filterMatches(core, activeStatus)");
-  const overlay = match.indexOf("const overlaid = filterMatches(this.coreMatches, overlayStatus)");
-  assert.match(match.slice(core, overlay), /hasData: true,\s+scheduleEmpty: false,\s+error: ""/);
-  assert.match(match.slice(overlay), /groups: groupMatches\(overlaid, overlayStatus\),\s+error: ""/);
+  const publication = match.indexOf("if (publishedMatchday?.snapshot)");
+  const retainedFallback = match.indexOf("if (preserveData)", publication);
+  assert.ok(publication >= 0 && retainedFallback > publication);
+  assert.match(
+    match.slice(publication, retainedFallback),
+    /hasData: true,\s+scheduleEmpty: false,\s+error: ""/,
+  );
   assert.match(match, /observeSoftTimeout[\s\S]*?navigationTracker\?\.mark\("softFailureAt"\)/);
 });

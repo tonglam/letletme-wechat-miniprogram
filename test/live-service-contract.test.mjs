@@ -3,38 +3,182 @@ import test from "node:test";
 import { parse, visit } from "graphql";
 
 const {
-  buildLiveFixturePlayersQuery,
   LIVE_MATCHES_QUERY,
+  LIVE_MATCHDAY_HEAD_QUERY,
+  liveMatchdayRequestOptions,
   mapGraphQLMatch,
-  mergeLiveFixturePlayers,
+  snapshotFromLiveMatchdayHead,
+  snapshotFromLiveMatchday,
+  validateLiveMatchdayHead,
+  validateLiveMatchday,
 } = await import("../miniprogram/services/live.service.ts");
 
-test("live matchday query uses only the published match summary fields", () => {
-  // The live desk is event-scoped. Team identity comes from the Core fixture
-  // schedule, so the live overlay only carries score/status fields.
-  assert.equal(
-    (LIVE_MATCHES_QUERY.match(/homeTeamShortName/g) || []).length,
-    0,
-  );
-  assert.equal(
-    (LIVE_MATCHES_QUERY.match(/awayTeamShortName/g) || []).length,
-    0,
-  );
+const ISO = "2026-08-31T12:00:00.000Z";
+
+const matchdayResult = () => ({
+  availability: "READY",
+  delivery: {
+    state: "FRESH",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["REDIS_CURRENT"],
+  },
+  snapshot: {
+    season: "2026-27",
+    eventId: 3,
+    state: "PRE_DEADLINE",
+    revisions: {
+      deskPublicationId: "desk-1",
+      deskGeneration: 1,
+      lifecycle: "lifecycle-1",
+      fixtureIdentity: "fixture-1",
+      scoreState: "score-1",
+      detailPublicationId: null,
+      detailGeneration: null,
+      playerDetail: null,
+    },
+    times: {
+      deskSourceCheckedAt: ISO,
+      deskContentUpdatedAt: ISO,
+      deskPublishedAt: ISO,
+      deskStaleAt: null,
+      detailSourceCheckedAt: null,
+      detailContentUpdatedAt: null,
+      detailPublishedAt: null,
+      detailStaleAt: null,
+      servedAt: ISO,
+      nextRefreshAt: null,
+    },
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_PENDING"],
+    },
+    matches: [
+      {
+        fixtureId: 30,
+        eventId: 3,
+        homeTeamId: 1,
+        homeTeamName: "Home",
+        homeTeamShortName: "HOM",
+        awayTeamId: 2,
+        awayTeamName: "Away",
+        awayTeamShortName: "AWY",
+        homeScore: null,
+        awayScore: null,
+        kickoffTime: ISO,
+        minutes: 0,
+        started: false,
+        finished: false,
+        finishedProvisional: false,
+        players: [],
+      },
+    ],
+  },
+});
+
+test("live matchday query is one V2 publication with embedded players", () => {
+  assert.match(LIVE_MATCHES_QUERY, /query LiveMatchday\(\$eventId: Int\)/);
+  assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
+  assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
+  assert.match(LIVE_MATCHES_QUERY, /homeTeamShortName/);
+  assert.match(LIVE_MATCHES_QUERY, /awayTeamShortName/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
   assert.match(LIVE_MATCHES_QUERY, /matches\s*\{[\s\S]*minutes[\s\S]*started/);
   assert.doesNotMatch(LIVE_MATCHES_QUERY, /nextFixtures/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bnextEventId\b/);
+  assert.doesNotMatch(
+    LIVE_MATCHES_QUERY,
+    /scoreCoreRevision|windowState|dataAvailability|checkpointedAt|\brules\b|\balgorithm\b|\binput\b/,
+  );
+  assert.doesNotMatch(
+    LIVE_MATCHES_QUERY,
+    /liveMatchdayDesk|liveFixturePlayers/,
+  );
 });
 
-test("live fixture player batches use the published player detail fields", () => {
-  const query = buildLiveFixturePlayersQuery(5);
+test("live matchday heartbeat is metadata-only and uses the V2 validator", () => {
+  assert.match(
+    LIVE_MATCHDAY_HEAD_QUERY,
+    /query LiveMatchdayHead\(\$eventId: Int\)/,
+  );
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /revisions\s*\{/);
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /times\s*\{/);
+  assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /matches\s*\{/);
+  assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /players\s*\{/);
 
-  assert.equal((query.match(/liveFixturePlayers/g) || []).length, 5);
-  assert.doesNotMatch(query, /\bavailability\b/);
-  assert.doesNotMatch(query, /\bbonusProvisional\b/);
-  assert.match(query, /players\s*\{/);
+  const result = matchdayResult();
+  delete result.snapshot.matches;
+  validateLiveMatchdayHead(result);
+  const snapshot = snapshotFromLiveMatchdayHead(result);
+  assert.equal(snapshot?.eventId, 3);
+  assert.equal(snapshot?.revisions.scoreState, "score-1");
+  assert.equal(snapshot?.times.nextRefreshAt, null);
+});
 
+test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
+  const result = matchdayResult();
+  validateLiveMatchday(result);
+  const snapshot = snapshotFromLiveMatchday(result);
+  assert.equal(snapshot?.availability, "READY");
+  assert.equal(snapshot?.revisions.scoreState, "score-1");
+  assert.equal(snapshot?.times.deskContentUpdatedAt, ISO);
+  assert.equal("scoreCoreRevision" in snapshot, false);
+  assert.equal("windowState" in snapshot, false);
+  assert.equal("dataAvailability" in snapshot, false);
+  assert.equal("nextEventId" in snapshot, false);
+});
+
+test("live matchday accepts nullable team abbreviations and maps full names", () => {
+  const result = matchdayResult();
+  result.snapshot.matches[0].homeTeamShortName = null;
+  result.snapshot.matches[0].awayTeamShortName = null;
+  validateLiveMatchday(result);
+  const mapped = mapGraphQLMatch(result.snapshot.matches[0]);
+  assert.equal(mapped.homeTeamShortName, "Home");
+  assert.equal(mapped.awayTeamShortName, "Away");
+});
+
+test("live matchday rejects partial detail vectors and fake unavailable snapshots", () => {
+  const partialDetail = matchdayResult();
+  partialDetail.snapshot.revisions.detailPublicationId = "detail-1";
+  assert.throws(
+    () => validateLiveMatchday(partialDetail),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+
+  const fakeUnavailable = matchdayResult();
+  fakeUnavailable.availability = "UNAVAILABLE";
+  fakeUnavailable.delivery = {
+    state: "UNAVAILABLE",
+    servedFrom: null,
+    reasonCodes: ["DESK_UNAVAILABLE"],
+  };
+  assert.throws(
+    () => validateLiveMatchday(fakeUnavailable),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+});
+
+test("active-event Match reads cannot enter the cross-request cache", () => {
+  assert.deepEqual(liveMatchdayRequestOptions(undefined, false), {
+    cachePolicy: "live",
+    cacheVariant: "matchday:event:active-pointer",
+    cacheTtl: 0,
+    staleTtl: 0,
+    forceRefresh: false,
+    trace: undefined,
+  });
+  assert.deepEqual(liveMatchdayRequestOptions(3, true), {
+    cachePolicy: "live",
+    cacheVariant: "matchday:event:3",
+    forceRefresh: true,
+    trace: undefined,
+  });
+});
+
+test("live matchday V2 query stays within the public AST budget", () => {
   let astNodes = 0;
-  visit(parse(query), { enter: () => void (astNodes += 1) });
+  visit(parse(LIVE_MATCHES_QUERY), { enter: () => void (astNodes += 1) });
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
 });
 
@@ -67,7 +211,7 @@ test("live match mapping carries the authoritative fixture minutes", () => {
 
   assert.equal(mapped.minutes, 48);
   assert.equal(mapped.playStatus, "playing");
-  assert.equal(mapped.homeTeamShortName, "Home");
+  assert.equal(mapped.homeTeamShortName, "HOM");
   assert.equal(mapped.awayTeamShortName, "Away");
 });
 
@@ -93,34 +237,7 @@ test("live match mapping presents provisional completion without mutating the co
   assert.equal(source.finished, false);
 });
 
-function performance(playerId, teamId, teamName, teamShortName) {
-  return {
-    player: {
-      id: playerId,
-      webName: `Player ${playerId}`,
-      position: "MIDFIELDER",
-      team: { id: teamId, name: teamName, shortName: teamShortName },
-    },
-    minutes: 48,
-    goalsScored: 0,
-    assists: 0,
-    cleanSheets: 0,
-    goalsConceded: 0,
-    ownGoals: 0,
-    penaltiesSaved: 0,
-    penaltiesMissed: 0,
-    yellowCards: 0,
-    redCards: 0,
-    saves: 0,
-    bonus: 0,
-    bps: 10,
-    defensiveContribution: 0,
-    totalPoints: 2,
-  };
-}
-
-test("live fixture players are merged by team after revision validation", () => {
-  const ref = { season: "2627", eventId: 1, revision: "88" };
+test("embedded live players are mapped into the authoritative fixture teams", () => {
   const match = mapGraphQLMatch({
     fixtureId: 10,
     eventId: 1,
@@ -135,58 +252,132 @@ test("live fixture players are merged by team after revision validation", () => 
     started: true,
     finished: false,
     finishedProvisional: false,
-  });
-  const detail = {
-    ...ref,
-    fixtureId: 10,
     players: [
-      performance(1, 1, "Home", "HOM"),
-      performance(2, 2, "Away", "AWY"),
+      {
+        id: 1,
+        webName: "Home Player",
+        position: "MIDFIELDER",
+        teamId: 1,
+        totalPoints: 2,
+        stats: [
+          {
+            identifier: "minutes",
+            value: 48,
+            points: 2,
+            pointsModification: null,
+          },
+        ],
+      },
+      {
+        id: 2,
+        webName: "Away Player",
+        position: "FORWARD",
+        teamId: 2,
+        totalPoints: 1,
+        stats: [],
+      },
     ],
-  };
+  });
 
-  const [merged] = mergeLiveFixturePlayers(
-    [match],
-    new Map([[10, detail]]),
-    ref,
-  );
-
-  assert.equal(merged?.homeTeamDataList?.length, 1);
-  assert.equal(merged?.awayTeamDataList?.length, 1);
-  assert.equal(merged?.homeTeamDataList?.[0]?.teamShortName, "HOM");
-  assert.equal(merged?.awayTeamDataList?.[0]?.teamShortName, "AWY");
+  assert.equal(match.homeTeamDataList?.length, 1);
+  assert.equal(match.awayTeamDataList?.length, 1);
+  assert.equal(match.homeTeamDataList?.[0]?.webName, "Home Player");
+  assert.equal(match.awayTeamDataList?.[0]?.webName, "Away Player");
+  assert.equal(match.homeTeamDataList?.[0]?.minutes, 48);
+  assert.equal(match.homeTeamDataList?.[0]?.playStatus, 2);
+  assert.equal(match.homeTeamDataList?.[0]?.team, "Home");
+  assert.equal(match.homeTeamDataList?.[0]?.teamShortName, "Home");
+  assert.deepEqual(match.homeTeamDataList?.[0]?.statPoints, {
+    minutes: { points: 2, pointsModification: null },
+  });
 });
 
-test("live fixture players ignore a stale score revision without erasing the desk", () => {
-  const ref = { season: "2627", eventId: 1, scoreCoreRevision: "88" };
+test("embedded live player details retain fixture identity and official stat points", async () => {
+  const { buildPlayerLiveDetail } =
+    await import("../miniprogram/pages/live/entry/player-detail.ts");
   const match = mapGraphQLMatch({
     fixtureId: 10,
     eventId: 1,
     homeTeamId: 1,
     homeTeamName: "Home",
+    homeTeamShortName: "HOM",
     awayTeamId: 2,
     awayTeamName: "Away",
+    awayTeamShortName: "AWY",
     homeScore: 1,
     awayScore: 0,
     kickoffTime: null,
-    minutes: 48,
+    minutes: 90,
     started: true,
     finished: false,
     finishedProvisional: false,
+    players: [
+      {
+        id: 1,
+        webName: "Home Player",
+        position: "MIDFIELDER",
+        teamId: 1,
+        totalPoints: 8,
+        stats: [
+          {
+            identifier: "minutes",
+            value: 90,
+            points: 2,
+            pointsModification: null,
+          },
+          {
+            identifier: "goals",
+            value: 1,
+            points: 5,
+            pointsModification: 1,
+          },
+        ],
+      },
+    ],
   });
-  const stale = {
-    season: "2627",
-    eventId: 1,
-    scoreCoreRevision: "87",
-    fixtureId: 10,
-    players: [performance(1, 1, "Home", "HOM")],
-  };
 
-  const [merged] = mergeLiveFixturePlayers(
-    [match],
-    new Map([[10, stale]]),
-    ref,
+  const player = match.homeTeamDataList?.[0];
+  assert.equal(player?.team, "Home");
+  assert.equal(player?.teamShortName, "HOM");
+  assert.deepEqual(player?.statPoints?.goals, {
+    points: 5,
+    pointsModification: 1,
+  });
+  assert.ok(player);
+  const detail = buildPlayerLiveDetail(player);
+  assert.equal(detail.team, "Home");
+  assert.equal(
+    detail.breakdownRows.find((row) => row.label === "进球")?.pointsText,
+    "+6",
   );
+  assert.equal(detail.breakdownSumText, "+8");
+  assert.equal(detail.breakdownHint, "");
+});
 
-  assert.deepEqual(merged, match);
+test("player detail includes published adjustments even when formula guards do not match", async () => {
+  const { buildPlayerLiveDetail } =
+    await import("../miniprogram/pages/live/entry/player-detail.ts");
+  const detail = buildPlayerLiveDetail({
+    position: "DEF",
+    totalPoints: 4,
+    minutes: 90,
+    defensiveContribution: 9,
+    bonus: 0,
+    statPoints: {
+      minutes: { points: 2, pointsModification: null },
+      defensive_contribution: { points: 1, pointsModification: null },
+      bonus: { points: 0, pointsModification: 1 },
+    },
+  });
+
+  assert.deepEqual(
+    detail.breakdownRows.map((row) => [row.label, row.pointsText]),
+    [
+      ["出场", "+2"],
+      ["防守贡献", "+1"],
+      ["奖励分", "+1"],
+    ],
+  );
+  assert.equal(detail.breakdownSumText, "+4");
+  assert.equal(detail.breakdownHint, "");
 });

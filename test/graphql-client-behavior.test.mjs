@@ -6,6 +6,7 @@ import {
   GraphQLApplicationError,
   graphqlRead,
   graphqlRequest,
+  liveContractVersionForQuery,
   purgeGraphQLStorageCache
 } from "../miniprogram/services/graphql.service.ts";
 import {
@@ -87,6 +88,27 @@ test("public headers omit Bearer while session headers include it", () => {
     "X-Letletme-Device-Id": "wx-device-123",
     Authorization: "Bearer secret-token"
   });
+});
+
+test("Live Points and Live Matches use distinct hard-cut contracts", () => {
+  assert.equal(
+    liveContractVersionForQuery("query Match { liveMatchday { availability } }"),
+    "live-matches-v2",
+  );
+  assert.equal(
+    liveContractVersionForQuery(
+      "query Points { calcLivePointsByEntry(eventId: 1, entryId: 1) { availability } }",
+    ),
+    "live-points-v2",
+  );
+  assert.equal(liveContractVersionForQuery("query Teams { teams { id } }"), null);
+  assert.throws(
+    () =>
+      liveContractVersionForQuery(
+        "query Mixed { liveMatchday { availability } calcLivePointsByEntry(eventId: 1, entryId: 1) { availability } }",
+      ),
+    /LIVE_CONTRACT_MIXED_OPERATION/,
+  );
 });
 
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {

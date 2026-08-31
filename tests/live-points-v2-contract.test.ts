@@ -1,6 +1,7 @@
 import {
   LIVE_REFRESH_INTERVAL_MS,
   liveSnapshotNeedsRefresh,
+  shouldPollLiveMatchday,
   shouldPollLiveSnapshot,
 } from "../miniprogram/utils/live-refresh";
 import {
@@ -12,8 +13,11 @@ import {
   buildGraphQLRequestHeaders,
   GraphQLTransportError,
   isClientUpgradeRequired,
+  isLiveMatchesV2Query,
   isLivePointsV2Query,
+  extractGraphQLOperationName,
 } from "../miniprogram/services/graphql.service";
+import { LIVE_MATCHDAY_HEAD_QUERY } from "../miniprogram/services/live.service";
 import type { LiveScore, LiveSnapshotStatus } from "../miniprogram/models/live";
 
 function assertEqual(
@@ -108,6 +112,26 @@ assertEqual(
   "context is gated",
 );
 assertEqual(
+  isLivePointsV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
+  false,
+  "matchday uses its own contract",
+);
+assertEqual(
+  isLiveMatchesV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
+  true,
+  "matchday is gated",
+);
+assertEqual(
+  extractGraphQLOperationName(LIVE_MATCHDAY_HEAD_QUERY),
+  "LiveMatchdayHead",
+  "matchday heartbeat uses the dedicated operation",
+);
+assertEqual(
+  LIVE_MATCHDAY_HEAD_QUERY.includes("matches"),
+  false,
+  "matchday heartbeat does not download fixture payloads",
+);
+assertEqual(
   isLivePointsV2Query("query { events { id } }"),
   false,
   "non-live query is not gated",
@@ -183,6 +207,16 @@ assertEqual(
   }),
   false,
   "cross-event polling is forbidden",
+);
+assertEqual(
+  shouldPollLiveMatchday({
+    pageVisible: true,
+    currentEventId: 1,
+    selectedEventId: 1,
+    snapshot: null,
+  }),
+  true,
+  "matchday recovery keeps polling before the first publication",
 );
 
 const traceable = traceableLiveScore(score());
