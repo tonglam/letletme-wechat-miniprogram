@@ -1200,6 +1200,12 @@ Page({
           context = null;
         }
         useActiveEventPointer = context === null;
+        if (useActiveEventPointer) {
+          // Stop the revision probe as soon as this refresh falls back to the
+          // active pointer; waiting until loadData would leave a race window
+          // while the context request is being resolved.
+          this.liveRefresh?.stop();
+        }
       }
       if (!this.pageVisible || this.perfTracker !== tracker) return;
       this.refreshContextPending = false;
@@ -1229,6 +1235,7 @@ Page({
             previousSeason !== context.season,
           );
         if (scheduledWithoutCurrent) useActiveEventPointer = true;
+        if (scheduledWithoutCurrent) this.liveRefresh?.stop();
         if (eventChanged) {
           this.liveRefresh?.stop();
           this.clearKickoffTransition();

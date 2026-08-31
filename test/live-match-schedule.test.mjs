@@ -83,6 +83,22 @@ test("forced context refresh failure switches Match reads to the active pointer"
   );
 });
 
+test("active-pointer pull refresh stops an existing live probe before loading", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const refresh = page.slice(
+    page.indexOf("async runForcedRefresh"),
+    page.indexOf("async onShow"),
+  );
+  assert.match(
+    refresh,
+    /if \(useActiveEventPointer\) \{.*this\.liveRefresh\?\.stop\(\);.*\} tracker\.mark\("contextReadyAt"\)/,
+  );
+  assert.match(
+    refresh,
+    /this\.liveRefresh\?\.stop\(\);.*const publicationAccepted = await this\.loadData\(\{ background, forceRefresh: true, trackNavigation: true, useActiveEventPointer, \}/,
+  );
+});
+
 test("preseason uses displayEvent schedule without a Live overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   assert.match(page, /currentEventId = context\.currentEvent \?\? 0/);
