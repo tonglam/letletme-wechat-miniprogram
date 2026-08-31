@@ -791,7 +791,7 @@ Page({
   sharedImageMatchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   shareImageRequestId: 0,
 
-  liveRequest: null as Promise<void> | null,
+  liveRequest: null as Promise<boolean> | null,
   liveRequestKey: "",
   liveRequestId: 0,
   liveSnapshot: null as LiveMatchdayStatus | null,
@@ -938,13 +938,17 @@ Page({
       reload: () => {
         const liveResult = prefetchedLiveResult;
         prefetchedLiveResult = null;
-        if (!liveResult)
-          return this.loadData({ background: true, forceRefresh: true });
+        if (!liveResult) {
+          return this.loadData({
+            background: true,
+            forceRefresh: true,
+          }).then(() => undefined);
+        }
         return this.loadData({
           background: true,
           forceRefresh: true,
-          prefetchedLiveResult: liveResult ?? undefined,
-        });
+          prefetchedLiveResult: liveResult,
+        }).then(() => undefined);
       },
       getNextRefreshAt: () => this.liveSnapshot?.times.nextRefreshAt || null,
       // Publication revision, not a heartbeat deadline, owns content reloads.
@@ -1229,12 +1233,22 @@ Page({
       this.initLiveRefresh();
       // Event rollover is a foreground recovery: do not leave the cleared
       // page looking like a successful background refresh.
-      await this.loadData({
+      const publicationAccepted = await this.loadData({
         background,
         forceRefresh: true,
         trackNavigation: true,
         useActiveEventPointer,
       });
+      if (
+        !publicationAccepted &&
+        useActiveEventPointer &&
+        this.pageVisible &&
+        this.perfTracker === tracker
+      ) {
+        // The active pointer can also be unavailable. Re-arm the bounded
+        // context retry so an old finalized LKG cannot become permanent.
+        this.armContextDeadline(undefined, true);
+      }
     } catch (error) {
       if (this.pageVisible && this.perfTracker === tracker)
         this.showContextError(error);
@@ -1470,7 +1484,7 @@ Page({
     }
   },
 
-  loadData(options: LiveMatchLoadOptions = {}): Promise<void> {
+  loadData(options: LiveMatchLoadOptions = {}): Promise<boolean> {
     const tracksNavigation =
       options.background !== true || options.trackNavigation === true;
     const requestKey = `${this.targetEventId}:${options.forceRefresh === true}:${tracksNavigation}:${options.useActiveEventPointer === true}`;
@@ -1546,7 +1560,7 @@ Page({
         } catch (error) {
           publicationError = error;
         }
-        if (!this.pageVisible || requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return false;
 
         if (publishedMatchday?.snapshot) {
           navigationTracker?.mark("primaryResponseAt");
@@ -1605,7 +1619,7 @@ Page({
           );
           this.liveRefresh?.sync();
           this.syncDisplayState();
-          return;
+          return true;
         }
 
         if (preserveData) {
@@ -1617,7 +1631,7 @@ Page({
           });
           this.liveRefresh?.sync();
           this.syncDisplayState();
-          return;
+          return false;
         }
 
         // No accepted Match publication exists on this cold page. Fall back to
@@ -1634,7 +1648,7 @@ Page({
             wx.nextTick(() => navigationTracker?.observePrimary());
           });
           this.syncDisplayState();
-          return;
+          return false;
         }
         this.currentEventId = context.currentEvent ?? targetEvent;
         this.targetEventId = targetEvent;
@@ -1649,7 +1663,7 @@ Page({
             trace: requestTrace,
           },
         );
-        if (!this.pageVisible || requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return false;
         navigationTracker?.mark("primaryResponseAt");
         const core = coreRead.data.map(coreMatch);
         this.liveWindow =
@@ -1697,13 +1711,15 @@ Page({
         );
         this.liveRefresh?.sync();
         this.syncDisplayState();
+        return false;
       } catch (error) {
-        if (!this.pageVisible || requestId !== this.liveRequestId) return;
+        if (!this.pageVisible || requestId !== this.liveRequestId) return false;
         this.setData({
           error: error instanceof Error ? error.message : "实时比赛加载失败",
         });
         this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();
+        return false;
       } finally {
         if (this.pageVisible && requestId === this.liveRequestId) {
           this.setData({ loading: false, refreshing: false });

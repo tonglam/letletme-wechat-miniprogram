@@ -19,7 +19,7 @@ test("Live Matches uses the self-contained V2 publication before the cold Core f
   );
   assert.match(
     page,
-    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;[\s\S]*await readCoreEventFixtureSchedule/,
+    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return(?: false)?;[\s\S]*await readCoreEventFixtureSchedule/,
   );
   assert.match(
     page,
@@ -171,6 +171,10 @@ test("scheduled Match context never inherits the previous event snapshot", () =>
     forcedRefresh,
     /Boolean\(scheduledWithoutCurrent && previousEventId\)[\s\S]*if \(scheduledWithoutCurrent\) useActiveEventPointer = true;/,
   );
+  assert.match(
+    forcedRefresh,
+    /const publicationAccepted = await this\.loadData[\s\S]*!publicationAccepted && useActiveEventPointer[\s\S]*this\.armContextDeadline\(undefined, true\);/,
+  );
 });
 
 test("current-event schedule arms a kickoff transition without preseason Live work", () => {
@@ -244,7 +248,7 @@ test("an unavailable background publication cannot overwrite the accepted match 
   const page = source("miniprogram/pages/live/match/match.ts");
   assert.match(
     page,
-    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return;/,
+    /if \(preserveData\) \{[\s\S]*publication 暂不可用[\s\S]*return(?: false)?;/,
   );
   assert.match(
     page,
