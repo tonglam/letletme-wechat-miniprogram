@@ -1372,6 +1372,32 @@ PerformancePage({
       }
     } catch (error) {
       if (!isActiveRequest()) return;
+      if (isViewerEntryAuthorizationError(error)) {
+        try {
+          const refreshedEntryId = await refreshAuthoritativeFollow();
+          if (!isActiveRequest()) return;
+          if (!refreshedEntryId) {
+            this.showEntryEmptyState();
+            return;
+          }
+          if (refreshedEntryId !== expectedEntryId) {
+            void this.loadV2Leagues(true);
+            return;
+          }
+        } catch {
+          if (!isActiveRequest()) return;
+        }
+        if (!isActiveRequest()) return;
+        this.clearV2EntryScopedViewState();
+        this.v2RetryOperation = "review";
+        this.setData({
+          v2Loading: false,
+          v2State: "UNAVAILABLE",
+          v2StatusText: tournamentReviewStateText("UNAVAILABLE"),
+          v2Error: "球队状态尚未同步，请稍后重试",
+        });
+        return;
+      }
       this.v2RetryOperation =
         error instanceof Error &&
         error.message === "赛事复盘快照已更新，请刷新后重试"

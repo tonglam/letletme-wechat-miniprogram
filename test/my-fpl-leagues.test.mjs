@@ -198,6 +198,10 @@ test("V2 review pins pagination and resumes the failed operation", async () => {
     page,
     /await getMyTournamentGameweekReview\([\s\S]*if \(!\(await revalidateReviewAuthority\(\)\)\) return;/,
   );
+  assert.match(
+    page,
+    /if \(isViewerEntryAuthorizationError\(error\)\)[\s\S]*this\.clearV2EntryScopedViewState\(\);[\s\S]*v2State: "UNAVAILABLE"/,
+  );
   assert.match(page, /if \(!isActiveRequest\(\)\) return;/);
   assert.match(
     page,
