@@ -68,9 +68,34 @@ interface StatusTab extends StatusOption {
   count: number;
 }
 
+type LiveMatchViewPlayer = Pick<
+  LivePlayerRow,
+  | "element"
+  | "webName"
+  | "name"
+  | "totalPoints"
+  | "minutes"
+  | "goalsScored"
+  | "assists"
+  | "defensiveContribution"
+  | "bps"
+  | "bonus"
+  | "saves"
+  | "yellowCards"
+  | "redCards"
+>;
+
+type LiveMatchView = Omit<
+  LiveMatch,
+  "homeTeamDataList" | "awayTeamDataList" | "homeMatchPlayers" | "awayMatchPlayers"
+> & {
+  homeMatchPlayers: LiveMatchViewPlayer[];
+  awayMatchPlayers: LiveMatchViewPlayer[];
+};
+
 interface MatchGroup {
   title: string;
-  matches: LiveMatch[];
+  matches: LiveMatchView[];
 }
 
 interface LiveMatchLoadOptions {
@@ -596,8 +621,48 @@ function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
   };
 }
 
-function groupMatches(matches: LiveMatch[], status: string): MatchGroup[] {
-  const groups: Record<string, LiveMatch[]> = {};
+const toViewPlayer = (player: LivePlayerRow): LiveMatchViewPlayer => ({
+  element: player.element,
+  webName: player.webName,
+  name: player.name,
+  totalPoints: player.totalPoints,
+  minutes: player.minutes,
+  goalsScored: player.goalsScored,
+  assists: player.assists,
+  defensiveContribution: player.defensiveContribution,
+  bps: player.bps,
+  bonus: player.bonus,
+  saves: player.saves,
+  yellowCards: player.yellowCards,
+  redCards: player.redCards,
+});
+
+/**
+ * The page instance owns the complete authoritative publication in
+ * `coreMatches`. WXML receives only the fields needed to render the current
+ * tab; in particular it never receives statPoints or the raw player arrays.
+ */
+function toMatchView(match: LiveMatch): LiveMatchView {
+  const display = { ...match };
+  delete display.homeTeamDataList;
+  delete display.awayTeamDataList;
+  const homeMatchPlayers = display.homeMatchPlayers;
+  const awayMatchPlayers = display.awayMatchPlayers;
+  delete display.homeMatchPlayers;
+  delete display.awayMatchPlayers;
+  return {
+    ...display,
+    homeMatchPlayers: (homeMatchPlayers ?? []).map(toViewPlayer),
+    awayMatchPlayers: (awayMatchPlayers ?? []).map(toViewPlayer),
+  };
+}
+
+function toMatchViews(matches: readonly LiveMatch[]): LiveMatchView[] {
+  return matches.map(toMatchView);
+}
+
+function groupMatches(matches: LiveMatchView[], status: string): MatchGroup[] {
+  const groups: Record<string, LiveMatchView[]> = {};
 
   matches.forEach((match) => {
     const title =
@@ -638,7 +703,7 @@ export function noScheduleState() {
     errorWorkload: "home" as const,
     hasData: false,
     scheduleEmpty: true,
-    matches: [] as LiveMatch[],
+    visibleMatchCount: 0,
     groups: [] as MatchGroup[],
     displayState: "scheduled" as const,
     lastUpdated: "",
@@ -772,7 +837,7 @@ Page({
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
     statusTabs: buildStatusTabs([]),
-    matches: [] as LiveMatch[],
+    visibleMatchCount: 0,
     groups: [] as MatchGroup[],
     lastUpdated: "",
     copiedMatchId: "" as number | string,
@@ -853,7 +918,7 @@ Page({
         emptyDescription: emptyDescription(storedStatus),
       });
     }
-    // Match V2's active-event pointer is the cold-start authority. A stale app
+    // Match V3's active-event pointer is the cold-start authority. A stale app
     // context must be refreshed before it can pin the first read; if that
     // refresh cannot produce a valid context, leave the event unset so the
     // active pointer can select the event instead of crossing a GW boundary.
@@ -1061,7 +1126,7 @@ Page({
       if (!this.pageVisible) return;
       // A forced context read can resolve with the centralized stale fallback
       // during a transient outage. It must not overwrite an event already
-      // proven by Match V2's active pointer; retry the pointer instead.
+      // proven by Match V3's active pointer; retry the pointer instead.
       const context = shouldRefreshAppContext(refreshedContext)
         ? null
         : refreshedContext;
@@ -1102,7 +1167,7 @@ Page({
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       this.setData({
-        matches: [],
+        visibleMatchCount: 0,
         groups: [],
         hasData: false,
         fixtureStaleMessage: "",
@@ -1249,7 +1314,7 @@ Page({
           this.coreMatches = [];
           this.liveWindow = false;
           this.setData({
-            matches: [],
+            visibleMatchCount: 0,
             groups: [],
             statusTabs: buildStatusTabs([]),
             hasData: false,
@@ -1330,7 +1395,7 @@ Page({
         this.perfTracker.mark("contextReadyAt");
       } catch {
         // A stale/expired context cannot pin the next read. Keep the rendered
-        // LKG for availability, but force the Match V2 active pointer to prove
+        // LKG for availability, but force the Match V3 active pointer to prove
         // whether the live event has rolled over.
         context = null;
         useActiveEventPointer = true;
@@ -1394,7 +1459,7 @@ Page({
         this.clearCopiedMatchTimer();
         this.clearSharedImageMatchTimer();
         this.setData({
-          matches: [],
+          visibleMatchCount: 0,
           groups: [],
           statusTabs: buildStatusTabs([]),
           hasData: false,
@@ -1573,7 +1638,7 @@ Page({
                 }
               : undefined;
 
-        // A complete Match V2 publication is self-contained and owns the
+        // A complete Match V3 publication is self-contained and owns the
         // current-event page. Core fixtures are a cold schedule fallback only;
         // they must never gate or add a second read to the warm live path.
         this.setData({ errorWorkload: "gameweek" });
@@ -1639,8 +1704,8 @@ Page({
                 STATUS_OPTIONS.find((item) => item.key === publicationStatus)
                   ?.label || "比赛",
               emptyDescription: emptyDescription(publicationStatus),
-              matches: visibleMatches,
-              groups: groupMatches(visibleMatches, publicationStatus),
+              visibleMatchCount: visibleMatches.length,
+              groups: groupMatches(toMatchViews(visibleMatches), publicationStatus),
               hasData: true,
               scheduleEmpty: false,
               error: "",
@@ -1759,8 +1824,8 @@ Page({
             statusTabs: buildStatusTabs(core),
             activeStatusLabel,
             emptyDescription: emptyDescription(activeStatus),
-            matches,
-            groups: groupMatches(matches, activeStatus),
+            visibleMatchCount: matches.length,
+            groups: groupMatches(toMatchViews(matches), activeStatus),
             hasData: true,
             scheduleEmpty: false,
             error:
@@ -1903,8 +1968,8 @@ Page({
       status,
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
-      matches,
-      groups: groupMatches(matches, status),
+      visibleMatchCount: matches.length,
+      groups: groupMatches(toMatchViews(matches), status),
       hasData: true,
     });
     this.syncDisplayState();

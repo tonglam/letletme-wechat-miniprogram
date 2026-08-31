@@ -94,7 +94,7 @@ test("public headers omit Bearer while session headers include it", () => {
 test("Live Points and Live Matches use distinct hard-cut contracts", () => {
   assert.equal(
     liveContractVersionForQuery("query Match { liveMatchday { availability } }"),
-    "live-matches-v2",
+    "live-matches-v3",
   );
   assert.equal(
     liveContractVersionForQuery(

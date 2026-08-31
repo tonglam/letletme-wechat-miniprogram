@@ -146,7 +146,7 @@ function authoritativePoints(
   for (const identifier of identifiers) {
     const stat = player.statPoints?.[identifier.toLowerCase()];
     if (!stat) continue;
-    return numberValue(stat.points) + numberValue(stat.pointsModification);
+    return numberValue(stat.awardedPoints);
   }
   return undefined;
 }

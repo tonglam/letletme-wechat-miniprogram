@@ -5,7 +5,7 @@
         <live-status-bar compact="{{true}}" state="{{displayState}}" lastChecked="{{lastUpdated}}" bind:refresh="onRetry" />
       </view>
       <view class="match-count match-count-{{status}}">
-        <text class="match-count-number">{{matches.length}}</text>
+        <text class="match-count-number">{{visibleMatchCount}}</text>
         <text class="match-count-label">{{activeStatusLabel}}</text>
       </view>
     </view>
@@ -40,7 +40,7 @@
     <data-status wx:if="{{fixtureStaleMessage}}" status="stale" message="{{fixtureStaleMessage}}" workload="fixtures" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <data-status wx:elif="{{error}}" status="stale" message="{{error}}，当前显示上次成功结果" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <app-empty-state
-      wx:if="{{matches.length === 0}}"
+      wx:if="{{visibleMatchCount === 0}}"
       title="当前没有{{activeStatusLabel}}的比赛"
       description="{{emptyDescription}}"
       actionText="重新加载"
@@ -153,7 +153,7 @@
               >
                 <view class="match-player-row-head">
                   <text class="match-player-name">{{player.webName || player.name || '-'}}</text>
-                  <text class="match-player-points">{{player.totalPoints || player.points || player.livePoints || 0}}</text>
+                  <text class="match-player-points">{{player.totalPoints || 0}}</text>
                 </view>
                 <view class="match-player-stats">
                   <text>分钟 {{player.minutes || 0}}</text>
@@ -182,7 +182,7 @@
               >
                 <view class="match-player-row-head">
                   <text class="match-player-name">{{player.webName || player.name || '-'}}</text>
-                  <text class="match-player-points">{{player.totalPoints || player.points || player.livePoints || 0}}</text>
+                  <text class="match-player-points">{{player.totalPoints || 0}}</text>
                 </view>
                 <view class="match-player-stats">
                   <text>分钟 {{player.minutes || 0}}</text>

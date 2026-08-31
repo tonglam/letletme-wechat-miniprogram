@@ -8,7 +8,7 @@ const source = (path) =>
     " ",
   );
 
-test("Live Matches uses the self-contained V2 publication before the cold Core fallback", () => {
+test("Live Matches uses the self-contained V3 publication before the cold Core fallback", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const publication = page.indexOf("await getLiveMatchByStatusSnapshot");
   const core = page.indexOf("await readCoreEventFixtureSchedule");
@@ -303,7 +303,7 @@ test("fixture service rejects partial errors before mapping an empty schedule", 
   assert.ok(read >= 0 && guard > read && mapping > guard);
 });
 
-test("Live Matches reads one coherent V2 publication without fixture fan-out", () => {
+test("Live Matches reads one coherent V3 publication without fixture fan-out", () => {
   const service = source("miniprogram/services/live.service.ts");
   assert.match(service, /query LiveMatchday\(\$eventId: Int\)/);
   assert.match(
@@ -327,7 +327,7 @@ test("an unavailable background publication cannot overwrite the accepted match 
   );
   assert.match(
     page,
-    /if \(publishedMatchday\?\.snapshot\)[\s\S]*this\.setData\([\s\S]*matches: visibleMatches/,
+    /if \(publishedMatchday\?\.snapshot\)[\s\S]*this\.setData\([\s\S]*visibleMatchCount: visibleMatches\.length/,
   );
 });
 
@@ -341,6 +341,17 @@ test("heartbeat-only Match probes update metadata without rebuilding matches", (
   assert.match(accept, /fixtureStaleMessage: matchDetailUpdateMessage/);
   assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
   assert.doesNotMatch(accept, /\bmatches\s*:|\bgroups\s*:/);
+});
+
+test("Match WXML receives only the compact player view model", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const template = source("miniprogram/pages/live/match/match.wxml");
+  assert.match(page, /type LiveMatchViewPlayer = Pick<[\s\S]*"totalPoints"/);
+  assert.match(page, /const toViewPlayer = \(player: LivePlayerRow\)/);
+  assert.match(page, /delete display\.homeTeamDataList/);
+  assert.match(page, /delete display\.awayTeamDataList/);
+  assert.doesNotMatch(template, /player\.statPoints|player\.points|player\.livePoints/);
+  assert.match(template, /visibleMatchCount/);
 });
 
 test("Match refresh probes the head and fetches the full publication only on revision change", () => {
@@ -406,7 +417,7 @@ test("live match tabs follow web content preference and carry per-tab counts", (
 test("settled desk stays event-scoped without a second fixture overlay", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   const service = source("miniprogram/services/live.service.ts");
-  // V2 live data is event-scoped and self-contained; the page must not smuggle
+  // V3 live data is event-scoped and self-contained; the page must not smuggle
   // a next-event LKG into the publication path.
   assert.match(page, /this\.coreMatches = publicationMatches/);
   assert.doesNotMatch(page, /appendNextEventRows\(/);

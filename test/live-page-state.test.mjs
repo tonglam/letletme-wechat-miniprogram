@@ -257,7 +257,7 @@ test("match offseason is a scheduled empty state, not a request error", () => {
     errorWorkload: "home",
     hasData: false,
     scheduleEmpty: true,
-    matches: [],
+    visibleMatchCount: 0,
     groups: [],
     displayState: "scheduled",
     lastUpdated: "",
@@ -535,7 +535,10 @@ test("match status changes filter the Core schedule without network work", () =>
     currentTarget: { dataset: { status: "playing" } }
   });
 
-  assert.deepEqual(context.data.matches.map((match) => match.matchId), [1]);
+  assert.deepEqual(
+    context.data.groups.flatMap((group) => group.matches).map((match) => match.matchId),
+    [1],
+  );
   assert.deepEqual(calls, [
     "store:playing",
     "set:playing"

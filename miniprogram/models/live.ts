@@ -175,8 +175,7 @@ export type LiveEntryAvailability =
   "READY" | "PENDING" | "NO_PICKS" | "UNAVAILABLE";
 
 export interface LivePlayerStatPoints {
-  points: number;
-  pointsModification: number | null;
+  awardedPoints: number;
 }
 
 export interface LivePlayerRow {

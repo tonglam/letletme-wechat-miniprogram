@@ -76,10 +76,12 @@ const matchdayResult = () => ({
   },
 });
 
-test("live matchday query is one V2 publication with embedded players", () => {
+test("live matchday query is one V3 publication with embedded players", () => {
   assert.match(LIVE_MATCHES_QUERY, /query LiveMatchday\(\$eventId: Int\)/);
   assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
   assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
+  assert.match(LIVE_MATCHES_QUERY, /stats\s*\{\s*identifier\s+value\s+awardedPoints/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bpoints\b|pointsModification/);
   assert.match(LIVE_MATCHES_QUERY, /homeTeamShortName/);
   assert.match(LIVE_MATCHES_QUERY, /awayTeamShortName/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
@@ -96,7 +98,7 @@ test("live matchday query is one V2 publication with embedded players", () => {
   );
 });
 
-test("live matchday heartbeat is metadata-only and uses the V2 validator", () => {
+test("live matchday heartbeat is metadata-only and uses the V3 validator", () => {
   assert.match(
     LIVE_MATCHDAY_HEAD_QUERY,
     /query LiveMatchdayHead\(\$eventId: Int\)/,
@@ -176,7 +178,7 @@ test("active-event Match reads cannot enter the cross-request cache", () => {
   });
 });
 
-test("live matchday V2 query stays within the public AST budget", () => {
+test("live matchday V3 query stays within the public AST budget", () => {
   let astNodes = 0;
   visit(parse(LIVE_MATCHES_QUERY), { enter: () => void (astNodes += 1) });
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
@@ -263,8 +265,7 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
           {
             identifier: "minutes",
             value: 48,
-            points: 2,
-            pointsModification: null,
+            awardedPoints: 2,
           },
         ],
       },
@@ -287,8 +288,10 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
   assert.equal(match.homeTeamDataList?.[0]?.playStatus, 2);
   assert.equal(match.homeTeamDataList?.[0]?.team, "Home");
   assert.equal(match.homeTeamDataList?.[0]?.teamShortName, "Home");
+  assert.equal(match.homeTeamDataList?.[0]?.points, undefined);
+  assert.equal(match.homeTeamDataList?.[0]?.livePoints, undefined);
   assert.deepEqual(match.homeTeamDataList?.[0]?.statPoints, {
-    minutes: { points: 2, pointsModification: null },
+    minutes: { awardedPoints: 2 },
   });
 });
 
@@ -322,14 +325,12 @@ test("embedded live player details retain fixture identity and official stat poi
           {
             identifier: "minutes",
             value: 90,
-            points: 2,
-            pointsModification: null,
+            awardedPoints: 2,
           },
           {
             identifier: "goals",
             value: 1,
-            points: 5,
-            pointsModification: 1,
+            awardedPoints: 6,
           },
         ],
       },
@@ -340,8 +341,7 @@ test("embedded live player details retain fixture identity and official stat poi
   assert.equal(player?.team, "Home");
   assert.equal(player?.teamShortName, "HOM");
   assert.deepEqual(player?.statPoints?.goals, {
-    points: 5,
-    pointsModification: 1,
+    awardedPoints: 6,
   });
   assert.ok(player);
   const detail = buildPlayerLiveDetail(player);
@@ -364,9 +364,9 @@ test("player detail includes published adjustments even when formula guards do n
     defensiveContribution: 9,
     bonus: 0,
     statPoints: {
-      minutes: { points: 2, pointsModification: null },
-      defensive_contribution: { points: 1, pointsModification: null },
-      bonus: { points: 0, pointsModification: 1 },
+      minutes: { awardedPoints: 2 },
+      defensive_contribution: { awardedPoints: 1 },
+      bonus: { awardedPoints: 1 },
     },
   });
 

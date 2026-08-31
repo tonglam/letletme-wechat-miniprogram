@@ -73,9 +73,9 @@ const authoritative = buildPlayerLiveDetail({
   goalsScored: 1,
   bonus: 1,
   statPoints: {
-    minutes: { points: 2, pointsModification: null },
-    goals: { points: 5, pointsModification: 1 },
-    bonus: { points: 1, pointsModification: 1 },
+    minutes: { awardedPoints: 2 },
+    goals: { awardedPoints: 6 },
+    bonus: { awardedPoints: 2 },
   },
 } as LivePlayerRow);
 assertEqual(

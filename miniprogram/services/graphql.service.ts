@@ -551,7 +551,7 @@ export function buildGraphQLRequestHeaders(
   return header;
 }
 
-export const LIVE_MATCHES_CONTRACT_VERSION = "live-matches-v2";
+export const LIVE_MATCHES_CONTRACT_VERSION = "live-matches-v3";
 
 /** Every Live Points operation is hard-gated to the V2 contract. */
 export function isLivePointsV2Query(query: string): boolean {
@@ -560,12 +560,12 @@ export function isLivePointsV2Query(query: string): boolean {
   );
 }
 
-export function isLiveMatchesV2Query(query: string): boolean {
+export function isLiveMatchesV3Query(query: string): boolean {
   return /\bliveMatchday\s*(?:\(|\{)/.test(query);
 }
 
 export function liveContractVersionForQuery(query: string): string | null {
-  const matches = isLiveMatchesV2Query(query);
+  const matches = isLiveMatchesV3Query(query);
   const points = isLivePointsV2Query(query);
   if (matches && points) {
     throw new Error("LIVE_CONTRACT_MIXED_OPERATION");

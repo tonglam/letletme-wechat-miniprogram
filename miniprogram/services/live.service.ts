@@ -440,7 +440,7 @@ export const LIVE_MATCHES_QUERY = `
             position
             teamId
             totalPoints
-            stats { identifier value points pointsModification }
+            stats { identifier value awardedPoints }
           }
         }
       }
@@ -489,8 +489,7 @@ export const LIVE_MATCHDAY_HEAD_QUERY = `
 export interface GraphQLMatchdayPlayerStat {
   identifier: string;
   value: number;
-  points: number;
-  pointsModification: number | null;
+  awardedPoints: number;
 }
 
 export interface GraphQLMatchdayPlayer {
@@ -584,8 +583,7 @@ function mapLiveMatchdayPlayer(
   for (const stat of player.stats) {
     const identifier = stat.identifier.toLowerCase();
     statPoints[identifier] = {
-      points: stat.points,
-      pointsModification: stat.pointsModification,
+      awardedPoints: stat.awardedPoints,
     };
   }
   const isHomePlayer = player.teamId === match.homeTeamId;
@@ -608,7 +606,6 @@ function mapLiveMatchdayPlayer(
     position: player.position,
     elementType: POSITION_TYPE[player.position],
     elementTypeName: player.position,
-    points: player.totalPoints,
     totalPoints: player.totalPoints,
     playStatus: matchPlayerPlayStatus(match),
     minutes: statValue(player, ["minutes", "mins"]),
@@ -848,16 +845,24 @@ export function validateLiveMatchday(
         throw new Error("LIVE_MATCHDAY_INCOHERENT");
       }
       playerIds.add(player.id);
+      const statIdentifiers = new Set<string>();
       for (const stat of player.stats) {
         if (
           !stat.identifier ||
+          statIdentifiers.has(stat.identifier) ||
           !Number.isFinite(stat.value) ||
-          !Number.isFinite(stat.points) ||
-          (stat.pointsModification !== null &&
-            !Number.isFinite(stat.pointsModification))
+          !Number.isFinite(stat.awardedPoints)
         ) {
           throw new Error("LIVE_MATCHDAY_INCOHERENT");
         }
+        statIdentifiers.add(stat.identifier);
+      }
+      const awardedPoints = player.stats.reduce(
+        (total, stat) => total + stat.awardedPoints,
+        0,
+      );
+      if (awardedPoints !== player.totalPoints) {
+        throw new Error("LIVE_MATCHDAY_INCOHERENT");
       }
     }
   }
