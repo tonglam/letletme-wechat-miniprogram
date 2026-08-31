@@ -259,3 +259,66 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
     minutes: { points: 2, pointsModification: null },
   });
 });
+
+test("embedded live player details retain fixture identity and official stat points", async () => {
+  const { buildPlayerLiveDetail } = await import(
+    "../miniprogram/pages/live/entry/player-detail.ts"
+  );
+  const match = mapGraphQLMatch({
+    fixtureId: 10,
+    eventId: 1,
+    homeTeamId: 1,
+    homeTeamName: "Home",
+    homeTeamShortName: "HOM",
+    awayTeamId: 2,
+    awayTeamName: "Away",
+    awayTeamShortName: "AWY",
+    homeScore: 1,
+    awayScore: 0,
+    kickoffTime: null,
+    minutes: 90,
+    started: true,
+    finished: false,
+    finishedProvisional: false,
+    players: [
+      {
+        id: 1,
+        webName: "Home Player",
+        position: "MIDFIELDER",
+        teamId: 1,
+        totalPoints: 8,
+        stats: [
+          {
+            identifier: "minutes",
+            value: 90,
+            points: 2,
+            pointsModification: null,
+          },
+          {
+            identifier: "goals",
+            value: 1,
+            points: 5,
+            pointsModification: 1,
+          },
+        ],
+      },
+    ],
+  });
+
+  const player = match.homeTeamDataList?.[0];
+  assert.equal(player?.team, "Home");
+  assert.equal(player?.teamShortName, "HOM");
+  assert.deepEqual(player?.statPoints?.goals, {
+    points: 5,
+    pointsModification: 1,
+  });
+  assert.ok(player);
+  const detail = buildPlayerLiveDetail(player);
+  assert.equal(detail.team, "Home");
+  assert.equal(
+    detail.breakdownRows.find((row) => row.label === "进球")?.pointsText,
+    "+6",
+  );
+  assert.equal(detail.breakdownSumText, "+8");
+  assert.equal(detail.breakdownHint, "");
+});
