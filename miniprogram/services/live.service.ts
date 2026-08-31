@@ -569,6 +569,13 @@ function statValue(
   );
 }
 
+function matchPlayerPlayStatus(match: GraphQLMatchData): number {
+  if (match.finished) return 4;
+  if (match.finishedProvisional) return 3;
+  if (match.started) return 2;
+  return 1;
+}
+
 function mapLiveMatchdayPlayer(
   player: GraphQLMatchdayPlayer,
   match: GraphQLMatchData,
@@ -603,6 +610,7 @@ function mapLiveMatchdayPlayer(
     elementTypeName: player.position,
     points: player.totalPoints,
     totalPoints: player.totalPoints,
+    playStatus: matchPlayerPlayStatus(match),
     minutes: statValue(player, ["minutes", "mins"]),
     goalsScored: statValue(player, ["goals", "goals_scored", "goalsScored"]),
     assists: statValue(player, ["assists"]),

@@ -113,6 +113,46 @@ test("warm resume observes retained Core schedule without refetching", () => {
   );
 });
 
+test("warm Match resume retries the active pointer after context failure", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onShow = page.slice(
+    page.indexOf("async onShow()"),
+    page.indexOf("onHide()"),
+  );
+  assert.match(
+    onShow,
+    /catch \{[\s\S]*context = null;[\s\S]*useActiveEventPointer = true;/,
+  );
+  assert.match(
+    onShow,
+    /armContextDeadline\([\s\S]*useActiveEventPointer && context === null/,
+  );
+  assert.match(
+    onShow,
+    /if \(useActiveEventPointer\) \{[\s\S]*forceRefresh: true,[\s\S]*useActiveEventPointer: true/,
+  );
+});
+
+test("scheduled Match context never inherits the previous event snapshot", () => {
+  const page = source("miniprogram/pages/live/match/match.ts");
+  const onShow = page.slice(
+    page.indexOf("async onShow()"),
+    page.indexOf("onHide()"),
+  );
+  assert.match(
+    onShow,
+    /if \(context\?\.currentEvent === null\) \{[\s\S]*useActiveEventPointer = true;/,
+  );
+  assert.match(
+    onShow,
+    /const nextCurrentEventId = context !== null\s*\?\s*\(context\?\.currentEvent \?\? 0\)/,
+  );
+  assert.match(
+    onShow,
+    /const nextTargetEventId = context !== null\s*\?\s*\(context\?\.displayEvent \?\? context\?\.currentEvent \?\? 0\)/,
+  );
+});
+
 test("current-event schedule arms a kickoff transition without preseason Live work", () => {
   const page = source("miniprogram/pages/live/match/match.ts");
   assert.match(

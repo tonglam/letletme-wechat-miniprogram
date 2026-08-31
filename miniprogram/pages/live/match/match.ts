@@ -1246,6 +1246,7 @@ Page({
     this.resumeForcedRefreshBackground = false;
     const resumeInterruptedLoad = resumed && this.resumeLoadAfterShow;
     let context = getAppContextSnapshot();
+    let useActiveEventPointer = false;
     if (resumed) {
       this.perfTracker?.disconnect();
       this.perfTracker = new PagePerformanceTracker(
@@ -1265,7 +1266,11 @@ Page({
         context = await this.ensureContext("page-show");
         this.perfTracker.mark("contextReadyAt");
       } catch {
-        /* keep the last known event */
+        // A stale/expired context cannot pin the next read. Keep the rendered
+        // LKG for availability, but force the Match V2 active pointer to prove
+        // whether the live event has rolled over.
+        context = null;
+        useActiveEventPointer = true;
       }
       if (!this.pageVisible) return;
     }
@@ -1277,14 +1282,24 @@ Page({
       // The replacement lifecycle owns both the load and its recovery polling.
       this.initLiveRefresh();
     }
+    if (context?.currentEvent === null) {
+      // A scheduled context has an upcoming display event but no active event.
+      // Never inherit the prior live snapshot across that boundary.
+      useActiveEventPointer = true;
+    }
     const nextCurrentEventId =
-      context?.currentEvent ??
-      this.liveSnapshot?.eventId ??
-      this.currentEventId;
+      context !== null
+        ? (context?.currentEvent ?? 0)
+        : (this.liveSnapshot?.eventId ?? this.currentEventId);
     const nextTargetEventId =
-      context?.displayEvent ?? this.liveSnapshot?.eventId ?? this.targetEventId;
+      context !== null
+        ? (context?.displayEvent ?? context?.currentEvent ?? 0)
+        : (this.liveSnapshot?.eventId ?? this.targetEventId);
     const nextSeason = context?.season || undefined;
-    this.armContextDeadline(context?.nextDeadlineAt);
+    this.armContextDeadline(
+      context?.nextDeadlineAt,
+      useActiveEventPointer && context === null,
+    );
     const seasonChanged = Boolean(
       this.loadedSeason && nextSeason && this.loadedSeason !== nextSeason,
     );
@@ -1323,7 +1338,10 @@ Page({
           shareText: "",
         });
         this.liveRefresh?.sync();
-        await this.loadData({ forceRefresh: true });
+        await this.loadData({
+          forceRefresh: true,
+          useActiveEventPointer,
+        });
         this.syncDisplayState();
         return;
       }
@@ -1332,6 +1350,15 @@ Page({
       await this.loadData({
         background: this.data.hasData,
         forceRefresh: true,
+        useActiveEventPointer,
+      });
+      return;
+    }
+    if (useActiveEventPointer) {
+      await this.loadData({
+        background: this.data.hasData,
+        forceRefresh: true,
+        useActiveEventPointer: true,
       });
       return;
     }
