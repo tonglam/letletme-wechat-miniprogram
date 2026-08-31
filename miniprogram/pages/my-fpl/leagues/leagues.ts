@@ -1401,6 +1401,7 @@ PerformancePage({
     this.v2RetryOperation = null;
     const eventId =
       selected.latestAvailableEventId ?? selected.latestFinalizedEventId ?? 0;
+    if (!eventId) this.loadedEvent = 0;
     this.setData({
       v2SelectedTournamentIndex: index,
       v2SelectedTournament: selected,
@@ -1419,6 +1420,7 @@ PerformancePage({
       v2Loading: false,
       v2LoadingMore: false,
       v2HasNextPage: false,
+      v2Error: "",
     });
     if (this.data.entryId > 0) {
       writeLastPick(this.data.entryId, selected.tournamentId);
