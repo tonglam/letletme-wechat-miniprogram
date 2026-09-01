@@ -885,10 +885,33 @@ export function validateLiveMatchdayHead(
   });
 }
 
+type LiveMatchdayCacheValidationMode = "head" | "full";
+
+function validateLiveMatchdayCacheData(
+  data: unknown,
+  mode: LiveMatchdayCacheValidationMode,
+): boolean {
+  if (!data || typeof data !== "object") return false;
+  const result = (data as { liveMatchday?: unknown }).liveMatchday;
+  try {
+    if (mode === "head") {
+      validateLiveMatchdayHead(
+        result as LiveMatchdayHeadResponse["liveMatchday"],
+      );
+    } else {
+      validateLiveMatchday(result as LiveMatchesResponse["liveMatchday"]);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function liveMatchdayRequestOptions(
   expectedEventId: number | undefined,
   forceRefresh: boolean,
   trace?: PageRequestTrace | null,
+  mode: LiveMatchdayCacheValidationMode = "full",
 ): GraphQLOptions {
   return {
     cachePolicy: "live",
@@ -898,6 +921,9 @@ export function liveMatchdayRequestOptions(
     ...(expectedEventId === undefined ? { cacheTtl: 0, staleTtl: 0 } : {}),
     forceRefresh,
     trace,
+    validateCacheData: (data) => validateLiveMatchdayCacheData(data, mode),
+    // A malformed publication must not evict the same-event last-good value.
+    preserveCacheOnValidationFailure: true,
   };
 }
 
@@ -1079,6 +1105,7 @@ export async function getLiveMatchdayHead(
     expectedEventId,
     forceRefresh,
     trace,
+    "head",
   );
   const data = await graphqlRequest<LiveMatchdayHeadResponse>(
     LIVE_MATCHDAY_HEAD_QUERY,

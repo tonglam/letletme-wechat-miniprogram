@@ -183,20 +183,51 @@ test("live matchday rejects partial detail vectors and fake unavailable snapshot
 });
 
 test("active-event Match reads cannot enter the cross-request cache", () => {
-  assert.deepEqual(liveMatchdayRequestOptions(undefined, false), {
+  const activeOptions = liveMatchdayRequestOptions(undefined, false);
+  const { validateCacheData: activeValidator, ...activeWithoutValidator } = activeOptions;
+  assert.deepEqual(activeWithoutValidator, {
     cachePolicy: "live",
     cacheVariant: "matchday:event:active-pointer",
     cacheTtl: 0,
     staleTtl: 0,
     forceRefresh: false,
     trace: undefined,
+    preserveCacheOnValidationFailure: true,
   });
-  assert.deepEqual(liveMatchdayRequestOptions(3, true), {
+  assert.equal(typeof activeValidator, "function");
+
+  const explicitOptions = liveMatchdayRequestOptions(3, true);
+  const { validateCacheData: explicitValidator, ...explicitWithoutValidator } = explicitOptions;
+  assert.deepEqual(explicitWithoutValidator, {
     cachePolicy: "live",
     cacheVariant: "matchday:event:3",
     forceRefresh: true,
     trace: undefined,
+    preserveCacheOnValidationFailure: true,
   });
+  assert.equal(typeof explicitValidator, "function");
+});
+
+test("live matchday cache admission rejects malformed FULL data and accepts metadata HEAD data", () => {
+  const full = liveMatchdayRequestOptions(3, false);
+  const valid = matchdayResult();
+  assert.equal(full.validateCacheData?.({ liveMatchday: valid }), true);
+
+  const malformed = matchdayResult();
+  malformed.snapshot.matches[0].players = [{
+    id: 7,
+    webName: "Player",
+    position: "MIDFIELDER",
+    teamId: 1,
+    totalPoints: 4,
+    stats: [{ identifier: "goals", value: 1, awardedPoints: 3 }],
+  }];
+  assert.equal(full.validateCacheData?.({ liveMatchday: malformed }), false);
+
+  const head = liveMatchdayRequestOptions(3, false, undefined, "head");
+  const metadataOnly = matchdayResult();
+  delete metadataOnly.snapshot.matches;
+  assert.equal(head.validateCacheData?.({ liveMatchday: metadataOnly }), true);
 });
 
 test("live matchday V3 query stays within the public AST budget", () => {

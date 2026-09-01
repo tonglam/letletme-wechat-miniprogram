@@ -89,6 +89,8 @@ export interface GraphQLOptions {
   mapStaleData?: (data: unknown) => unknown;
   /** Reject a successful response before it is admitted to the cache. */
   validateCacheData?: (data: unknown) => boolean;
+  /** Keep the prior authoritative value when a network response fails validation. */
+  preserveCacheOnValidationFailure?: boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
   contract?: "my-tournament-review-v2";
 }
@@ -1212,12 +1214,15 @@ export async function graphqlRead<T>(
           policy.operationName,
           response.body.data,
         );
+        let cacheValidationFailed = false;
         if (cacheableData && options?.validateCacheData) {
           try {
             cacheableData = options.validateCacheData(response.body.data);
+            cacheValidationFailed = !cacheableData;
           } catch {
             // A failed identity/integrity check must never admit the response.
             cacheableData = false;
+            cacheValidationFailed = true;
           }
         }
 
@@ -1237,7 +1242,11 @@ export async function graphqlRead<T>(
           };
           writeCacheEntry(responseIdentity.cacheKey, entry, policy.persist);
           forgetServedFromCache(responseIdentity.requestKey);
-        } else if (producingSessionStillActive && !cacheableData) {
+        } else if (
+          producingSessionStillActive &&
+          !cacheableData &&
+          !(cacheValidationFailed && options?.preserveCacheOnValidationFailure)
+        ) {
           // A successful response that cannot be shared is authoritative about
           // freshness: remove any older good value so the next read cannot
           // present it as current. The non-authoritative response stays

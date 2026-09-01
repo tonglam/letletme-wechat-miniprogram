@@ -315,6 +315,32 @@ test("cache identity validation rejects fresh and stale viewer candidates", asyn
   assert.equal(runtime.requests.length, 4);
 });
 
+test("validation-rejected live refresh preserves the prior last-good cache", async () => {
+  let response = { value: "last-good" };
+  const runtime = installRuntime((request) =>
+    request.success({ statusCode: 200, data: { data: response } }),
+  );
+  const query = "query LiveValidationPreservesLkg { value }";
+  const options = {
+    ...publicReporting,
+    cacheTtl: 60_000,
+    staleTtl: 60_000,
+    preserveCacheOnValidationFailure: true,
+    validateCacheData: (data) => data?.value === "last-good",
+  };
+
+  const first = await graphqlRead(query, {}, options);
+  assert.equal(first.data.value, "last-good");
+  response = { value: "malformed" };
+  const rejected = await graphqlRead(query, {}, { ...options, forceRefresh: true });
+  assert.equal(rejected.data.value, "malformed");
+
+  const retained = await graphqlRead(query, {}, options);
+  assert.equal(retained.meta.source, "memory");
+  assert.equal(retained.data.value, "last-good");
+  assert.equal(runtime.requests.length, 2);
+});
+
 test("fresh cache, force refresh, L1 limit, and L2 storage use one policy", async () => {
   const runtime = installRuntime(success({ value: 1 }));
   const query = "query BehaviorCache { value }";
