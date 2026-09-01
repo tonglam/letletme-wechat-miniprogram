@@ -794,7 +794,7 @@ export async function getMiniHomePricePredictions(
   };
 }
 
-const MINI_HOME_DREAM_TEAM_QUERY = `
+export const MINI_HOME_DREAM_TEAM_QUERY = `
   query MiniHomeDreamTeam($eventId: Int!) {
     homeGameweek(eventId: $eventId) {
       gameweekDesk {

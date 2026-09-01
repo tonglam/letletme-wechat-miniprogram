@@ -6,10 +6,15 @@ import {
   GraphQLApplicationError,
   graphqlRead,
   graphqlRequest,
+  isLivePointsV2Query,
+  LIVE_POINTS_CONTRACT_VERSION,
+  LIVE_POINTS_V2_ROOT_FIELDS,
   liveContractVersionForQuery,
   purgeGraphQLStorageCache,
   shouldCacheGraphQLData,
 } from "../miniprogram/services/graphql.service.ts";
+import { MINI_HOME_DREAM_TEAM_QUERY } from "../miniprogram/services/home.service.ts";
+import { GET_TOURNAMENT_DETAIL_DESK } from "../miniprogram/services/tournament-detail.service.ts";
 import {
   clearSessionCredentials,
   restoreApiSessionCredentials
@@ -110,6 +115,47 @@ test("Live Points and Live Matches use distinct hard-cut contracts", () => {
       ),
     /LIVE_CONTRACT_MIXED_OPERATION/,
   );
+});
+
+test("Live Points covers every gated root and both previously omitted Mini desks", () => {
+  assert.equal(LIVE_POINTS_V2_ROOT_FIELDS.length, 16);
+  for (const document of [
+    MINI_HOME_DREAM_TEAM_QUERY,
+    GET_TOURNAMENT_DETAIL_DESK,
+  ]) {
+    assert.equal(isLivePointsV2Query(document), true);
+    assert.equal(
+      liveContractVersionForQuery(document),
+      LIVE_POINTS_CONTRACT_VERSION,
+    );
+  }
+});
+
+test("affected Mini desks send the Live Points V2 header through wx.request", async () => {
+  const runtime = installRuntime(success({ homeGameweek: { gameweekDesk: {} } }));
+
+  await graphqlRequest(
+    MINI_HOME_DREAM_TEAM_QUERY,
+    { eventId: 1 },
+    { ...publicReporting, forceRefresh: true },
+  );
+  await graphqlRequest(
+    GET_TOURNAMENT_DETAIL_DESK,
+    { tournamentId: 1, entryId: 1, eventId: 1 },
+    {
+      ...publicReporting,
+      cacheVariant: "tournament:1:entry:1:event:1",
+      forceRefresh: true,
+    },
+  );
+
+  assert.equal(runtime.requests.length, 2);
+  for (const request of runtime.requests) {
+    assert.equal(
+      request.header["X-LetLetMe-Contract"],
+      LIVE_POINTS_CONTRACT_VERSION,
+    );
+  }
 });
 
 test("V2 review requests carry an explicit contract header", () => {
