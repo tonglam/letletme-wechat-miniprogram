@@ -114,6 +114,12 @@ test("Match score and detail revisions independently rebuild the match list", ()
   );
 });
 
+test("a season rollover rebuilds even when the event number is reused", () => {
+  const accepted = matchdaySnapshot({ season: "2025-26" });
+  const observed = matchdaySnapshot({ season: "2026-27" });
+  assert.equal(liveMatchdayNeedsRefresh(accepted, observed), true);
+});
+
 test("metadata-only HEAD retains the accepted complete detail LKG", () => {
   const accepted = matchdaySnapshot();
   const observed = matchdaySnapshot({
@@ -284,6 +290,25 @@ test("Match recovery polling continues after the final whistle until detail is f
       snapshot: accepted,
     }),
     true,
+  );
+});
+
+test("terminal matchday stops polling even when an old deadline remains", () => {
+  assert.equal(
+    shouldPollLiveMatchday({
+      pageVisible: true,
+      currentEventId: 3,
+      selectedEventId: 3,
+      snapshot: matchdaySnapshot({
+        state: "FINALIZED",
+        detailDelivery: {
+          state: "FINAL",
+          servedFrom: "REDIS_CURRENT",
+          reasonCodes: ["DETAIL_FINAL"],
+        },
+      }),
+    }),
+    false,
   );
 });
 

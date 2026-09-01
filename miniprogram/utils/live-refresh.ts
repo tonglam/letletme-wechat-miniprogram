@@ -35,6 +35,7 @@ export function liveMatchdayNeedsRefresh(
 ): boolean {
   if (!accepted || !observed) return true;
   return (
+    accepted.season !== observed.season ||
     accepted.eventId !== observed.eventId ||
     accepted.revisions.lifecycle !== observed.revisions.lifecycle ||
     accepted.revisions.fixtureIdentity !==
@@ -314,6 +315,12 @@ export function shouldPollLiveMatchday(options: {
   // A missing snapshot is a pending/unavailable state, not a terminal one.
   if (!snapshot) return true;
   if (snapshot.eventId !== selectedEventId) return false;
+  if (
+    snapshot.state === "FINALIZED" &&
+    snapshot.detailDelivery.state === "FINAL"
+  ) {
+    return false;
+  }
   const nextRefreshAt = snapshot.times.nextRefreshAt;
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
   if (snapshot.state === "FINALIZED") {
