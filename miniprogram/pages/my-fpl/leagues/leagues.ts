@@ -423,6 +423,7 @@ PerformancePage({
   viewRequestId: 0,
   retryOperation: null as ReviewRetryOperation | null,
   retryPhaseId: null as string | null,
+  retryAfter: null as string | null,
   loadedEntryId: 0,
   loadedContextRevision: 0,
   loadedSeason: "" as string,
@@ -540,6 +541,7 @@ PerformancePage({
       requestId === this.requestId &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     this.retryOperation = "catalog";
+    this.retryAfter = null;
     this.setData({
       v2Loading: !append,
       v2LoadingMore: false,
@@ -636,7 +638,19 @@ PerformancePage({
       // catalog. A binding can change between the network response and this
       // state update; never attach the response to the new entry by accident.
       const authoritativeEntryId = currentMyFplEntryId() || 0;
-      if (authoritativeEntryId !== entryId) return;
+      if (authoritativeEntryId !== entryId) {
+        if (!authoritativeEntryId) {
+          this.showEntryEmptyState();
+          return;
+        }
+        this.setData({
+          v2Loading: false,
+          v2CatalogLoadingMore: false,
+          entryId: authoritativeEntryId,
+        });
+        await this.loadCatalog(true, trace, scope, null, false);
+        return;
+      }
       if (catalog.viewerEntryId && Number(catalog.viewerEntryId) !== entryId) {
         throw new Error("球队绑定已变更，请稍后重试");
       }
@@ -801,6 +815,7 @@ PerformancePage({
     };
     this.retryOperation = "review";
     this.retryPhaseId = null;
+    this.retryAfter = after;
     this.setData({
       v2Loading: true,
       v2LoadingMore: Boolean(after),
@@ -950,6 +965,7 @@ PerformancePage({
       const visibleState = visibleMeta.state;
       this.retryOperation = null;
       this.retryPhaseId = null;
+      this.retryAfter = null;
       this.setData({
         v2Loading: false,
         v2LoadingMore: false,
@@ -983,6 +999,7 @@ PerformancePage({
         });
       } else {
         this.retryOperation = "review";
+        this.retryAfter = after;
         this.setData({
           v2Loading: false,
           v2LoadingMore: false,
@@ -1021,6 +1038,7 @@ PerformancePage({
         void this.loadCatalog(true);
       }
     };
+    this.retryAfter = null;
     this.setData({
       v2SelectedPhaseId: phaseId,
       v2Format: phase.format,
@@ -1197,9 +1215,10 @@ PerformancePage({
         this.data.v2SelectedPhaseId === context.phaseId &&
         (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
       this.retryOperation = "loadMore";
+      this.retryAfter = null;
       this.setData({ v2LoadingMore: true, v2Error: "" });
       try {
-        const nextSections = await Promise.all(
+        const settledSections = await Promise.allSettled(
           pendingSections.map((current) =>
             getMyTournamentSeasonReviewSection(
               selected.tournamentId,
@@ -1218,6 +1237,13 @@ PerformancePage({
             ),
           ),
         );
+        const firstSection = settledSections[0];
+        if (!firstSection) throw new Error("赛事阶段暂时不可用");
+        if (firstSection.status === "rejected") throw firstSection.reason;
+        const nextSections = settledSections.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+        if (!nextSections.length) throw new Error("赛事阶段暂时不可用");
         if (!active()) {
           if (this.pageVisible && requestId === this.viewRequestId) {
             this.setData({ v2LoadingMore: false });
@@ -1240,6 +1266,7 @@ PerformancePage({
         });
         this.retryOperation = null;
         this.retryPhaseId = null;
+        this.retryAfter = null;
       } catch (error) {
         if (!active()) {
           if (this.pageVisible && requestId === this.viewRequestId) {
@@ -1474,6 +1501,7 @@ PerformancePage({
     ) {
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
+        const retryAfter = this.retryAfter;
         void this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
@@ -1482,6 +1510,8 @@ PerformancePage({
             callerSurface: "my-fpl-leagues-v2.1",
             trigger: "refresh",
           }),
+          retryAfter,
+          selected.latestFinalizedScope?.revision ?? null,
         );
         return;
       }
