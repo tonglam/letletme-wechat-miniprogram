@@ -25,8 +25,8 @@
 ## Change routing
 
 - For a Mini-only feature or bug, use `$letletme-mini-client-path`; no cross-repo Change ID is needed.
-- If a change needs a Web login/proxy contract, GraphQL field/resolver, Data publication, or Ops release change, use `$letletme-stack-audit` and register only the affected repositories.
-- Use `$letletme-miniprogram-devtools` for DevTools import/build/scenario/simulator/preview/upload work. Use `$gh-codex-review-loop` for PR completion and `$letletme-release-acceptance` for authorized public-release acceptance.
+- If a change needs a Web login/proxy contract, GraphQL field/resolver, Data publication, or Ops release change, use the global `$letletme-stack-audit` and register only the affected repositories.
+- Use the global `$letletme-miniprogram-devtools` for DevTools import/build/scenario/simulator/preview/upload work. Use the global `$gh-codex-review-loop` for PR completion and the global `$letletme-release-acceptance` for authorized public-release acceptance.
 
 ## Verification and release evidence
 
@@ -36,11 +36,3 @@
 - Keep checked-in `project.config.json` on `touristappid`. Real app id and local DevTools preferences stay in ignored `project.private.config.json`; generated `miniprogram/miniprogram_npm` stays uncommitted.
 - Treat source/static checks, DevTools compile/Problems, exact simulator scenario, preview/real device, signed development upload, audit, and public publication as distinct evidence. Simulator or upload success is not public release.
 - Before any upload, inspect the current online version and update type, continue the approved version line, bind version/description to the exact `origin/main` SHA, and run `npm run check:production-origin`. After publication, verify the online version and a representative real client flow.
-
-## Governance and review
-
-- Global routes in `.codex/global-skills.json` are provisioned from immutable `tonglam/codex-workspace-config@7e92336ec04d38f7bb95620e304ce6ec6567c896:registry/workspace-assets.json` with its recorded SHA-256 content digest into the host Codex mount. Provision that source before invoking a route; run `python3 .codex/provision_global_skills.py --manifest .codex/global-skills.json --apply` when the host mount is absent, or append `--allow-network` only when network access is explicitly approved and no authenticated local source is available. If provisioning or the mount is unavailable, stop and report the missing dependency rather than silently substituting it or fetching implicitly.
-- Use `$gh-codex-review-loop` for PR work. A review may be skipped only after two consecutive explicit quota-limit responses for the unchanged head; record both responses and the exact SHA. This never waives CI, findings, or cleanup.
-- Every P0-P3 finding must be dispositioned and its thread resolved. Only a finding confined to tests/scripts gets the time exception: implement P0/P1, and explain plus resolve P2/P3 without implementation time. P2/P3 anywhere else must be actually fixed and verified.
-- Keep a complete finding ledger for the exact head; merge is prohibited while any finding is undispositioned or any review thread is unresolved. A quota override can skip only a new review request and never finding resolution.
-- After merge, clean only the exact corresponding worktree, local branch, and remote branch after verifying identity; leave unrelated WIP untouched.
