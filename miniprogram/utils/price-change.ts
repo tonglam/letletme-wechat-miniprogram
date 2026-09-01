@@ -2,7 +2,6 @@ import type {
   PersonalPriceState,
   PriceChangePlayer,
   PriceChangePredictionStatus,
-  PriceChangeTransferGameweek,
 } from "../models/price-change";
 import { formatCompactNumber } from "./summary-format";
 
@@ -278,71 +277,9 @@ export function buildPriceChangeViewRow(
   };
 }
 
-export function playerIdentityKey(webName: string, teamShortName: string): string {
-  return `${webName.trim().toLowerCase()}|${teamShortName.trim().toLowerCase()}`;
-}
-
-function playerNamePositionKey(webName: string, position: string): string {
-  const normalized = position.trim().toUpperCase();
-  const positionCode = normalized === "GOALKEEPER" ? "GKP"
-    : normalized === "DEFENDER" ? "DEF"
-      : normalized === "MIDFIELDER" ? "MID"
-        : normalized === "FORWARD" ? "FWD"
-          : normalized;
-  return `${webName.trim().toLowerCase()}|${positionCode}`;
-}
-
-function addUnique(map: Map<string, number | null>, key: string, playerId: number): void {
-  const current = map.get(key);
-  if (current === undefined) map.set(key, playerId);
-  else if (current !== playerId) map.set(key, null);
-}
-
-export function resolveTransferPlayerIds(
-  gameweeks: readonly PriceChangeTransferGameweek[],
-  players: readonly PriceChangePlayer[],
-): Array<{ eventId: number; elementInId: number; elementInCost: number; time: string }> {
-  const byExactKey = new Map<string, number | null>();
-  const byNameAndPosition = new Map<string, number | null>();
-  for (const player of players) {
-    addUnique(byExactKey, playerIdentityKey(player.webName, player.teamShortName), player.playerId);
-    addUnique(
-      byNameAndPosition,
-      playerNamePositionKey(player.webName, player.position),
-      player.playerId,
-    );
-  }
-
-  const resolved: Array<{
-    eventId: number;
-    elementInId: number;
-    elementInCost: number;
-    time: string;
-  }> = [];
-  for (const gameweek of gameweeks) {
-    for (const move of gameweek.transfers) {
-      const exact = byExactKey.get(
-        playerIdentityKey(move.elementInWebName, move.elementInTeamShortName),
-      );
-      const fallback = byNameAndPosition.get(
-        playerNamePositionKey(move.elementInWebName, move.elementInTypeName),
-      );
-      const elementInId = exact ?? fallback ?? null;
-      if (elementInId === null || !Number.isFinite(move.elementInCost)) continue;
-      resolved.push({
-        eventId: move.eventId || gameweek.eventId,
-        elementInId,
-        elementInCost: move.elementInCost,
-        time: move.time,
-      });
-    }
-  }
-  return resolved;
-}
-
 export function isFreeHitChip(value: unknown): boolean {
   const chip = String(value || "").trim().toUpperCase();
-  return chip === "FREE_HIT" || chip === "FREEHIT" || chip === "FH";
+  return chip === "FREE_HIT";
 }
 
 export function buildPersonalPurchasePrices(input: {
@@ -351,7 +288,7 @@ export function buildPersonalPurchasePrices(input: {
   startPrices: Readonly<Record<string, number>>;
   transfers: ReadonlyArray<{
     eventId: number;
-    elementInId: number;
+    elementIn: number | null;
     elementInCost: number;
     time: string;
   }>;
@@ -377,9 +314,9 @@ export function buildPersonalPurchasePrices(input: {
   });
   for (const transfer of transfers) {
     if (isFreeHitChip(input.historyChips?.[String(transfer.eventId)])) continue;
-    if (!squad.includes(transfer.elementInId)) continue;
+    if (transfer.elementIn === null || !squad.includes(transfer.elementIn)) continue;
     if (!Number.isFinite(transfer.elementInCost) || transfer.elementInCost < 0) continue;
-    permanent.set(transfer.elementInId, transfer.elementInCost);
+    permanent.set(transfer.elementIn, transfer.elementInCost);
   }
   const purchasePrices: Record<string, number> = {};
   permanent.forEach((price, playerId) => {

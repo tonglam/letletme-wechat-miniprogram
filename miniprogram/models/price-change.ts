@@ -77,9 +77,7 @@ export interface PriceChangePersonalPick {
 
 export interface PriceChangeTransferMove {
   eventId: number;
-  elementInWebName: string;
-  elementInTypeName: string;
-  elementInTeamShortName: string;
+  elementIn: number | null;
   elementInCost: number;
   time: string;
 }

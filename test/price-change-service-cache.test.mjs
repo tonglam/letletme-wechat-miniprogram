@@ -37,6 +37,13 @@ function installWx(storage, handleRequest) {
   globalThis.getApp = () => ({ globalData: {} });
 }
 
+test("personal price query uses only the manager-review v2 contract", () => {
+  assert.match(PRICE_CHANGE_PERSONAL_QUERY, /myFplManagerReview/);
+  assert.match(PRICE_CHANGE_PERSONAL_QUERY, /currentGameweek/);
+  assert.match(PRICE_CHANGE_PERSONAL_QUERY, /\belementIn\b/);
+  assert.doesNotMatch(PRICE_CHANGE_PERSONAL_QUERY, /myFplTeam(?:Desk|Gameweek|Transfers)/);
+});
+
 test("price board falls back to its 60-minute last-good snapshot when GraphQL throws", async () => {
   const previousWx = globalThis.wx;
   const previousGetApp = globalThis.getApp;
@@ -185,12 +192,16 @@ test("personal prices reject a stale viewer reporting snapshot", async () => {
         statusCode: 200,
         data: {
           data: {
-            myFplTeamGameweek: {
+            myFplManagerReview: {
               state: "READY",
-              result: { picks: [{ element: 1, webName: "Old pick" }] },
+              currentGameweek: {
+                state: "READY",
+                eventId: 1,
+                result: { picks: [{ element: 1, webName: "Old pick" }] },
+              },
+              timeline: [],
+              transfers: [],
             },
-            myFplTeamDesk: { state: "READY", history: [] },
-            myFplTeamTransfers: { state: "READY", gameweeks: [] },
           },
         },
         header: {},
@@ -207,7 +218,7 @@ test("personal prices reject a stale viewer reporting snapshot", async () => {
 
     await graphqlRead(
       PRICE_CHANGE_PERSONAL_QUERY,
-      { eventId: 1 },
+      {},
       {
         authMode: "session",
         cachePolicy: "reporting",
@@ -222,7 +233,6 @@ test("personal prices reject a stale viewer reporting snapshot", async () => {
       eventId: 1,
       season: "2627",
       entryId: 6953,
-      players: [],
       forceRefresh: true,
     });
 
@@ -254,15 +264,16 @@ test("current Free Hit picks never trigger or receive permanent start prices", a
         statusCode: 200,
         data: {
           data: {
-            myFplTeamGameweek: {
+            myFplManagerReview: {
               state: "READY",
-              result: { picks: [{ element: 1, webName: "Temporary pick" }] },
+              currentGameweek: {
+                state: "READY",
+                eventId: 1,
+                result: { picks: [{ element: 1, webName: "Temporary pick" }] },
+              },
+              timeline: [{ eventId: 1, eventChip: "FREE_HIT" }],
+              transfers: [],
             },
-            myFplTeamDesk: {
-              state: "READY",
-              history: [{ eventId: 1, eventChip: "FH" }],
-            },
-            myFplTeamTransfers: { state: "READY", gameweeks: [] },
           },
         },
         header: {},
@@ -281,7 +292,6 @@ test("current Free Hit picks never trigger or receive permanent start prices", a
       eventId: 1,
       season: "2627",
       entryId: 6953,
-      players: [],
       forceRefresh: true,
     });
 
@@ -289,6 +299,65 @@ test("current Free Hit picks never trigger or receive permanent start prices", a
     assert.deepEqual(result, {
       squadState: "ready",
       squadElementIds: [1],
+      purchasePrices: {},
+      personalPriceState: "UNAVAILABLE",
+    });
+  } finally {
+    clearSessionCredentials();
+    clearGraphQLMemoryCache();
+    globalThis.wx = previousWx;
+    globalThis.getApp = previousGetApp;
+  }
+});
+
+test("personal prices reject a gameweek outside the review revision", async () => {
+  const previousWx = globalThis.wx;
+  const previousGetApp = globalThis.getApp;
+  const storage = new Map();
+  let requests = 0;
+
+  try {
+    installWx(storage, (options) => {
+      requests += 1;
+      options.success({
+        statusCode: 200,
+        data: {
+          data: {
+            myFplManagerReview: {
+              state: "READY",
+              currentGameweek: {
+                state: "READY",
+                eventId: 2,
+                result: { picks: [{ element: 1, webName: "Wrong revision pick" }] },
+              },
+              timeline: [{ eventId: 2, eventChip: "NONE" }],
+              transfers: [],
+            },
+          },
+        },
+        header: {},
+      });
+    });
+    clearSessionCredentials();
+    storage.set(storageKeys.apiSessionToken, "revision-session-token");
+    storage.set(storageKeys.apiSessionExpiresAt, "2099-01-01T00:00:00.000Z");
+    storage.set(storageKeys.apiProfileFplEntryId, 6953);
+    storage.set(storageKeys.entryId, 6953);
+    await restoreApiSessionCredentials();
+    setKnownNetworkStatusForTest(true);
+    clearGraphQLMemoryCache();
+
+    const result = await getPriceChangePersonalContext({
+      eventId: 1,
+      season: "2627",
+      entryId: 6953,
+      forceRefresh: true,
+    });
+
+    assert.equal(requests, 1, "a revision mismatch must skip start-price requests");
+    assert.deepEqual(result, {
+      squadState: "not-published",
+      squadElementIds: [],
       purchasePrices: {},
       personalPriceState: "UNAVAILABLE",
     });
@@ -313,12 +382,15 @@ test("personal prices stay unavailable when chip history is not authoritative", 
         statusCode: 200,
         data: {
           data: {
-            myFplTeamGameweek: {
+            myFplManagerReview: {
               state: "READY",
-              result: { picks: [{ element: 1, webName: "Unknown chip pick" }] },
+              currentGameweek: {
+                state: "READY",
+                eventId: 1,
+                result: { picks: [{ element: 1, webName: "Unknown chip pick" }] },
+              },
+              timeline: [],
             },
-            myFplTeamDesk: { state: "PENDING", history: [] },
-            myFplTeamTransfers: { state: "READY", gameweeks: [] },
           },
         },
         header: {},
@@ -337,7 +409,6 @@ test("personal prices stay unavailable when chip history is not authoritative", 
       eventId: 1,
       season: "2627",
       entryId: 6953,
-      players: [],
       forceRefresh: true,
     });
 

@@ -336,7 +336,6 @@ PerformancePage({
           eventId: context.displayEvent,
           season: context.season,
           entryId: currentMyFplEntryId() ?? null,
-          players: board.players,
           forceRefresh,
           trace,
         });
