@@ -501,13 +501,21 @@ export async function getMyTournamentSeasonReview(
   forceRefresh = false,
   trace?: PageRequestTrace,
   viewerEntryId?: number | null,
+  catalogRevision?: string | null,
 ): Promise<MyTournamentSeasonReview> {
   const data = await graphqlRequest<{
     myTournamentSeasonReview: MyTournamentSeasonReview;
   }>(
     GET_MY_TOURNAMENT_SEASON_REVIEW,
     { tournamentId, throughEventId },
-    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
+    myTournamentReviewOptions(
+      forceRefresh,
+      trace,
+      viewerEntryId,
+      false,
+      "reporting",
+      catalogRevision,
+    ),
   );
   return data.myTournamentSeasonReview;
 }

@@ -44,6 +44,9 @@
       <button wx:if="{{v2Event}}" size="mini" bindtap="onGoLive">前往 Live 查看未结算数据</button>
     </view>
 
+    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
+    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
+
     <view wx:if="{{showSeason && v2Season}}" class="section">
       <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.throughEventId}}</view>
       <view class="phase-timeline">
