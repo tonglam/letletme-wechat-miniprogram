@@ -228,9 +228,24 @@ test("V2 review cache accepts only fully READY snapshots", () => {
   );
   assert.equal(
     shouldCacheGraphQLData("MyTournamentSeasonReview", {
-      myTournamentSeasonReview: { state: "READY" },
+      myTournamentSeasonReview: {
+        state: "READY",
+        phases: [{ state: "READY", revision: "1", semanticSha256: "sha-1" }],
+      },
     }),
     true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentSeasonReview", {
+      myTournamentSeasonReview: {
+        state: "READY",
+        phases: [
+          { state: "READY", revision: "1", semanticSha256: "sha-1" },
+          { state: "PENDING", revision: null, semanticSha256: null },
+        ],
+      },
+    }),
+    false,
   );
   assert.equal(
     shouldCacheGraphQLData("MyTournamentReviewCatalog", {

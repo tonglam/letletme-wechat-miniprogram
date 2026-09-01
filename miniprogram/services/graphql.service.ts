@@ -863,8 +863,8 @@ export function shouldCacheGraphQLData(
     ).myTournamentReviewCatalog;
     return Boolean(
       catalog?.state === "READY" &&
-        Array.isArray(catalog.edges) &&
-        catalog.edges.every((edge) => edge.node?.state === "READY"),
+      Array.isArray(catalog.edges) &&
+      catalog.edges.every((edge) => edge.node?.state === "READY"),
     );
   }
   if (operationName === "MyTournamentGameweekReview") {
@@ -877,12 +877,29 @@ export function shouldCacheGraphQLData(
     );
   }
   if (operationName === "MyTournamentSeasonReview") {
+    const review = (
+      data as {
+        myTournamentSeasonReview?: {
+          state?: unknown;
+          phases?: Array<{
+            state?: unknown;
+            revision?: unknown;
+            semanticSha256?: unknown;
+          }>;
+        } | null;
+      }
+    ).myTournamentSeasonReview;
     return (
-      (
-        data as {
-          myTournamentSeasonReview?: { state?: unknown } | null;
-        }
-      ).myTournamentSeasonReview?.state === "READY"
+      review?.state === "READY" &&
+      Array.isArray(review.phases) &&
+      review.phases.every(
+        (phase) =>
+          phase.state === "READY" &&
+          typeof phase.revision === "string" &&
+          phase.revision.length > 0 &&
+          typeof phase.semanticSha256 === "string" &&
+          phase.semanticSha256.length > 0,
+      )
     );
   }
   if (operationName === "MyTournamentSeasonReviewSection") {
