@@ -319,6 +319,24 @@ test("live matchday cache admission rejects malformed FULL data and accepts meta
   assert.equal(head.validateCacheData?.({ liveMatchday: metadataOnly }), true);
 });
 
+test("cache admission rejects a valid unavailable envelope", () => {
+  const explicit = liveMatchdayRequestOptions(3, false);
+  assert.equal(
+    explicit.validateCacheData?.({
+      liveMatchday: {
+        availability: "UNAVAILABLE",
+        delivery: {
+          state: "UNAVAILABLE",
+          servedFrom: null,
+          reasonCodes: ["DESK_UNAVAILABLE"],
+        },
+        snapshot: null,
+      },
+    }),
+    false,
+  );
+});
+
 test("live matchday V3 query stays within the public AST budget", () => {
   let astNodes = 0;
   visit(parse(LIVE_MATCHES_QUERY), { enter: () => void (astNodes += 1) });

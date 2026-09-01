@@ -989,6 +989,16 @@ function validateLiveMatchdayCacheData(
     } else {
       validateLiveMatchday(result as LiveMatchesResponse["liveMatchday"]);
     }
+    // An unavailable envelope is a valid response state, but it is not a
+    // publication and must never replace a previously cached same-event LKG.
+    if (
+      (result as
+        | LiveMatchesResponse["liveMatchday"]
+        | LiveMatchdayHeadResponse["liveMatchday"]).availability ===
+      "UNAVAILABLE"
+    ) {
+      return false;
+    }
     return isExpectedLiveMatchdayScope(
       result as
         | LiveMatchesResponse["liveMatchday"]

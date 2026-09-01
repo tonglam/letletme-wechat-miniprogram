@@ -1,6 +1,7 @@
 import type {
   LiveMatch,
   LiveMatchdayStatus,
+  LivePlayerRow,
   LiveSnapshotStatus,
 } from "../models/live";
 
@@ -162,6 +163,21 @@ export function shouldRetainAcceptedLiveMatchDetails(
   );
 }
 
+function retainedPlayerPlayStatus(match: LiveMatch): number {
+  const status = match.status || match.playStatus;
+  if (status === "finished") return match.provisional ? 3 : 4;
+  if (status === "playing") return 2;
+  return 1;
+}
+
+function refreshRetainedPlayerStatus(
+  players: readonly LivePlayerRow[],
+  match: LiveMatch,
+): LivePlayerRow[] {
+  const playStatus = retainedPlayerPlayStatus(match);
+  return players.map((player) => ({ ...player, playStatus }));
+}
+
 /** Copy only same-fixture player rows from the accepted full LKG. */
 export function retainLiveMatchPlayerDetails(
   candidate: readonly LiveMatch[],
@@ -177,8 +193,14 @@ export function retainLiveMatchPlayerDetails(
     if (!previous) return match;
     return {
       ...match,
-      homeTeamDataList: previous.homeTeamDataList,
-      awayTeamDataList: previous.awayTeamDataList,
+      homeTeamDataList: refreshRetainedPlayerStatus(
+        previous.homeTeamDataList ?? [],
+        match,
+      ),
+      awayTeamDataList: refreshRetainedPlayerStatus(
+        previous.awayTeamDataList ?? [],
+        match,
+      ),
     };
   });
 }

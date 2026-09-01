@@ -249,6 +249,8 @@ test("new desk keeps accepted player detail when FULL detail is absent", () => {
   const candidateMatches = [
     {
       matchId: 10,
+      playStatus: "finished",
+      provisional: false,
       homeTeamDataList: [],
       awayTeamDataList: [],
     },
@@ -256,14 +258,17 @@ test("new desk keeps accepted player detail when FULL detail is absent", () => {
   const acceptedMatches = [
     {
       matchId: 10,
-      homeTeamDataList: [{ element: 1 }],
-      awayTeamDataList: [{ element: 2 }],
+      homeTeamDataList: [{ element: 1, playStatus: 2 }],
+      awayTeamDataList: [{ element: 2, playStatus: 2 }],
     },
   ];
-  assert.deepEqual(
-    retainLiveMatchPlayerDetails(candidateMatches, acceptedMatches),
+  const retainedMatches = retainLiveMatchPlayerDetails(
+    candidateMatches,
     acceptedMatches,
   );
+  assert.equal(retainedMatches[0].homeTeamDataList?.[0].element, 1);
+  assert.equal(retainedMatches[0].homeTeamDataList?.[0].playStatus, 4);
+  assert.equal(retainedMatches[0].awayTeamDataList?.[0].playStatus, 4);
   const retained = retainLiveMatchdayDetailRevision(candidate, accepted);
   assert.equal(retained.revisions.detailPublicationId, "detail-1");
   assert.equal(retained.detailDelivery.state, "DEGRADED");
