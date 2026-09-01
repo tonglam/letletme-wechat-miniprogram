@@ -64,6 +64,7 @@ interface LeaguesData {
   v2SeasonSection: MyTournamentSeasonSection | null;
   v2Loading: boolean;
   v2LoadingMore: boolean;
+  v2CatalogLoadingMore: boolean;
   v2HasNextPage: boolean;
   v2Error: string;
   v2UpgradeRequired: boolean;
@@ -101,18 +102,37 @@ function catalogItems(
   return catalog?.edges?.map((edge) => edge.node) ?? [];
 }
 
+function mergeCatalogPages(
+  previous: MyTournamentReviewCatalog | null,
+  next: MyTournamentReviewCatalog,
+): MyTournamentReviewCatalog {
+  if (!previous) return next;
+  const byTournamentId = new Map<number, { cursor: string; node: MyTournamentReviewCatalogItem }>();
+  for (const edge of [...previous.edges, ...next.edges]) {
+    byTournamentId.set(edge.node.tournamentId, edge);
+  }
+  return {
+    ...next,
+    edges: [...byTournamentId.values()],
+  };
+}
+
 function eventIdsFromPhases(
   phases: MyTournamentReviewCatalogItem["phaseSummaries"],
   latest: number | null,
 ): number[] {
+  // A review event is selectable only after the server has established a
+  // finalized bound.  Phase metadata without that bound describes setup, not
+  // a settled snapshot, and must not manufacture selectable GW ids.
+  if (!latest || latest <= 0) return [];
   const ids = new Set<number>();
   for (const phase of phases) {
-    const end = phase.endEventId ?? latest ?? phase.startEventId;
+    const end = Math.min(phase.endEventId ?? latest, latest);
     for (let eventId = phase.startEventId; eventId <= end; eventId += 1) {
-      if (eventId > 0 && (!latest || eventId <= latest)) ids.add(eventId);
+      if (eventId > 0) ids.add(eventId);
     }
   }
-  if (latest && latest > 0) ids.add(latest);
+  ids.add(latest);
   return [...ids].sort((left, right) => left - right);
 }
 
@@ -209,6 +229,70 @@ function mergeSection(
   };
 }
 
+type SeasonSectionPages = Partial<
+  Record<MyTournamentReviewSeasonSection, MyTournamentSeasonSection>
+>;
+
+function combineSeasonSections(
+  pages: SeasonSectionPages,
+): MyTournamentSeasonSection | null {
+  const sections = Object.values(pages).filter(
+    (section): section is MyTournamentSeasonSection => Boolean(section),
+  );
+  if (!sections.length) return null;
+  const merged = sections.reduce(
+    mergeSection,
+    null as MyTournamentSeasonSection | null,
+  );
+  if (!merged) return null;
+  // Each section has its own cursor.  The UI only needs the aggregate flag;
+  // pagination uses seasonSectionPages below and never reuses this synthetic
+  // cursor for another section.
+  return {
+    ...merged,
+    pageInfo: {
+      hasNextPage: sections.some((section) => section.pageInfo.hasNextPage),
+      endCursor: null,
+    },
+  };
+}
+
+function reviewViewMeta(
+  view: LeagueView,
+  selected: MyTournamentReviewCatalogItem | null,
+  season: ReviewSeasonDisplay | null,
+  gameweek: MyTournamentGameweekReview | null,
+  phaseId: string | null,
+): { format: MyTournamentReviewFormat | null; state: MyTournamentReviewState } {
+  if (view === "gameweek") {
+    const format = payloadFormat(gameweek?.payload) ?? gameweek?.scope?.format ?? null;
+    return {
+      format: format ?? selected?.latestFinalizedScope?.format ?? null,
+      state:
+        gameweek?.state ??
+        selected?.latestFinalizedScope?.state ??
+        selected?.state ??
+        "NOT_STARTED",
+    };
+  }
+  const phase =
+    season?.phases.find((candidate) => candidate.phaseId === phaseId) ??
+    season?.phases.find(
+      (candidate) =>
+        candidate.startEventId <= (season?.throughEventId ?? 0) &&
+        candidate.endEventId >= (season?.throughEventId ?? 0),
+    );
+  return {
+    format: phase?.format ?? selected?.latestFinalizedScope?.format ?? null,
+    state:
+      phase?.state ??
+      season?.state ??
+      selected?.latestFinalizedScope?.state ??
+      selected?.state ??
+      "NOT_STARTED",
+  };
+}
+
 function sectionForFormat(
   format: MyTournamentReviewFormat | null,
 ): MyTournamentReviewSeasonSection | null {
@@ -287,6 +371,7 @@ PerformancePage({
     v2SeasonSection: null,
     v2Loading: true,
     v2LoadingMore: false,
+    v2CatalogLoadingMore: false,
     v2HasNextPage: false,
     v2Error: "",
     v2UpgradeRequired: false,
@@ -310,6 +395,16 @@ PerformancePage({
   loadedEntryId: 0,
   loadedContextRevision: 0,
   loadedSeason: "" as string,
+  resumeForceRefresh: false,
+  catalogRequestSequence: 0,
+  catalogAfter: null as string | null,
+  seasonSectionPages: {} as SeasonSectionPages,
+  seasonSectionContext: null as {
+    tournamentId: number;
+    eventId: number;
+    phaseId: string;
+    entryId: number;
+  } | null,
 
   async onLoad() {
     this.pageVisible = true;
@@ -334,22 +429,38 @@ PerformancePage({
       this.hasShown = true;
       return;
     }
+    const forceRefresh = this.resumeForceRefresh;
     await this.loadCatalog(
-      false,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "show" }),
+      forceRefresh,
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: forceRefresh ? "refresh" : "show",
+        ...(forceRefresh ? { forceReason: "user-refresh" as const } : {}),
+      }),
     );
+    if (this.pageVisible) this.resumeForceRefresh = false;
   },
 
   onHide() {
     this.pageVisible = false;
+    this.resumeForceRefresh =
+      this.resumeForceRefresh ||
+      this.data.v2Loading ||
+      this.data.v2LoadingMore ||
+      this.data.v2CatalogLoadingMore;
     this.lifecycleRevision += 1;
     this.requestId += 1;
     this.viewRequestId += 1;
-    this.setData({ v2Loading: false, v2LoadingMore: false });
+    this.setData({
+      v2Loading: false,
+      v2LoadingMore: false,
+      v2CatalogLoadingMore: false,
+    });
   },
 
   onUnload() {
     this.pageVisible = false;
+    this.resumeForceRefresh = false;
     this.lifecycleRevision += 1;
     this.requestId += 1;
     this.viewRequestId += 1;
@@ -374,18 +485,25 @@ PerformancePage({
     forceRefresh = false,
     trace?: PageRequestTrace,
     scopeOverride?: MyTournamentReviewScope,
+    after: string | null = null,
+    append = false,
   ) {
     const requestId = ++this.requestId;
+    const expectedEntryId = currentMyFplEntryId() || 0;
     const scope = scopeOverride ?? this.data.v2Scope;
-    const active = () => this.pageVisible && requestId === this.requestId;
+    const active = () =>
+      this.pageVisible &&
+      requestId === this.requestId &&
+      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     this.retryOperation = "catalog";
     this.setData({
-      v2Loading: true,
+      v2Loading: !append,
       v2LoadingMore: false,
+      v2CatalogLoadingMore: append,
       v2Error: "",
       v2UpgradeRequired: false,
       v2Scope: scope,
-      entryId: currentMyFplEntryId() || 0,
+      entryId: expectedEntryId,
       emptyState: "",
     });
     try {
@@ -402,6 +520,9 @@ PerformancePage({
           forceRefresh,
           trace,
           entryId,
+          after,
+          null,
+          100,
         );
       } catch (error) {
         if (scope !== "ALL" || !isViewerEntryAuthorizationError(error)) {
@@ -412,14 +533,20 @@ PerformancePage({
           true,
           trace,
           entryId,
+          after,
+          null,
+          100,
         );
         if (active()) this.setData({ v2Scope: "ACCESSIBLE" });
       }
-      if (!active()) return;
+      if (!active() || currentMyFplEntryId() !== entryId) return;
       if (catalog.viewerEntryId && Number(catalog.viewerEntryId) !== entryId) {
         throw new Error("球队绑定已变更，请稍后重试");
       }
-      const items = catalogItems(catalog);
+      const mergedCatalog = append
+        ? mergeCatalogPages(this.data.v2Catalog, catalog)
+        : catalog;
+      const items = catalogItems(mergedCatalog);
       const lastPick = readLastPick(entryId);
       const previousId = this.data.v2SelectedTournament?.tournamentId ?? 0;
       const selected =
@@ -433,14 +560,37 @@ PerformancePage({
       const eventIds = selected
         ? eventIdsFromPhases(selected.phaseSummaries, selected.latestFinalizedEventId)
         : [];
-      const eventId = selected?.latestFinalizedEventId ?? 0;
+      const previousEventId = this.data.v2Event;
+      const eventId =
+        selected && previousId === selected.tournamentId && eventIds.includes(previousEventId)
+          ? previousEventId
+          : selected?.latestFinalizedEventId ?? 0;
+      const aggregateState =
+        selected?.latestFinalizedScope?.state ??
+        selected?.state ??
+        mergedCatalog.state ??
+        "NOT_STARTED";
       this.loadedEntryId = entryId;
       this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
       this.loadedSeason = getApp<IAppOption>().globalData.season || "";
+      this.catalogAfter = mergedCatalog.pageInfo.endCursor;
       this.retryOperation = null;
+      if (append) {
+        // Appending catalog pages must not reset the active review, GW, phase,
+        // or its in-flight visual state.  Only the connection and picker
+        // labels change; a newly discovered tournament is selected explicitly
+        // by the user later.
+        this.setData({
+          entryId,
+          v2Catalog: mergedCatalog,
+          v2TournamentNames: items.map((item) => item.name),
+          v2CatalogLoadingMore: false,
+        });
+        return;
+      }
       this.setData({
         entryId,
-        v2Catalog: catalog,
+        v2Catalog: mergedCatalog,
         v2TournamentNames: items.map((item) => item.name),
         v2SelectedTournamentIndex: selectedIndex,
         v2SelectedTournament: selected,
@@ -448,19 +598,26 @@ PerformancePage({
         v2SelectedEventIndex: Math.max(0, eventIds.indexOf(eventId)),
         v2Event: eventId,
         v2Format: selected?.latestFinalizedScope?.format ?? null,
-        v2State: selected?.latestFinalizedScope?.state ?? selected?.state ?? "NOT_STARTED",
-        v2StatusText: stateText(
-          selected?.latestFinalizedScope?.state ?? selected?.state ?? "NOT_STARTED",
-        ),
+        v2State: aggregateState,
+        v2StatusText: stateText(aggregateState),
         v2Gameweek: null,
         v2Season: null,
         v2SelectedPhaseId: null,
         v2SeasonSection: null,
-        v2Loading: Boolean(selected && eventId),
+        v2Loading: append ? this.data.v2Loading : Boolean(selected && eventId),
+        v2CatalogLoadingMore: false,
         v2HasNextPage: false,
-        emptyState: selected ? "" : items.length ? "view" : "tournaments",
+        emptyState: selected
+          ? ""
+          : items.length || mergedCatalog.state !== "NOT_STARTED"
+            ? "view"
+            : "tournaments",
       });
-      if (selected && eventId) {
+      if (!append) {
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+      }
+      if (!append && selected && eventId) {
         await this.loadReview(selected.tournamentId, eventId, forceRefresh, trace);
       }
     } catch (error) {
@@ -470,6 +627,7 @@ PerformancePage({
         this.retryOperation = "catalog";
         this.setData({
           v2Loading: false,
+          v2CatalogLoadingMore: false,
           v2UpgradeRequired: true,
           v2Error: "赛事复盘需要升级小程序后继续",
         });
@@ -477,6 +635,7 @@ PerformancePage({
         this.retryOperation = "catalog";
         this.setData({
           v2Loading: false,
+          v2CatalogLoadingMore: false,
           v2State: "UNAVAILABLE",
           v2StatusText: stateText("UNAVAILABLE"),
           v2Error: error instanceof Error ? error.message : "赛事复盘目录暂时不可用",
@@ -493,11 +652,13 @@ PerformancePage({
     after: string | null = null,
   ) {
     const requestId = ++this.viewRequestId;
+    const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
       this.data.v2SelectedTournament?.tournamentId === tournamentId &&
-      this.data.v2Event === eventId;
+      this.data.v2Event === eventId &&
+      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     this.retryOperation = "review";
     this.setData({ v2Loading: true, v2LoadingMore: Boolean(after), v2Error: "" });
     try {
@@ -585,15 +746,23 @@ PerformancePage({
             );
           }
           const sections = await Promise.all(requests);
-          section = sections.reduce(
-            mergeSection,
-            null as MyTournamentSeasonSection | null,
-          );
+          if (!active()) return;
+          this.seasonSectionPages = Object.fromEntries(
+            sections.map((candidate) => [candidate.section, candidate]),
+          ) as SeasonSectionPages;
+          this.seasonSectionContext = {
+            tournamentId,
+            eventId,
+            phaseId: phase.phaseId,
+            entryId: expectedEntryId,
+          };
+          section = combineSeasonSections(this.seasonSectionPages);
         }
+      } else if (!after) {
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
       }
       const selected = this.data.v2SelectedTournament;
-      const visibleState =
-        this.data.activeView === "season" ? season.state : gameweek.state;
       const eventIds = selected
         ? eventIdsFromPhases(selected.phaseSummaries, selected.latestFinalizedEventId)
         : [eventId];
@@ -604,6 +773,14 @@ PerformancePage({
         latestFinalizedEventId: season.latestFinalizedEventId,
         phases: season.phases,
       };
+      const visibleMeta = reviewViewMeta(
+        this.data.activeView,
+        selected,
+        nextSeason,
+        nextGameweek,
+        phase?.phaseId ?? null,
+      );
+      const visibleState = visibleMeta.state;
       this.retryOperation = null;
       this.setData({
         v2Loading: false,
@@ -614,7 +791,7 @@ PerformancePage({
         v2SeasonSection: section,
         v2EventIds: eventIds,
         v2SelectedEventIndex: Math.max(0, eventIds.indexOf(eventId)),
-        v2Format: payloadFormat(gameweek.payload) ?? selected?.latestFinalizedScope?.format ?? null,
+        v2Format: visibleMeta.format,
         v2State: visibleState,
         v2StatusText: stateText(visibleState),
         v2HasNextPage:
@@ -654,11 +831,15 @@ PerformancePage({
     const phase = season.phases.find((candidate) => candidate.phaseId === phaseId);
     if (!phase) return;
     const requestId = ++this.viewRequestId;
+    const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
+      this.data.activeView === "season" &&
       this.data.v2SelectedTournament?.tournamentId === selected.tournamentId &&
-      this.data.v2Event === eventId;
+      this.data.v2Event === eventId &&
+      this.data.v2SelectedPhaseId === phaseId &&
+      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     this.setData({
       v2SelectedPhaseId: phaseId,
       v2Format: phase.format,
@@ -671,6 +852,8 @@ PerformancePage({
       v2Error: "",
     });
     if (phase.state !== "READY" || !phase.revision || !phase.semanticSha256) {
+      this.seasonSectionPages = {};
+      this.seasonSectionContext = null;
       this.setData({ v2Loading: false });
       return;
     }
@@ -725,10 +908,16 @@ PerformancePage({
       }
       const sections = await Promise.all(requests);
       if (!active()) return;
-      const section = sections.reduce(
-        mergeSection,
-        null as MyTournamentSeasonSection | null,
-      );
+      this.seasonSectionPages = Object.fromEntries(
+        sections.map((candidate) => [candidate.section, candidate]),
+      ) as SeasonSectionPages;
+      this.seasonSectionContext = {
+        tournamentId: selected.tournamentId,
+        eventId,
+        phaseId,
+        entryId: expectedEntryId,
+      };
+      const section = combineSeasonSections(this.seasonSectionPages);
       this.setData({
         v2SeasonSection: section,
         v2Loading: false,
@@ -760,11 +949,6 @@ PerformancePage({
     if (this.data.v2Loading || this.data.v2LoadingMore) return;
     const selected = this.data.v2SelectedTournament;
     if (!selected || !this.data.v2Event) return;
-    const after =
-      this.data.activeView === "season"
-        ? sectionPageInfo(this.data.v2SeasonSection).endCursor
-        : payloadCursor(this.data.v2Gameweek?.payload);
-    if (!after) return;
     if (this.data.activeView === "season") {
       const section = this.data.v2SeasonSection;
       const phase =
@@ -776,29 +960,73 @@ PerformancePage({
             candidate.startEventId <= this.data.v2Event &&
             candidate.endEventId >= this.data.v2Event,
         );
-      if (!section || !phase?.revision || !phase.semanticSha256) return;
+      const context = this.seasonSectionContext;
+      const pages = this.seasonSectionPages;
+      const pendingSections = Object.values(pages).filter(
+        (candidate): candidate is MyTournamentSeasonSection =>
+          Boolean(candidate?.pageInfo.hasNextPage),
+      );
+      if (
+        !section ||
+        !phase?.revision ||
+        !phase.semanticSha256 ||
+        !context ||
+        context.tournamentId !== selected.tournamentId ||
+        context.eventId !== this.data.v2Event ||
+        context.phaseId !== phase.phaseId ||
+        !pendingSections.length
+      )
+        return;
+      const requestId = ++this.viewRequestId;
+      const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
+      const active = () =>
+        this.pageVisible &&
+        requestId === this.viewRequestId &&
+        this.data.activeView === "season" &&
+        this.data.v2SelectedTournament?.tournamentId === selected.tournamentId &&
+        this.data.v2Event === context.eventId &&
+        this.data.v2SelectedPhaseId === context.phaseId &&
+        (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
       this.retryOperation = "loadMore";
       this.setData({ v2LoadingMore: true, v2Error: "" });
       try {
-        const next = await getMyTournamentSeasonReviewSection(
-          selected.tournamentId,
-          this.data.v2Event,
-          phase.phaseId,
-          section.section,
-          phase.revision,
-          phase.semanticSha256,
-          true,
-          capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "pagination" }),
-          after,
-          this.data.entryId,
+        const nextSections = await Promise.all(
+          pendingSections.map((current) =>
+            getMyTournamentSeasonReviewSection(
+              selected.tournamentId,
+              context.eventId,
+              current.phaseId,
+              current.section,
+              current.revision,
+              current.semanticSha256,
+              true,
+              capturePageRequestTrace({
+                callerSurface: "my-fpl-leagues-v2.1",
+                trigger: "pagination",
+              }),
+              current.pageInfo.endCursor,
+              expectedEntryId,
+            ),
+          ),
         );
+        if (!active()) return;
+        const nextPages: SeasonSectionPages = { ...pages };
+        for (const next of nextSections) {
+          const previous = nextPages[next.section];
+          nextPages[next.section] = previous
+            ? mergeSection(previous, next)
+            : next;
+        }
+        this.seasonSectionPages = nextPages;
+        const combined = combineSeasonSections(nextPages);
         this.setData({
-          v2SeasonSection: mergeSection(section, next),
+          v2SeasonSection: combined,
           v2LoadingMore: false,
-          v2HasNextPage: next.pageInfo.hasNextPage,
+          v2HasNextPage: sectionPageInfo(combined).hasNextPage,
         });
         this.retryOperation = null;
       } catch (error) {
+        if (!active()) return;
         this.setData({
           v2LoadingMore: false,
           v2Error: error instanceof Error ? error.message : "加载更多失败",
@@ -806,12 +1034,34 @@ PerformancePage({
       }
       return;
     }
+    const after = payloadCursor(this.data.v2Gameweek?.payload);
+    if (!after) return;
     await this.loadReview(
       selected.tournamentId,
       this.data.v2Event,
       true,
       capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "pagination" }),
       after,
+    );
+  },
+
+  async onCatalogLoadMore() {
+    if (
+      this.data.v2Loading ||
+      this.data.v2CatalogLoadingMore ||
+      !this.data.v2Catalog?.pageInfo.hasNextPage ||
+      !this.catalogAfter
+    )
+      return;
+    await this.loadCatalog(
+      false,
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "pagination",
+      }),
+      this.data.v2Scope,
+      this.catalogAfter,
+      true,
     );
   },
 
@@ -822,8 +1072,10 @@ PerformancePage({
       selected.phaseSummaries,
       selected.latestFinalizedEventId,
     );
-    const eventId = selected.latestFinalizedEventId ?? 0;
+    const eventId = selected?.latestFinalizedEventId ?? 0;
     this.viewRequestId += 1;
+    this.seasonSectionPages = {};
+    this.seasonSectionContext = null;
     this.retryOperation = null;
     persistLastPick(this.data.entryId, selected.tournamentId);
     this.setData({
@@ -873,6 +1125,8 @@ PerformancePage({
       v2SeasonSection: null,
       v2Error: "",
     });
+    this.seasonSectionPages = {};
+    this.seasonSectionContext = null;
     void this.loadReview(
       selected.tournamentId,
       eventId,
@@ -884,15 +1138,45 @@ PerformancePage({
   onViewTap(event: WechatMiniprogram.TouchEvent) {
     const nextView: LeagueView =
       event.currentTarget.dataset.view === "gameweek" ? "gameweek" : "season";
+    const selected = this.data.v2SelectedTournament;
+    const season = this.data.v2Season;
+    const gameweek = this.data.v2Gameweek;
+    const phase =
+      season?.phases.find((candidate) => candidate.phaseId === this.data.v2SelectedPhaseId) ??
+      season?.phases.find(
+        (candidate) =>
+          candidate.startEventId <= this.data.v2Event &&
+          candidate.endEventId >= this.data.v2Event,
+      );
+    const meta = reviewViewMeta(
+      nextView,
+      selected,
+      season,
+      gameweek,
+      phase?.phaseId ?? null,
+    );
     this.setData({
       activeView: nextView,
       showSeason: nextView === "season",
       showGameweek: nextView === "gameweek",
+      v2Format: meta.format,
+      v2State: meta.state,
+      v2StatusText: stateText(meta.state),
+      v2SelectedPhaseId:
+        nextView === "season" ? phase?.phaseId ?? this.data.v2SelectedPhaseId : this.data.v2SelectedPhaseId,
       v2HasNextPage:
         nextView === "season"
           ? sectionPageInfo(this.data.v2SeasonSection).hasNextPage
           : payloadHasNext(this.data.v2Gameweek?.payload),
     });
+    if (
+      nextView === "season" &&
+      phase &&
+      (!this.data.v2SeasonSection ||
+        this.seasonSectionContext?.phaseId !== phase.phaseId)
+    ) {
+      void this.loadSeasonPhase(phase.phaseId);
+    }
   },
 
   onPhaseTap(event: WechatMiniprogram.TouchEvent) {
@@ -912,6 +1196,10 @@ PerformancePage({
   },
 
   onRetry() {
+    if (this.retryOperation === "loadMore" && this.data.activeView === "season") {
+      void this.onV2LoadMore();
+      return;
+    }
     if (this.retryOperation === "review" || this.retryOperation === "loadMore") {
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
@@ -933,6 +1221,9 @@ PerformancePage({
   showEntryEmptyState() {
     this.retryOperation = null;
     this.viewRequestId += 1;
+    this.catalogAfter = null;
+    this.seasonSectionPages = {};
+    this.seasonSectionContext = null;
     this.setData({
       entryId: 0,
       v2Catalog: null,
@@ -950,6 +1241,7 @@ PerformancePage({
       v2SeasonSection: null,
       v2Loading: false,
       v2LoadingMore: false,
+      v2CatalogLoadingMore: false,
       v2HasNextPage: false,
       v2Error: "",
       emptyState: "entry",
@@ -963,6 +1255,10 @@ PerformancePage({
   onEmptyAction() {
     if (this.data.emptyState === "entry") {
       goToEntrySearch();
+      return;
+    }
+    if (this.data.v2State !== "NOT_STARTED") {
+      this.onRetry();
       return;
     }
     void this.onOpenWebsite();

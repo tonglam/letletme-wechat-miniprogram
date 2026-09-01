@@ -64,6 +64,7 @@ test("latest finalized non-ready data stays visible as state and is never silent
   ]);
 
   assert.match(page, /const eventId = selected\?\.latestFinalizedEventId \?\? 0/);
+  assert.match(page, /const visibleState = visibleMeta\.state/);
   assert.match(page, /v2State: visibleState/);
   assert.match(page, /state === "READY"/);
   assert.match(template, /v2State !== 'READY'/);

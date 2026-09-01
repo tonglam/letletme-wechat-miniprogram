@@ -25,7 +25,8 @@ test("My FPL Leagues tracks forced loads independently of the loading placeholde
   assert.match(page, /const requestId = \+\+this\.requestId/);
   assert.match(page, /forceRefresh/);
   assert.match(page, /loadCatalog\(/);
-  assert.doesNotMatch(page, /loadPending|loadForceRefresh|resumeForceRefresh|loadLeagues\(/);
+  assert.match(page, /resumeForceRefresh/);
+  assert.doesNotMatch(page, /loadPending|loadForceRefresh|loadLeagues\(/);
 });
 
 test("Gameweek Summary retains a forced refresh after repeated hides", () => {

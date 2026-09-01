@@ -10,6 +10,7 @@
       </picker>
     </view>
     <view wx:if="{{v2Catalog && v2Catalog.adminReadAll}}" class="review-admin-scope" bindtap="onV2ScopeTap" hover-class="hover-dim">{{v2Scope === 'ALL' ? '管理员：只看我的赛事' : '管理员：查看全部赛事'}}</view>
+    <button wx:if="{{v2Catalog && v2Catalog.pageInfo.hasNextPage}}" class="review-catalog-load-more" size="mini" loading="{{v2CatalogLoadingMore}}" disabled="{{v2Loading || v2CatalogLoadingMore}}" bindtap="onCatalogLoadMore">加载更多赛事</button>
   </view>
 
   <view wx:if="{{v2SelectedTournament}}" class="section tab-strip">
@@ -22,9 +23,9 @@
   <view id="perf-primary-content" wx:elif="{{!v2SelectedTournament && !v2Error}}" class="section">
     <app-empty-state
       eyebrow="{{emptyState === 'entry' ? emptyEyebrow : ''}}"
-      title="{{emptyState === 'entry' ? emptyTitle : '暂无可复盘赛事'}}"
-      description="{{emptyState === 'entry' ? emptyDescription : '创建或加入 LetLetMe 赛事并完成轮次结算后，会显示在这里。'}}"
-      actionText="{{emptyState === 'entry' ? emptyActionText : '去网页版创建赛事'}}"
+      title="{{emptyState === 'entry' ? emptyTitle : (v2State !== 'NOT_STARTED' ? v2StatusText : '暂无可复盘赛事')}}"
+      description="{{emptyState === 'entry' ? emptyDescription : (v2State !== 'NOT_STARTED' ? '最新结算范围正在准备，点击重试检查状态。' : '创建或加入 LetLetMe 赛事并完成轮次结算后，会显示在这里。')}}"
+      actionText="{{emptyState === 'entry' ? emptyActionText : (v2State !== 'NOT_STARTED' ? '重新检查' : '去网页版创建赛事')}}"
       bind:action="onEmptyAction"
     />
   </view>
