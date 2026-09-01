@@ -370,27 +370,13 @@ function readLastPick(entryId: number): number {
   }
 }
 
-let upgradePromptRegistered = false;
-
 function promptForUpgrade(): void {
   try {
-    const manager = wx.getUpdateManager();
-    // App-level update protection already owns this event. Registering page
-    // handlers on every 426 would produce duplicate modals and applyUpdate
-    // calls when a page is revisited.
-    if (upgradePromptRegistered) return;
-    upgradePromptRegistered = true;
-    manager.onUpdateReady(() => {
-      wx.showModal({
-        title: "需要升级",
-        content: "赛事复盘已更新，请升级小程序后继续。",
-        showCancel: false,
-        success: () => manager.applyUpdate(),
-      });
-    });
-    manager.onUpdateFailed(() => {
-      wx.showToast({ title: "升级失败，请稍后重试", icon: "none" });
-    });
+    // The app-level update guard owns onUpdateReady/onUpdateFailed and the
+    // single applyUpdate call. The page only surfaces the 426 state; adding a
+    // second event handler here would duplicate modals on every retry.
+    wx.getUpdateManager();
+    wx.showToast({ title: "请升级小程序后继续", icon: "none" });
   } catch {
     wx.showToast({ title: "请升级小程序后继续", icon: "none" });
   }
@@ -628,6 +614,24 @@ PerformancePage({
         }
         return;
       }
+      // Reconcile the Web-owned binding at the commit boundary as well. A
+      // rebind can complete while the catalog request is in flight, after the
+      // initial reconciliation but before these rows are committed.
+      const reconciledEntryId = (await refreshAuthoritativeFollow()) || 0;
+      if (!this.pageVisible || requestId !== this.requestId) return;
+      if (reconciledEntryId !== entryId) {
+        if (!reconciledEntryId) {
+          this.showEntryEmptyState();
+          return;
+        }
+        this.setData({
+          v2Loading: false,
+          v2CatalogLoadingMore: false,
+          entryId: reconciledEntryId,
+        });
+        await this.loadCatalog(true, trace, scope, null, false);
+        return;
+      }
       // Re-read the Web-owned binding immediately before committing the
       // catalog. A binding can change between the network response and this
       // state update; never attach the response to the new entry by accident.
@@ -727,6 +731,8 @@ PerformancePage({
           eventId,
           forceRefresh,
           trace,
+          null,
+          selected.latestFinalizedScope?.revision ?? null,
         );
       }
     } catch (error) {
@@ -771,11 +777,15 @@ PerformancePage({
     forceRefresh = false,
     trace?: PageRequestTrace,
     after: string | null = null,
+    catalogRevisionOverride?: string | null,
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
     const catalogRevision =
-      this.data.v2SelectedTournament?.latestFinalizedScope?.revision ?? null;
+      catalogRevisionOverride !== undefined
+        ? catalogRevisionOverride
+        : (this.data.v2SelectedTournament?.latestFinalizedScope?.revision ??
+          null);
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -1320,6 +1330,8 @@ PerformancePage({
           callerSurface: "my-fpl-leagues-v2.1",
           trigger: "tab",
         }),
+        null,
+        selected.latestFinalizedScope?.revision ?? null,
       );
     }
   },
@@ -1353,13 +1365,16 @@ PerformancePage({
         callerSurface: "my-fpl-leagues-v2.1",
         trigger: "tab",
       }),
+      null,
+      selected.latestFinalizedScope?.revision ?? null,
     );
   },
 
   onViewTap(event: WechatMiniprogram.TouchEvent) {
     const nextView: LeagueView =
       event.currentTarget.dataset.view === "gameweek" ? "gameweek" : "season";
-    if (nextView !== this.data.activeView) {
+    const viewChanged = nextView !== this.data.activeView;
+    if (viewChanged) {
       // A phase request started in the hidden view must not commit after the
       // user changes tabs. The request is allowed to finish on the wire, but
       // its result is stale by definition.
@@ -1405,6 +1420,8 @@ PerformancePage({
         nextView === "season"
           ? sectionPageInfo(this.data.v2SeasonSection).hasNextPage
           : payloadHasNext(this.data.v2Gameweek?.payload),
+      v2Loading: viewChanged ? false : this.data.v2Loading,
+      v2LoadingMore: viewChanged ? false : this.data.v2LoadingMore,
     });
     if (
       nextView === "season" &&
