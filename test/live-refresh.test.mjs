@@ -148,6 +148,47 @@ test("metadata-only HEAD retains the accepted complete detail LKG", () => {
   assert.ok(merged.detailDelivery.reasonCodes.includes("DETAIL_LKG_RETAINED"));
 });
 
+test("metadata-only HEAD promotes matching accepted detail to FINAL", () => {
+  const accepted = matchdaySnapshot({
+    state: "FINALIZED",
+    times: { ...matchdaySnapshot().times, nextRefreshAt: null },
+    detailDelivery: {
+      state: "DEGRADED",
+      servedFrom: "PROCESS_LKG",
+      reasonCodes: ["DETAIL_LKG_RETAINED"],
+    },
+  });
+  const observed = matchdaySnapshot({
+    state: "FINALIZED",
+    delivery: {
+      state: "FINAL",
+      servedFrom: "REDIS_CURRENT",
+      reasonCodes: ["DESK_FINAL"],
+    },
+    detailDelivery: {
+      state: "FINAL",
+      servedFrom: "REDIS_CURRENT",
+      reasonCodes: ["DETAIL_FINAL"],
+    },
+    times: { ...accepted.times, servedAt: "2026-08-31T12:01:00.000Z" },
+  });
+
+  const merged = mergeLiveMatchdayHeadStatus(accepted, observed);
+  assert.equal(merged.revisions.playerDetail, accepted.revisions.playerDetail);
+  assert.equal(merged.detailDelivery.state, "FINAL");
+  assert.equal(merged.detailDelivery.servedFrom, "PROCESS_LKG");
+  assert.ok(merged.detailDelivery.reasonCodes.includes("DETAIL_FINAL"));
+  assert.equal(
+    shouldPollLiveMatchday({
+      pageVisible: true,
+      currentEventId: 3,
+      selectedEventId: 3,
+      snapshot: merged,
+    }),
+    false,
+  );
+});
+
 test("same-event LKG replacement is monotonic across Redis fallback", () => {
   const accepted = matchdaySnapshot();
   const older = matchdaySnapshot({

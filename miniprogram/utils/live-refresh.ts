@@ -83,19 +83,34 @@ export function mergeLiveMatchdayHeadStatus(
   if (!hasAcceptedDetail) return observed;
 
   const detailDelivery =
-    observed.revisions.detailObservation === null
+    observed.detailDelivery.state === "FINAL"
       ? {
-          ...accepted.detailDelivery,
-          state: "DEGRADED" as const,
+          ...observed.detailDelivery,
+          // The HEAD carries only terminal metadata. The player body is still
+          // the accepted FULL LKG, so preserve its source provenance while
+          // allowing the terminal delivery state to stop recovery polling.
+          servedFrom: accepted.detailDelivery.servedFrom,
           reasonCodes: Array.from(
             new Set([
               ...accepted.detailDelivery.reasonCodes,
               ...observed.detailDelivery.reasonCodes,
-              "DETAIL_LKG_RETAINED",
+              "DETAIL_FINAL",
             ]),
           ),
         }
-      : accepted.detailDelivery;
+      : observed.revisions.detailObservation === null
+        ? {
+            ...accepted.detailDelivery,
+            state: "DEGRADED" as const,
+            reasonCodes: Array.from(
+              new Set([
+                ...accepted.detailDelivery.reasonCodes,
+                ...observed.detailDelivery.reasonCodes,
+                "DETAIL_LKG_RETAINED",
+              ]),
+            ),
+          }
+        : accepted.detailDelivery;
 
   return {
     ...observed,
