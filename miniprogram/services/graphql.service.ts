@@ -552,12 +552,34 @@ export function buildGraphQLRequestHeaders(
 }
 
 export const LIVE_MATCHES_CONTRACT_VERSION = "live-matches-v2";
+export const LIVE_POINTS_CONTRACT_VERSION = "live-points-v2";
+
+export const LIVE_POINTS_V2_ROOT_FIELDS = [
+  "calcLivePointsByEntry",
+  "calcLivePointsForEntries",
+  "liveScores",
+  "playerLive",
+  "eventLive",
+  "eventLiveExplain",
+  "eventLiveExplains",
+  "liveSnapshot",
+  "liveContext",
+  "entryLiveCompetitionBoard",
+  "entryLiveCompetitionsDesk",
+  "tournamentSelectionIndex",
+  "tournamentEntrySquads",
+  "tournamentDetailDesk",
+  "gameweekDesk",
+  "homeGameweek",
+] as const;
+
+const LIVE_POINTS_V2_ROOT_FIELD_PATTERN = new RegExp(
+  `\\b(?:${LIVE_POINTS_V2_ROOT_FIELDS.join("|")})\\s*(?:\\(|\\{)`,
+);
 
 /** Every Live Points operation is hard-gated to the V2 contract. */
 export function isLivePointsV2Query(query: string): boolean {
-  return /\b(?:calcLivePointsByEntry|calcLivePointsForEntries|entryLiveCompetitionBoard|entryLiveCompetitionsDesk|liveSnapshot|liveContext|eventLiveExplain|eventLiveExplains|liveScores|playerLive|eventLive|tournamentSelectionIndex|tournamentEntrySquads)\s*(?:\(|\{)/.test(
-    query,
-  );
+  return LIVE_POINTS_V2_ROOT_FIELD_PATTERN.test(query);
 }
 
 export function isLiveMatchesV2Query(query: string): boolean {
@@ -571,7 +593,7 @@ export function liveContractVersionForQuery(query: string): string | null {
     throw new Error("LIVE_CONTRACT_MIXED_OPERATION");
   }
   if (matches) return LIVE_MATCHES_CONTRACT_VERSION;
-  if (points) return "live-points-v2";
+  if (points) return LIVE_POINTS_CONTRACT_VERSION;
   return null;
 }
 
