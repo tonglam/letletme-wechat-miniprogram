@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,8 +11,17 @@ const {
   LIVE_SNAPSHOT_QUERY,
   PLAYER_LIVE_STATS_QUERY,
 } = await import("../miniprogram/services/live.service.ts");
-const { MINI_HOME_MARKET_QUERY, MINI_HOME_PERSONAL_LEAGUES_QUERY } =
+const {
+  MINI_HOME_DREAM_TEAM_QUERY,
+  MINI_HOME_MARKET_QUERY,
+  MINI_HOME_PERSONAL_LEAGUES_QUERY,
+} =
   await import("../miniprogram/services/home.service.ts");
+const {
+  EVENT_DREAM_TEAM_QUERY,
+  EVENT_ELITE_ELEMENTS_QUERY,
+  EVENT_OVERALL_TRANSFERS_QUERY,
+} = await import("../miniprogram/services/summary.service.ts");
 const {
   PRICE_CHANGE_BOARD_QUERY,
   PRICE_CHANGE_LIVE_BOARD_QUERY,
@@ -42,6 +52,11 @@ const { ENTRY_LOOKUP_QUERY } =
   await import("../miniprogram/services/entry.service.ts");
 const { PLAYER_DETAIL } =
   await import("../miniprogram/services/player.service.ts");
+const {
+  LIVE_MATCHES_CONTRACT_VERSION,
+  LIVE_POINTS_CONTRACT_VERSION,
+  liveContractVersionForQuery,
+} = await import("../miniprogram/services/graphql.service.ts");
 
 const schemaModulePath = process.env.GRAPHQL_SCHEMA_MODULE?.trim();
 
@@ -57,6 +72,10 @@ const operations = [
   ["PLAYER_LIVE_STATS_QUERY", PLAYER_LIVE_STATS_QUERY],
   ["MINI_HOME_PERSONAL_LEAGUES_QUERY", MINI_HOME_PERSONAL_LEAGUES_QUERY],
   ["MINI_HOME_MARKET_QUERY", MINI_HOME_MARKET_QUERY],
+  ["MINI_HOME_DREAM_TEAM_QUERY", MINI_HOME_DREAM_TEAM_QUERY],
+  ["EVENT_DREAM_TEAM_QUERY", EVENT_DREAM_TEAM_QUERY],
+  ["EVENT_ELITE_ELEMENTS_QUERY", EVENT_ELITE_ELEMENTS_QUERY],
+  ["EVENT_OVERALL_TRANSFERS_QUERY", EVENT_OVERALL_TRANSFERS_QUERY],
   ["PRICE_CHANGE_BOARD_QUERY", PRICE_CHANGE_BOARD_QUERY],
   ["PRICE_CHANGE_LIVE_CURSOR_QUERY", PRICE_CHANGE_LIVE_CURSOR_QUERY],
   ["PRICE_CHANGE_LIVE_BOARD_QUERY", PRICE_CHANGE_LIVE_BOARD_QUERY],
@@ -79,6 +98,103 @@ const operations = [
   ["PLAYER_DETAIL", PLAYER_DETAIL],
 ];
 
+const rootFieldsForDocument = (document) => {
+  const ast = parse(document);
+  const fragments = new Map(
+    ast.definitions
+      .filter((definition) => definition.kind === Kind.FRAGMENT_DEFINITION)
+      .map((definition) => [definition.name.value, definition]),
+  );
+  const rootFields = new Set();
+  const visitedFragments = new Set();
+
+  const collect = (selectionSet) => {
+    for (const selection of selectionSet.selections) {
+      if (selection.kind === Kind.FIELD) {
+        rootFields.add(selection.name.value);
+      } else if (selection.kind === Kind.INLINE_FRAGMENT) {
+        collect(selection.selectionSet);
+      } else if (
+        selection.kind === Kind.FRAGMENT_SPREAD &&
+        !visitedFragments.has(selection.name.value)
+      ) {
+        visitedFragments.add(selection.name.value);
+        const fragment = fragments.get(selection.name.value);
+        if (fragment) collect(fragment.selectionSet);
+      }
+    }
+  };
+
+  for (const definition of ast.definitions) {
+    if (definition.kind === Kind.OPERATION_DEFINITION) {
+      collect(definition.selectionSet);
+    }
+  }
+  return Array.from(rootFields);
+};
+
+async function loadPinnedTransportContracts() {
+  const graphqlRoot = path.resolve(
+    path.dirname(path.resolve(schemaModulePath)),
+    "..",
+    "..",
+  );
+  const pointsPath = path.join(
+    graphqlRoot,
+    "src/http/live-points-contract.ts",
+  );
+  const matchesPath = path.join(
+    graphqlRoot,
+    "src/http/live-matches-contract.ts",
+  );
+  const [points, matches] = await Promise.all([
+    import(pathToFileURL(pointsPath).href),
+    import(pathToFileURL(matchesPath).href),
+  ]);
+  if (
+    typeof points.requiresLivePointsV2Contract !== "function" ||
+    typeof matches.requiresLiveMatchesV2Contract !== "function" ||
+    typeof points.LIVE_POINTS_CONTRACT_VALUE !== "string" ||
+    typeof matches.LIVE_MATCHES_CONTRACT_VALUE !== "string"
+  ) {
+    throw new Error("Pinned GraphQL transport contract exports are invalid");
+  }
+  return {
+    requiresLivePointsV2Contract: points.requiresLivePointsV2Contract,
+    requiresLiveMatchesV2Contract: matches.requiresLiveMatchesV2Contract,
+    livePointsValue: points.LIVE_POINTS_CONTRACT_VALUE,
+    liveMatchesValue: matches.LIVE_MATCHES_CONTRACT_VALUE,
+  };
+}
+
+async function discoverVersionGatedOperations(contracts) {
+  const servicesDirectory = path.resolve("miniprogram/services");
+  const discovered = [];
+  for (const filename of readdirSync(servicesDirectory).filter((name) =>
+    name.endsWith(".service.ts")
+  )) {
+    const exports = await import(
+      pathToFileURL(path.join(servicesDirectory, filename)).href
+    );
+    for (const [exportName, value] of Object.entries(exports)) {
+      if (typeof value !== "string") continue;
+      let rootFields;
+      try {
+        rootFields = rootFieldsForDocument(value);
+      } catch {
+        continue;
+      }
+      if (
+        contracts.requiresLivePointsV2Contract(rootFields) ||
+        contracts.requiresLiveMatchesV2Contract(rootFields)
+      ) {
+        discovered.push([`${filename}:${exportName}`, value]);
+      }
+    }
+  }
+  return discovered;
+}
+
 async function loadSchema() {
   const resolvedPath = path.resolve(schemaModulePath);
   const imported = await import(pathToFileURL(resolvedPath).href);
@@ -95,6 +211,27 @@ async function loadSchema() {
 
 const schema = await loadSchema();
 let failed = 0;
+const transportContracts = await loadPinnedTransportContracts();
+if (
+  transportContracts.livePointsValue !== LIVE_POINTS_CONTRACT_VERSION ||
+  transportContracts.liveMatchesValue !== LIVE_MATCHES_CONTRACT_VERSION
+) {
+  console.error("[CONTRACT_FAIL] Client contract tokens differ from GraphQL");
+  failed += 1;
+}
+const registeredDocuments = new Set(
+  operations.map(([, document]) => document.trim()),
+);
+for (const [name, document] of await discoverVersionGatedOperations(
+  transportContracts,
+)) {
+  if (!registeredDocuments.has(document.trim())) {
+    console.error(
+      `[REGISTRY_FAIL] ${name} is version-gated but missing from operations`,
+    );
+    failed += 1;
+  }
+}
 
 const astNodeLimit = (document) => {
   const operations = document.definitions.filter(
@@ -129,6 +266,7 @@ const astNodeLimit = (document) => {
 
 for (const [name, document] of operations) {
   let errors;
+  let operationFailed = false;
   try {
     const ast = parse(document);
     let astNodes = 0;
@@ -141,6 +279,38 @@ for (const [name, document] of operations) {
       );
       continue;
     }
+    const rootFields = rootFieldsForDocument(document);
+    const requiresPoints =
+      transportContracts.requiresLivePointsV2Contract(rootFields);
+    const requiresMatches =
+      transportContracts.requiresLiveMatchesV2Contract(rootFields);
+    if (requiresPoints && requiresMatches) {
+      console.error(
+        `[CONTRACT_FAIL] ${name}: mixes Live Points and Live Matches roots`,
+      );
+      operationFailed = true;
+    } else {
+      const expected = requiresPoints
+        ? transportContracts.livePointsValue
+        : requiresMatches
+          ? transportContracts.liveMatchesValue
+          : null;
+      let actual = null;
+      try {
+        actual = liveContractVersionForQuery(document);
+      } catch (error) {
+        console.error(
+          `[CONTRACT_FAIL] ${name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        operationFailed = true;
+      }
+      if (!operationFailed && actual !== expected) {
+        console.error(
+          `[CONTRACT_FAIL] ${name}: expected ${expected ?? "no contract"}, client selected ${actual ?? "no contract"}`,
+        );
+        operationFailed = true;
+      }
+    }
     errors = validate(schema, ast);
   } catch (error) {
     failed += 1;
@@ -151,9 +321,12 @@ for (const [name, document] of operations) {
   }
 
   if (errors.length > 0) {
-    failed += 1;
+    operationFailed = true;
     console.error(`[FAIL] ${name}`);
     for (const error of errors) console.error(`  ${error.message}`);
+  }
+  if (operationFailed) {
+    failed += 1;
   } else {
     console.log(`[PASS] ${name}`);
   }
