@@ -9,7 +9,7 @@ test("Live Match publication startup owns errors and initializes recovery pollin
   const page = read("miniprogram/pages/live/match/match.ts");
   assert.match(
     page,
-    /loadData\([\s\S]*catch \(error\) \{[\s\S]*error: error instanceof Error[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/
+    /loadData\([\s\S]*catch \(error\) \{[\s\S]*error: userFacingErrorMessage\(error, "实时比赛加载失败"\)[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/
   );
   assert.match(
     page,

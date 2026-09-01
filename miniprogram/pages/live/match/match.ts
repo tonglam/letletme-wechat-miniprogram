@@ -59,6 +59,7 @@ import {
   presentPlayerLiveShareImage,
 } from "../../../utils/player-live-share-image";
 import { miniLogger } from "../../../utils/logger";
+import { userFacingErrorMessage } from "../../../utils/request-error";
 import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView,
@@ -1057,7 +1058,9 @@ Page({
         this.syncDisplayState();
       },
       onProbeError: (message) => {
-        this.setData({ error: message });
+        this.setData({
+          error: userFacingErrorMessage(message, "实时比赛刷新失败"),
+        });
         this.syncDisplayState();
       },
       onProbeChange: (probing) => {
@@ -1240,8 +1243,10 @@ Page({
   },
 
   showContextError(error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    const message = userFacingErrorMessage(
+      error,
+      "赛季和比赛轮信息加载失败",
+    );
     this.setData(
       {
         loading: false,
@@ -1782,10 +1787,10 @@ Page({
 
         if (preserveData) {
           this.setData({
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : "实时比赛 publication 暂不可用",
+            error: userFacingErrorMessage(
+              publicationError,
+              "实时比赛 publication 暂不可用",
+            ),
           });
           this.liveRefresh?.sync();
           this.syncDisplayState();
@@ -1818,10 +1823,10 @@ Page({
             ...noScheduleState(),
             scheduleEmpty: false,
             displayState: "unavailable" as const,
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : "实时比赛 publication 暂不可用",
+            error: userFacingErrorMessage(
+              publicationError,
+              "实时比赛 publication 暂不可用",
+            ),
           });
           this.syncDisplayState();
           return false;
@@ -1877,12 +1882,14 @@ Page({
             groups: groupMatches(toMatchViews(matches), activeStatus),
             hasData: true,
             scheduleEmpty: false,
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : publishedMatchday
-                  ? "实时比赛 publication 暂不可用"
-                  : "",
+            error: publicationError
+              ? userFacingErrorMessage(
+                  publicationError,
+                  "实时比赛 publication 暂不可用",
+                )
+              : publishedMatchday
+                ? "实时比赛 publication 暂不可用"
+                : "",
             fixtureStaleMessage: coreRead.meta.stale
               ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
               : "",
@@ -1901,7 +1908,7 @@ Page({
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return false;
         this.setData({
-          error: error instanceof Error ? error.message : "实时比赛加载失败",
+          error: userFacingErrorMessage(error, "实时比赛加载失败"),
         });
         this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();

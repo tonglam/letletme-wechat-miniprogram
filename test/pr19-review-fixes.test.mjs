@@ -146,7 +146,7 @@ test("cold context failures settle Home and all Live page loading states", () =>
   }
   assert.match(
     match,
-    /loadData\([\s\S]*catch \(error\)[\s\S]*error: error instanceof Error[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/,
+    /loadData\([\s\S]*catch \(error\)[\s\S]*error: userFacingErrorMessage\(error, "实时比赛加载失败"\)[\s\S]*finally \{[\s\S]*loading: false, refreshing: false/,
   );
   assert.match(
     match,

@@ -107,6 +107,10 @@ export function looksTechnicalErrorMessage(message: string): boolean {
   if (/^\s*at\s+\S+/.test(text) || text.includes("\n    at ")) {
     return true;
   }
+  // Internal enum/error tokens must never become user-facing copy.
+  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(text)) {
+    return true;
+  }
   // English-only exception-like lines with no CJK product copy.
   if (!/[\u3400-\u9fff]/.test(text) && /error|exception|failed|invalid|undefined|null/i.test(lower)) {
     return true;
