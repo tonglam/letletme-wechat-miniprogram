@@ -104,7 +104,7 @@ test("does not expose raw HTTP status codes to users", () => {
   );
 });
 
-test("keeps the live matchday V2 publication query bounded", () => {
+test("keeps the live matchday V3 publication query bounded", () => {
   assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
   assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bfixtureId\b/g) || []).length, 1);

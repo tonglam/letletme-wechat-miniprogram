@@ -140,6 +140,27 @@ test("live matchday accepts nullable team abbreviations and maps full names", ()
   assert.equal(mapped.awayTeamShortName, "Away");
 });
 
+test("live matchday rejects case-insensitive duplicate stat identifiers", () => {
+  const result = matchdayResult();
+  result.snapshot.matches[0].players = [
+    {
+      id: 9,
+      webName: "Player",
+      position: "MIDFIELDER",
+      teamId: 1,
+      totalPoints: 3,
+      stats: [
+        { identifier: "bps", value: 30, awardedPoints: 1 },
+        { identifier: "BPS", value: 30, awardedPoints: 2 },
+      ],
+    },
+  ];
+  assert.throws(
+    () => validateLiveMatchday(result),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+});
+
 test("live matchday rejects partial detail vectors and fake unavailable snapshots", () => {
   const partialDetail = matchdayResult();
   partialDetail.snapshot.revisions.detailPublicationId = "detail-1";

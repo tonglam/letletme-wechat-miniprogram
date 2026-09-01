@@ -847,15 +847,19 @@ export function validateLiveMatchday(
       playerIds.add(player.id);
       const statIdentifiers = new Set<string>();
       for (const stat of player.stats) {
+        const identifier =
+          typeof stat.identifier === "string"
+            ? stat.identifier.trim().toLowerCase()
+            : "";
         if (
-          !stat.identifier ||
-          statIdentifiers.has(stat.identifier) ||
+          !identifier ||
+          statIdentifiers.has(identifier) ||
           !Number.isFinite(stat.value) ||
           !Number.isFinite(stat.awardedPoints)
         ) {
           throw new Error("LIVE_MATCHDAY_INCOHERENT");
         }
-        statIdentifiers.add(stat.identifier);
+        statIdentifiers.add(identifier);
       }
       const awardedPoints = player.stats.reduce(
         (total, stat) => total + stat.awardedPoints,
