@@ -817,7 +817,9 @@ PerformancePage({
     this.retryPhaseId = null;
     this.retryAfter = after;
     this.setData({
-      v2Loading: true,
+      // Keep the already rendered page mounted while fetching a continuation;
+      // the inline loading state belongs to the load-more control.
+      v2Loading: !after,
       v2LoadingMore: Boolean(after),
       v2Error: "",
     });
@@ -1450,6 +1452,29 @@ PerformancePage({
       v2Loading: viewChanged ? false : this.data.v2Loading,
       v2LoadingMore: viewChanged ? false : this.data.v2LoadingMore,
     });
+    if (
+      viewChanged &&
+      selected &&
+      this.data.v2Event &&
+      !season &&
+      !gameweek
+    ) {
+      // If the initial combined request is still pending, changing tabs
+      // invalidates it. Start a fresh request for the newly selected view so
+      // the stale response cannot leave both review payloads empty.
+      void this.loadReview(
+        selected.tournamentId,
+        this.data.v2Event,
+        false,
+        capturePageRequestTrace({
+          callerSurface: "my-fpl-leagues-v2.1",
+          trigger: "tab",
+        }),
+        null,
+        selected.latestFinalizedScope?.revision ?? null,
+      );
+      return;
+    }
     if (
       nextView === "season" &&
       phase &&
