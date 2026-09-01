@@ -85,34 +85,19 @@ export function mergeLiveMatchdayHeadStatus(
   if (!hasAcceptedDetail) return observed;
 
   const detailDelivery =
-    observed.detailDelivery.state === "FINAL"
+    observed.revisions.detailObservation === null
       ? {
-          ...observed.detailDelivery,
-          // The HEAD carries only terminal metadata. The player body is still
-          // the accepted FULL LKG, so preserve its source provenance while
-          // allowing the terminal delivery state to stop recovery polling.
-          servedFrom: accepted.detailDelivery.servedFrom,
+          ...accepted.detailDelivery,
+          state: "DEGRADED" as const,
           reasonCodes: Array.from(
             new Set([
               ...accepted.detailDelivery.reasonCodes,
               ...observed.detailDelivery.reasonCodes,
-              "DETAIL_FINAL",
+              "DETAIL_LKG_RETAINED",
             ]),
           ),
         }
-      : observed.revisions.detailObservation === null
-        ? {
-            ...accepted.detailDelivery,
-            state: "DEGRADED" as const,
-            reasonCodes: Array.from(
-              new Set([
-                ...accepted.detailDelivery.reasonCodes,
-                ...observed.detailDelivery.reasonCodes,
-                "DETAIL_LKG_RETAINED",
-              ]),
-            ),
-          }
-        : accepted.detailDelivery;
+      : mergeAcceptedDetailDelivery(accepted, observed);
 
   return {
     ...observed,
@@ -125,10 +110,16 @@ export function mergeLiveMatchdayHeadStatus(
     },
     times: {
       ...observed.times,
-      detailSourceCheckedAt: accepted.times.detailSourceCheckedAt,
+      // A same-revision HEAD is allowed to advance observation/freshness
+      // metadata, but it cannot change the content provenance of the retained
+      // player body.
+      detailSourceCheckedAt:
+        observed.times.detailSourceCheckedAt ??
+        accepted.times.detailSourceCheckedAt,
       detailContentUpdatedAt: accepted.times.detailContentUpdatedAt,
       detailPublishedAt: accepted.times.detailPublishedAt,
-      detailStaleAt: accepted.times.detailStaleAt,
+      detailStaleAt:
+        observed.times.detailStaleAt ?? accepted.times.detailStaleAt,
     },
     detailDelivery,
   };
@@ -176,6 +167,63 @@ function refreshRetainedPlayerStatus(
 ): LivePlayerRow[] {
   const playStatus = retainedPlayerPlayStatus(match);
   return players.map((player) => ({ ...player, playStatus }));
+}
+
+function isPastTimestamp(value: string | null): boolean {
+  if (!value) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed <= Date.now();
+}
+
+function mergeAcceptedDetailDelivery(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): LiveMatchdayStatus["detailDelivery"] {
+  if (observed.detailDelivery.state === "FINAL") {
+    return {
+      ...observed.detailDelivery,
+      // The HEAD carries only terminal metadata. The player body is still
+      // the accepted FULL LKG, so preserve its source provenance while
+      // allowing the terminal delivery state to stop recovery polling.
+      servedFrom: accepted.detailDelivery.servedFrom,
+      reasonCodes: Array.from(
+        new Set([
+          ...accepted.detailDelivery.reasonCodes,
+          ...observed.detailDelivery.reasonCodes,
+          "DETAIL_FINAL",
+        ]),
+      ),
+    };
+  }
+
+  // HEAD reports DEGRADED for a started fixture even when it only loaded the
+  // detail manifest. Do not downgrade a verified FULL LKG for that metadata
+  // marker; downgrade only when HEAD proves a fallback source or an expired
+  // detail freshness deadline.
+  const detailFallback =
+    observed.detailDelivery.servedFrom !== null &&
+    observed.detailDelivery.servedFrom !== "REDIS_CURRENT";
+  const detailStale = isPastTimestamp(observed.times.detailStaleAt);
+  if (
+    accepted.detailDelivery.state !== "FINAL" &&
+    (detailFallback || detailStale)
+  ) {
+    return {
+      ...accepted.detailDelivery,
+      state: "DEGRADED",
+      reasonCodes: Array.from(
+        new Set([
+          ...accepted.detailDelivery.reasonCodes,
+          ...observed.detailDelivery.reasonCodes,
+          ...(detailFallback ? ["DETAIL_FALLBACK"] : []),
+          ...(detailStale ? ["DETAIL_STALE"] : []),
+          "DETAIL_LKG_RETAINED",
+        ]),
+      ),
+    };
+  }
+
+  return accepted.detailDelivery;
 }
 
 /** Copy only same-fixture player rows from the accepted full LKG. */

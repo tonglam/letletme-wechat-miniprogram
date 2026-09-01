@@ -154,6 +154,49 @@ test("metadata-only HEAD retains the accepted complete detail LKG", () => {
   assert.ok(merged.detailDelivery.reasonCodes.includes("DETAIL_LKG_RETAINED"));
 });
 
+test("metadata-only HEAD keeps a fresh body fresh but propagates real detail fallback", () => {
+  const accepted = matchdaySnapshot();
+  const metadataOnly = matchdaySnapshot({
+    detailDelivery: {
+      state: "DEGRADED",
+      servedFrom: "REDIS_CURRENT",
+      reasonCodes: ["DETAIL_METADATA_ONLY"],
+    },
+    times: {
+      ...accepted.times,
+      detailSourceCheckedAt: "2026-08-31T12:01:00.000Z",
+      detailStaleAt: "2099-08-31T12:00:00.000Z",
+      servedAt: "2026-08-31T12:01:01.000Z",
+    },
+  });
+  const fresh = mergeLiveMatchdayHeadStatus(accepted, metadataOnly);
+  assert.equal(fresh.detailDelivery.state, "FRESH");
+  assert.equal(fresh.detailDelivery.servedFrom, "REDIS_CURRENT");
+  assert.equal(
+    fresh.times.detailSourceCheckedAt,
+    metadataOnly.times.detailSourceCheckedAt,
+  );
+
+  const fallback = matchdaySnapshot({
+    detailDelivery: {
+      state: "DEGRADED",
+      servedFrom: "REDIS_PREVIOUS",
+      reasonCodes: ["DETAIL_PREVIOUS"],
+    },
+    times: {
+      ...metadataOnly.times,
+      detailStaleAt: "2026-08-31T12:00:30.000Z",
+    },
+  });
+  const degraded = mergeLiveMatchdayHeadStatus(accepted, fallback);
+  assert.equal(degraded.detailDelivery.state, "DEGRADED");
+  assert.equal(degraded.detailDelivery.servedFrom, "REDIS_CURRENT");
+  assert.ok(degraded.detailDelivery.reasonCodes.includes("DETAIL_FALLBACK"));
+  assert.ok(degraded.detailDelivery.reasonCodes.includes("DETAIL_STALE"));
+  assert.equal(degraded.times.detailStaleAt, fallback.times.detailStaleAt);
+  assert.equal(degraded.revisions.playerDetail, accepted.revisions.playerDetail);
+});
+
 test("metadata-only HEAD promotes matching accepted detail to FINAL", () => {
   const accepted = matchdaySnapshot({
     state: "FINALIZED",
