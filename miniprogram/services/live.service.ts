@@ -743,6 +743,7 @@ export function snapshotFromLiveMatchdayHead(
 
 export function validateLiveMatchday(
   result: LiveMatchesResponse["liveMatchday"] | null | undefined,
+  mode: LiveMatchdayValidationMode = "full",
 ): asserts result is LiveMatchesResponse["liveMatchday"] {
   if (
     !result ||
@@ -799,6 +800,12 @@ export function validateLiveMatchday(
     snapshot.times.detailContentUpdatedAt === null &&
     snapshot.times.detailPublishedAt === null &&
     snapshot.times.detailStaleAt === null;
+  const headFinalDetailManifest =
+    mode === "head" &&
+    result.delivery.state === "FINAL" &&
+    snapshot.detailDelivery.state === "FINAL" &&
+    detailRevisionAbsent &&
+    detailObservationPresent;
   if (
     !snapshot.season ||
     !Number.isSafeInteger(snapshot.eventId) ||
@@ -838,14 +845,18 @@ export function validateLiveMatchday(
     (detailRevisionAbsent &&
       detailObservationPresent &&
       (snapshot.detailDelivery.servedFrom === null ||
-        !["PENDING", "DEGRADED"].includes(snapshot.detailDelivery.state))) ||
+        (![
+          "PENDING",
+          "DEGRADED",
+        ].includes(snapshot.detailDelivery.state) &&
+          !headFinalDetailManifest))) ||
     (detailRevisionPresent &&
       (snapshot.detailDelivery.servedFrom === null ||
         ["PENDING", "UNAVAILABLE"].includes(snapshot.detailDelivery.state))) ||
     (result.delivery.state === "FINAL" &&
       (snapshot.state !== "FINALIZED" ||
         snapshot.detailDelivery.state !== "FINAL" ||
-        !detailRevisionPresent))
+        (mode !== "head" && !detailRevisionPresent)))
   ) {
     throw new Error("LIVE_MATCHDAY_INCOHERENT");
   }
@@ -942,10 +953,10 @@ export function validateLiveMatchdayHead(
           matches: [],
         }
       : null,
-  });
+  }, "head");
 }
 
-type LiveMatchdayCacheValidationMode = "head" | "full";
+type LiveMatchdayValidationMode = "head" | "full";
 
 function isExpectedLiveMatchdayScope(
   result:
@@ -964,7 +975,7 @@ function isExpectedLiveMatchdayScope(
 
 function validateLiveMatchdayCacheData(
   data: unknown,
-  mode: LiveMatchdayCacheValidationMode,
+  mode: LiveMatchdayValidationMode,
   expectedEventId?: number,
   expectedSeason?: string,
 ): boolean {
@@ -994,7 +1005,7 @@ export function liveMatchdayRequestOptions(
   expectedEventId: number | undefined,
   forceRefresh: boolean,
   trace?: PageRequestTrace | null,
-  mode: LiveMatchdayCacheValidationMode = "full",
+  mode: LiveMatchdayValidationMode = "full",
   expectedSeason?: string,
 ): GraphQLOptions {
   const season = expectedSeason?.trim();

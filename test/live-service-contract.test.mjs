@@ -146,6 +146,48 @@ test("metadata-only HEAD accepts an observed detail manifest without a body", ()
   assert.equal(snapshot?.detailDelivery.servedFrom, "REDIS_CURRENT");
 });
 
+test("metadata-only HEAD accepts finalized detail metadata without a body", () => {
+  const result = matchdayResult();
+  result.delivery = {
+    state: "FINAL",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DESK_FINAL"],
+  };
+  result.snapshot.state = "FINALIZED";
+  result.snapshot.revisions.detailObservation = "detail-observation-final";
+  result.snapshot.times = {
+    ...result.snapshot.times,
+    detailSourceCheckedAt: ISO,
+    detailContentUpdatedAt: ISO,
+    detailPublishedAt: ISO,
+    detailStaleAt: null,
+  };
+  result.snapshot.detailDelivery = {
+    state: "FINAL",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_FINAL"],
+  };
+  const fullShape = structuredClone(result);
+  delete result.snapshot.matches;
+
+  validateLiveMatchdayHead(result);
+  assert.throws(
+    () => validateLiveMatchday(fullShape),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+
+  const contradictoryHead = structuredClone(result);
+  contradictoryHead.snapshot.detailDelivery = {
+    state: "DEGRADED",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_DEGRADED"],
+  };
+  assert.throws(
+    () => validateLiveMatchdayHead(contradictoryHead),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+});
+
 test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
   const result = matchdayResult();
   validateLiveMatchday(result);
