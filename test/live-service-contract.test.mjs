@@ -349,12 +349,25 @@ test("live matchday V3 query stays within the public AST budget", () => {
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
 });
 
-test("live tournament board requests official coverage and server ranking", async () => {
+test("live tournament board requests the V2 publication head and server ranking", async () => {
   const { ENTRY_LIVE_COMPETITION_BOARD_QUERY } =
     await import("../miniprogram/services/live-board.service.ts");
-  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /officialCoverage/);
-  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /unavailableEntryIds/);
-  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /rows\s*\{[\s\S]*\brank\b/);
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /head\s*\{/);
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /contentRevision/);
+  assert.match(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /input:\s*\$input/);
+  assert.doesNotMatch(
+    ENTRY_LIVE_COMPETITION_BOARD_QUERY,
+    /entryLiveCompetitionBoard\([\s\S]*\$first/,
+  );
+  assert.match(
+    ENTRY_LIVE_COMPETITION_BOARD_QUERY,
+    /pageInfo\s*\{\s*hasNextPage\s+endCursor/,
+  );
+  assert.match(
+    ENTRY_LIVE_COMPETITION_BOARD_QUERY,
+    /rows\s*\{[\s\S]*\bliveRank\b/,
+  );
+  assert.doesNotMatch(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /pickList/);
 });
 
 test("live match mapping carries the authoritative fixture minutes", () => {

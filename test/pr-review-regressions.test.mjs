@@ -433,20 +433,19 @@ test("team summary requests discard older GW responses", () => {
   );
 });
 
-test("unchanged live probes update metadata while Match Last Updated remains content time", () => {
-  for (const path of [
-    "miniprogram/pages/live/entry/entry.ts",
+test("unchanged live probes update metadata while Last Updated remains content time", () => {
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(
+    entry,
+    /acceptSnapshot:[\s\S]*snapshot\?\.sourceCheckedAt[\s\S]*lastUpdated: formatTime\(new Date\(snapshot\.sourceCheckedAt\)\)/,
+  );
+  const tournament = source(
     "miniprogram/pages/live/tournament/tournament.controller.ts",
-  ]) {
-    const page = source(path);
-    assert.match(
-      page,
-      new RegExp(
-        `acceptSnapshot:[\\s\\S]*snapshot\\?\\.sourceCheckedAt[\\s\\S]*lastUpdated: formatTime\\(new Date\\(snapshot\\.sourceCheckedAt\\)\\)`,
-      ),
-      path,
-    );
-  }
+  );
+  assert.match(
+    tournament,
+    /acceptSnapshot:[\s\S]*snapshot\.head\.publication\.times\.contentUpdatedAt[\s\S]*lastUpdated: formatTime\([\s\S]*snapshot\.head\.publication\.times\.contentUpdatedAt/,
+  );
   const match = source("miniprogram/pages/live/match/match.ts");
   const accept = match.slice(
     match.indexOf("acceptSnapshot:"),

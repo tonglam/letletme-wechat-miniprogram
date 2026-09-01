@@ -1,7 +1,5 @@
 import type {
-  LiveDataAvailability,
   LiveDelivery,
-  LiveRevisionVector,
   LiveScore,
   LiveTimes,
   LiveTournamentRow,
@@ -23,10 +21,10 @@ import {
   type TournamentLiveGraphQLRow,
 } from "./live-tournament";
 
-export const LIVE_BOARD_CONTRACT_VERSION = "entry-live-board-v2";
+export const LIVE_BOARD_CONTRACT_VERSION = "entry-live-board-v3";
 export const LIVE_BOARD_PAGE_SIZE = 20;
 export const LIVE_BOARD_LAST_GOOD_PREFIX =
-  `${storagePrefixes.liveBoardLastGood}${LIVE_BOARD_CONTRACT_VERSION}`;
+  storagePrefixes.liveBoardLastGood + LIVE_BOARD_CONTRACT_VERSION;
 
 export type LiveBoardSort =
   | "EVENT_POINTS"
@@ -34,7 +32,6 @@ export type LiveBoardSort =
   | "TRANSFER_COST"
   | "PLAYED"
   | "TOTAL_POINTS"
-  | "OVERALL_RANK"
   | "TEAM_VALUE"
   | "RANK"
   | "ENTRY_NAME";
@@ -54,68 +51,95 @@ export interface LiveBoardTeamCountRule {
   scope: LiveBoardPickScope;
 }
 
+export interface LeagueLiveHead {
+  season: string;
+  eventId: number;
+  tournamentId: number;
+  mode: "CLASSIC" | "H2H";
+  availability: "READY" | "PENDING" | "MISSING" | "ERROR";
+  contentRevision: string | null;
+  publication: {
+    revisions: {
+      publicationId: string;
+      generation: number;
+      roster: string;
+      scoreCore: string;
+      fixtureIdentity: string;
+      entryInputSet: string;
+      identity: string;
+      officialRank: string | null;
+      rules: string;
+      algorithm: string;
+      content: string;
+    };
+    times: LiveTimes;
+  } | null;
+  delivery: LiveDelivery;
+  nextRefreshAt: string | null;
+}
+
 export interface LiveBoardVariables {
   entryId: number;
   tournamentId: number;
   eventId: number;
-  ref?: { season: string; eventId: number; scoreCoreRevision: string } | null;
-  page?: number;
-  pageSize?: number;
-  sort?: LiveBoardSort;
-  direction?: LiveBoardDirection;
-  search?: string | null;
-  chips?: string[];
-  captainPlayerIds?: number[];
-  ownership?: LiveBoardOwnershipFilter | null;
-  teamCountRules?: LiveBoardTeamCountRule[];
-  expectedBoardRevision?: string | null;
+  input?: {
+    first?: number;
+    after?: string | null;
+    sort?: LiveBoardSort;
+    direction?: LiveBoardDirection;
+    search?: string | null;
+    chips?: string[];
+    captainPlayerIds?: number[];
+    ownership?: LiveBoardOwnershipFilter | null;
+    teamCountRules?: LiveBoardTeamCountRule[];
+  };
 }
 
 export interface LiveBoardRow {
+  availability: "READY" | "PENDING" | "MISSING" | "ERROR";
   entry: number;
   entryName: string;
   playerName: string;
-  rank: number;
-  overallRank: number;
-  teamValue: number;
-  chip: string;
-  transferCost: number;
-  played: number;
-  toPlay: number;
-  captainId: number;
-  captainName: string;
-  captainPoints: number;
-  score: LiveScore;
+  liveRank: number | null;
+  overallRank: number | null;
+  teamValue: number | null;
+  chip: string | null;
+  transferCost: number | null;
+  played: number | null;
+  toPlay: number | null;
+  captainId: number | null;
+  captainName: string | null;
+  captainPoints: number | null;
+  score: LiveScore | null;
 }
 
 export interface LiveBoardPage {
-  season: string;
-  eventId: number;
-  tournamentId: number;
-  boardRevision: string;
-  scoreCoreRevision: string | null;
-  dataAvailability: LiveDataAvailability;
-  revisions: LiveRevisionVector;
-  times: LiveTimes;
-  delivery: LiveDelivery;
-  coverageState: "WARMING" | "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
-  rankScope: "FULL_FIELD" | "AVAILABLE_ROWS";
-  computedEntries: number;
-  deferredEntryCount: number;
-  failedEntryCount: number;
-  unavailableEntryCount: number;
-  officialCoverage: number;
-  unavailableEntryIds: number[];
-  failedEntryIds: number[];
-  partial: boolean;
+  head: LeagueLiveHead;
   totalEntries: number;
   filteredEntries: number;
-  page: number;
-  pageSize: number;
-  hasMore: boolean;
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
   highestEventPoints: number | null;
   averageEventPoints: number | null;
   rows: LiveBoardRow[];
+  viewerRow: LiveBoardRow | null;
+}
+
+/** A page is safe to replace an existing screen only when its publication is complete. */
+export function isCompleteLiveBoardPage(page: LiveBoardPage | null): boolean {
+  if (
+    !page ||
+    page.head.availability !== "READY" ||
+    page.head.publication === null ||
+    page.head.delivery.state === "UNAVAILABLE"
+  ) {
+    return false;
+  }
+  const rows = page.viewerRow ? [...page.rows, page.viewerRow] : page.rows;
+  return rows.every(
+    (row) =>
+      (row.availability === "READY" && row.score !== null) ||
+      (row.availability === "MISSING" && row.score === null),
+  );
 }
 
 export interface LiveBoardReadResult {
@@ -179,53 +203,99 @@ export const ENTRY_LIVE_COMPETITION_BOARD_QUERY = `
     $entryId: Int!
     $tournamentId: Int!
     $eventId: Int!
-    $ref: LivePublicationRefInput
-    $page: Int
-    $pageSize: Int
-    $sort: EntryLiveCompetitionBoardSort
-    $direction: EntryLiveCompetitionBoardSortDirection
-    $search: String
-    $chips: [String!]
-    $captainPlayerIds: [Int!]
-    $ownership: EntryLiveCompetitionOwnershipFilterInput
-    $teamCountRules: [EntryLiveCompetitionTeamCountRuleInput!]
-    $expectedBoardRevision: String
+    $input: EntryLiveCompetitionBoardInput
   ) {
     entryLiveCompetitionBoard(
       entryId: $entryId
       tournamentId: $tournamentId
       eventId: $eventId
-      ref: $ref
-      page: $page
-      pageSize: $pageSize
-      sort: $sort
-      direction: $direction
-      search: $search
-      chips: $chips
-      captainPlayerIds: $captainPlayerIds
-      ownership: $ownership
-      teamCountRules: $teamCountRules
-      expectedBoardRevision: $expectedBoardRevision
+      input: $input
     ) {
-      season eventId tournamentId boardRevision scoreCoreRevision
-      dataAvailability
-      revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
-      times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
-      delivery { state servedFrom reasonCodes }
-      coverageState rankScope computedEntries deferredEntryCount failedEntryCount unavailableEntryCount
-      officialCoverage unavailableEntryIds
-      failedEntryIds partial totalEntries filteredEntries page pageSize hasMore
-      highestEventPoints averageEventPoints
+      head {
+        season eventId tournamentId mode availability contentRevision nextRefreshAt
+        publication {
+          revisions {
+            publicationId generation roster scoreCore fixtureIdentity
+            entryInputSet identity officialRank rules algorithm content
+          }
+          times {
+            sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt
+            servedAt staleAt nextRefreshAt
+          }
+        }
+        delivery { state servedFrom reasonCodes }
+      }
+      totalEntries
+      filteredEntries
+      pageInfo { hasNextPage endCursor }
+      highestEventPoints
+      averageEventPoints
       rows {
-        entry entryName playerName rank overallRank teamValue chip transferCost played toPlay captainId
-        captainName captainPoints
+        availability entry entryName playerName liveRank overallRank teamValue
+        chip transferCost played toPlay captainId captainName captainPoints
         score {
-          eventPoints netEventPoints totalPoints totalScope transferCost source calculationMode
-          revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
-          times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
+          eventPoints netEventPoints totalPoints totalScope transferCost
+          source calculationMode
+          revisions {
+            publicationId generation lifecycle fixtureIdentity scoreCore
+            displayStats explain picksBase officialAdjustment previousTotals
+            finalResult rules algorithm input
+          }
+          times {
+            sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt
+            servedAt staleAt nextRefreshAt
+          }
           delivery { state servedFrom reasonCodes }
         }
       }
+      viewerRow {
+        availability entry entryName playerName liveRank overallRank teamValue
+        chip transferCost played toPlay captainId captainName captainPoints
+        score {
+          eventPoints netEventPoints totalPoints totalScope transferCost
+          source calculationMode
+          revisions {
+            publicationId generation lifecycle fixtureIdentity scoreCore
+            displayStats explain picksBase officialAdjustment previousTotals
+            finalResult rules algorithm input
+          }
+          times {
+            sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt
+            servedAt staleAt nextRefreshAt
+          }
+          delivery { state servedFrom reasonCodes }
+        }
+      }
+    }
+  }
+`;
+
+/** Metadata-only probe used to decide whether a full board read is needed. */
+export const LEAGUE_LIVE_HEAD_QUERY = `
+  query GetLeagueLiveHead(
+    $entryId: Int!
+    $tournamentId: Int!
+    $eventId: Int!
+    $mode: LeagueLiveMode!
+  ) {
+    leagueLiveHead(
+      entryId: $entryId
+      tournamentId: $tournamentId
+      eventId: $eventId
+      mode: $mode
+    ) {
+      season eventId tournamentId mode availability contentRevision nextRefreshAt
+      publication {
+        revisions {
+          publicationId generation roster scoreCore fixtureIdentity entryInputSet
+          identity officialRank rules algorithm content
+        }
+        times {
+          sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt
+          servedAt staleAt nextRefreshAt
+        }
+      }
+      delivery { state servedFrom reasonCodes }
     }
   }
 `;
@@ -236,11 +306,7 @@ export const TOURNAMENT_SELECTION_INDEX_QUERY = `
     $tournamentId: Int!
     $ref: LivePublicationRefInput!
   ) {
-    tournamentSelectionIndex(
-      entryId: $entryId
-      tournamentId: $tournamentId
-      ref: $ref
-    ) {
+    tournamentSelectionIndex(entryId: $entryId, tournamentId: $tournamentId, ref: $ref) {
       tournamentId eventId scoreCoreRevision
       rows { playerId playerName teamId teamName teamShortName position count percentage }
     }
@@ -266,8 +332,14 @@ export const TOURNAMENT_ENTRY_SQUADS_QUERY = `
         rank { eventRank overallRank leagueRank revision contentUpdatedAt state }
         score {
           eventPoints netEventPoints totalPoints totalScope transferCost source calculationMode
-          revisions { publicationId generation lifecycle fixtureIdentity scoreCore displayStats explain picksBase officialAdjustment previousTotals finalResult rules algorithm input }
-          times { sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt servedAt staleAt nextRefreshAt }
+          revisions {
+            publicationId generation lifecycle fixtureIdentity scoreCore displayStats
+            explain picksBase officialAdjustment previousTotals finalResult rules algorithm input
+          }
+          times {
+            sourceCheckedAt contentUpdatedAt publishedAt checkpointedAt
+            servedAt staleAt nextRefreshAt
+          }
           delivery { state servedFrom reasonCodes }
         }
         pickList {
@@ -306,7 +378,9 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function isNullableNumber(value: unknown): value is number | null {
-  return value === null || (typeof value === "number" && Number.isFinite(value));
+  return (
+    value === null || (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -314,8 +388,10 @@ function isNullableString(value: unknown): value is string | null {
 }
 
 function isNullableDate(value: unknown): value is string | null {
-  return value === null ||
-    (typeof value === "string" && Number.isFinite(Date.parse(value)));
+  return (
+    value === null ||
+    (typeof value === "string" && Number.isFinite(Date.parse(value)))
+  );
 }
 
 function validateRevisionVector(
@@ -338,12 +414,12 @@ function validateRevisionVector(
     "algorithm",
     "input",
   ]) {
-    if (typeof value[field] !== "string" || !value[field]) {
-      missing.push(`${path}.${field}`);
+    if (typeof value[field] !== "string" || value[field].length === 0) {
+      missing.push(path + "." + field);
     }
   }
-  if (!isInteger(value.generation) || value.generation < 0) {
-    missing.push(`${path}.generation`);
+  if (!isInteger(value.generation) || value.generation < 1) {
+    missing.push(path + ".generation");
   }
   for (const field of [
     "picksBase",
@@ -351,11 +427,7 @@ function validateRevisionVector(
     "previousTotals",
     "finalResult",
   ]) {
-    if (!isNullableString(value[field])) {
-      missing.push(`${path}.${field}`);
-    } else if (value[field] !== null && value[field] === "") {
-      missing.push(`${path}.${field}`);
-    }
+    if (!isNullableString(value[field])) missing.push(path + "." + field);
   }
 }
 
@@ -376,13 +448,11 @@ function validateLiveTimes(
     "staleAt",
   ]) {
     if (!isNullableDate(value[field]) || value[field] === null) {
-      missing.push(`${path}.${field}`);
+      missing.push(path + "." + field);
     }
   }
   for (const field of ["checkpointedAt", "nextRefreshAt"]) {
-    if (!isNullableDate(value[field])) {
-      missing.push(`${path}.${field}`);
-    }
+    if (!isNullableDate(value[field])) missing.push(path + "." + field);
   }
 }
 
@@ -395,17 +465,7 @@ function validateLiveDelivery(
     missing.push(path);
     return;
   }
-  if (
-    ![
-      "FRESH",
-      "STALE",
-      "DEGRADED",
-      "FINAL",
-      "UNAVAILABLE",
-    ].includes(String(value.state))
-  ) {
-    missing.push(`${path}.state`);
-  }
+  if (!AVAILABILITY.has(String(value.state))) missing.push(path + ".state");
   if (
     ![
       "REDIS_CURRENT",
@@ -416,14 +476,67 @@ function validateLiveDelivery(
       "UNAVAILABLE",
     ].includes(String(value.servedFrom))
   ) {
-    missing.push(`${path}.servedFrom`);
+    missing.push(path + ".servedFrom");
   }
   if (
     !Array.isArray(value.reasonCodes) ||
     !value.reasonCodes.every((item) => typeof item === "string")
   ) {
-    missing.push(`${path}.reasonCodes`);
+    missing.push(path + ".reasonCodes");
   }
+}
+
+function validateLeagueHead(
+  value: unknown,
+  path: string,
+  missing: string[],
+): value is LeagueLiveHead {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return false;
+  }
+  for (const field of ["season", "mode", "availability"]) {
+    if (typeof value[field] !== "string" || value[field].length === 0) {
+      missing.push(path + "." + field);
+    }
+  }
+  for (const field of ["eventId", "tournamentId"]) {
+    if (!isInteger(value[field]) || (value[field] as number) < 1) {
+      missing.push(path + "." + field);
+    }
+  }
+  if (value.mode !== "CLASSIC" && value.mode !== "H2H")
+    missing.push(path + ".mode");
+  if (
+    !["READY", "PENDING", "MISSING", "ERROR"].includes(
+      String(value.availability),
+    )
+  ) {
+    missing.push(path + ".availability");
+  }
+  if (!isNullableString(value.contentRevision))
+    missing.push(path + ".contentRevision");
+  if (!isNullableDate(value.nextRefreshAt))
+    missing.push(path + ".nextRefreshAt");
+  validateLiveDelivery(value.delivery, path + ".delivery", missing);
+  if (value.availability === "READY" && value.publication === null) {
+    missing.push(path + ".publication");
+  } else if (value.publication !== null) {
+    if (!isRecord(value.publication)) missing.push(path + ".publication");
+    else {
+      validateRevisionVector(
+        value.publication.revisions,
+        path + ".publication.revisions",
+        missing,
+      );
+      validateLiveTimes(
+        value.publication.times,
+        path + ".publication.times",
+        missing,
+      );
+    }
+  }
+  return true;
 }
 
 function validateLiveScore(
@@ -435,141 +548,162 @@ function validateLiveScore(
     missing.push(path);
     return;
   }
-  for (const field of ["eventPoints", "netEventPoints", "totalPoints"]) {
-    if (!isNullableNumber(value[field])) missing.push(`${path}.${field}`);
+  for (const field of ["eventPoints", "netEventPoints"]) {
+    if (!isInteger(value[field])) missing.push(path + "." + field);
   }
-  if (!isInteger(value.transferCost)) missing.push(`${path}.transferCost`);
-  for (const field of ["source", "calculationMode"]) {
-    if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
+  if (!isNullableNumber(value.totalPoints)) missing.push(path + ".totalPoints");
+  if (value.totalScope !== "OVERALL" && value.totalScope !== "UNKNOWN") {
+    missing.push(path + ".totalScope");
   }
-  if (value.totalScope !== "OVERALL" && value.totalScope !== "UNKNOWN") missing.push(`${path}.totalScope`);
-  validateRevisionVector(value.revisions, `${path}.revisions`, missing);
-  validateLiveTimes(value.times, `${path}.times`, missing);
-  validateLiveDelivery(value.delivery, `${path}.delivery`, missing);
+  if (!isNonNegativeInteger(value.transferCost))
+    missing.push(path + ".transferCost");
+  if (
+    value.source !== "FPL_EVENT_LIVE" &&
+    value.source !== "FPL_FINAL_RESULT" &&
+    value.source !== "UNAVAILABLE"
+  ) {
+    missing.push(path + ".source");
+  }
+  if (
+    value.calculationMode !== "PROJECTED_AUTOSUBS" &&
+    value.calculationMode !== "FINAL_RESULT"
+  ) {
+    missing.push(path + ".calculationMode");
+  }
+  validateRevisionVector(value.revisions, path + ".revisions", missing);
+  validateLiveTimes(value.times, path + ".times", missing);
+  validateLiveDelivery(value.delivery, path + ".delivery", missing);
 }
 
 function validateBoardRow(
   value: unknown,
-  index: number,
+  path: string,
   missing: string[],
 ): void {
-  const path = `rows[${index}]`;
   if (!isRecord(value)) {
     missing.push(path);
     return;
   }
-  for (const field of ["entry", "rank", "overallRank", "transferCost", "played", "toPlay", "captainId", "captainPoints"]) {
-    if (!isInteger(value[field])) missing.push(`${path}.${field}`);
+  if (
+    !["READY", "PENDING", "MISSING", "ERROR"].includes(
+      String(value.availability),
+    )
+  ) {
+    missing.push(path + ".availability");
   }
-  if (typeof value.teamValue !== "number" || !Number.isFinite(value.teamValue)) {
-    missing.push(`${path}.teamValue`);
+  if (!isInteger(value.entry) || (value.entry as number) < 1)
+    missing.push(path + ".entry");
+  for (const field of ["entryName", "playerName"]) {
+    if (typeof value[field] !== "string") missing.push(path + "." + field);
   }
-  for (const field of ["entryName", "playerName", "chip", "captainName"]) {
-    if (typeof value[field] !== "string") missing.push(`${path}.${field}`);
+  for (const field of [
+    "liveRank",
+    "overallRank",
+    "teamValue",
+    "transferCost",
+    "played",
+    "toPlay",
+    "captainId",
+    "captainPoints",
+  ]) {
+    if (!isNullableNumber(value[field])) missing.push(path + "." + field);
   }
-  validateLiveScore(value.score, `${path}.score`, missing);
+  if (!isNullableString(value.chip)) missing.push(path + ".chip");
+  if (!isNullableString(value.captainName)) missing.push(path + ".captainName");
+  if (value.score === null) {
+    if (value.availability === "READY") missing.push(path + ".score");
+  } else {
+    validateLiveScore(value.score, path + ".score", missing);
+  }
 }
 
 export function parseLiveBoardPage(
   value: unknown,
   options: { requestId?: string; durationMs?: number } = {},
 ): LiveBoardPage {
-  const root = isRecord(value) && "entryLiveCompetitionBoard" in value
-    ? value.entryLiveCompetitionBoard
-    : value;
+  const root =
+    isRecord(value) && "entryLiveCompetitionBoard" in value
+      ? value.entryLiveCompetitionBoard
+      : value;
   if (!isRecord(root)) {
-    throw new LiveBoardInvalidResponseError(["entryLiveCompetitionBoard"], options);
+    throw new LiveBoardInvalidResponseError(
+      ["entryLiveCompetitionBoard"],
+      options,
+    );
   }
   const missing: string[] = [];
-  for (const field of ["eventId", "tournamentId", "page", "pageSize"]) {
-    if (!isPositiveInteger(root[field])) missing.push(field);
-  }
-  if (isPositiveInteger(root.pageSize) && root.pageSize > 50) {
-    missing.push("pageSize:max");
-  }
+  validateLeagueHead(root.head, "head", missing);
   for (const field of ["totalEntries", "filteredEntries"]) {
     if (!isNonNegativeInteger(root[field])) missing.push(field);
   }
   if (
     isNonNegativeInteger(root.totalEntries) &&
     isNonNegativeInteger(root.filteredEntries) &&
-    root.filteredEntries > root.totalEntries
+    (root.filteredEntries as number) > (root.totalEntries as number)
   ) {
     missing.push("filteredEntries:range");
   }
-  for (const field of ["season", "boardRevision"]) {
-    if (typeof root[field] !== "string" || root[field].length === 0) {
-      missing.push(field);
-    }
+  if (!isRecord(root.pageInfo)) {
+    missing.push("pageInfo");
+  } else {
+    if (typeof root.pageInfo.hasNextPage !== "boolean")
+      missing.push("pageInfo.hasNextPage");
+    if (!isNullableString(root.pageInfo.endCursor))
+      missing.push("pageInfo.endCursor");
   }
-  if (!isNullableString(root.scoreCoreRevision)) missing.push("scoreCoreRevision");
-  if (!AVAILABILITY.has(String(root.dataAvailability))) {
-    missing.push("dataAvailability");
-  }
-  validateRevisionVector(root.revisions, "revisions", missing);
-  validateLiveTimes(root.times, "times", missing);
-  validateLiveDelivery(root.delivery, "delivery", missing);
-  if (!new Set(["WARMING", "COMPLETE", "PARTIAL", "UNAVAILABLE"]).has(String(root.coverageState))) missing.push("coverageState");
-  if (!new Set(["FULL_FIELD", "AVAILABLE_ROWS"]).has(String(root.rankScope))) missing.push("rankScope");
-  for (const field of ["computedEntries", "deferredEntryCount", "failedEntryCount", "unavailableEntryCount"]) {
-    if (!isNonNegativeInteger(root[field])) missing.push(field);
-  }
-  for (const field of ["partial", "hasMore"]) {
-    if (typeof root[field] !== "boolean") missing.push(field);
-  }
-  if (typeof root.officialCoverage !== "number" ||
-      !Number.isFinite(root.officialCoverage) ||
-      root.officialCoverage < 0 ||
-      root.officialCoverage > 1) {
-    missing.push("officialCoverage");
-  }
-  if (!isNullableNumber(root.highestEventPoints)) {
+  if (!isNullableNumber(root.highestEventPoints))
     missing.push("highestEventPoints");
-  }
-  if (!isNullableNumber(root.averageEventPoints)) {
+  if (!isNullableNumber(root.averageEventPoints))
     missing.push("averageEventPoints");
-  }
-  for (const field of ["unavailableEntryIds", "failedEntryIds"]) {
-    if (!Array.isArray(root[field]) || !root[field].every(isPositiveInteger)) {
-      missing.push(field);
-    }
-  }
   if (!Array.isArray(root.rows)) {
     missing.push("rows");
   } else {
-    root.rows.forEach((row, index) => validateBoardRow(row, index, missing));
-    if (isPositiveInteger(root.pageSize) && root.rows.length > root.pageSize) {
-      missing.push("rows.length");
-    }
+    if (root.rows.length > 50) missing.push("rows:max");
     if (
       isNonNegativeInteger(root.filteredEntries) &&
-      root.rows.length > root.filteredEntries
+      root.rows.length > (root.filteredEntries as number)
     ) {
       missing.push("rows.filteredEntries");
     }
-    const entryIds = root.rows
-      .filter(isRecord)
-      .map((row) => row.entry)
-      .filter(isPositiveInteger);
-    if (new Set(entryIds).size !== entryIds.length) {
-      missing.push("rows.entry:duplicate");
-    }
-    if (root.hasMore === true && root.rows.length === 0) {
-      missing.push("hasMore:empty-page");
-    }
+    const entryIds = new Set<number>();
+    root.rows.forEach((row, index) =>
+      validateBoardRow(row, "rows[" + index + "]", missing),
+    );
+    root.rows.forEach((row) => {
+      if (isRecord(row) && isInteger(row.entry)) {
+        if (entryIds.has(row.entry)) missing.push("rows.entry:duplicate");
+        entryIds.add(row.entry);
+      }
+    });
   }
-  if (missing.length > 0) {
+  if (root.viewerRow !== null)
+    validateBoardRow(root.viewerRow, "viewerRow", missing);
+  if (missing.length > 0)
     throw new LiveBoardInvalidResponseError(missing, options);
-  }
   return root as unknown as LiveBoardPage;
 }
 
+export function parseLeagueLiveHead(value: unknown): LeagueLiveHead {
+  const root =
+    isRecord(value) && "leagueLiveHead" in value ? value.leagueLiveHead : value;
+  const missing: string[] = [];
+  validateLeagueHead(root, "head", missing);
+  if (missing.length > 0) throw new LiveBoardInvalidResponseError(missing);
+  return root as LeagueLiveHead;
+}
+
 function shouldRetry(error: unknown): boolean {
-  if (!(error instanceof GraphQLTransportError) || !error.transient) return false;
-  if (error.statusCode === 429 || error.statusCode === 401 || error.statusCode === 403) {
+  if (!(error instanceof GraphQLTransportError) || !error.transient)
     return false;
-  }
-  return error.statusCode === undefined || TRANSIENT_STATUSES.has(error.statusCode);
+  if (
+    error.statusCode === 429 ||
+    error.statusCode === 401 ||
+    error.statusCode === 403
+  )
+    return false;
+  return (
+    error.statusCode === undefined || TRANSIENT_STATUSES.has(error.statusCode)
+  );
 }
 
 function retryDelayMs(random: () => number): number {
@@ -598,10 +732,10 @@ async function readWithOneTransientRetry<T>(
         cachePolicy: "network-only",
         forceRefresh: true,
         trace: options.trace,
+        contract: "live-points-v2",
       });
-      if (result.errors.length > 0) {
+      if (result.errors.length > 0)
         throw new GraphQLApplicationError(result.errors);
-      }
       return { data: result.data, meta: result.meta };
     } catch (error) {
       if (attempt >= 1 || !shouldRetry(error)) throw error;
@@ -615,7 +749,11 @@ function recordInvalidLiveResponse(
   operation: string,
   error: LiveBoardInvalidResponseError,
 ): void {
-  const message = `duration=${error.durationMs}ms missing=${error.missingFields.join(",")}`;
+  const message =
+    "duration=" +
+    error.durationMs +
+    "ms missing=" +
+    error.missingFields.join(",");
   miniLogger.error("live-board.invalid-response", message);
   recordBugReportDiagnostic({
     at: new Date().toISOString(),
@@ -649,20 +787,15 @@ export async function getEntryLiveCompetitionBoardPage(
       durationMs: Date.now() - startedAt,
     });
     const mismatches: string[] = [];
-    if (page.eventId !== variables.eventId) mismatches.push("eventId:mismatch");
-    if (page.tournamentId !== variables.tournamentId) {
-      mismatches.push("tournamentId:mismatch");
+    if (page.head.eventId !== variables.eventId)
+      mismatches.push("head.eventId:mismatch");
+    if (page.head.tournamentId !== variables.tournamentId) {
+      mismatches.push("head.tournamentId:mismatch");
     }
-    if (options.expectedSeason && page.season !== options.expectedSeason) {
-      mismatches.push("season:mismatch");
+    if (page.head.mode !== "CLASSIC") mismatches.push("head.mode:mismatch");
+    if (options.expectedSeason && page.head.season !== options.expectedSeason) {
+      mismatches.push("head.season:mismatch");
     }
-    if (
-      variables.expectedBoardRevision &&
-      page.boardRevision !== variables.expectedBoardRevision
-    ) {
-      mismatches.push("boardRevision:mismatch");
-    }
-    if (page.page !== (variables.page || 1)) mismatches.push("page:mismatch");
     if (mismatches.length > 0) {
       throw new LiveBoardInvalidResponseError(mismatches, {
         requestId: result.meta.requestId,
@@ -678,29 +811,80 @@ export async function getEntryLiveCompetitionBoardPage(
   }
 }
 
+export async function getLeagueLiveHead(
+  variables: {
+    entryId: number;
+    tournamentId: number;
+    eventId: number;
+    mode: "CLASSIC" | "H2H";
+  },
+  options: {
+    expectedSeason?: string;
+    trace?: PageRequestTrace;
+    random?: () => number;
+    sleepImpl?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<LeagueLiveHead> {
+  const startedAt = Date.now();
+  const result = await readWithOneTransientRetry<{
+    leagueLiveHead: unknown;
+  }>(LEAGUE_LIVE_HEAD_QUERY, variables, options);
+  try {
+    const errorOptions = {
+      requestId: result.meta.requestId,
+      durationMs: Date.now() - startedAt,
+    };
+    const head = parseLeagueLiveHead(result.data);
+    const mismatches: string[] = [];
+    if (head.eventId !== variables.eventId)
+      mismatches.push("head.eventId:mismatch");
+    if (head.tournamentId !== variables.tournamentId)
+      mismatches.push("head.tournamentId:mismatch");
+    if (head.mode !== variables.mode) mismatches.push("head.mode:mismatch");
+    if (options.expectedSeason && head.season !== options.expectedSeason) {
+      mismatches.push("head.season:mismatch");
+    }
+    if (mismatches.length > 0) {
+      throw new LiveBoardInvalidResponseError(mismatches, errorOptions);
+    }
+    return head;
+  } catch (error) {
+    if (error instanceof LiveBoardInvalidResponseError) {
+      recordInvalidLiveResponse("GetLeagueLiveHead", error);
+    }
+    throw error;
+  }
+}
 function graphQLErrorCode(error: GraphQLErrorInfo): string {
   return String(error.extensions?.code || "");
 }
 
 export function hasLiveBoardErrorCode(error: unknown, code: string): boolean {
-  return error instanceof GraphQLApplicationError &&
-    error.errors.some((item) => graphQLErrorCode(item) === code);
+  return (
+    error instanceof GraphQLApplicationError &&
+    error.errors.some((item) => graphQLErrorCode(item) === code)
+  );
 }
 
 function validateSelectionIndex(
   value: unknown,
   options: { requestId?: string; durationMs?: number } = {},
 ): LiveBoardSelectionIndex {
-  const root = isRecord(value) && "tournamentSelectionIndex" in value
-    ? value.tournamentSelectionIndex
-    : value;
+  const root =
+    isRecord(value) && "tournamentSelectionIndex" in value
+      ? value.tournamentSelectionIndex
+      : value;
   const missing: string[] = [];
   if (!isRecord(root)) {
-    throw new LiveBoardInvalidResponseError(["tournamentSelectionIndex"], options);
+    throw new LiveBoardInvalidResponseError(
+      ["tournamentSelectionIndex"],
+      options,
+    );
   }
   if (!isPositiveInteger(root.tournamentId)) missing.push("tournamentId");
   if (!isPositiveInteger(root.eventId)) missing.push("eventId");
-  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision) missing.push("scoreCoreRevision");
+  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision)
+    missing.push("scoreCoreRevision");
   if (!Array.isArray(root.rows)) {
     missing.push("rows");
   } else {
@@ -723,13 +907,16 @@ function validateSelectionIndex(
           missing.push(`${path}.${field}`);
         }
       }
-      if (typeof value.percentage !== "number" ||
-          !Number.isFinite(value.percentage)) {
+      if (
+        typeof value.percentage !== "number" ||
+        !Number.isFinite(value.percentage)
+      ) {
         missing.push(`${path}.percentage`);
       }
     });
   }
-  if (missing.length > 0) throw new LiveBoardInvalidResponseError(missing, options);
+  if (missing.length > 0)
+    throw new LiveBoardInvalidResponseError(missing, options);
   return root as unknown as LiveBoardSelectionIndex;
 }
 
@@ -742,20 +929,26 @@ export async function getTournamentSelectionIndex(options: {
   const startedAt = Date.now();
   const result = await readWithOneTransientRetry<{
     tournamentSelectionIndex: unknown;
-  }>(TOURNAMENT_SELECTION_INDEX_QUERY, {
-    entryId: options.entryId,
-    tournamentId: options.tournamentId,
-    ref: options.ref,
-  }, { trace: options.trace });
+  }>(
+    TOURNAMENT_SELECTION_INDEX_QUERY,
+    {
+      entryId: options.entryId,
+      tournamentId: options.tournamentId,
+      ref: options.ref,
+    },
+    { trace: options.trace },
+  );
   try {
     const errorOptions = {
       requestId: result.meta.requestId,
       durationMs: Date.now() - startedAt,
     };
     const parsed = validateSelectionIndex(result.data, errorOptions);
-    if (parsed.eventId !== options.ref.eventId ||
-        parsed.tournamentId !== options.tournamentId ||
-        parsed.scoreCoreRevision !== options.ref.scoreCoreRevision) {
+    if (
+      parsed.eventId !== options.ref.eventId ||
+      parsed.tournamentId !== options.tournamentId ||
+      parsed.scoreCoreRevision !== options.ref.scoreCoreRevision
+    ) {
       throw new LiveBoardInvalidResponseError(
         ["selectionIndex:scope-mismatch"],
         errorOptions,
@@ -779,17 +972,23 @@ function validateSquads(
   scoreCoreRevision: string;
   entries: TournamentLiveGraphQLRow[];
 } {
-  const root = isRecord(value) && "tournamentEntrySquads" in value
-    ? value.tournamentEntrySquads
-    : value;
+  const root =
+    isRecord(value) && "tournamentEntrySquads" in value
+      ? value.tournamentEntrySquads
+      : value;
   const missing: string[] = [];
   if (!isRecord(root)) {
     throw new LiveBoardInvalidResponseError(["tournamentEntrySquads"], options);
   }
   if (!isPositiveInteger(root.tournamentId)) missing.push("tournamentId");
   if (!isPositiveInteger(root.eventId)) missing.push("eventId");
-  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision) missing.push("scoreCoreRevision");
-  if (!Array.isArray(root.entries) || root.entries.length < 1 || root.entries.length > 2) {
+  if (typeof root.scoreCoreRevision !== "string" || !root.scoreCoreRevision)
+    missing.push("scoreCoreRevision");
+  if (
+    !Array.isArray(root.entries) ||
+    root.entries.length < 1 ||
+    root.entries.length > 2
+  ) {
     missing.push("entries");
   } else {
     root.entries.forEach((entry, index) => {
@@ -805,7 +1004,12 @@ function validateSquads(
         if (typeof entry[field] !== "string") missing.push(`${path}.${field}`);
       }
       validateLiveScore(entry.score, `${path}.score`, missing);
-      if (!isRecord(entry.rank) || !isNullableNumber(entry.rank.overallRank) || !isNullableNumber(entry.rank.eventRank)) missing.push(`${path}.rank`);
+      if (
+        !isRecord(entry.rank) ||
+        !isNullableNumber(entry.rank.overallRank) ||
+        !isNullableNumber(entry.rank.eventRank)
+      )
+        missing.push(`${path}.rank`);
       const picks = entry.pickList;
       if (!Array.isArray(picks) || picks.length > 15) {
         missing.push(`${path}.pickList`);
@@ -817,12 +1021,15 @@ function validateSquads(
           missing.push(pickPath);
           return;
         }
-        if (!isPositiveInteger(pick.element)) missing.push(`${pickPath}.element`);
-        if (typeof pick.webName !== "string") missing.push(`${pickPath}.webName`);
+        if (!isPositiveInteger(pick.element))
+          missing.push(`${pickPath}.element`);
+        if (typeof pick.webName !== "string")
+          missing.push(`${pickPath}.webName`);
       });
     });
   }
-  if (missing.length > 0) throw new LiveBoardInvalidResponseError(missing, options);
+  if (missing.length > 0)
+    throw new LiveBoardInvalidResponseError(missing, options);
   return root as unknown as {
     tournamentId: number;
     eventId: number;
@@ -838,20 +1045,25 @@ export async function getTournamentEntrySquads(options: {
   ref: { season: string; eventId: number; scoreCoreRevision: string };
   trace?: PageRequestTrace;
 }): Promise<LiveTournamentRow[]> {
-  const comparedEntryIds = [...new Set(options.comparedEntryIds)]
-    .filter((value) => Number.isSafeInteger(value) && value > 0);
+  const comparedEntryIds = [...new Set(options.comparedEntryIds)].filter(
+    (value) => Number.isSafeInteger(value) && value > 0,
+  );
   if (comparedEntryIds.length !== 2) {
     throw new Error("请选择两支球队后再对比");
   }
   const startedAt = Date.now();
   const result = await readWithOneTransientRetry<{
     tournamentEntrySquads: unknown;
-  }>(TOURNAMENT_ENTRY_SQUADS_QUERY, {
-    entryId: options.entryId,
-    tournamentId: options.tournamentId,
-    comparedEntryIds,
-    ref: options.ref,
-  }, { trace: options.trace });
+  }>(
+    TOURNAMENT_ENTRY_SQUADS_QUERY,
+    {
+      entryId: options.entryId,
+      tournamentId: options.tournamentId,
+      comparedEntryIds,
+      ref: options.ref,
+    },
+    { trace: options.trace },
+  );
   try {
     const errorOptions = {
       requestId: result.meta.requestId,
@@ -859,10 +1071,12 @@ export async function getTournamentEntrySquads(options: {
     };
     const parsed = validateSquads(result.data, errorOptions);
     const responseIds = new Set(parsed.entries.map((entry) => entry.entry));
-    if (parsed.tournamentId !== options.tournamentId ||
-        parsed.eventId !== options.ref.eventId ||
-        parsed.scoreCoreRevision !== options.ref.scoreCoreRevision ||
-        comparedEntryIds.some((entryId) => !responseIds.has(entryId))) {
+    if (
+      parsed.tournamentId !== options.tournamentId ||
+      parsed.eventId !== options.ref.eventId ||
+      parsed.scoreCoreRevision !== options.ref.scoreCoreRevision ||
+      comparedEntryIds.some((entryId) => !responseIds.has(entryId))
+    ) {
       throw new LiveBoardInvalidResponseError(
         ["tournamentEntrySquads:scope-mismatch"],
         errorOptions,
@@ -900,11 +1114,13 @@ function sameScope(
   left: LiveBoardLastGoodScope,
   right: LiveBoardLastGoodScope,
 ): boolean {
-  return left.sessionKey === right.sessionKey &&
+  return (
+    left.sessionKey === right.sessionKey &&
     left.season === right.season &&
     left.eventId === right.eventId &&
     left.entryId === right.entryId &&
-    left.tournamentId === right.tournamentId;
+    left.tournamentId === right.tournamentId
+  );
 }
 
 export function readLiveBoardLastGood(
@@ -913,16 +1129,21 @@ export function readLiveBoardLastGood(
   if (!scope.sessionKey || !scope.season) return null;
   try {
     const raw = wx.getStorageSync(liveBoardLastGoodKey(scope)) as unknown;
-    if (!isRecord(raw) ||
-        raw.contractVersion !== LIVE_BOARD_CONTRACT_VERSION ||
-        !isRecord(raw.scope) ||
-        !sameScope(raw.scope as unknown as LiveBoardLastGoodScope, scope)) {
+    if (
+      !isRecord(raw) ||
+      raw.contractVersion !== LIVE_BOARD_CONTRACT_VERSION ||
+      !isRecord(raw.scope) ||
+      !sameScope(raw.scope as unknown as LiveBoardLastGoodScope, scope)
+    ) {
       return null;
     }
     const page = parseLiveBoardPage(raw.page);
-    if (page.page !== 1 || page.season !== scope.season ||
-        page.eventId !== scope.eventId ||
-        page.tournamentId !== scope.tournamentId) {
+    if (
+      page.head.eventId !== scope.eventId ||
+      page.head.tournamentId !== scope.tournamentId ||
+      page.head.season !== scope.season ||
+      page.head.mode !== "CLASSIC"
+    ) {
       return null;
     }
     return {
@@ -940,9 +1161,14 @@ export function writeLiveBoardLastGood(
   scope: LiveBoardLastGoodScope,
   page: LiveBoardPage,
 ): boolean {
-  if (!scope.sessionKey || !scope.season || page.page !== 1 ||
-      page.season !== scope.season || page.eventId !== scope.eventId ||
-      page.tournamentId !== scope.tournamentId) {
+  if (
+    !scope.sessionKey ||
+    !scope.season ||
+    page.head.season !== scope.season ||
+    page.head.eventId !== scope.eventId ||
+    page.head.tournamentId !== scope.tournamentId ||
+    page.head.mode !== "CLASSIC"
+  ) {
     return false;
   }
   const envelope: StoredLiveBoardLastGood = {
@@ -959,31 +1185,42 @@ export function writeLiveBoardLastGood(
   }
 }
 
-export function clearOtherLiveBoardLastGood(keepKey: string): void {
+export function clearAllLiveBoardLastGood(): void {
   try {
     const { keys } = wx.getStorageInfoSync();
     keys
-      .filter(
-        (key) =>
-          key.startsWith(`${LIVE_BOARD_LAST_GOOD_PREFIX}:`) && key !== keepKey,
-      )
+      .filter((key) => key.startsWith(`${LIVE_BOARD_LAST_GOOD_PREFIX}:`))
       .forEach((key) => wx.removeStorageSync(key));
   } catch {}
 }
 
-export function clearAllLiveBoardLastGood(): void {
-  clearOtherLiveBoardLastGood("");
-}
-
 export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
-  return mapTournamentLiveRows(page.rows).map((row, index) => ({
+  const readyRows: TournamentLiveGraphQLRow[] = page.rows
+    .filter(
+      (row): row is LiveBoardRow & { score: LiveScore } =>
+        row.availability === "READY" &&
+        row.score !== null &&
+        row.transferCost !== null,
+    )
+    .map((row) => ({
+      entry: row.entry,
+      entryName: row.entryName,
+      playerName: row.playerName,
+      rank: row.liveRank,
+      overallRank: row.overallRank,
+      chip: row.chip,
+      played: row.played ?? 0,
+      toPlay: row.toPlay ?? 0,
+      captainName: row.captainName ?? "",
+      teamValue: row.teamValue,
+      captainPoints: row.captainPoints,
+      score: row.score,
+    }));
+  return mapTournamentLiveRows(readyRows).map((row, index) => ({
     ...row,
-    rank:
-      page.rankScope === "FULL_FIELD"
-        ? page.rows[index]?.rank ?? row.rank
-        : 0,
+    rank: row.rank,
     // The mapped row already prefers score.overallRank (fresher); the raw
     // board value is only the fallback (web liveEntries parity).
-    overallRank: row.overallRank ?? page.rows[index]?.overallRank,
+    overallRank: row.overallRank ?? readyRows[index]?.overallRank ?? undefined,
   }));
 }

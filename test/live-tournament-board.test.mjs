@@ -52,9 +52,9 @@ test("tournament board offers an image share of the visible rows", () => {
   );
 });
 
-test("the board pipeline keeps score-level overall rank ahead of the row value", () => {
+test("the V2 board pipeline keeps the publication row overall rank", () => {
   const service = source("miniprogram/services/live-board.service.ts");
-  assert.match(service, /overallRank: row\.overallRank \?\? page\.rows\[index\]\?\.overallRank/);
+  assert.match(service, /overallRank: row\.overallRank \?\? readyRows\[index\]\?\.overallRank/);
 });
 
 test("tournament detail sheet drops stale responses from a previous selection", () => {
