@@ -2,6 +2,7 @@ import { graphqlRequest } from "./graphql.service";
 import type { PageRequestTrace } from "./graphql.service";
 import type {
   H2HBoard,
+  H2HHistoryMatch,
   TournamentDetailKind,
   TournamentParticipantRow,
   TournamentSetupProgress,
@@ -90,6 +91,35 @@ export const GET_TOURNAMENT_OFFICIAL_H2H = `
   }
 `;
 
+export const GET_TOURNAMENT_OFFICIAL_H2H_HISTORY = `
+  query TournamentOfficialH2HHistory(
+    $tournamentId: Int!
+    $eventId: Int!
+    $limit: Int
+  ) {
+    tournamentOfficialH2HHistory(
+      tournamentId: $tournamentId
+      eventId: $eventId
+      limit: $limit
+    ) {
+      eventId
+      availability
+      matches {
+        officialMatchId eventId groupId sourceOrder phase knockoutName tiebreak isBye
+        availability
+        home { availability entryId entryName playerName isAverage points netPoints }
+        away { availability entryId entryName playerName isAverage points netPoints }
+      }
+    }
+  }
+`;
+
+export interface TournamentOfficialH2HHistory {
+  eventId: number;
+  availability: "READY" | "PENDING";
+  matches: H2HHistoryMatch[];
+}
+
 export interface TournamentDetailInfo {
   id: number;
   name: string;
@@ -168,4 +198,20 @@ export async function getTournamentOfficialH2H(
     { cachePolicy: "reporting", forceRefresh, trace },
   );
   return data.tournamentOfficialH2H;
+}
+
+export async function getTournamentOfficialH2HHistory(
+  tournamentId: number,
+  eventId: number,
+  limit = 100,
+  trace?: PageRequestTrace,
+): Promise<TournamentOfficialH2HHistory> {
+  const data = await graphqlRequest<{
+    tournamentOfficialH2HHistory: TournamentOfficialH2HHistory;
+  }>(
+    GET_TOURNAMENT_OFFICIAL_H2H_HISTORY,
+    { tournamentId, eventId, limit },
+    { cachePolicy: "reporting", trace },
+  );
+  return data.tournamentOfficialH2HHistory;
 }
