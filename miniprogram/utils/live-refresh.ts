@@ -88,7 +88,10 @@ export function mergeLiveMatchdayHeadStatus(
     observed.revisions.detailObservation === null
       ? {
           ...accepted.detailDelivery,
-          state: "DEGRADED" as const,
+          state:
+            accepted.detailDelivery.state === "FINAL"
+              ? ("FINAL" as const)
+              : ("DEGRADED" as const),
           reasonCodes: Array.from(
             new Set([
               ...accepted.detailDelivery.reasonCodes,
@@ -99,10 +102,21 @@ export function mergeLiveMatchdayHeadStatus(
         }
       : mergeAcceptedDetailDelivery(accepted, observed);
 
+  const detailObservationPresent =
+    observed.revisions.detailObservation !== null;
+
   return {
     ...observed,
     revisions: {
       ...observed.revisions,
+      // HEAD can be served from an older Redis fallback publication with the
+      // same semantic revision. The accepted FULL body remains authoritative;
+      // never replace its desk provenance with metadata from that fallback.
+      deskPublicationId: accepted.revisions.deskPublicationId,
+      deskGeneration: accepted.revisions.deskGeneration,
+      lifecycle: accepted.revisions.lifecycle,
+      fixtureIdentity: accepted.revisions.fixtureIdentity,
+      scoreState: accepted.revisions.scoreState,
       detailObservation: accepted.revisions.detailObservation,
       detailPublicationId: accepted.revisions.detailPublicationId,
       detailGeneration: accepted.revisions.detailGeneration,
@@ -112,15 +126,22 @@ export function mergeLiveMatchdayHeadStatus(
       ...observed.times,
       // A same-revision HEAD is allowed to advance observation/freshness
       // metadata, but it cannot change the content provenance of the retained
-      // player body.
-      detailSourceCheckedAt:
-        observed.times.detailSourceCheckedAt ??
-        accepted.times.detailSourceCheckedAt,
+      // desk or player body. A non-null HEAD detail observation owns its
+      // source/freshness timestamps, including an explicit cleared staleAt.
+      deskSourceCheckedAt: observed.times.deskSourceCheckedAt,
+      deskContentUpdatedAt: accepted.times.deskContentUpdatedAt,
+      deskPublishedAt: accepted.times.deskPublishedAt,
+      deskStaleAt: observed.times.deskStaleAt,
+      detailSourceCheckedAt: detailObservationPresent
+        ? observed.times.detailSourceCheckedAt
+        : accepted.times.detailSourceCheckedAt,
       detailContentUpdatedAt: accepted.times.detailContentUpdatedAt,
       detailPublishedAt: accepted.times.detailPublishedAt,
-      detailStaleAt:
-        observed.times.detailStaleAt ?? accepted.times.detailStaleAt,
+      detailStaleAt: detailObservationPresent
+        ? observed.times.detailStaleAt
+        : accepted.times.detailStaleAt,
     },
+    delivery: mergeAcceptedDeskDelivery(accepted, observed),
     detailDelivery,
   };
 }
@@ -204,13 +225,11 @@ function mergeAcceptedDetailDelivery(
     observed.detailDelivery.servedFrom !== null &&
     observed.detailDelivery.servedFrom !== "REDIS_CURRENT";
   const detailStale = isPastTimestamp(observed.times.detailStaleAt);
-  if (
-    accepted.detailDelivery.state !== "FINAL" &&
-    (detailFallback || detailStale)
-  ) {
+  if (detailFallback || detailStale) {
     return {
       ...accepted.detailDelivery,
-      state: "DEGRADED",
+      state:
+        accepted.detailDelivery.state === "FINAL" ? "FINAL" : "DEGRADED",
       reasonCodes: Array.from(
         new Set([
           ...accepted.detailDelivery.reasonCodes,
@@ -224,6 +243,31 @@ function mergeAcceptedDetailDelivery(
   }
 
   return accepted.detailDelivery;
+}
+
+function mergeAcceptedDeskDelivery(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): LiveMatchdayStatus["delivery"] {
+  const deskFallback =
+    observed.delivery.servedFrom !== null &&
+    observed.delivery.servedFrom !== "REDIS_CURRENT";
+  const deskStale = isPastTimestamp(observed.times.deskStaleAt);
+  if (!deskFallback && !deskStale) return accepted.delivery;
+
+  return {
+    ...accepted.delivery,
+    state: accepted.delivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+    reasonCodes: Array.from(
+      new Set([
+        ...accepted.delivery.reasonCodes,
+        ...observed.delivery.reasonCodes,
+        ...(deskFallback ? ["DESK_FALLBACK"] : []),
+        ...(deskStale ? ["DESK_STALE"] : []),
+        "DESK_LKG_RETAINED",
+      ]),
+    ),
+  };
 }
 
 /** Copy only same-fixture player rows from the accepted full LKG. */
@@ -279,10 +323,15 @@ export function retainLiveMatchdayDetailRevision(
     },
     detailDelivery: {
       ...accepted.detailDelivery,
-      state: "DEGRADED",
+      // A retained exact FINAL publication is terminal. The candidate's
+      // absent/older detail is recorded in reasonCodes without reopening
+      // recovery polling or changing the user-visible final state.
+      state:
+        accepted.detailDelivery.state === "FINAL" ? "FINAL" : "DEGRADED",
       reasonCodes: Array.from(
         new Set([
           ...accepted.detailDelivery.reasonCodes,
+          ...candidate.detailDelivery.reasonCodes,
           "DETAIL_REVISION_RETAINED",
         ]),
       ),

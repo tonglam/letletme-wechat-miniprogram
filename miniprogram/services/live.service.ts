@@ -1022,9 +1022,12 @@ export function liveMatchdayRequestOptions(
   return {
     cachePolicy: "live",
     cacheVariant: `${season ? `season:${season}|` : ""}matchday:event:${expectedEventId ?? "active-pointer"}`,
-    // An active pointer is intentionally never cached: its event identity can
-    // change between requests. Explicit event reads remain season+event keyed.
-    ...(expectedEventId === undefined ? { cacheTtl: 0, staleTtl: 0 } : {}),
+    // The page-owned same-event LKG is the authority for live matchday data.
+    // A client TTL could admit a coherent but older REDIS_PREVIOUS FULL
+    // response after a forced refresh, so neither HEAD nor FULL is persisted
+    // in the generic GraphQL response cache.
+    cacheTtl: 0,
+    staleTtl: 0,
     forceRefresh,
     trace,
     validateCacheData: (data) =>

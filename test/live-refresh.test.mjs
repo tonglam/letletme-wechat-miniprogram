@@ -154,6 +154,55 @@ test("metadata-only HEAD retains the accepted complete detail LKG", () => {
   assert.ok(merged.detailDelivery.reasonCodes.includes("DETAIL_LKG_RETAINED"));
 });
 
+test("metadata-only HEAD does not reopen an accepted FINAL detail", () => {
+  const accepted = matchdaySnapshot({
+    state: "FINALIZED",
+    times: { ...matchdaySnapshot().times, nextRefreshAt: null },
+    detailDelivery: {
+      state: "FINAL",
+      servedFrom: "REDIS_CURRENT",
+      reasonCodes: ["DETAIL_FINAL"],
+    },
+  });
+  const observed = matchdaySnapshot({
+    state: "FINALIZED",
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_NOT_INCLUDED"],
+    },
+    revisions: {
+      ...accepted.revisions,
+      detailObservation: null,
+      detailPublicationId: null,
+      detailGeneration: null,
+      playerDetail: null,
+    },
+    times: {
+      ...accepted.times,
+      detailSourceCheckedAt: null,
+      detailContentUpdatedAt: null,
+      detailPublishedAt: null,
+      detailStaleAt: null,
+    },
+  });
+
+  const merged = mergeLiveMatchdayHeadStatus(accepted, observed);
+  assert.equal(merged.detailDelivery.state, "FINAL");
+  assert.ok(
+    merged.detailDelivery.reasonCodes.includes("DETAIL_NOT_INCLUDED"),
+  );
+  assert.equal(
+    shouldPollLiveMatchday({
+      pageVisible: true,
+      currentEventId: 3,
+      selectedEventId: 3,
+      snapshot: merged,
+    }),
+    false,
+  );
+});
+
 test("metadata-only HEAD keeps a fresh body fresh but propagates real detail fallback", () => {
   const accepted = matchdaySnapshot();
   const metadataOnly = matchdaySnapshot({
@@ -195,6 +244,58 @@ test("metadata-only HEAD keeps a fresh body fresh but propagates real detail fal
   assert.ok(degraded.detailDelivery.reasonCodes.includes("DETAIL_STALE"));
   assert.equal(degraded.times.detailStaleAt, fallback.times.detailStaleAt);
   assert.equal(degraded.revisions.playerDetail, accepted.revisions.playerDetail);
+});
+
+test("fallback HEAD cannot roll back accepted FULL desk provenance", () => {
+  const accepted = matchdaySnapshot();
+  const fallback = matchdaySnapshot({
+    delivery: {
+      state: "DEGRADED",
+      servedFrom: "REDIS_PREVIOUS",
+      reasonCodes: ["DESK_PREVIOUS"],
+    },
+    revisions: {
+      ...accepted.revisions,
+      deskPublicationId: "desk-0",
+      deskGeneration: 0,
+    },
+    times: {
+      ...accepted.times,
+      deskSourceCheckedAt: "2026-08-31T12:01:00.000Z",
+      deskContentUpdatedAt: "2026-08-31T11:58:30.000Z",
+      deskPublishedAt: "2026-08-31T11:58:31.000Z",
+      servedAt: "2026-08-31T12:01:01.000Z",
+    },
+  });
+
+  const merged = mergeLiveMatchdayHeadStatus(accepted, fallback);
+  assert.equal(merged.revisions.deskPublicationId, "desk-1");
+  assert.equal(merged.revisions.deskGeneration, 1);
+  assert.equal(
+    merged.times.deskContentUpdatedAt,
+    accepted.times.deskContentUpdatedAt,
+  );
+  assert.equal(merged.times.deskPublishedAt, accepted.times.deskPublishedAt);
+  assert.equal(
+    merged.times.deskSourceCheckedAt,
+    fallback.times.deskSourceCheckedAt,
+  );
+  assert.equal(merged.delivery.servedFrom, "REDIS_CURRENT");
+  assert.equal(merged.delivery.state, "DEGRADED");
+  assert.ok(merged.delivery.reasonCodes.includes("DESK_FALLBACK"));
+  assert.equal(
+    canReplaceLiveMatchdayLkg({
+      snapshot: {
+        ...fallback,
+        revisions: {
+          ...fallback.revisions,
+          deskPublicationId: "desk-0",
+          deskGeneration: 0,
+        },
+      },
+    }, merged),
+    false,
+  );
 });
 
 test("metadata-only HEAD promotes matching accepted detail to FINAL", () => {
@@ -317,6 +418,43 @@ test("new desk keeps accepted player detail when FULL detail is absent", () => {
   assert.equal(retained.detailDelivery.state, "DEGRADED");
   assert.ok(
     retained.detailDelivery.reasonCodes.includes("DETAIL_REVISION_RETAINED"),
+  );
+
+  const finalAccepted = matchdaySnapshot({
+    state: "FINALIZED",
+    times: { ...accepted.times, nextRefreshAt: null },
+    detailDelivery: {
+      state: "FINAL",
+      servedFrom: "REDIS_CURRENT",
+      reasonCodes: ["DETAIL_FINAL"],
+    },
+  });
+  const finalRetained = retainLiveMatchdayDetailRevision(
+    {
+      ...candidate,
+      state: "FINALIZED",
+      detailDelivery: {
+        state: "PENDING",
+        servedFrom: null,
+        reasonCodes: ["DETAIL_CANDIDATE_MISSING"],
+      },
+    },
+    finalAccepted,
+  );
+  assert.equal(finalRetained.detailDelivery.state, "FINAL");
+  assert.ok(
+    finalRetained.detailDelivery.reasonCodes.includes(
+      "DETAIL_CANDIDATE_MISSING",
+    ),
+  );
+  assert.equal(
+    shouldPollLiveMatchday({
+      pageVisible: true,
+      currentEventId: 3,
+      selectedEventId: 3,
+      snapshot: finalRetained,
+    }),
+    false,
   );
 });
 

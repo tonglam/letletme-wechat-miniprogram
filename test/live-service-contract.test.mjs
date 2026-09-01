@@ -253,7 +253,7 @@ test("live matchday rejects partial detail vectors and fake unavailable snapshot
   );
 });
 
-test("active-event Match reads cannot enter the cross-request cache", () => {
+test("live Match reads cannot enter the cross-request cache", () => {
   const activeOptions = liveMatchdayRequestOptions(undefined, false);
   const { validateCacheData: activeValidator, ...activeWithoutValidator } = activeOptions;
   assert.deepEqual(activeWithoutValidator, {
@@ -272,11 +272,17 @@ test("active-event Match reads cannot enter the cross-request cache", () => {
   assert.deepEqual(explicitWithoutValidator, {
     cachePolicy: "live",
     cacheVariant: "matchday:event:3",
+    cacheTtl: 0,
+    staleTtl: 0,
     forceRefresh: true,
     trace: undefined,
     preserveCacheOnValidationFailure: true,
   });
   assert.equal(typeof explicitValidator, "function");
+
+  const explicitNonForced = liveMatchdayRequestOptions(3, false);
+  assert.equal(explicitNonForced.cacheTtl, 0);
+  assert.equal(explicitNonForced.staleTtl, 0);
 
   const seasonalOptions = liveMatchdayRequestOptions(
     3,
