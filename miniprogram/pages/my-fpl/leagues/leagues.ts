@@ -546,6 +546,39 @@ PerformancePage({
     const requestId = ++this.requestId;
     const expectedEntryId = currentMyFplEntryId() || 0;
     const scope = scopeOverride ?? this.data.v2Scope;
+    const requestSeason = String(getApp<IAppOption>().globalData.season || "");
+    const seasonChanged = Boolean(
+      this.loadedSeason && requestSeason && this.loadedSeason !== requestSeason,
+    );
+    if (seasonChanged) {
+      // A season rollover invalidates every resident review payload. Clear it
+      // before the new catalog request so an old finalized GW cannot remain
+      // visible while the new season is being reconciled.
+      this.viewRequestId += 1;
+      this.seasonSectionPages = {};
+      this.seasonSectionContext = null;
+      this.retryOperation = null;
+      this.retryPhaseId = null;
+      this.retryAfter = null;
+      this.retryBySurface.gameweek = null;
+      this.retryBySurface.season = null;
+      this.setData({
+        v2EventIds: [],
+        v2SelectedEventIndex: 0,
+        v2Event: 0,
+        v2Format: null,
+        v2State: "NOT_STARTED",
+        v2StatusText: stateText("NOT_STARTED"),
+        v2Gameweek: null,
+        v2Season: null,
+        v2SelectedPhaseId: null,
+        v2SeasonSection: null,
+        v2GameweekError: "",
+        v2SeasonError: "",
+        v2Error: "",
+      });
+    }
+    let resolvedScope = scope;
     if (this.loadedEntryId !== 0 && this.loadedEntryId !== expectedEntryId) {
       // The authoritative binding can change while the page is resident. Do
       // not leave the previous entry's catalog or review rows mounted while
@@ -594,7 +627,6 @@ PerformancePage({
       v2GameweekError: append ? this.data.v2GameweekError : "",
       v2SeasonError: append ? this.data.v2SeasonError : "",
       v2UpgradeRequired: false,
-      v2Scope: scope,
       entryId: expectedEntryId,
       emptyState: "",
     });
@@ -651,7 +683,7 @@ PerformancePage({
           null,
           100,
         );
-        if (active()) this.setData({ v2Scope: "ACCESSIBLE" });
+        resolvedScope = "ACCESSIBLE";
       }
       if (!active() || currentMyFplEntryId() !== entryId) {
         if (this.pageVisible && requestId === this.requestId) {
@@ -760,11 +792,13 @@ PerformancePage({
           v2Catalog: mergedCatalog,
           v2TournamentNames: items.map((item) => item.name),
           v2CatalogLoadingMore: false,
+          v2Scope: resolvedScope,
         });
         return;
       }
       this.setData({
         entryId,
+        v2Scope: resolvedScope,
         v2Catalog: mergedCatalog,
         v2TournamentNames: items.map((item) => item.name),
         v2SelectedTournamentIndex: selectedIndex,
@@ -852,6 +886,8 @@ PerformancePage({
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
+    const expectedSeason =
+      this.loadedSeason || String(getApp<IAppOption>().globalData.season || "");
     const catalogRevision =
       catalogRevisionOverride !== undefined
         ? catalogRevisionOverride
@@ -862,10 +898,38 @@ PerformancePage({
       requestId === this.viewRequestId &&
       this.data.v2SelectedTournament?.tournamentId === tournamentId &&
       this.data.v2Event === eventId &&
+      (!expectedSeason ||
+        !String(getApp<IAppOption>().globalData.season || "") ||
+        String(getApp<IAppOption>().globalData.season || "") ===
+          expectedSeason) &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     const settleStale = () => {
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
+      const currentSeason = String(
+        getApp<IAppOption>().globalData.season || "",
+      );
+      if (expectedSeason && currentSeason && currentSeason !== expectedSeason) {
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.setData({
+          v2EventIds: [],
+          v2SelectedEventIndex: 0,
+          v2Event: 0,
+          v2Format: null,
+          v2State: "NOT_STARTED",
+          v2StatusText: stateText("NOT_STARTED"),
+          v2Gameweek: null,
+          v2Season: null,
+          v2SelectedPhaseId: null,
+          v2SeasonSection: null,
+          v2GameweekError: "",
+          v2SeasonError: "",
+          v2Error: "",
+        });
+        void this.loadCatalog(true, trace);
+        return;
+      }
       if (currentMyFplEntryId() !== expectedEntryId) {
         void this.loadCatalog(true, trace);
       }
@@ -1205,6 +1269,8 @@ PerformancePage({
     if (!phase) return;
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
+    const expectedSeason =
+      this.loadedSeason || String(getApp<IAppOption>().globalData.season || "");
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -1212,10 +1278,38 @@ PerformancePage({
       this.data.v2SelectedTournament?.tournamentId === selected.tournamentId &&
       this.data.v2Event === eventId &&
       this.data.v2SelectedPhaseId === phaseId &&
+      (!expectedSeason ||
+        !String(getApp<IAppOption>().globalData.season || "") ||
+        String(getApp<IAppOption>().globalData.season || "") ===
+          expectedSeason) &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     const settleStale = () => {
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
+      const currentSeason = String(
+        getApp<IAppOption>().globalData.season || "",
+      );
+      if (expectedSeason && currentSeason && currentSeason !== expectedSeason) {
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.setData({
+          v2EventIds: [],
+          v2SelectedEventIndex: 0,
+          v2Event: 0,
+          v2Format: null,
+          v2State: "NOT_STARTED",
+          v2StatusText: stateText("NOT_STARTED"),
+          v2Gameweek: null,
+          v2Season: null,
+          v2SelectedPhaseId: null,
+          v2SeasonSection: null,
+          v2GameweekError: "",
+          v2SeasonError: "",
+          v2Error: "",
+        });
+        void this.loadCatalog(true);
+        return;
+      }
       if (currentMyFplEntryId() !== expectedEntryId) {
         void this.loadCatalog(true);
       }
@@ -1818,6 +1912,10 @@ PerformancePage({
       const retry = this.retryBySurface[surface];
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
+        if (surface === "season" && retry?.operation === "loadMore") {
+          void this.onV2LoadMore();
+          return;
+        }
         if (surface === "season" && retry?.phaseId) {
           void this.loadSeasonPhase(retry.phaseId);
           return;

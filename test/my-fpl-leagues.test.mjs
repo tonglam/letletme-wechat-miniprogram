@@ -22,7 +22,10 @@ test("My FPL uses the V2.1 settled tournament-review contract", async () => {
   assert.match(page, /isViewerEntryAuthorizationError/);
   assert.match(page, /requestId === this\.requestId/);
   assert.match(page, /requestId === this\.viewRequestId/);
-  assert.doesNotMatch(page, /getMyFplCompetition|readTournamentsCache|v2Enabled/);
+  assert.doesNotMatch(
+    page,
+    /getMyFplCompetition|readTournamentsCache|v2Enabled/,
+  );
   assert.doesNotMatch(page, /mapStaleTournamentReviewData/);
 
   assert.match(template, /已结算快照复盘中心/);
@@ -47,7 +50,10 @@ test("the Mini catalog is connection-shaped and supports a custom setup shell", 
   const service = await read("miniprogram/services/tournament.service.ts");
   const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
 
-  assert.match(service, /edges: Array<\{ cursor: string; node: MyTournamentReviewCatalogItem \}>/);
+  assert.match(
+    service,
+    /edges: Array<\{ cursor: string; node: MyTournamentReviewCatalogItem \}>/,
+  );
   assert.match(service, /pageInfo: MyTournamentReviewPageInfo/);
   assert.match(service, /setupStatus: string/);
   assert.match(service, /latestFinalizedScope/);
@@ -63,7 +69,10 @@ test("latest finalized non-ready data stays visible as state and is never silent
     read("miniprogram/pages/my-fpl/leagues/leagues.wxml"),
   ]);
 
-  assert.match(page, /const eventId = selected\?\.latestFinalizedEventId \?\? 0/);
+  assert.match(
+    page,
+    /const eventId = selected\?\.latestFinalizedEventId \?\? 0/,
+  );
   assert.match(page, /const visibleState = visibleMeta\.state/);
   assert.match(page, /v2State: visibleState/);
   assert.match(page, /state === "READY"/);
@@ -99,5 +108,21 @@ test("the Mini review cache is keyed to V2.1 and cannot serve transient review s
   assert.match(service, /edge\.node\?\.state === "READY"/);
   assert.match(service, /operationName === "MyTournamentSeasonReviewSection"/);
   assert.match(cachePolicy, /MyTournamentReviewCatalog/);
+  assert.match(
+    cachePolicy,
+    /MyTournamentReviewCatalog:[\s\S]*workload: "interactive"/,
+  );
   assert.match(cachePolicy, /MyTournamentSeasonReviewSection/);
+});
+
+test("review pagination and resident payloads are fenced across retries and season rollover", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+
+  assert.match(page, /retry\?\.operation === "loadMore"/);
+  assert.match(page, /this\.onV2LoadMore\(\)/);
+  assert.match(page, /const seasonChanged = Boolean/);
+  assert.match(page, /this\.loadedSeason !== requestSeason/);
+  assert.match(page, /expectedSeason/);
+  assert.match(page, /currentSeason !== expectedSeason/);
+  assert.match(page, /v2Season: null/);
 });

@@ -111,10 +111,21 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   EntryTournaments: { authMode: "session", cachePolicy: "reporting" },
   TournamentSummary: { authMode: "session", cachePolicy: "reporting" },
   TournamentSelectionStats: { authMode: "session", cachePolicy: "reporting" },
-  MyTournamentReviewCatalog: { authMode: "session", cachePolicy: "reporting" },
+  // The catalog intentionally bypasses the Mini persistent cache, but it is
+  // still an interactive review read for server-side weighted rate limiting.
+  // Keep the workload explicit instead of deriving `public-other` from the
+  // network-only override used by the service wrapper.
+  MyTournamentReviewCatalog: {
+    authMode: "session",
+    cachePolicy: "reporting",
+    workload: "interactive",
+  },
   MyTournamentGameweekReview: { authMode: "session", cachePolicy: "reporting" },
   MyTournamentSeasonReview: { authMode: "session", cachePolicy: "reporting" },
-  MyTournamentSeasonReviewSection: { authMode: "session", cachePolicy: "reporting" },
+  MyTournamentSeasonReviewSection: {
+    authMode: "session",
+    cachePolicy: "reporting",
+  },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
   GetEntryLiveCompetitionBoard: {
     authMode: "session",
@@ -187,6 +198,8 @@ export function getGraphQLOperationPolicy(
   };
   return {
     ...configured,
-    workload: getGraphQLWorkload(operationName, configured.cachePolicy),
+    workload:
+      configured.workload ??
+      getGraphQLWorkload(operationName, configured.cachePolicy),
   };
 }

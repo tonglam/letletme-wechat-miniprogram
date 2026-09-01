@@ -78,6 +78,8 @@ interface GraphQLResponse<T> {
 export interface GraphQLOptions {
   authMode?: GraphQLAuthMode;
   cachePolicy?: GraphQLCachePolicyName;
+  /** Explicit server-side workload when a cache policy is overridden. */
+  workload?: GraphQLWorkload;
   cacheTtl?: number;
   staleTtl?: number;
   getCacheExpiry?: (data: unknown) => number;
@@ -359,7 +361,10 @@ function resolvePolicy(
     persist: !mutation && policy.persist,
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
-    workload: getGraphQLWorkload(operationName, cachePolicy),
+    workload:
+      options?.workload ??
+      configured.workload ??
+      getGraphQLWorkload(operationName, cachePolicy),
     contract: options?.contract,
   };
 }
