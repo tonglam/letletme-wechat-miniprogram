@@ -104,6 +104,7 @@ export function mergeLiveMatchdayHeadStatus(
 
   const detailObservationPresent =
     observed.revisions.detailObservation !== null;
+  const adoptObservedDesk = shouldAdoptObservedDesk(accepted, observed);
 
   return {
     ...observed,
@@ -112,11 +113,21 @@ export function mergeLiveMatchdayHeadStatus(
       // HEAD can be served from an older Redis fallback publication with the
       // same semantic revision. The accepted FULL body remains authoritative;
       // never replace its desk provenance with metadata from that fallback.
-      deskPublicationId: accepted.revisions.deskPublicationId,
-      deskGeneration: accepted.revisions.deskGeneration,
-      lifecycle: accepted.revisions.lifecycle,
-      fixtureIdentity: accepted.revisions.fixtureIdentity,
-      scoreState: accepted.revisions.scoreState,
+      deskPublicationId: adoptObservedDesk
+        ? observed.revisions.deskPublicationId
+        : accepted.revisions.deskPublicationId,
+      deskGeneration: adoptObservedDesk
+        ? observed.revisions.deskGeneration
+        : accepted.revisions.deskGeneration,
+      lifecycle: adoptObservedDesk
+        ? observed.revisions.lifecycle
+        : accepted.revisions.lifecycle,
+      fixtureIdentity: adoptObservedDesk
+        ? observed.revisions.fixtureIdentity
+        : accepted.revisions.fixtureIdentity,
+      scoreState: adoptObservedDesk
+        ? observed.revisions.scoreState
+        : accepted.revisions.scoreState,
       detailObservation: accepted.revisions.detailObservation,
       detailPublicationId: accepted.revisions.detailPublicationId,
       detailGeneration: accepted.revisions.detailGeneration,
@@ -129,8 +140,12 @@ export function mergeLiveMatchdayHeadStatus(
       // desk or player body. A non-null HEAD detail observation owns its
       // source/freshness timestamps, including an explicit cleared staleAt.
       deskSourceCheckedAt: observed.times.deskSourceCheckedAt,
-      deskContentUpdatedAt: accepted.times.deskContentUpdatedAt,
-      deskPublishedAt: accepted.times.deskPublishedAt,
+      deskContentUpdatedAt: adoptObservedDesk
+        ? observed.times.deskContentUpdatedAt
+        : accepted.times.deskContentUpdatedAt,
+      deskPublishedAt: adoptObservedDesk
+        ? observed.times.deskPublishedAt
+        : accepted.times.deskPublishedAt,
       deskStaleAt: observed.times.deskStaleAt,
       detailSourceCheckedAt: detailObservationPresent
         ? observed.times.detailSourceCheckedAt
@@ -249,9 +264,19 @@ function mergeAcceptedDeskDelivery(
   accepted: LiveMatchdayStatus,
   observed: LiveMatchdayStatus,
 ): LiveMatchdayStatus["delivery"] {
+  if (shouldAdoptObservedDesk(accepted, observed)) {
+    return {
+      ...observed.delivery,
+      state: accepted.delivery.state === "FINAL" ? "FINAL" : observed.delivery.state,
+    };
+  }
+
   const deskFallback =
-    observed.delivery.servedFrom !== null &&
-    observed.delivery.servedFrom !== "REDIS_CURRENT";
+    observed.delivery.servedFrom !== "REDIS_CURRENT" ||
+    observed.revisions.deskGeneration < accepted.revisions.deskGeneration ||
+    (observed.revisions.deskGeneration === accepted.revisions.deskGeneration &&
+      observed.revisions.deskPublicationId !==
+        accepted.revisions.deskPublicationId);
   const deskStale = isPastTimestamp(observed.times.deskStaleAt);
   if (!deskFallback && !deskStale) return accepted.delivery;
 
@@ -268,6 +293,21 @@ function mergeAcceptedDeskDelivery(
       ]),
     ),
   };
+}
+
+function shouldAdoptObservedDesk(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): boolean {
+  if (observed.delivery.servedFrom !== "REDIS_CURRENT") return false;
+  if (observed.revisions.deskGeneration > accepted.revisions.deskGeneration) {
+    return true;
+  }
+  return (
+    observed.revisions.deskGeneration === accepted.revisions.deskGeneration &&
+    observed.revisions.deskPublicationId ===
+      accepted.revisions.deskPublicationId
+  );
 }
 
 /** Copy only same-fixture player rows from the accepted full LKG. */

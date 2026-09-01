@@ -298,6 +298,53 @@ test("fallback HEAD cannot roll back accepted FULL desk provenance", () => {
   );
 });
 
+test("newer current HEAD advances desk provenance without rebuilding the body", () => {
+  const accepted = matchdaySnapshot();
+  const current = matchdaySnapshot({
+    revisions: {
+      ...accepted.revisions,
+      deskPublicationId: "desk-2",
+      deskGeneration: 2,
+    },
+    times: {
+      ...accepted.times,
+      deskSourceCheckedAt: "2026-08-31T12:02:00.000Z",
+      deskContentUpdatedAt: "2026-08-31T12:01:30.000Z",
+      deskPublishedAt: "2026-08-31T12:01:31.000Z",
+      servedAt: "2026-08-31T12:02:01.000Z",
+    },
+  });
+
+  const merged = mergeLiveMatchdayHeadStatus(accepted, current);
+  assert.equal(merged.revisions.deskPublicationId, "desk-2");
+  assert.equal(merged.revisions.deskGeneration, 2);
+  assert.equal(
+    merged.times.deskContentUpdatedAt,
+    current.times.deskContentUpdatedAt,
+  );
+  assert.equal(merged.times.deskPublishedAt, current.times.deskPublishedAt);
+  assert.equal(merged.delivery.servedFrom, "REDIS_CURRENT");
+  assert.equal(merged.delivery.state, "FRESH");
+  assert.equal(merged.revisions.detailPublicationId, "detail-1");
+  assert.equal(
+    canReplaceLiveMatchdayLkg(
+      {
+        snapshot: {
+          ...current,
+          revisions: {
+            ...current.revisions,
+            deskPublicationId: "desk-1",
+            deskGeneration: 1,
+            scoreState: "score-2",
+          },
+        },
+      },
+      merged,
+    ),
+    false,
+  );
+});
+
 test("metadata-only HEAD promotes matching accepted detail to FINAL", () => {
   const accepted = matchdaySnapshot({
     state: "FINALIZED",
