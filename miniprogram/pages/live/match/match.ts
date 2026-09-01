@@ -18,7 +18,12 @@ import {
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
+  canReplaceLiveMatchdayLkg,
   liveMatchdayNeedsRefresh,
+  mergeLiveMatchdayHeadStatus,
+  retainLiveMatchPlayerDetails,
+  retainLiveMatchdayDetailRevision,
+  shouldRetainAcceptedLiveMatchDetails,
   shouldRevalidateCachedLiveMatchday,
   shouldPollLiveMatchday,
 } from "../../../utils/live-refresh";
@@ -54,6 +59,7 @@ import {
   presentPlayerLiveShareImage,
 } from "../../../utils/player-live-share-image";
 import { miniLogger } from "../../../utils/logger";
+import { userFacingErrorMessage } from "../../../utils/request-error";
 import {
   buildPlayerLiveDetail,
   type PlayerLiveDetailView,
@@ -68,9 +74,34 @@ interface StatusTab extends StatusOption {
   count: number;
 }
 
+type LiveMatchViewPlayer = Pick<
+  LivePlayerRow,
+  | "element"
+  | "webName"
+  | "name"
+  | "totalPoints"
+  | "minutes"
+  | "goalsScored"
+  | "assists"
+  | "defensiveContribution"
+  | "bps"
+  | "bonus"
+  | "saves"
+  | "yellowCards"
+  | "redCards"
+>;
+
+type LiveMatchView = Omit<
+  LiveMatch,
+  "homeTeamDataList" | "awayTeamDataList" | "homeMatchPlayers" | "awayMatchPlayers"
+> & {
+  homeMatchPlayers: LiveMatchViewPlayer[];
+  awayMatchPlayers: LiveMatchViewPlayer[];
+};
+
 interface MatchGroup {
   title: string;
-  matches: LiveMatch[];
+  matches: LiveMatchView[];
 }
 
 interface LiveMatchLoadOptions {
@@ -596,8 +627,48 @@ function normalizeMatch(match: LiveMatch, fallbackStatus: string): LiveMatch {
   };
 }
 
-function groupMatches(matches: LiveMatch[], status: string): MatchGroup[] {
-  const groups: Record<string, LiveMatch[]> = {};
+const toViewPlayer = (player: LivePlayerRow): LiveMatchViewPlayer => ({
+  element: player.element,
+  webName: player.webName,
+  name: player.name,
+  totalPoints: player.totalPoints,
+  minutes: player.minutes,
+  goalsScored: player.goalsScored,
+  assists: player.assists,
+  defensiveContribution: player.defensiveContribution,
+  bps: player.bps,
+  bonus: player.bonus,
+  saves: player.saves,
+  yellowCards: player.yellowCards,
+  redCards: player.redCards,
+});
+
+/**
+ * The page instance owns the complete authoritative publication in
+ * `coreMatches`. WXML receives only the fields needed to render the current
+ * tab; in particular it never receives statPoints or the raw player arrays.
+ */
+function toMatchView(match: LiveMatch): LiveMatchView {
+  const display = { ...match };
+  delete display.homeTeamDataList;
+  delete display.awayTeamDataList;
+  const homeMatchPlayers = display.homeMatchPlayers;
+  const awayMatchPlayers = display.awayMatchPlayers;
+  delete display.homeMatchPlayers;
+  delete display.awayMatchPlayers;
+  return {
+    ...display,
+    homeMatchPlayers: (homeMatchPlayers ?? []).map(toViewPlayer),
+    awayMatchPlayers: (awayMatchPlayers ?? []).map(toViewPlayer),
+  };
+}
+
+function toMatchViews(matches: readonly LiveMatch[]): LiveMatchView[] {
+  return matches.map(toMatchView);
+}
+
+function groupMatches(matches: LiveMatchView[], status: string): MatchGroup[] {
+  const groups: Record<string, LiveMatchView[]> = {};
 
   matches.forEach((match) => {
     const title =
@@ -638,7 +709,7 @@ export function noScheduleState() {
     errorWorkload: "home" as const,
     hasData: false,
     scheduleEmpty: true,
-    matches: [] as LiveMatch[],
+    visibleMatchCount: 0,
     groups: [] as MatchGroup[],
     displayState: "scheduled" as const,
     lastUpdated: "",
@@ -772,7 +843,7 @@ Page({
     activeStatusLabel: "比赛中",
     emptyDescription: emptyDescription(DEFAULT_STATUS),
     statusTabs: buildStatusTabs([]),
-    matches: [] as LiveMatch[],
+    visibleMatchCount: 0,
     groups: [] as MatchGroup[],
     lastUpdated: "",
     copiedMatchId: "" as number | string,
@@ -853,7 +924,7 @@ Page({
         emptyDescription: emptyDescription(storedStatus),
       });
     }
-    // Match V2's active-event pointer is the cold-start authority. A stale app
+    // Match V3's active-event pointer is the cold-start authority. A stale app
     // context must be refreshed before it can pin the first read; if that
     // refresh cannot produce a valid context, leave the event unset so the
     // active pointer can select the event instead of crossing a GW boundary.
@@ -920,7 +991,12 @@ Page({
       hasRevisionChanged: liveMatchdayNeedsRefresh,
       probe: async () => {
         prefetchedLiveResult = null;
-        const head = await getLiveMatchdayHead(this.currentEventId, true);
+        const head = await getLiveMatchdayHead(
+          this.currentEventId,
+          true,
+          undefined,
+          this.loadedSeason,
+        );
         if (!head) {
           // A failed publication observation must preserve the accepted
           // matchday; the controller records the probe error and retries
@@ -933,6 +1009,7 @@ Page({
             true,
             undefined,
             this.currentEventId,
+            this.loadedSeason,
           );
           prefetchedLiveResult = liveResult;
           if (!liveResult.snapshot) {
@@ -960,17 +1037,20 @@ Page({
       // Publication revision, not a heartbeat deadline, owns content reloads.
       reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
-        this.liveSnapshot = snapshot;
+        const acceptedSnapshot = snapshot
+          ? mergeLiveMatchdayHeadStatus(this.liveSnapshot, snapshot)
+          : snapshot;
+        this.liveSnapshot = acceptedSnapshot;
         this.setData({
           error: "",
           fixtureStaleMessage: matchDetailUpdateMessage(
-            snapshot,
+            acceptedSnapshot,
             this.coreMatches,
           ),
-          ...(snapshot?.times.deskContentUpdatedAt
+          ...(acceptedSnapshot?.times.deskContentUpdatedAt
             ? {
                 lastUpdated: formatTime(
-                  new Date(snapshot.times.deskContentUpdatedAt),
+                  new Date(acceptedSnapshot.times.deskContentUpdatedAt),
                 ),
               }
             : {}),
@@ -978,7 +1058,9 @@ Page({
         this.syncDisplayState();
       },
       onProbeError: (message) => {
-        this.setData({ error: message });
+        this.setData({
+          error: userFacingErrorMessage(message, "实时比赛刷新失败"),
+        });
         this.syncDisplayState();
       },
       onProbeChange: (probing) => {
@@ -1061,7 +1143,7 @@ Page({
       if (!this.pageVisible) return;
       // A forced context read can resolve with the centralized stale fallback
       // during a transient outage. It must not overwrite an event already
-      // proven by Match V2's active pointer; retry the pointer instead.
+      // proven by Match V3's active pointer; retry the pointer instead.
       const context = shouldRefreshAppContext(refreshedContext)
         ? null
         : refreshedContext;
@@ -1102,7 +1184,7 @@ Page({
       this.liveSnapshot = null;
       this.cachedLiveStoredAt = undefined;
       this.setData({
-        matches: [],
+        visibleMatchCount: 0,
         groups: [],
         hasData: false,
         fixtureStaleMessage: "",
@@ -1161,8 +1243,10 @@ Page({
   },
 
   showContextError(error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
+    const message = userFacingErrorMessage(
+      error,
+      "赛季和比赛轮信息加载失败",
+    );
     this.setData(
       {
         loading: false,
@@ -1249,7 +1333,7 @@ Page({
           this.coreMatches = [];
           this.liveWindow = false;
           this.setData({
-            matches: [],
+            visibleMatchCount: 0,
             groups: [],
             statusTabs: buildStatusTabs([]),
             hasData: false,
@@ -1330,7 +1414,7 @@ Page({
         this.perfTracker.mark("contextReadyAt");
       } catch {
         // A stale/expired context cannot pin the next read. Keep the rendered
-        // LKG for availability, but force the Match V2 active pointer to prove
+        // LKG for availability, but force the Match V3 active pointer to prove
         // whether the live event has rolled over.
         context = null;
         useActiveEventPointer = true;
@@ -1394,7 +1478,7 @@ Page({
         this.clearCopiedMatchTimer();
         this.clearSharedImageMatchTimer();
         this.setData({
-          matches: [],
+          visibleMatchCount: 0,
           groups: [],
           statusTabs: buildStatusTabs([]),
           hasData: false,
@@ -1573,7 +1657,7 @@ Page({
                 }
               : undefined;
 
-        // A complete Match V2 publication is self-contained and owns the
+        // A complete Match V3 publication is self-contained and owns the
         // current-event page. Core fixtures are a cold schedule fallback only;
         // they must never gate or add a second read to the warm live path.
         this.setData({ errorWorkload: "gameweek" });
@@ -1600,6 +1684,7 @@ Page({
               options.forceRefresh === true,
               requestTrace,
               expectedEventId,
+              options.useActiveEventPointer ? undefined : this.loadedSeason,
             ));
         } catch (error) {
           publicationError = error;
@@ -1607,46 +1692,80 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return false;
 
         if (publishedMatchday?.snapshot) {
+          const retainAcceptedDetails =
+            this.liveSnapshot !== null &&
+            publishedMatchday.snapshot.season === this.liveSnapshot.season &&
+            publishedMatchday.snapshot.eventId === this.liveSnapshot.eventId &&
+            publishedMatchday.snapshot.revisions.fixtureIdentity ===
+              this.liveSnapshot.revisions.fixtureIdentity &&
+            shouldRetainAcceptedLiveMatchDetails(
+              publishedMatchday.snapshot,
+              this.liveSnapshot,
+            );
+          const snapshotWithRetainedDetails =
+            retainAcceptedDetails && this.liveSnapshot
+              ? retainLiveMatchdayDetailRevision(
+                  publishedMatchday.snapshot,
+                  this.liveSnapshot,
+                )
+              : publishedMatchday.snapshot;
+          const matchesWithRetainedDetails = retainAcceptedDetails
+            ? retainLiveMatchPlayerDetails(
+                publishedMatchday.data,
+                this.coreMatches,
+              )
+            : publishedMatchday.data;
+          if (
+            !canReplaceLiveMatchdayLkg(
+              { ...publishedMatchday, snapshot: snapshotWithRetainedDetails },
+              this.liveSnapshot,
+            )
+          ) {
+            // A delayed/previous fallback must never repaint an already newer
+            // same-event publication. Keep the accepted board intact.
+            this.liveRefresh?.sync();
+            this.syncDisplayState();
+            return false;
+          }
           navigationTracker?.mark("primaryResponseAt");
-          const publicationMatches = publishedMatchday.data.map((match) =>
-            normalizeMatch(
-              match,
-              match.playStatus || match.status || "not_start",
-            ),
-          );
           this.liveWindow = true;
-          this.liveSnapshot = publishedMatchday.snapshot;
-          this.currentEventId = publishedMatchday.snapshot.eventId;
-          this.targetEventId = publishedMatchday.snapshot.eventId;
-          this.loadedSeason = publishedMatchday.snapshot.season;
+          this.liveSnapshot = snapshotWithRetainedDetails;
+          this.currentEventId = snapshotWithRetainedDetails.eventId;
+          this.targetEventId = snapshotWithRetainedDetails.eventId;
+          this.loadedSeason = snapshotWithRetainedDetails.season;
           this.armContextDeadline(
             cachedContext?.nextDeadlineAt,
             cachedContext === null,
           );
           this.cachedLiveStoredAt = publishedMatchday.servedStoredAt;
-          this.coreMatches = publicationMatches;
+          this.coreMatches = matchesWithRetainedDetails.map((match) =>
+            normalizeMatch(
+              match,
+              match.playStatus || match.status || "not_start",
+            ),
+          );
           const publicationStatus =
-            this.resolveActiveStatus(publicationMatches);
+            this.resolveActiveStatus(this.coreMatches);
           const visibleMatches = filterMatches(
-            publicationMatches,
+            this.coreMatches,
             publicationStatus,
           );
           this.setData(
             {
               status: publicationStatus,
-              statusTabs: buildStatusTabs(publicationMatches),
+              statusTabs: buildStatusTabs(this.coreMatches),
               activeStatusLabel:
                 STATUS_OPTIONS.find((item) => item.key === publicationStatus)
                   ?.label || "比赛",
               emptyDescription: emptyDescription(publicationStatus),
-              matches: visibleMatches,
-              groups: groupMatches(visibleMatches, publicationStatus),
+              visibleMatchCount: visibleMatches.length,
+              groups: groupMatches(toMatchViews(visibleMatches), publicationStatus),
               hasData: true,
               scheduleEmpty: false,
               error: "",
               fixtureStaleMessage: matchDetailUpdateMessage(
-                publishedMatchday.snapshot,
-                publicationMatches,
+                snapshotWithRetainedDetails,
+                this.coreMatches,
               ),
               lastUpdated: formatTime(
                 new Date(
@@ -1668,10 +1787,10 @@ Page({
 
         if (preserveData) {
           this.setData({
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : "实时比赛 publication 暂不可用",
+            error: userFacingErrorMessage(
+              publicationError,
+              "实时比赛 publication 暂不可用",
+            ),
           });
           this.liveRefresh?.sync();
           this.syncDisplayState();
@@ -1704,10 +1823,10 @@ Page({
             ...noScheduleState(),
             scheduleEmpty: false,
             displayState: "unavailable" as const,
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : "实时比赛 publication 暂不可用",
+            error: userFacingErrorMessage(
+              publicationError,
+              "实时比赛 publication 暂不可用",
+            ),
           });
           this.syncDisplayState();
           return false;
@@ -1759,16 +1878,18 @@ Page({
             statusTabs: buildStatusTabs(core),
             activeStatusLabel,
             emptyDescription: emptyDescription(activeStatus),
-            matches,
-            groups: groupMatches(matches, activeStatus),
+            visibleMatchCount: matches.length,
+            groups: groupMatches(toMatchViews(matches), activeStatus),
             hasData: true,
             scheduleEmpty: false,
-            error:
-              publicationError instanceof Error
-                ? publicationError.message
-                : publishedMatchday
-                  ? "实时比赛 publication 暂不可用"
-                  : "",
+            error: publicationError
+              ? userFacingErrorMessage(
+                  publicationError,
+                  "实时比赛 publication 暂不可用",
+                )
+              : publishedMatchday
+                ? "实时比赛 publication 暂不可用"
+                : "",
             fixtureStaleMessage: coreRead.meta.stale
               ? fixtureScheduleStaleMessage(coreRead.meta.storedAt)
               : "",
@@ -1787,7 +1908,7 @@ Page({
       } catch (error) {
         if (!this.pageVisible || requestId !== this.liveRequestId) return false;
         this.setData({
-          error: error instanceof Error ? error.message : "实时比赛加载失败",
+          error: userFacingErrorMessage(error, "实时比赛加载失败"),
         });
         this.armKickoffTransition(this.coreMatches, true);
         this.syncDisplayState();
@@ -1903,8 +2024,8 @@ Page({
       status,
       activeStatusLabel,
       emptyDescription: emptyDescription(status),
-      matches,
-      groups: groupMatches(matches, status),
+      visibleMatchCount: matches.length,
+      groups: groupMatches(toMatchViews(matches), status),
       hasData: true,
     });
     this.syncDisplayState();

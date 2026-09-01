@@ -32,6 +32,7 @@ const matchdayResult = () => ({
       lifecycle: "lifecycle-1",
       fixtureIdentity: "fixture-1",
       scoreState: "score-1",
+      detailObservation: null,
       detailPublicationId: null,
       detailGeneration: null,
       playerDetail: null,
@@ -76,10 +77,12 @@ const matchdayResult = () => ({
   },
 });
 
-test("live matchday query is one V2 publication with embedded players", () => {
+test("live matchday query is one V3 publication with embedded players", () => {
   assert.match(LIVE_MATCHES_QUERY, /query LiveMatchday\(\$eventId: Int\)/);
   assert.match(LIVE_MATCHES_QUERY, /liveMatchday\(eventId: \$eventId\)/);
   assert.match(LIVE_MATCHES_QUERY, /players\s*\{[\s\S]*stats\s*\{/);
+  assert.match(LIVE_MATCHES_QUERY, /stats\s*\{\s*identifier\s+value\s+awardedPoints/);
+  assert.doesNotMatch(LIVE_MATCHES_QUERY, /\bpoints\b|pointsModification/);
   assert.match(LIVE_MATCHES_QUERY, /homeTeamShortName/);
   assert.match(LIVE_MATCHES_QUERY, /awayTeamShortName/);
   assert.equal((LIVE_MATCHES_QUERY.match(/\bminutes\b/g) || []).length, 1);
@@ -96,15 +99,20 @@ test("live matchday query is one V2 publication with embedded players", () => {
   );
 });
 
-test("live matchday heartbeat is metadata-only and uses the V2 validator", () => {
+test("live matchday heartbeat is metadata-only and uses the V3 validator", () => {
   assert.match(
     LIVE_MATCHDAY_HEAD_QUERY,
     /query LiveMatchdayHead\(\$eventId: Int\)/,
   );
   assert.match(LIVE_MATCHDAY_HEAD_QUERY, /revisions\s*\{/);
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /detailObservation/);
   assert.match(LIVE_MATCHDAY_HEAD_QUERY, /times\s*\{/);
   assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /matches\s*\{/);
   assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /players\s*\{/);
+  assert.doesNotMatch(
+    LIVE_MATCHDAY_HEAD_QUERY,
+    /detailPublicationId|detailGeneration|playerDetail/,
+  );
 
   const result = matchdayResult();
   delete result.snapshot.matches;
@@ -113,6 +121,71 @@ test("live matchday heartbeat is metadata-only and uses the V2 validator", () =>
   assert.equal(snapshot?.eventId, 3);
   assert.equal(snapshot?.revisions.scoreState, "score-1");
   assert.equal(snapshot?.times.nextRefreshAt, null);
+});
+
+test("metadata-only HEAD accepts an observed detail manifest without a body", () => {
+  const result = matchdayResult();
+  result.snapshot.revisions.detailObservation = "detail-observation-1";
+  result.snapshot.times = {
+    ...result.snapshot.times,
+    detailSourceCheckedAt: ISO,
+    detailContentUpdatedAt: ISO,
+    detailPublishedAt: ISO,
+    detailStaleAt: null,
+  };
+  result.snapshot.detailDelivery = {
+    state: "DEGRADED",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_METADATA_ONLY"],
+  };
+  delete result.snapshot.matches;
+  validateLiveMatchdayHead(result);
+  const snapshot = snapshotFromLiveMatchdayHead(result);
+  assert.equal(snapshot?.revisions.detailObservation, "detail-observation-1");
+  assert.equal(snapshot?.revisions.detailPublicationId, null);
+  assert.equal(snapshot?.detailDelivery.servedFrom, "REDIS_CURRENT");
+});
+
+test("metadata-only HEAD accepts finalized detail metadata without a body", () => {
+  const result = matchdayResult();
+  result.delivery = {
+    state: "FINAL",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DESK_FINAL"],
+  };
+  result.snapshot.state = "FINALIZED";
+  result.snapshot.revisions.detailObservation = "detail-observation-final";
+  result.snapshot.times = {
+    ...result.snapshot.times,
+    detailSourceCheckedAt: ISO,
+    detailContentUpdatedAt: ISO,
+    detailPublishedAt: ISO,
+    detailStaleAt: null,
+  };
+  result.snapshot.detailDelivery = {
+    state: "FINAL",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_FINAL"],
+  };
+  const fullShape = structuredClone(result);
+  delete result.snapshot.matches;
+
+  validateLiveMatchdayHead(result);
+  assert.throws(
+    () => validateLiveMatchday(fullShape),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+
+  const contradictoryHead = structuredClone(result);
+  contradictoryHead.snapshot.detailDelivery = {
+    state: "DEGRADED",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_DEGRADED"],
+  };
+  assert.throws(
+    () => validateLiveMatchdayHead(contradictoryHead),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
 });
 
 test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
@@ -138,6 +211,27 @@ test("live matchday accepts nullable team abbreviations and maps full names", ()
   assert.equal(mapped.awayTeamShortName, "Away");
 });
 
+test("live matchday rejects case-insensitive duplicate stat identifiers", () => {
+  const result = matchdayResult();
+  result.snapshot.matches[0].players = [
+    {
+      id: 9,
+      webName: "Player",
+      position: "MIDFIELDER",
+      teamId: 1,
+      totalPoints: 3,
+      stats: [
+        { identifier: "bps", value: 30, awardedPoints: 1 },
+        { identifier: "BPS", value: 30, awardedPoints: 2 },
+      ],
+    },
+  ];
+  assert.throws(
+    () => validateLiveMatchday(result),
+    /LIVE_MATCHDAY_INCOHERENT/,
+  );
+});
+
 test("live matchday rejects partial detail vectors and fake unavailable snapshots", () => {
   const partialDetail = matchdayResult();
   partialDetail.snapshot.revisions.detailPublicationId = "detail-1";
@@ -159,24 +253,97 @@ test("live matchday rejects partial detail vectors and fake unavailable snapshot
   );
 });
 
-test("active-event Match reads cannot enter the cross-request cache", () => {
-  assert.deepEqual(liveMatchdayRequestOptions(undefined, false), {
+test("live Match reads cannot enter the cross-request cache", () => {
+  const activeOptions = liveMatchdayRequestOptions(undefined, false);
+  const { validateCacheData: activeValidator, ...activeWithoutValidator } = activeOptions;
+  assert.deepEqual(activeWithoutValidator, {
     cachePolicy: "live",
     cacheVariant: "matchday:event:active-pointer",
     cacheTtl: 0,
     staleTtl: 0,
     forceRefresh: false,
     trace: undefined,
+    preserveCacheOnValidationFailure: true,
   });
-  assert.deepEqual(liveMatchdayRequestOptions(3, true), {
+  assert.equal(typeof activeValidator, "function");
+
+  const explicitOptions = liveMatchdayRequestOptions(3, true);
+  const { validateCacheData: explicitValidator, ...explicitWithoutValidator } = explicitOptions;
+  assert.deepEqual(explicitWithoutValidator, {
     cachePolicy: "live",
     cacheVariant: "matchday:event:3",
+    cacheTtl: 0,
+    staleTtl: 0,
     forceRefresh: true,
     trace: undefined,
+    preserveCacheOnValidationFailure: true,
   });
+  assert.equal(typeof explicitValidator, "function");
+
+  const explicitNonForced = liveMatchdayRequestOptions(3, false);
+  assert.equal(explicitNonForced.cacheTtl, 0);
+  assert.equal(explicitNonForced.staleTtl, 0);
+
+  const seasonalOptions = liveMatchdayRequestOptions(
+    3,
+    false,
+    undefined,
+    "full",
+    "2026-27",
+  );
+  assert.equal(seasonalOptions.cacheVariant, "season:2026-27|matchday:event:3");
+  assert.equal(
+    seasonalOptions.validateCacheData?.({
+      liveMatchday: {
+        ...matchdayResult(),
+        snapshot: { ...matchdayResult().snapshot, season: "2025-26" },
+      },
+    }),
+    false,
+  );
 });
 
-test("live matchday V2 query stays within the public AST budget", () => {
+test("live matchday cache admission rejects malformed FULL data and accepts metadata HEAD data", () => {
+  const full = liveMatchdayRequestOptions(3, false);
+  const valid = matchdayResult();
+  assert.equal(full.validateCacheData?.({ liveMatchday: valid }), true);
+
+  const malformed = matchdayResult();
+  malformed.snapshot.matches[0].players = [{
+    id: 7,
+    webName: "Player",
+    position: "MIDFIELDER",
+    teamId: 1,
+    totalPoints: 4,
+    stats: [{ identifier: "goals", value: 1, awardedPoints: 3 }],
+  }];
+  assert.equal(full.validateCacheData?.({ liveMatchday: malformed }), false);
+
+  const head = liveMatchdayRequestOptions(3, false, undefined, "head");
+  const metadataOnly = matchdayResult();
+  delete metadataOnly.snapshot.matches;
+  assert.equal(head.validateCacheData?.({ liveMatchday: metadataOnly }), true);
+});
+
+test("cache admission rejects a valid unavailable envelope", () => {
+  const explicit = liveMatchdayRequestOptions(3, false);
+  assert.equal(
+    explicit.validateCacheData?.({
+      liveMatchday: {
+        availability: "UNAVAILABLE",
+        delivery: {
+          state: "UNAVAILABLE",
+          servedFrom: null,
+          reasonCodes: ["DESK_UNAVAILABLE"],
+        },
+        snapshot: null,
+      },
+    }),
+    false,
+  );
+});
+
+test("live matchday V3 query stays within the public AST budget", () => {
   let astNodes = 0;
   visit(parse(LIVE_MATCHES_QUERY), { enter: () => void (astNodes += 1) });
   assert.ok(astNodes <= 200, `operation has ${astNodes} AST nodes`);
@@ -263,8 +430,7 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
           {
             identifier: "minutes",
             value: 48,
-            points: 2,
-            pointsModification: null,
+            awardedPoints: 2,
           },
         ],
       },
@@ -287,8 +453,10 @@ test("embedded live players are mapped into the authoritative fixture teams", ()
   assert.equal(match.homeTeamDataList?.[0]?.playStatus, 2);
   assert.equal(match.homeTeamDataList?.[0]?.team, "Home");
   assert.equal(match.homeTeamDataList?.[0]?.teamShortName, "Home");
+  assert.equal(match.homeTeamDataList?.[0]?.points, undefined);
+  assert.equal(match.homeTeamDataList?.[0]?.livePoints, undefined);
   assert.deepEqual(match.homeTeamDataList?.[0]?.statPoints, {
-    minutes: { points: 2, pointsModification: null },
+    minutes: { awardedPoints: 2 },
   });
 });
 
@@ -322,14 +490,12 @@ test("embedded live player details retain fixture identity and official stat poi
           {
             identifier: "minutes",
             value: 90,
-            points: 2,
-            pointsModification: null,
+            awardedPoints: 2,
           },
           {
             identifier: "goals",
             value: 1,
-            points: 5,
-            pointsModification: 1,
+            awardedPoints: 6,
           },
         ],
       },
@@ -340,8 +506,7 @@ test("embedded live player details retain fixture identity and official stat poi
   assert.equal(player?.team, "Home");
   assert.equal(player?.teamShortName, "HOM");
   assert.deepEqual(player?.statPoints?.goals, {
-    points: 5,
-    pointsModification: 1,
+    awardedPoints: 6,
   });
   assert.ok(player);
   const detail = buildPlayerLiveDetail(player);
@@ -364,9 +529,9 @@ test("player detail includes published adjustments even when formula guards do n
     defensiveContribution: 9,
     bonus: 0,
     statPoints: {
-      minutes: { points: 2, pointsModification: null },
-      defensive_contribution: { points: 1, pointsModification: null },
-      bonus: { points: 0, pointsModification: 1 },
+      minutes: { awardedPoints: 2 },
+      defensive_contribution: { awardedPoints: 1 },
+      bonus: { awardedPoints: 1 },
     },
   });
 

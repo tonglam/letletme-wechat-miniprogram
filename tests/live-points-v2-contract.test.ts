@@ -13,7 +13,7 @@ import {
   buildGraphQLRequestHeaders,
   GraphQLTransportError,
   isClientUpgradeRequired,
-  isLiveMatchesV2Query,
+  isLiveMatchesV3Query,
   isLivePointsV2Query,
   extractGraphQLOperationName,
 } from "../miniprogram/services/graphql.service";
@@ -117,9 +117,9 @@ assertEqual(
   "matchday uses its own contract",
 );
 assertEqual(
-  isLiveMatchesV2Query("query { liveMatchday(eventId: 1) { eventId } }"),
+  isLiveMatchesV3Query("query { liveMatchday(eventId: 1) { eventId } }"),
   true,
-  "matchday is gated",
+  "matchday is V3 gated",
 );
 assertEqual(
   extractGraphQLOperationName(LIVE_MATCHDAY_HEAD_QUERY),

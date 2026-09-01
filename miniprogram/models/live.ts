@@ -126,6 +126,8 @@ export interface LiveMatchdayRevisionVector {
   lifecycle: string;
   fixtureIdentity: string;
   scoreState: string;
+  /** Descriptor-only detail token returned by HEAD; FULL also carries the verified revision. */
+  detailObservation: string | null;
   detailPublicationId: string | null;
   detailGeneration: number | null;
   playerDetail: string | null;
@@ -175,8 +177,7 @@ export type LiveEntryAvailability =
   "READY" | "PENDING" | "NO_PICKS" | "UNAVAILABLE";
 
 export interface LivePlayerStatPoints {
-  points: number;
-  pointsModification: number | null;
+  awardedPoints: number;
 }
 
 export interface LivePlayerRow {

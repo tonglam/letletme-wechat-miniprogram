@@ -452,10 +452,10 @@ test("unchanged live probes update metadata while Match Last Updated remains con
     match.indexOf("acceptSnapshot:"),
     match.indexOf("onProbeError:"),
   );
-  assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
+  assert.match(accept, /acceptedSnapshot\?\.times\.deskContentUpdatedAt/);
   assert.match(
     accept,
-    /lastUpdated: formatTime\( new Date\(snapshot\.times\.deskContentUpdatedAt\), \)/,
+    /lastUpdated: formatTime\( new Date\(acceptedSnapshot\.times\.deskContentUpdatedAt\), \)/,
   );
   assert.doesNotMatch(accept, /deskSourceCheckedAt/);
 });

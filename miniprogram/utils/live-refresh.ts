@@ -1,5 +1,7 @@
 import type {
+  LiveMatch,
   LiveMatchdayStatus,
+  LivePlayerRow,
   LiveSnapshotStatus,
 } from "../models/live";
 
@@ -34,12 +36,428 @@ export function liveMatchdayNeedsRefresh(
 ): boolean {
   if (!accepted || !observed) return true;
   return (
+    accepted.season !== observed.season ||
     accepted.eventId !== observed.eventId ||
     accepted.revisions.lifecycle !== observed.revisions.lifecycle ||
     accepted.revisions.fixtureIdentity !==
       observed.revisions.fixtureIdentity ||
     accepted.revisions.scoreState !== observed.revisions.scoreState ||
-    accepted.revisions.playerDetail !== observed.revisions.playerDetail
+    (observed.revisions.detailObservation !== null &&
+      observed.revisions.detailObservation !==
+        accepted.revisions.detailObservation)
+  );
+}
+
+/**
+ * A metadata-only HEAD has no verified player body. Keep the accepted FULL
+ * detail as the same-event LKG while accepting newer heartbeat metadata; a
+ * changed detail observation remains untouched so the caller performs one
+ * FULL reload.
+ */
+export function mergeLiveMatchdayHeadStatus(
+  accepted: LiveMatchdayStatus | null | undefined,
+  observed: LiveMatchdayStatus,
+): LiveMatchdayStatus {
+  if (
+    !accepted ||
+    accepted.season !== observed.season ||
+    accepted.eventId !== observed.eventId
+  ) {
+    return observed;
+  }
+  if (
+    accepted.revisions.lifecycle !== observed.revisions.lifecycle ||
+    accepted.revisions.fixtureIdentity !== observed.revisions.fixtureIdentity ||
+    accepted.revisions.scoreState !== observed.revisions.scoreState ||
+    (observed.revisions.detailObservation !== null &&
+      observed.revisions.detailObservation !==
+        accepted.revisions.detailObservation)
+  ) {
+    return observed;
+  }
+  const hasAcceptedDetail =
+    accepted.revisions.detailPublicationId !== null &&
+    accepted.revisions.detailGeneration !== null &&
+    accepted.revisions.playerDetail !== null &&
+    accepted.detailDelivery.servedFrom !== null &&
+    accepted.detailDelivery.state !== "PENDING" &&
+    accepted.detailDelivery.state !== "UNAVAILABLE";
+  if (!hasAcceptedDetail) return observed;
+
+  const detailDelivery =
+    observed.revisions.detailObservation === null
+      ? {
+          ...accepted.detailDelivery,
+          state:
+            accepted.detailDelivery.state === "FINAL"
+              ? ("FINAL" as const)
+              : ("DEGRADED" as const),
+          reasonCodes: Array.from(
+            new Set([
+              ...accepted.detailDelivery.reasonCodes,
+              ...observed.detailDelivery.reasonCodes,
+              "DETAIL_LKG_RETAINED",
+            ]),
+          ),
+        }
+      : mergeAcceptedDetailDelivery(accepted, observed);
+
+  const detailObservationPresent =
+    observed.revisions.detailObservation !== null;
+  const adoptObservedDesk = shouldAdoptObservedDesk(accepted, observed);
+
+  return {
+    ...observed,
+    revisions: {
+      ...observed.revisions,
+      // HEAD can be served from an older Redis fallback publication with the
+      // same semantic revision. The accepted FULL body remains authoritative;
+      // never replace its desk provenance with metadata from that fallback.
+      deskPublicationId: adoptObservedDesk
+        ? observed.revisions.deskPublicationId
+        : accepted.revisions.deskPublicationId,
+      deskGeneration: adoptObservedDesk
+        ? observed.revisions.deskGeneration
+        : accepted.revisions.deskGeneration,
+      lifecycle: adoptObservedDesk
+        ? observed.revisions.lifecycle
+        : accepted.revisions.lifecycle,
+      fixtureIdentity: adoptObservedDesk
+        ? observed.revisions.fixtureIdentity
+        : accepted.revisions.fixtureIdentity,
+      scoreState: adoptObservedDesk
+        ? observed.revisions.scoreState
+        : accepted.revisions.scoreState,
+      detailObservation: accepted.revisions.detailObservation,
+      detailPublicationId: accepted.revisions.detailPublicationId,
+      detailGeneration: accepted.revisions.detailGeneration,
+      playerDetail: accepted.revisions.playerDetail,
+    },
+    times: {
+      ...observed.times,
+      // A same-revision HEAD is allowed to advance observation/freshness
+      // metadata, but it cannot change the content provenance of the retained
+      // desk or player body. A non-null HEAD detail observation owns its
+      // source/freshness timestamps, including an explicit cleared staleAt.
+      deskSourceCheckedAt: observed.times.deskSourceCheckedAt,
+      deskContentUpdatedAt: adoptObservedDesk
+        ? observed.times.deskContentUpdatedAt
+        : accepted.times.deskContentUpdatedAt,
+      deskPublishedAt: adoptObservedDesk
+        ? observed.times.deskPublishedAt
+        : accepted.times.deskPublishedAt,
+      deskStaleAt: observed.times.deskStaleAt,
+      detailSourceCheckedAt: detailObservationPresent
+        ? observed.times.detailSourceCheckedAt
+        : accepted.times.detailSourceCheckedAt,
+      detailContentUpdatedAt: accepted.times.detailContentUpdatedAt,
+      detailPublishedAt: accepted.times.detailPublishedAt,
+      detailStaleAt: detailObservationPresent
+        ? observed.times.detailStaleAt
+        : accepted.times.detailStaleAt,
+    },
+    delivery: mergeAcceptedDeskDelivery(accepted, observed),
+    detailDelivery,
+  };
+}
+
+/**
+ * A FULL response can contain a newer desk while its detail publication is
+ * temporarily absent or older. Keep the accepted same-event player rows in
+ * that case; the new desk score/lifecycle remains authoritative.
+ */
+export function shouldRetainAcceptedLiveMatchDetails(
+  candidate: Pick<LiveMatchdayStatus, "revisions">,
+  accepted: Pick<LiveMatchdayStatus, "revisions">,
+): boolean {
+  const acceptedRevision = accepted.revisions;
+  const candidateRevision = candidate.revisions;
+  if (
+    acceptedRevision.detailPublicationId === null ||
+    acceptedRevision.detailGeneration === null ||
+    acceptedRevision.playerDetail === null
+  ) {
+    return false;
+  }
+  if (candidateRevision.detailGeneration === null) return true;
+  if (candidateRevision.detailGeneration < acceptedRevision.detailGeneration) {
+    return true;
+  }
+  return (
+    candidateRevision.detailGeneration === acceptedRevision.detailGeneration &&
+    candidateRevision.detailPublicationId !==
+      acceptedRevision.detailPublicationId
+  );
+}
+
+function retainedPlayerPlayStatus(match: LiveMatch): number {
+  const status = match.status || match.playStatus;
+  if (status === "finished") return match.provisional ? 3 : 4;
+  if (status === "playing") return 2;
+  return 1;
+}
+
+function refreshRetainedPlayerStatus(
+  players: readonly LivePlayerRow[],
+  match: LiveMatch,
+): LivePlayerRow[] {
+  const playStatus = retainedPlayerPlayStatus(match);
+  return players.map((player) => ({ ...player, playStatus }));
+}
+
+function isPastTimestamp(value: string | null): boolean {
+  if (!value) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed <= Date.now();
+}
+
+function mergeAcceptedDetailDelivery(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): LiveMatchdayStatus["detailDelivery"] {
+  if (observed.detailDelivery.state === "FINAL") {
+    return {
+      ...observed.detailDelivery,
+      // The HEAD carries only terminal metadata. The player body is still
+      // the accepted FULL LKG, so preserve its source provenance while
+      // allowing the terminal delivery state to stop recovery polling.
+      servedFrom: accepted.detailDelivery.servedFrom,
+      reasonCodes: Array.from(
+        new Set([
+          ...accepted.detailDelivery.reasonCodes,
+          ...observed.detailDelivery.reasonCodes,
+          "DETAIL_FINAL",
+        ]),
+      ),
+    };
+  }
+
+  // HEAD reports DEGRADED for a started fixture even when it only loaded the
+  // detail manifest. Do not downgrade a verified FULL LKG for that metadata
+  // marker; downgrade only when HEAD proves a fallback source or an expired
+  // detail freshness deadline.
+  const detailFallback =
+    observed.detailDelivery.servedFrom !== null &&
+    observed.detailDelivery.servedFrom !== "REDIS_CURRENT";
+  const detailStale = isPastTimestamp(observed.times.detailStaleAt);
+  if (detailFallback || detailStale) {
+    return {
+      ...accepted.detailDelivery,
+      state:
+        accepted.detailDelivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+      reasonCodes: Array.from(
+        new Set([
+          ...accepted.detailDelivery.reasonCodes,
+          ...observed.detailDelivery.reasonCodes,
+          ...(detailFallback ? ["DETAIL_FALLBACK"] : []),
+          ...(detailStale ? ["DETAIL_STALE"] : []),
+          "DETAIL_LKG_RETAINED",
+        ]),
+      ),
+    };
+  }
+
+  return accepted.detailDelivery;
+}
+
+function mergeAcceptedDeskDelivery(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): LiveMatchdayStatus["delivery"] {
+  if (shouldAdoptObservedDesk(accepted, observed)) {
+    return {
+      ...observed.delivery,
+      state: accepted.delivery.state === "FINAL" ? "FINAL" : observed.delivery.state,
+    };
+  }
+
+  const deskFallback =
+    observed.delivery.servedFrom !== "REDIS_CURRENT" ||
+    observed.revisions.deskGeneration < accepted.revisions.deskGeneration ||
+    (observed.revisions.deskGeneration === accepted.revisions.deskGeneration &&
+      observed.revisions.deskPublicationId !==
+        accepted.revisions.deskPublicationId);
+  const deskStale = isPastTimestamp(observed.times.deskStaleAt);
+  if (!deskFallback && !deskStale) return accepted.delivery;
+
+  return {
+    ...accepted.delivery,
+    state: accepted.delivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+    reasonCodes: Array.from(
+      new Set([
+        ...accepted.delivery.reasonCodes,
+        ...observed.delivery.reasonCodes,
+        ...(deskFallback ? ["DESK_FALLBACK"] : []),
+        ...(deskStale ? ["DESK_STALE"] : []),
+        "DESK_LKG_RETAINED",
+      ]),
+    ),
+  };
+}
+
+function shouldAdoptObservedDesk(
+  accepted: LiveMatchdayStatus,
+  observed: LiveMatchdayStatus,
+): boolean {
+  if (observed.delivery.servedFrom !== "REDIS_CURRENT") return false;
+  if (observed.revisions.deskGeneration > accepted.revisions.deskGeneration) {
+    return true;
+  }
+  return (
+    observed.revisions.deskGeneration === accepted.revisions.deskGeneration &&
+    observed.revisions.deskPublicationId ===
+      accepted.revisions.deskPublicationId
+  );
+}
+
+/** Copy only same-fixture player rows from the accepted full LKG. */
+export function retainLiveMatchPlayerDetails(
+  candidate: readonly LiveMatch[],
+  accepted: readonly LiveMatch[],
+): LiveMatch[] {
+  const acceptedByFixtureId = new Map(
+    accepted.map((match) => [String(match.matchId ?? match.id), match]),
+  );
+  return candidate.map((match) => {
+    const previous = acceptedByFixtureId.get(
+      String(match.matchId ?? match.id),
+    );
+    if (!previous) return match;
+    return {
+      ...match,
+      homeTeamDataList: refreshRetainedPlayerStatus(
+        previous.homeTeamDataList ?? [],
+        match,
+      ),
+      awayTeamDataList: refreshRetainedPlayerStatus(
+        previous.awayTeamDataList ?? [],
+        match,
+      ),
+    };
+  });
+}
+
+/** Carry the exact detail provenance for rows retained from the accepted LKG. */
+export function retainLiveMatchdayDetailRevision(
+  candidate: LiveMatchdayStatus,
+  accepted: LiveMatchdayStatus,
+): LiveMatchdayStatus {
+  if (!shouldRetainAcceptedLiveMatchDetails(candidate, accepted)) {
+    return candidate;
+  }
+  return {
+    ...candidate,
+    revisions: {
+      ...candidate.revisions,
+      detailObservation: accepted.revisions.detailObservation,
+      detailPublicationId: accepted.revisions.detailPublicationId,
+      detailGeneration: accepted.revisions.detailGeneration,
+      playerDetail: accepted.revisions.playerDetail,
+    },
+    times: {
+      ...candidate.times,
+      detailSourceCheckedAt: accepted.times.detailSourceCheckedAt,
+      detailContentUpdatedAt: accepted.times.detailContentUpdatedAt,
+      detailPublishedAt: accepted.times.detailPublishedAt,
+      detailStaleAt: accepted.times.detailStaleAt,
+    },
+    detailDelivery: {
+      ...accepted.detailDelivery,
+      // A retained exact FINAL publication is terminal. The candidate's
+      // absent/older detail is recorded in reasonCodes without reopening
+      // recovery polling or changing the user-visible final state.
+      state:
+        accepted.detailDelivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+      reasonCodes: Array.from(
+        new Set([
+          ...accepted.detailDelivery.reasonCodes,
+          ...candidate.detailDelivery.reasonCodes,
+          "DETAIL_REVISION_RETAINED",
+        ]),
+      ),
+    },
+  };
+}
+
+function compareSeasons(left: string, right: string): number {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isSafeInteger(leftNumber) && Number.isSafeInteger(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  return left.localeCompare(right);
+}
+
+/**
+ * A fallback publication may be older than the response already painted.
+ * Accept only a monotonic same-event candidate so Redis previous or a delayed
+ * request cannot roll the page back to an older score/detail pair.
+ */
+export function canReplaceLiveMatchdayLkg(
+  candidate: { snapshot: LiveMatchdayStatus | null },
+  accepted?: LiveMatchdayStatus | null,
+): boolean {
+  if (!candidate.snapshot) return false;
+  if (!accepted) return true;
+  if (
+    candidate.snapshot.season !== accepted.season ||
+    candidate.snapshot.eventId !== accepted.eventId
+  ) {
+    const seasonOrder = compareSeasons(
+      candidate.snapshot.season,
+      accepted.season,
+    );
+    return (
+      seasonOrder > 0 ||
+      (seasonOrder === 0 && candidate.snapshot.eventId > accepted.eventId)
+    );
+  }
+
+  const candidateRevision = candidate.snapshot.revisions;
+  const acceptedRevision = accepted.revisions;
+  if (candidateRevision.deskGeneration < acceptedRevision.deskGeneration) {
+    return false;
+  }
+  if (candidateRevision.deskGeneration > acceptedRevision.deskGeneration) {
+    return true;
+  }
+  if (
+    candidateRevision.deskPublicationId !== acceptedRevision.deskPublicationId
+  ) {
+    return false;
+  }
+
+  const candidateHasDetail =
+    candidateRevision.detailPublicationId !== null &&
+    candidateRevision.detailGeneration !== null &&
+    candidateRevision.playerDetail !== null;
+  const acceptedHasDetail =
+    acceptedRevision.detailPublicationId !== null &&
+    acceptedRevision.detailGeneration !== null &&
+    acceptedRevision.playerDetail !== null;
+  if (!candidateHasDetail) {
+    if (!acceptedHasDetail) return true;
+    return (
+      candidateRevision.detailObservation === null ||
+      candidateRevision.detailObservation ===
+        acceptedRevision.detailObservation
+    );
+  }
+  if (acceptedRevision.detailGeneration === null) return true;
+  if (candidateRevision.detailGeneration === null) return false;
+  if (
+    candidateRevision.detailGeneration < acceptedRevision.detailGeneration
+  ) {
+    return false;
+  }
+  if (
+    candidateRevision.detailGeneration > acceptedRevision.detailGeneration
+  ) {
+    return true;
+  }
+  return (
+    candidateRevision.detailPublicationId ===
+    acceptedRevision.detailPublicationId
   );
 }
 
@@ -56,6 +474,12 @@ export function shouldPollLiveMatchday(options: {
   // A missing snapshot is a pending/unavailable state, not a terminal one.
   if (!snapshot) return true;
   if (snapshot.eventId !== selectedEventId) return false;
+  if (
+    snapshot.state === "FINALIZED" &&
+    snapshot.detailDelivery.state === "FINAL"
+  ) {
+    return false;
+  }
   const nextRefreshAt = snapshot.times.nextRefreshAt;
   if (nextRefreshAt && Number.isFinite(Date.parse(nextRefreshAt))) return true;
   if (snapshot.state === "FINALIZED") {

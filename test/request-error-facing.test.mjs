@@ -7,6 +7,7 @@ import {
 
 test("technical runtime leaks are hidden from users", () => {
   assert.equal(looksTechnicalErrorMessage("(0,d.canReadEventReporting) is not a function"), true);
+  assert.equal(looksTechnicalErrorMessage("LIVE_MATCHDAY_INCOHERENT"), true);
   assert.equal(
     userFacingErrorMessage(
       new Error("(0,d.canReadEventReporting) is not a function"),
@@ -17,6 +18,10 @@ test("technical runtime leaks are hidden from users", () => {
   assert.equal(
     userFacingErrorMessage(new Error("TypeError: undefined is not an object"), "球队数据加载失败"),
     "球队数据加载失败"
+  );
+  assert.equal(
+    userFacingErrorMessage(new Error("LIVE_MATCHDAY_INCOHERENT"), "实时比赛加载失败"),
+    "实时比赛加载失败"
   );
 });
 
