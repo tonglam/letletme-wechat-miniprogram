@@ -211,7 +211,7 @@ export async function getTournamentOfficialH2HHistory(
   }>(
     GET_TOURNAMENT_OFFICIAL_H2H_HISTORY,
     { tournamentId, eventId, limit },
-    { cachePolicy: "reporting", trace },
+    { cachePolicy: "reporting", trace, contract: "live-points-v2" },
   );
   return data.tournamentOfficialH2HHistory;
 }
