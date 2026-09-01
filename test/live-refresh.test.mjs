@@ -3,6 +3,11 @@ import test from "node:test";
 
 const {
   liveMatchdayNeedsRefresh,
+  canReplaceLiveMatchdayLkg,
+  mergeLiveMatchdayHeadStatus,
+  retainLiveMatchPlayerDetails,
+  retainLiveMatchdayDetailRevision,
+  shouldRetainAcceptedLiveMatchDetails,
   liveSnapshotNeedsRefresh,
   shouldPollLiveMatchday,
 } = await import("../miniprogram/utils/live-refresh.ts");
@@ -50,6 +55,7 @@ const matchdaySnapshot = (overrides = {}) => ({
     lifecycle: "lifecycle-1",
     fixtureIdentity: "fixture-1",
     scoreState: "score-1",
+    detailObservation: "detail-r1",
     detailPublicationId: "detail-1",
     detailGeneration: 1,
     playerDetail: "detail-r1",
@@ -99,9 +105,123 @@ test("Match score and detail revisions independently rebuild the match list", ()
   assert.equal(
     liveMatchdayNeedsRefresh(accepted, {
       ...accepted,
-      revisions: { ...accepted.revisions, playerDetail: "detail-r2" },
+      revisions: {
+        ...accepted.revisions,
+        detailObservation: "detail-r2",
+      },
     }),
     true,
+  );
+});
+
+test("metadata-only HEAD retains the accepted complete detail LKG", () => {
+  const accepted = matchdaySnapshot();
+  const observed = matchdaySnapshot({
+    revisions: {
+      ...accepted.revisions,
+      detailObservation: null,
+      detailPublicationId: null,
+      detailGeneration: null,
+      playerDetail: null,
+    },
+    times: {
+      ...accepted.times,
+      detailSourceCheckedAt: null,
+      detailContentUpdatedAt: null,
+      detailPublishedAt: null,
+      detailStaleAt: null,
+    },
+    detailDelivery: {
+      state: "PENDING",
+      servedFrom: null,
+      reasonCodes: ["DETAIL_PENDING"],
+    },
+  });
+
+  const merged = mergeLiveMatchdayHeadStatus(accepted, observed);
+  assert.equal(merged.revisions.detailObservation, "detail-r1");
+  assert.equal(merged.revisions.detailPublicationId, "detail-1");
+  assert.equal(merged.revisions.detailGeneration, 1);
+  assert.equal(merged.revisions.playerDetail, "detail-r1");
+  assert.equal(merged.times.detailPublishedAt, accepted.times.detailPublishedAt);
+  assert.equal(merged.detailDelivery.state, "DEGRADED");
+  assert.ok(merged.detailDelivery.reasonCodes.includes("DETAIL_LKG_RETAINED"));
+});
+
+test("same-event LKG replacement is monotonic across Redis fallback", () => {
+  const accepted = matchdaySnapshot();
+  const older = matchdaySnapshot({
+    revisions: {
+      ...accepted.revisions,
+      deskGeneration: 0,
+      deskPublicationId: "desk-0",
+    },
+  });
+  const newer = matchdaySnapshot({
+    revisions: {
+      ...accepted.revisions,
+      deskGeneration: 2,
+      deskPublicationId: "desk-2",
+    },
+  });
+  assert.equal(canReplaceLiveMatchdayLkg({ snapshot: older }, accepted), false);
+  assert.equal(canReplaceLiveMatchdayLkg({ snapshot: newer }, accepted), true);
+  assert.equal(
+    canReplaceLiveMatchdayLkg(
+      { snapshot: { ...accepted, eventId: accepted.eventId - 1 } },
+      accepted,
+    ),
+    false,
+  );
+  assert.equal(
+    canReplaceLiveMatchdayLkg(
+      { snapshot: { ...accepted, eventId: accepted.eventId + 1 } },
+      accepted,
+    ),
+    true,
+  );
+});
+
+test("new desk keeps accepted player detail when FULL detail is absent", () => {
+  const accepted = matchdaySnapshot();
+  const candidate = matchdaySnapshot({
+    revisions: {
+      ...accepted.revisions,
+      deskGeneration: 2,
+      deskPublicationId: "desk-2",
+      detailObservation: null,
+      detailPublicationId: null,
+      detailGeneration: null,
+      playerDetail: null,
+    },
+  });
+  assert.equal(
+    shouldRetainAcceptedLiveMatchDetails(candidate, accepted),
+    true,
+  );
+  const candidateMatches = [
+    {
+      matchId: 10,
+      homeTeamDataList: [],
+      awayTeamDataList: [],
+    },
+  ];
+  const acceptedMatches = [
+    {
+      matchId: 10,
+      homeTeamDataList: [{ element: 1 }],
+      awayTeamDataList: [{ element: 2 }],
+    },
+  ];
+  assert.deepEqual(
+    retainLiveMatchPlayerDetails(candidateMatches, acceptedMatches),
+    acceptedMatches,
+  );
+  const retained = retainLiveMatchdayDetailRevision(candidate, accepted);
+  assert.equal(retained.revisions.detailPublicationId, "detail-1");
+  assert.equal(retained.detailDelivery.state, "DEGRADED");
+  assert.ok(
+    retained.detailDelivery.reasonCodes.includes("DETAIL_REVISION_RETAINED"),
   );
 });
 

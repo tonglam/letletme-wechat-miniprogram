@@ -18,7 +18,12 @@ import {
 import { PagePerformanceTracker } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
+  canReplaceLiveMatchdayLkg,
   liveMatchdayNeedsRefresh,
+  mergeLiveMatchdayHeadStatus,
+  retainLiveMatchPlayerDetails,
+  retainLiveMatchdayDetailRevision,
+  shouldRetainAcceptedLiveMatchDetails,
   shouldRevalidateCachedLiveMatchday,
   shouldPollLiveMatchday,
 } from "../../../utils/live-refresh";
@@ -985,7 +990,12 @@ Page({
       hasRevisionChanged: liveMatchdayNeedsRefresh,
       probe: async () => {
         prefetchedLiveResult = null;
-        const head = await getLiveMatchdayHead(this.currentEventId, true);
+        const head = await getLiveMatchdayHead(
+          this.currentEventId,
+          true,
+          undefined,
+          this.loadedSeason,
+        );
         if (!head) {
           // A failed publication observation must preserve the accepted
           // matchday; the controller records the probe error and retries
@@ -998,6 +1008,7 @@ Page({
             true,
             undefined,
             this.currentEventId,
+            this.loadedSeason,
           );
           prefetchedLiveResult = liveResult;
           if (!liveResult.snapshot) {
@@ -1025,7 +1036,9 @@ Page({
       // Publication revision, not a heartbeat deadline, owns content reloads.
       reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
-        this.liveSnapshot = snapshot;
+        this.liveSnapshot = snapshot
+          ? mergeLiveMatchdayHeadStatus(this.liveSnapshot, snapshot)
+          : snapshot;
         this.setData({
           error: "",
           fixtureStaleMessage: matchDetailUpdateMessage(
@@ -1665,6 +1678,7 @@ Page({
               options.forceRefresh === true,
               requestTrace,
               expectedEventId,
+              this.loadedSeason,
             ));
         } catch (error) {
           publicationError = error;
@@ -1672,34 +1686,68 @@ Page({
         if (!this.pageVisible || requestId !== this.liveRequestId) return false;
 
         if (publishedMatchday?.snapshot) {
+          const retainAcceptedDetails =
+            this.liveSnapshot !== null &&
+            publishedMatchday.snapshot.season === this.liveSnapshot.season &&
+            publishedMatchday.snapshot.eventId === this.liveSnapshot.eventId &&
+            publishedMatchday.snapshot.revisions.fixtureIdentity ===
+              this.liveSnapshot.revisions.fixtureIdentity &&
+            shouldRetainAcceptedLiveMatchDetails(
+              publishedMatchday.snapshot,
+              this.liveSnapshot,
+            );
+          const snapshotWithRetainedDetails =
+            retainAcceptedDetails && this.liveSnapshot
+              ? retainLiveMatchdayDetailRevision(
+                  publishedMatchday.snapshot,
+                  this.liveSnapshot,
+                )
+              : publishedMatchday.snapshot;
+          const matchesWithRetainedDetails = retainAcceptedDetails
+            ? retainLiveMatchPlayerDetails(
+                publishedMatchday.data,
+                this.coreMatches,
+              )
+            : publishedMatchday.data;
+          if (
+            !canReplaceLiveMatchdayLkg(
+              { ...publishedMatchday, snapshot: snapshotWithRetainedDetails },
+              this.liveSnapshot,
+            )
+          ) {
+            // A delayed/previous fallback must never repaint an already newer
+            // same-event publication. Keep the accepted board intact.
+            this.liveRefresh?.sync();
+            this.syncDisplayState();
+            return false;
+          }
           navigationTracker?.mark("primaryResponseAt");
-          const publicationMatches = publishedMatchday.data.map((match) =>
-            normalizeMatch(
-              match,
-              match.playStatus || match.status || "not_start",
-            ),
-          );
           this.liveWindow = true;
-          this.liveSnapshot = publishedMatchday.snapshot;
-          this.currentEventId = publishedMatchday.snapshot.eventId;
-          this.targetEventId = publishedMatchday.snapshot.eventId;
-          this.loadedSeason = publishedMatchday.snapshot.season;
+          this.liveSnapshot = snapshotWithRetainedDetails;
+          this.currentEventId = snapshotWithRetainedDetails.eventId;
+          this.targetEventId = snapshotWithRetainedDetails.eventId;
+          this.loadedSeason = snapshotWithRetainedDetails.season;
           this.armContextDeadline(
             cachedContext?.nextDeadlineAt,
             cachedContext === null,
           );
           this.cachedLiveStoredAt = publishedMatchday.servedStoredAt;
-          this.coreMatches = publicationMatches;
+          this.coreMatches = matchesWithRetainedDetails.map((match) =>
+            normalizeMatch(
+              match,
+              match.playStatus || match.status || "not_start",
+            ),
+          );
           const publicationStatus =
-            this.resolveActiveStatus(publicationMatches);
+            this.resolveActiveStatus(this.coreMatches);
           const visibleMatches = filterMatches(
-            publicationMatches,
+            this.coreMatches,
             publicationStatus,
           );
           this.setData(
             {
               status: publicationStatus,
-              statusTabs: buildStatusTabs(publicationMatches),
+              statusTabs: buildStatusTabs(this.coreMatches),
               activeStatusLabel:
                 STATUS_OPTIONS.find((item) => item.key === publicationStatus)
                   ?.label || "比赛",
@@ -1710,8 +1758,8 @@ Page({
               scheduleEmpty: false,
               error: "",
               fixtureStaleMessage: matchDetailUpdateMessage(
-                publishedMatchday.snapshot,
-                publicationMatches,
+                snapshotWithRetainedDetails,
+                this.coreMatches,
               ),
               lastUpdated: formatTime(
                 new Date(

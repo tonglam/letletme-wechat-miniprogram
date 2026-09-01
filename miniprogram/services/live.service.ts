@@ -401,6 +401,7 @@ export const LIVE_MATCHES_QUERY = `
           lifecycle
           fixtureIdentity
           scoreState
+          detailObservation
           detailPublicationId
           detailGeneration
           playerDetail
@@ -464,9 +465,7 @@ export const LIVE_MATCHDAY_HEAD_QUERY = `
           lifecycle
           fixtureIdentity
           scoreState
-          detailPublicationId
-          detailGeneration
-          playerDetail
+          detailObservation
         }
         times {
           deskSourceCheckedAt
@@ -538,7 +537,28 @@ interface LiveMatchesResponse {
   };
 }
 
-type LiveMatchdayHeadSnapshot = Omit<LiveMatchdaySnapshot, "matches">;
+type LiveMatchdayHeadRevisionVector = Pick<
+  LiveMatchdayRevisionVector,
+  | "deskPublicationId"
+  | "deskGeneration"
+  | "lifecycle"
+  | "fixtureIdentity"
+  | "scoreState"
+  | "detailObservation"
+> &
+  Partial<
+    Pick<
+      LiveMatchdayRevisionVector,
+      "detailPublicationId" | "detailGeneration" | "playerDetail"
+    >
+  >;
+
+type LiveMatchdayHeadSnapshot = Omit<
+  LiveMatchdaySnapshot,
+  "matches" | "revisions"
+> & {
+  revisions: LiveMatchdayHeadRevisionVector;
+};
 
 interface LiveMatchdayHeadResponse {
   liveMatchday: {
@@ -554,6 +574,17 @@ const POSITION_TYPE: Record<GraphQLMatchdayPlayer["position"], number> = {
   MIDFIELDER: 3,
   FORWARD: 4,
 };
+
+function normalizeLiveMatchdayRevisionVector(
+  revisions: LiveMatchdayHeadRevisionVector,
+): LiveMatchdayRevisionVector {
+  return {
+    ...revisions,
+    detailPublicationId: revisions.detailPublicationId ?? null,
+    detailGeneration: revisions.detailGeneration ?? null,
+    playerDetail: revisions.playerDetail ?? null,
+  };
+}
 
 function statValue(
   player: GraphQLMatchdayPlayer,
@@ -685,7 +716,7 @@ export function snapshotFromLiveMatchday(
     season: snapshot.season,
     eventId: snapshot.eventId,
     state: snapshot.state,
-    revisions: snapshot.revisions,
+    revisions: normalizeLiveMatchdayRevisionVector(snapshot.revisions),
     times: snapshot.times,
     availability: result.availability,
     delivery: result.delivery,
@@ -702,7 +733,7 @@ export function snapshotFromLiveMatchdayHead(
     season: snapshot.season,
     eventId: snapshot.eventId,
     state: snapshot.state,
-    revisions: snapshot.revisions,
+    revisions: normalizeLiveMatchdayRevisionVector(snapshot.revisions),
     times: snapshot.times,
     availability: result.availability,
     delivery: result.delivery,
@@ -754,6 +785,20 @@ export function validateLiveMatchday(
     snapshot.revisions.detailPublicationId === null &&
     snapshot.revisions.detailGeneration === null &&
     snapshot.revisions.playerDetail === null;
+  const detailObservationPresent =
+    typeof snapshot.revisions.detailObservation === "string" &&
+    snapshot.revisions.detailObservation.length > 0;
+  const detailObservationAbsent = snapshot.revisions.detailObservation === null;
+  const detailTimesPresent =
+    isTimestamp(snapshot.times.detailSourceCheckedAt) &&
+    isTimestamp(snapshot.times.detailContentUpdatedAt) &&
+    isTimestamp(snapshot.times.detailPublishedAt) &&
+    isOptionalTimestamp(snapshot.times.detailStaleAt);
+  const detailTimesAbsent =
+    snapshot.times.detailSourceCheckedAt === null &&
+    snapshot.times.detailContentUpdatedAt === null &&
+    snapshot.times.detailPublishedAt === null &&
+    snapshot.times.detailStaleAt === null;
   if (
     !snapshot.season ||
     !Number.isSafeInteger(snapshot.eventId) ||
@@ -766,6 +811,8 @@ export function validateLiveMatchday(
     !snapshot.revisions.fixtureIdentity ||
     !snapshot.revisions.scoreState ||
     (!detailRevisionPresent && !detailRevisionAbsent) ||
+    (!detailObservationPresent && !detailObservationAbsent) ||
+    (detailRevisionPresent && !detailObservationPresent) ||
     !isTimestamp(snapshot.times.deskSourceCheckedAt) ||
     !isTimestamp(snapshot.times.deskContentUpdatedAt) ||
     !isTimestamp(snapshot.times.deskPublishedAt) ||
@@ -782,13 +829,15 @@ export function validateLiveMatchday(
     throw new Error("LIVE_MATCHDAY_INCOHERENT");
   }
   if (
-    detailRevisionAbsent !==
-      (snapshot.times.detailSourceCheckedAt === null &&
-        snapshot.times.detailContentUpdatedAt === null &&
-        snapshot.times.detailPublishedAt === null &&
-        snapshot.times.detailStaleAt === null) ||
+    detailTimesPresent !== detailObservationPresent ||
+    detailTimesAbsent !== !detailObservationPresent ||
     (detailRevisionAbsent &&
+      detailObservationAbsent &&
       (snapshot.detailDelivery.servedFrom !== null ||
+        !["PENDING", "DEGRADED"].includes(snapshot.detailDelivery.state))) ||
+    (detailRevisionAbsent &&
+      detailObservationPresent &&
+      (snapshot.detailDelivery.servedFrom === null ||
         !["PENDING", "DEGRADED"].includes(snapshot.detailDelivery.state))) ||
     (detailRevisionPresent &&
       (snapshot.detailDelivery.servedFrom === null ||
@@ -881,15 +930,43 @@ export function validateLiveMatchdayHead(
   // empty synthetic array is sufficient for the common structural checks.
   validateLiveMatchday({
     ...result,
-    snapshot: result.snapshot ? { ...result.snapshot, matches: [] } : null,
+    snapshot: result.snapshot
+      ? {
+          ...result.snapshot,
+          revisions: {
+            ...result.snapshot.revisions,
+            detailPublicationId: null,
+            detailGeneration: null,
+            playerDetail: null,
+          },
+          matches: [],
+        }
+      : null,
   });
 }
 
 type LiveMatchdayCacheValidationMode = "head" | "full";
 
+function isExpectedLiveMatchdayScope(
+  result:
+    | LiveMatchesResponse["liveMatchday"]
+    | LiveMatchdayHeadResponse["liveMatchday"],
+  expectedEventId?: number,
+  expectedSeason?: string,
+): boolean {
+  const snapshot = result.snapshot;
+  return (
+    !snapshot ||
+    (expectedEventId === undefined || snapshot.eventId === expectedEventId) &&
+      (!expectedSeason?.trim() || snapshot.season === expectedSeason.trim())
+  );
+}
+
 function validateLiveMatchdayCacheData(
   data: unknown,
   mode: LiveMatchdayCacheValidationMode,
+  expectedEventId?: number,
+  expectedSeason?: string,
 ): boolean {
   if (!data || typeof data !== "object") return false;
   const result = (data as { liveMatchday?: unknown }).liveMatchday;
@@ -901,7 +978,13 @@ function validateLiveMatchdayCacheData(
     } else {
       validateLiveMatchday(result as LiveMatchesResponse["liveMatchday"]);
     }
-    return true;
+    return isExpectedLiveMatchdayScope(
+      result as
+        | LiveMatchesResponse["liveMatchday"]
+        | LiveMatchdayHeadResponse["liveMatchday"],
+      expectedEventId,
+      expectedSeason,
+    );
   } catch {
     return false;
   }
@@ -912,16 +995,19 @@ export function liveMatchdayRequestOptions(
   forceRefresh: boolean,
   trace?: PageRequestTrace | null,
   mode: LiveMatchdayCacheValidationMode = "full",
+  expectedSeason?: string,
 ): GraphQLOptions {
+  const season = expectedSeason?.trim();
   return {
     cachePolicy: "live",
-    cacheVariant: `matchday:event:${expectedEventId ?? "active-pointer"}`,
+    cacheVariant: `${season ? `season:${season}|` : ""}matchday:event:${expectedEventId ?? "active-pointer"}`,
     // An active pointer is intentionally never cached: its event identity can
     // change between requests. Explicit event reads remain season+event keyed.
     ...(expectedEventId === undefined ? { cacheTtl: 0, staleTtl: 0 } : {}),
     forceRefresh,
     trace,
-    validateCacheData: (data) => validateLiveMatchdayCacheData(data, mode),
+    validateCacheData: (data) =>
+      validateLiveMatchdayCacheData(data, mode, expectedEventId, season),
     // A malformed publication must not evict the same-event last-good value.
     preserveCacheOnValidationFailure: true,
   };
@@ -1069,12 +1155,15 @@ export async function getLiveMatchByStatusSnapshot(
   forceRefresh = false,
   trace?: PageRequestTrace | null,
   expectedEventId?: number,
+  expectedSeason?: string,
 ): Promise<LiveSnapshotResult<LiveMatch[], LiveMatchdayStatus>> {
   const variables = { eventId: expectedEventId ?? null };
   const requestOptions = liveMatchdayRequestOptions(
     expectedEventId,
     forceRefresh,
     trace,
+    "full",
+    expectedSeason,
   );
   const data = await graphqlRequest<LiveMatchesResponse>(
     LIVE_MATCHES_QUERY,
@@ -1083,6 +1172,9 @@ export async function getLiveMatchByStatusSnapshot(
   );
   const result = data.liveMatchday;
   validateLiveMatchday(result);
+  if (!isExpectedLiveMatchdayScope(result, expectedEventId, expectedSeason)) {
+    throw new Error("LIVE_MATCHDAY_SCOPE_MISMATCH");
+  }
   const mapped = result.snapshot?.matches.map(mapGraphQLMatch) ?? [];
   return {
     data: filterLiveMatchesByStatus(mapped, status),
@@ -1099,6 +1191,7 @@ export async function getLiveMatchdayHead(
   expectedEventId?: number,
   forceRefresh = false,
   trace?: PageRequestTrace | null,
+  expectedSeason?: string,
 ): Promise<LiveMatchdayStatus | null> {
   const variables = { eventId: expectedEventId ?? null };
   const requestOptions = liveMatchdayRequestOptions(
@@ -1106,6 +1199,7 @@ export async function getLiveMatchdayHead(
     forceRefresh,
     trace,
     "head",
+    expectedSeason,
   );
   const data = await graphqlRequest<LiveMatchdayHeadResponse>(
     LIVE_MATCHDAY_HEAD_QUERY,
@@ -1114,6 +1208,9 @@ export async function getLiveMatchdayHead(
   );
   const result = data.liveMatchday;
   validateLiveMatchdayHead(result);
+  if (!isExpectedLiveMatchdayScope(result, expectedEventId, expectedSeason)) {
+    throw new Error("LIVE_MATCHDAY_SCOPE_MISMATCH");
+  }
   return snapshotFromLiveMatchdayHead(result);
 }
 

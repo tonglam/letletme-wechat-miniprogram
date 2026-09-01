@@ -32,6 +32,7 @@ const matchdayResult = () => ({
       lifecycle: "lifecycle-1",
       fixtureIdentity: "fixture-1",
       scoreState: "score-1",
+      detailObservation: null,
       detailPublicationId: null,
       detailGeneration: null,
       playerDetail: null,
@@ -104,9 +105,14 @@ test("live matchday heartbeat is metadata-only and uses the V3 validator", () =>
     /query LiveMatchdayHead\(\$eventId: Int\)/,
   );
   assert.match(LIVE_MATCHDAY_HEAD_QUERY, /revisions\s*\{/);
+  assert.match(LIVE_MATCHDAY_HEAD_QUERY, /detailObservation/);
   assert.match(LIVE_MATCHDAY_HEAD_QUERY, /times\s*\{/);
   assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /matches\s*\{/);
   assert.doesNotMatch(LIVE_MATCHDAY_HEAD_QUERY, /players\s*\{/);
+  assert.doesNotMatch(
+    LIVE_MATCHDAY_HEAD_QUERY,
+    /detailPublicationId|detailGeneration|playerDetail/,
+  );
 
   const result = matchdayResult();
   delete result.snapshot.matches;
@@ -115,6 +121,29 @@ test("live matchday heartbeat is metadata-only and uses the V3 validator", () =>
   assert.equal(snapshot?.eventId, 3);
   assert.equal(snapshot?.revisions.scoreState, "score-1");
   assert.equal(snapshot?.times.nextRefreshAt, null);
+});
+
+test("metadata-only HEAD accepts an observed detail manifest without a body", () => {
+  const result = matchdayResult();
+  result.snapshot.revisions.detailObservation = "detail-observation-1";
+  result.snapshot.times = {
+    ...result.snapshot.times,
+    detailSourceCheckedAt: ISO,
+    detailContentUpdatedAt: ISO,
+    detailPublishedAt: ISO,
+    detailStaleAt: null,
+  };
+  result.snapshot.detailDelivery = {
+    state: "DEGRADED",
+    servedFrom: "REDIS_CURRENT",
+    reasonCodes: ["DETAIL_METADATA_ONLY"],
+  };
+  delete result.snapshot.matches;
+  validateLiveMatchdayHead(result);
+  const snapshot = snapshotFromLiveMatchdayHead(result);
+  assert.equal(snapshot?.revisions.detailObservation, "detail-observation-1");
+  assert.equal(snapshot?.revisions.detailPublicationId, null);
+  assert.equal(snapshot?.detailDelivery.servedFrom, "REDIS_CURRENT");
 });
 
 test("live matchday uses native Match metadata without fabricated Live Points fields", () => {
@@ -206,6 +235,24 @@ test("active-event Match reads cannot enter the cross-request cache", () => {
     preserveCacheOnValidationFailure: true,
   });
   assert.equal(typeof explicitValidator, "function");
+
+  const seasonalOptions = liveMatchdayRequestOptions(
+    3,
+    false,
+    undefined,
+    "full",
+    "2026-27",
+  );
+  assert.equal(seasonalOptions.cacheVariant, "season:2026-27|matchday:event:3");
+  assert.equal(
+    seasonalOptions.validateCacheData?.({
+      liveMatchday: {
+        ...matchdayResult(),
+        snapshot: { ...matchdayResult().snapshot, season: "2025-26" },
+      },
+    }),
+    false,
+  );
 });
 
 test("live matchday cache admission rejects malformed FULL data and accepts metadata HEAD data", () => {

@@ -15,7 +15,7 @@ test("Live Matches uses the self-contained V3 publication before the cold Core f
   assert.ok(publication >= 0 && core > publication);
   assert.match(
     page,
-    /if \(publishedMatchday\?\.snapshot\) \{[\s\S]*this\.coreMatches = publicationMatches[\s\S]*return;/,
+    /if \(publishedMatchday\?\.snapshot\) \{[\s\S]*this\.coreMatches = matchesWithRetainedDetails\.map[\s\S]*return;/,
   );
   assert.match(
     page,
@@ -362,7 +362,7 @@ test("Match refresh probes the head and fetches the full publication only on rev
   );
   assert.match(
     refresh,
-    /await getLiveMatchdayHead\(this\.currentEventId, true\)/,
+    /await getLiveMatchdayHead\(\s*this\.currentEventId,\s*true,/,
   );
   assert.match(
     refresh,
@@ -409,7 +409,7 @@ test("live match tabs follow web content preference and carry per-tab counts", (
   // Per-tab counts come from the same bucketing as the filter.
   assert.match(page, /countLiveMatchTabs/);
   assert.match(page, /statusTabs: buildStatusTabs\(core\)/);
-  assert.match(page, /statusTabs: buildStatusTabs\(publicationMatches\)/);
+  assert.match(page, /statusTabs: buildStatusTabs\(this\.coreMatches\)/);
   assert.match(template, /wx:for="\{\{statusTabs\}\}"/);
   assert.match(template, /status-tab-count">\{\{item\.count\}\}/);
 });
@@ -419,7 +419,7 @@ test("settled desk stays event-scoped without a second fixture overlay", () => {
   const service = source("miniprogram/services/live.service.ts");
   // V3 live data is event-scoped and self-contained; the page must not smuggle
   // a next-event LKG into the publication path.
-  assert.match(page, /this\.coreMatches = publicationMatches/);
+  assert.match(page, /this\.coreMatches = matchesWithRetainedDetails\.map/);
   assert.doesNotMatch(page, /appendNextEventRows\(/);
   assert.doesNotMatch(service, /nextFixtures/);
   assert.doesNotMatch(service, /homeTeamShortName\s+awayTeamShortName/);
