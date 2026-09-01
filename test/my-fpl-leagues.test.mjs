@@ -1,519 +1,102 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-globalThis.Page = () => {};
-const leaguesModule =
-  await import("../miniprogram/pages/my-fpl/leagues/leagues.ts");
+const read = (relativePath) =>
+  readFile(new URL(`../${relativePath}`, import.meta.url), "utf8");
 
-test("tournament directory cache never crosses season boundaries", () => {
-  globalThis.wx = {
-    getStorageSync() {
-      return {
-        entryId: 123,
-        season: "2025-26",
-        tournaments: [{ id: 9, name: "Old tournament" }],
-        storedAt: 1,
-      };
-    },
-  };
+test("My FPL uses the V2.1 settled tournament-review contract", async () => {
+  const [page, template, service] = await Promise.all([
+    read("miniprogram/pages/my-fpl/leagues/leagues.ts"),
+    read("miniprogram/pages/my-fpl/leagues/leagues.wxml"),
+    read("miniprogram/services/tournament.service.ts"),
+  ]);
 
-  assert.equal(leaguesModule.readTournamentsCache(123, "2026-27"), null);
-  assert.equal(
-    leaguesModule.readTournamentsCache(123, "2025-26")?.tournaments[0]?.name,
-    "Old tournament",
-  );
-  assert.equal(leaguesModule.readTournamentsCache(123, undefined), null);
-});
-
-test("My FPL page routes the settled tournament review through V2", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  const template = readFileSync(
-    new URL(
-      "../miniprogram/pages/my-fpl/leagues/leagues.wxml",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const service = readFileSync(
-    new URL("../miniprogram/services/tournament.service.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(page, /v2Enabled: true/);
+  assert.match(service, /my-tournament-review-v2\.1/);
   assert.match(page, /getMyTournamentReviewCatalog/);
-  assert.match(template, /<block wx:if="\{\{v2Enabled\}\}">/);
+  assert.match(page, /getMyTournamentGameweekReview/);
+  assert.match(page, /getMyTournamentSeasonReview/);
+  assert.match(page, /getMyTournamentSeasonReviewSection/);
+  assert.match(page, /latestFinalizedEventId/);
+  assert.match(service, /previousReadyEventId/);
+  assert.match(page, /isViewerEntryAuthorizationError/);
+  assert.match(page, /requestId === this\.requestId/);
+  assert.match(page, /requestId === this\.viewRequestId/);
+  assert.doesNotMatch(page, /getMyFplCompetition|readTournamentsCache|v2Enabled/);
+  assert.doesNotMatch(page, /mapStaleTournamentReviewData/);
+
   assert.match(template, /已结算快照复盘中心/);
   assert.match(template, /本轮积分（Gross）/);
+  assert.match(template, /Net（赛事排名）/);
   assert.match(template, /H2H 对战/);
-  assert.match(template, /淘汰赛对阵/);
-  assert.match(service, /X-LetLetMe-Contract|MY_TOURNAMENT_REVIEW_CONTRACT/);
-});
-
-test("V2 review presentation uses complete aggregates and contract-selected scores", () => {
-  assert.deepEqual(
-    leaguesModule.mergeTournamentReviewEventIds(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      [1, 2, 3, 4, 5],
-    ),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-  );
-  assert.equal(
-    leaguesModule.tournamentReviewTransferCostTotal({
-      grossPointsTotal: 400,
-      netPointsTotal: 384,
-    }),
-    16,
-  );
-  const row = {
-    grossPoints: 72,
-    netPoints: 68,
-    tournamentScore: 75,
-  };
-  assert.equal(leaguesModule.tournamentReviewHeadlineValue("gross", row), 72);
-  assert.equal(leaguesModule.tournamentReviewHeadlineValue("net", row), 68);
-  assert.equal(
-    leaguesModule.tournamentReviewHeadlineValue("custom-score", row),
-    75,
-  );
-  assert.equal(
-    leaguesModule.tournamentReviewHeadlineLabel("custom-score"),
-    "赛事分",
-  );
-  assert.equal(
-    leaguesModule.tournamentReviewVisibleState("READY", "DEGRADED"),
-    "DEGRADED",
-  );
-  assert.equal(
-    leaguesModule.tournamentReviewVisibleState("READY", "READY", "DEGRADED"),
-    "DEGRADED",
-  );
-  assert.equal(
-    leaguesModule.tournamentReviewVisibleState("READY", "READY"),
-    "READY",
-  );
-});
-
-test("V2 review pins pagination and resumes the failed operation", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  const template = readFileSync(
-    new URL(
-      "../miniprogram/pages/my-fpl/leagues/leagues.wxml",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const style = readFileSync(
-    new URL(
-      "../miniprogram/pages/my-fpl/leagues/leagues.wxss",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const service = readFileSync(
-    new URL("../miniprogram/services/tournament.service.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(service, /\$revision: String/);
-  assert.match(service, /revision: \$revision/);
-  assert.match(page, /next\.scope\?\.revision !== gameweekRevision/);
-  assert.match(page, /next\.latestRevision !== seasonRevision/);
-  assert.match(
-    page,
-    /error\.message === "赛事复盘快照已更新，请刷新后重试"[\s\S]*\? "review"/,
-  );
-  assert.match(page, /\[latestEventId, eventId\]/);
-  assert.match(page, /this\.v2RetryOperation = "loadMore"/);
-  assert.match(page, /async retryV2Operation\(forceRefresh = true\)/);
-  assert.match(
-    page,
-    /this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;[\s\S]*retryV2Operation/,
-  );
-  assert.match(
-    page,
-    /this\.data\.v2Loading \|\|[\s\S]*this\.data\.v2LoadingMore/,
-  );
-  assert.match(page, /this\.loadedContextRevision =\s*getAppContextSnapshot/);
-  assert.match(page, /this\.loadedEvent = eventId/);
-  assert.match(
-    page,
-    /const seasonChanged =[\s\S]*if \(entryId !== this\.loadedEntryId \|\| seasonChanged\)[\s\S]*clearV2EntryScopedViewState\(true\)/,
-  );
-  assert.match(
-    page,
-    /gameweekRevision &&[\s\S]*seasonRevision &&[\s\S]*gameweekRevision !== seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
-  );
-  assert.match(
-    page,
-    /gameweek\.state === "READY"[\s\S]*season\.state === "READY"[\s\S]*!gameweekRevision \|\| !seasonRevision[\s\S]*赛事复盘快照版本不一致，请刷新后重试/,
-  );
-  assert.match(page, /tournamentReviewVisibleState\([\s\S]*reviewState/);
-  assert.match(
-    page,
-    /const nextState = tournamentReviewVisibleState\([\s\S]*this\.data\.v2Catalog\?\.state[\s\S]*this\.data\.v2SelectedTournament\?\.state/,
-  );
-  assert.match(
-    page,
-    /previous\.state === "DEGRADED"[\s\S]*next\.state === "DEGRADED"[\s\S]*return \{ \.\.\.next, state,/,
-  );
-  assert.match(page, /clearV2EntryScopedViewState\(loading = false\)/);
-  assert.match(page, /if \(!entryId && !catalog\.adminReadAll\)/);
-  assert.match(
-    page,
-    /catalog\.tournaments\.length === 0 && catalog\.state !== "READY"/,
-  );
-  assert.match(page, /catalog\.state !== "DEGRADED"/);
-  assert.match(
-    page,
-    /finally \{[\s\S]*this\.loadPending = false;[\s\S]*this\.loadForceRefresh = false;/,
-  );
-  assert.match(
-    page,
-    /isViewerEntryAuthorizationError\(error\)[\s\S]*refreshAuthoritativeFollow\(\)/,
-  );
-  assert.match(template, /v2Season\.points\.seasonGrossPointsTotal/);
-  assert.match(template, /v2Season\.points\.seasonNetPointsTotal/);
-  assert.match(template, /v2SelectedTournament\.totalTeamNum/);
-  assert.match(template, /wx:for="\{\{v2GameweekRows\}\}"/);
-  assert.match(template, /bindtap="onOpenWebsite"/);
-  assert.match(template, /actionText="\{\{emptyState === 'entry'/);
-  assert.match(
-    template,
-    /<data-status[^>]*wx:if="\{\{v2Error\}\}"[\s\S]*<app-loading wx:if="\{\{v2Loading\}\}"/,
-  );
-  assert.match(
-    template,
-    /transferCost === null \|\| item\.transferCost === undefined \? '—'/,
-  );
-  assert.match(template, /winnerEntryId/);
-  assert.match(template, /review-v2-match-winner/);
-  assert.match(template, /perf-primary-content/);
-  assert.match(template, /review-v2-h2h-row/);
+  assert.match(template, /淘汰赛晋级路径/);
+  assert.match(template, /前往 Live 查看未结算数据/);
+  assert.match(template, /v2Season\.phases/);
   assert.doesNotMatch(template, /freshness\.ageSeconds/);
-  assert.match(service, /mapStaleData: mapStaleTournamentReviewData/);
-  assert.match(service, /state: "DEGRADED"/);
-  assert.match(service, /cacheVariant: `viewer-entry:/);
-  assert.match(service, /validateCacheData: \(data: unknown\)/);
-  assert.match(service, /currentMyFplEntryId\(\) !== Number\(viewerEntryId\)/);
-  assert.match(page, /requestView === "season" && !seasonRevision/);
-  assert.match(page, /v2State: tournamentReviewVisibleState\([\s\S]*merged\.state/);
-  assert.match(page, /const expectedEntryId = Number\(this\.data\.entryId\) \|\| 0/);
-  assert.match(page, /await refreshAuthoritativeFollow\(\)/);
-  assert.match(
-    page,
-    /const requestId = this\.viewRequestId;[\s\S]*const isActiveRequest = \(\) =>[\s\S]*this\.data\.v2SelectedTournament\?\.tournamentId === tournamentId/,
-  );
-  assert.match(
-    page,
-    /this\.setData\(\{ v2LoadingMore: true, v2Error: "" \}\);[\s\S]*await refreshAuthoritativeFollow\(\)/,
-  );
-  assert.match(
-    page,
-    /clearV2EntryScopedViewState\(\);[\s\S]*v2State: "UNAVAILABLE"[\s\S]*v2StatusText: tournamentReviewStateText\("UNAVAILABLE"\)/,
-  );
-  assert.match(page, /const revalidateReviewAuthority = async \(\) =>/);
-  assert.match(
-    page,
-    /await getMyTournamentSeasonReview\([\s\S]*if \(!\(await revalidateReviewAuthority\(\)\)\) return;/,
-  );
-  assert.match(
-    page,
-    /await getMyTournamentGameweekReview\([\s\S]*if \(!\(await revalidateReviewAuthority\(\)\)\) return;/,
-  );
-  assert.match(
-    page,
-    /if \(isViewerEntryAuthorizationError\(error\)\)[\s\S]*this\.clearV2EntryScopedViewState\(\);[\s\S]*v2State: "UNAVAILABLE"/,
-  );
-  assert.match(page, /if \(!isActiveRequest\(\)\) return;/);
-  assert.match(
-    page,
-    /v2State: "UNAVAILABLE",[\s\S]*v2StatusText: tournamentReviewStateText\("UNAVAILABLE"\)/,
-  );
-  assert.match(
-    page,
-    /v2State: "DEGRADED",[\s\S]*v2StatusText: tournamentReviewStateText\("DEGRADED"\)/,
-  );
-  assert.match(page, /!viewerRecoveryAttempted && isViewerEntryAuthorizationError/);
-  assert.match(page, /this\.loadedEvent = 0/);
-  assert.match(
-    page,
-    /v2LoadingMore: false,[\s\S]*v2HasNextPage:[\s\S]*v2Error: ""/,
-  );
-  assert.match(style, /\.review-v2-h2h-row\s*\{[\s\S]*grid-template-columns:/);
+  assert.doesNotMatch(template, /wx:else[\s\S]*v1/i);
+
+  assert.match(service, /MY_TOURNAMENT_REVIEW_CONTRACT/);
+  assert.match(service, /MyTournamentReviewCatalog/);
+  assert.match(service, /MyTournamentReviewSeasonSection/);
+  assert.match(service, /first: Math\.min\(100/);
+  assert.match(service, /staleTtl: 0/);
+  assert.doesNotMatch(service, /GET_MY_FPL_COMPETITION|MyFplCompetition/);
 });
 
-test("league warm show reloads only after identity change or the 60s window", () => {
-  assert.equal(
-    leaguesModule.shouldReloadLeagues(
-      1_000,
-      9,
-      9,
-      "2025-26",
-      "2025-26",
-      12,
-      12,
-      4,
-      4,
-      1_100,
-    ),
-    false,
-  );
-  assert.equal(
-    leaguesModule.shouldReloadLeagues(
-      1_000,
-      9,
-      9,
-      "2025-26",
-      "2025-26",
-      12,
-      12,
-      4,
-      4,
-      61_000,
-    ),
-    true,
-  );
-  assert.equal(
-    leaguesModule.shouldReloadLeagues(
-      1_000,
-      9,
-      10,
-      "2025-26",
-      "2025-26",
-      12,
-      12,
-      4,
-      4,
-      1_100,
-    ),
-    true,
-  );
-  assert.equal(
-    leaguesModule.shouldReloadLeagues(
-      1_000,
-      9,
-      9,
-      "2025-26",
-      "2026-27",
-      12,
-      12,
-      4,
-      4,
-      1_100,
-    ),
-    true,
-  );
-  assert.equal(
-    leaguesModule.shouldReloadLeagues(
-      1_000,
-      9,
-      9,
-      "2025-26",
-      "2025-26",
-      12,
-      13,
-      4,
-      4,
-      1_100,
-    ),
-    true,
-  );
+test("the Mini catalog is connection-shaped and supports a custom setup shell", async () => {
+  const service = await read("miniprogram/services/tournament.service.ts");
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+
+  assert.match(service, /edges: Array<\{ cursor: string; node: MyTournamentReviewCatalogItem \}>/);
+  assert.match(service, /pageInfo: MyTournamentReviewPageInfo/);
+  assert.match(service, /setupStatus: string/);
+  assert.match(service, /latestFinalizedScope/);
+  assert.match(service, /adminReadAll/);
+  assert.match(page, /scopeOverride/);
+  assert.match(page, /v2Scope === "ALL"/);
+  assert.match(page, /catalog\.viewerEntryId/);
 });
 
-test("league view loaders discard superseded responses and resume interrupted view loads", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(page, /isActiveViewRequest\(requestId\)/);
-  assert.match(page, /async loadSeasonView\([\s\S]*requestId: number/);
-  assert.match(page, /async loadGameweekView\([\s\S]*requestId: number/);
-  assert.match(
-    page,
-    /onHide\(\)[\s\S]*this\.data\.viewLoading[\s\S]*this\.data\.pathLoading/,
-  );
-  assert.match(
-    page,
-    /shouldReloadLeagues\([\s\S]*this\.loadedEvent,[\s\S]*this\.data\.event,/,
-  );
-  assert.match(
-    page,
-    /this\.pathLoadedKey = pathKey;[\s\S]*this\.setData\(\{ pathLoading: false \}\)/,
-  );
-  assert.match(page, /this\.pathLoadedKey = "";/);
-  assert.doesNotMatch(
-    page.slice(
-      page.indexOf("const recent = await loadTournamentSeasonPath"),
-      page.indexOf("if (window.hasOlder)"),
-    ),
-    /this\.pathLoadedKey = pathKey/,
-  );
+test("latest finalized non-ready data stays visible as state and is never silently replaced", async () => {
+  const [page, template] = await Promise.all([
+    read("miniprogram/pages/my-fpl/leagues/leagues.ts"),
+    read("miniprogram/pages/my-fpl/leagues/leagues.wxml"),
+  ]);
+
+  assert.match(page, /const eventId = selected\?\.latestFinalizedEventId \?\? 0/);
+  assert.match(page, /v2State: visibleState/);
+  assert.match(page, /state === "READY"/);
+  assert.match(template, /v2State !== 'READY'/);
+  assert.match(template, /不会回退到旧快照/);
+  assert.match(template, /未结算数据统一前往 Live/);
 });
 
-test("league view failures take precedence over misleading empty states", async () => {
-  const { readFileSync } = await import("node:fs");
-  const template = readFileSync(
-    new URL(
-      "../miniprogram/pages/my-fpl/leagues/leagues.wxml",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  assert.match(
-    template,
-    /<app-error-state[\s\S]*wx:if="\{\{viewError && \(\(showSeason && !hasSeasonData\) \|\| \(showGameweek && !hasGwData\)\)\}\}"[\s\S]*message="\{\{viewError\}\}"[\s\S]*bind:retry="onRetry"/,
-  );
-  assert.match(template, /!hasSeasonData && !viewError/);
-  assert.match(template, /!hasGwData && !viewError/);
-  assert.match(
-    template,
-    /showSeason && !viewLoading && \(!viewError \|\| hasSeasonData\)/,
-  );
-  assert.match(
-    template,
-    /showGameweek && !viewLoading && \(!viewError \|\| hasGwData\)/,
-  );
+test("review pagination and upgrade recovery remain bounded", async () => {
+  const [page, service] = await Promise.all([
+    read("miniprogram/pages/my-fpl/leagues/leagues.ts"),
+    read("miniprogram/services/tournament.service.ts"),
+  ]);
+
+  assert.match(page, /async onV2LoadMore/);
+  assert.match(page, /sectionPageInfo/);
+  assert.match(page, /payloadCursor/);
+  assert.match(page, /mergePayload/);
+  assert.match(page, /mergeSection/);
+  assert.match(page, /isClientUpgradeRequired/);
+  assert.match(page, /getUpdateManager/);
+  assert.match(service, /first: 100/);
+  assert.match(service, /first: 50/);
+  assert.doesNotMatch(service, /contentSha256/);
 });
 
-test("My FPL board loads every server page before local search and sort", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  const template = readFileSync(
-    new URL(
-      "../miniprogram/pages/my-fpl/leagues/leagues.wxml",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  assert.match(page, /getCompleteMyFplCompetitionBoard/);
-  assert.doesNotMatch(
-    page,
-    /getMyFplCompetitionBoard\([\s\S]{0,160}?\b1,\s*\b100,/,
-  );
-  assert.match(page, /currentMyFplEntryId/);
-  assert.match(template, /boardTotalRows \|\| boardRows\.length/);
-  assert.doesNotMatch(template, /再显示 20 队/);
-  assert.match(template, /bindtap="onPreviousBoardPage"/);
-  assert.match(template, /bindtap="onNextBoardPage"/);
-});
-
-test("large My FPL boards use a bounded 20-row UI window", () => {
-  const rows = Array.from({ length: 1567 }, (_, index) => index + 1);
-  const first = leaguesModule.paginateBoardRows(rows, 1);
-  assert.deepEqual(
-    {
-      rows: first.rows.length,
-      page: first.page,
-      pageCount: first.pageCount,
-      from: first.from,
-      to: first.to,
-      previous: first.hasPrevious,
-      next: first.hasNext,
-    },
-    {
-      rows: 20,
-      page: 1,
-      pageCount: 79,
-      from: 1,
-      to: 20,
-      previous: false,
-      next: true,
-    },
-  );
-
-  const last = leaguesModule.paginateBoardRows(rows, 999);
-  assert.deepEqual(last.rows, [1561, 1562, 1563, 1564, 1565, 1566, 1567]);
-  assert.deepEqual(
-    {
-      page: last.page,
-      from: last.from,
-      to: last.to,
-      previous: last.hasPrevious,
-      next: last.hasNext,
-    },
-    { page: 79, from: 1561, to: 1567, previous: true, next: false },
-  );
-});
-
-test("My FPL leagues sends every no-team viewer to team selection", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  assert.doesNotMatch(
-    page,
-    /requiresMyFplAccountLink|goToAccountLink|accountLinkRequired/,
-  );
-  assert.match(page, /emptyTitle: "先选择我的球队"/);
-  assert.match(
-    page,
-    /if \(this\.data\.emptyState === "entry"\) \{\s*goToEntrySearch\(\)/,
-  );
-});
-
-test("My FPL league views refresh viewer authority after authorization loss", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(page, /let viewerEntryRecoveryAttempted = false/);
-  assert.match(
-    page,
-    /isViewerEntryAuthorizationError\(error\)[\s\S]*?await refreshAuthoritativeFollow\(\)[\s\S]*?showEntryEmptyState\(\)[\s\S]*?void this\.loadLeagues\(true, trace\)/,
-  );
-  assert.match(page, /viewError: "球队状态尚未同步，请稍后重试"/);
-});
-
-test("My FPL entry removal clears retained view data and invalidates requests", async () => {
-  const { readFileSync } = await import("node:fs");
-  const page = readFileSync(
-    new URL("../miniprogram/pages/my-fpl/leagues/leagues.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    page,
-    /showEntryEmptyState\(\)[\s\S]*this\.clearEntryScopedViewState\(\)/,
-  );
-  assert.match(
-    page,
-    /if \(principalChanged \|\| seasonChanged\) \{\s*this\.clearEntryScopedViewState\(\)/,
-  );
-  assert.match(
-    page,
-    /clearEntryScopedViewState\(\)[\s\S]*this\.viewRequestId \+= 1[\s\S]*this\.pathRequestId \+= 1[\s\S]*this\.seasonRows = \[\][\s\S]*this\.gwRows = \[\][\s\S]*\.\.\.emptyPathState\(\)/,
-  );
-  assert.match(page, /this\.loadedEntryId = 0[\s\S]*this\.loadedEvent = 0/);
-});
-
-test("season path window loads the latest 8 gameweeks first", () => {
-  assert.deepEqual(leaguesModule.seasonPathWindow(1, 38), {
-    recentStart: 31,
-    recentEnd: 38,
-    hasOlder: true,
-    olderEnd: 30,
-  });
-  assert.deepEqual(leaguesModule.seasonPathWindow(1, 6), {
-    recentStart: 1,
-    recentEnd: 6,
-    hasOlder: false,
-    olderEnd: 0,
-  });
-  assert.notEqual(
-    leaguesModule.seasonPathCacheKey(9, 6953, 1),
-    leaguesModule.seasonPathCacheKey(9, 6953, 2),
-    "the cached season path must advance with the through-event",
-  );
+test("the Mini review cache is keyed to V2.1 and cannot serve transient review state", async () => {
+  const [service, cachePolicy] = await Promise.all([
+    read("miniprogram/services/graphql.service.ts"),
+    read("miniprogram/services/graphql-cache-policy.ts"),
+  ]);
+  assert.match(service, /operationName === "MyTournamentReviewCatalog"/);
+  assert.match(service, /edge\.node\?\.state === "READY"/);
+  assert.match(service, /operationName === "MyTournamentSeasonReviewSection"/);
+  assert.match(cachePolicy, /MyTournamentReviewCatalog/);
+  assert.match(cachePolicy, /MyTournamentSeasonReviewSection/);
 });

@@ -44,6 +44,35 @@
   margin-bottom: 16rpx;
 }
 
+.phase-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin: 12rpx 0 16rpx;
+}
+
+.phase-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 8rpx 14rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 999rpx;
+  background: var(--track);
+  color: var(--muted-ink);
+  font-size: 20rpx;
+}
+
+.phase-pill.phase-ready {
+  color: var(--ink);
+}
+
+.phase-pill.phase-active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+
 /* Toolbar — tournament picker pill, same as the live desk */
 .league-picker {
   flex: 1;

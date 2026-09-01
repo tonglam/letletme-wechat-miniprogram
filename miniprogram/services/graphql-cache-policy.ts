@@ -111,9 +111,10 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   EntryTournaments: { authMode: "session", cachePolicy: "reporting" },
   TournamentSummary: { authMode: "session", cachePolicy: "reporting" },
   TournamentSelectionStats: { authMode: "session", cachePolicy: "reporting" },
-  MyFplCompetitionsDesk: { authMode: "session", cachePolicy: "reporting" },
-  MyFplCompetitionBoard: { authMode: "session", cachePolicy: "reporting" },
-  MyFplCompetitionSeasonPath: { authMode: "session", cachePolicy: "reporting" },
+  MyTournamentReviewCatalog: { authMode: "session", cachePolicy: "reporting" },
+  MyTournamentGameweekReview: { authMode: "session", cachePolicy: "reporting" },
+  MyTournamentSeasonReview: { authMode: "session", cachePolicy: "reporting" },
+  MyTournamentSeasonReviewSection: { authMode: "session", cachePolicy: "reporting" },
   CalcLivePointsByEntry: { authMode: "session", cachePolicy: "live" },
   GetEntryLiveCompetitionBoard: {
     authMode: "session",

@@ -137,7 +137,6 @@ test("canReadEventReporting is exported and used by reporting desks", () => {
     "pages/my-fpl/team/team.controller.ts",
     "pages/summary/gameweek/gameweek.ts",
     "pages/summary/tournament/tournament.ts",
-    "pages/my-fpl/leagues/leagues.ts",
     "pages/data/selections/selections.ts"
   ]) {
     const page = readFileSync(path.join(ROOT, rel), "utf8");

@@ -92,7 +92,7 @@ export interface GraphQLOptions {
   /** Keep the prior authoritative value when a network response fails validation. */
   preserveCacheOnValidationFailure?: boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
-  contract?: "my-tournament-review-v2" | "live-points-v2";
+  contract?: "my-tournament-review-v2.1";
 }
 
 export interface PageRequestTrace {
@@ -182,7 +182,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
-  contract?: "my-tournament-review-v2" | "live-points-v2";
+  contract?: "my-tournament-review-v2.1";
 }
 
 export class GraphQLTransportError extends Error {
@@ -253,7 +253,7 @@ export function isViewerEntryAuthorizationError(error: unknown): boolean {
   return hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED");
 }
 
-/** Live Points is a hard cutover; old clients must show an upgrade state. */
+/** Version-gated review clients must show an upgrade state after hard cutover. */
 export function isClientUpgradeRequired(error: unknown): boolean {
   return hasGraphQLCode(error, "CLIENT_UPGRADE_REQUIRED");
 }
@@ -519,7 +519,7 @@ function toHttpError(
     code === "VIEWER_ENTRY_REQUIRED"
       ? "请先选择我的球队"
       : code === "CLIENT_UPGRADE_REQUIRED"
-        ? "当前版本不支持实时积分，请升级小程序后继续"
+        ? "当前版本不支持赛事复盘，请升级小程序后继续"
         : httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
     statusCode,
@@ -539,7 +539,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
-  contract?: "my-tournament-review-v2" | "live-points-v2",
+  contract?: "my-tournament-review-v2.1",
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -607,7 +607,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
-  contract: "my-tournament-review-v2" | "live-points-v2" | undefined,
+  contract: "my-tournament-review-v2.1" | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
@@ -857,14 +857,14 @@ export function shouldCacheGraphQLData(
       data as {
         myTournamentReviewCatalog?: {
           state?: unknown;
-          tournaments?: Array<{ state?: unknown }>;
+          edges?: Array<{ node?: { state?: unknown } }>;
         } | null;
       }
     ).myTournamentReviewCatalog;
     return Boolean(
       catalog?.state === "READY" &&
-        Array.isArray(catalog.tournaments) &&
-        catalog.tournaments.every((tournament) => tournament.state === "READY"),
+        Array.isArray(catalog.edges) &&
+        catalog.edges.every((edge) => edge.node?.state === "READY"),
     );
   }
   if (operationName === "MyTournamentGameweekReview") {
@@ -883,6 +883,15 @@ export function shouldCacheGraphQLData(
           myTournamentSeasonReview?: { state?: unknown } | null;
         }
       ).myTournamentSeasonReview?.state === "READY"
+    );
+  }
+  if (operationName === "MyTournamentSeasonReviewSection") {
+    return (
+      (
+        data as {
+          myTournamentSeasonReviewSection?: { state?: unknown } | null;
+        }
+      ).myTournamentSeasonReviewSection?.state === "READY"
     );
   }
   return true;

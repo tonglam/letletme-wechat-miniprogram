@@ -17,7 +17,6 @@ test("rank displays share the zh-CN compact formatRank", () => {
 test("overall-rank call sites route through formatRank", () => {
   const entryCard = source("miniprogram/components/entry-card/entry-card.ts");
   const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
-  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const summary = source("miniprogram/pages/summary/tournament/tournament.ts");
   const search = source("miniprogram/pages/entry/search/search.ts");
   const profile = source("miniprogram/pages/entry/profile/profile.ts");
@@ -33,11 +32,6 @@ test("overall-rank call sites route through formatRank", () => {
   assert.match(team, /rankText: formatRank\(item\.eventRank\)/);
   assert.match(team, /rankText: formatRank\(item\.overallRank\)/);
   assert.match(team, /overallRank: formatRank\(item\.overallRank\)/);
-
-  // League boards: position, overall-rank column and movement deltas.
-  assert.match(leagues, /rankText: formatRank\(row\.rank\)/);
-  assert.match(leagues, /c2: formatRank\(row\.overallRank\)/);
-  assert.match(leagues, /FPL 总排名 \$\{formatRank\(me\.overallRank\)\}/);
 
   // Tournament summary header + leaderboard OR column.
   assert.match(summary, /总排名", value: formatRank\(summary\.overallRank/);
