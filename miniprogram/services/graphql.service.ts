@@ -362,9 +362,7 @@ function resolvePolicy(
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
     workload:
-      options?.workload ??
-      configured.workload ??
-      getGraphQLWorkload(operationName, cachePolicy),
+      options?.workload ?? getGraphQLWorkload(operationName, cachePolicy),
     contract: options?.contract,
   };
 }
