@@ -41,7 +41,6 @@ const {
 const {
   GET_TOURNAMENT_DETAIL_DESK,
   GET_TOURNAMENT_OFFICIAL_H2H,
-  GET_ENTRY_OFFICIAL_H2H_MATCHUPS,
 } = await import("../miniprogram/services/tournament-detail.service.ts");
 const {
   ENTRY_LIVE_COMPETITION_BOARD_QUERY,
@@ -86,7 +85,6 @@ const operations = [
   ["GET_MY_FPL_COMPETITION_SEASON_PATH", GET_MY_FPL_COMPETITION_SEASON_PATH],
   ["GET_TOURNAMENT_DETAIL_DESK", GET_TOURNAMENT_DETAIL_DESK],
   ["GET_TOURNAMENT_OFFICIAL_H2H", GET_TOURNAMENT_OFFICIAL_H2H],
-  ["GET_ENTRY_OFFICIAL_H2H_MATCHUPS", GET_ENTRY_OFFICIAL_H2H_MATCHUPS],
   ["GET_ENTRY_TOURNAMENTS", GET_ENTRY_TOURNAMENTS],
   ["GET_MY_TOURNAMENT_REVIEW_CATALOG", GET_MY_TOURNAMENT_REVIEW_CATALOG],
   ["GET_MY_TOURNAMENT_GAMEWEEK_REVIEW", GET_MY_TOURNAMENT_GAMEWEEK_REVIEW],
@@ -252,6 +250,7 @@ const astNodeLimit = (document) => {
   if (["myTournamentGameweekReview", "myTournamentSeasonReview"].includes(rootName)) {
     return 320;
   }
+  if (rootName === "tournamentOfficialH2H") return 240;
   return roots.length === 1 &&
     roots[0].kind === Kind.FIELD &&
     !roots[0].alias &&
