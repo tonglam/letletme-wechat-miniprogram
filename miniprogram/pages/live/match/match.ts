@@ -1036,19 +1036,20 @@ Page({
       // Publication revision, not a heartbeat deadline, owns content reloads.
       reloadOnDeadline: false,
       acceptSnapshot: (snapshot) => {
-        this.liveSnapshot = snapshot
+        const acceptedSnapshot = snapshot
           ? mergeLiveMatchdayHeadStatus(this.liveSnapshot, snapshot)
           : snapshot;
+        this.liveSnapshot = acceptedSnapshot;
         this.setData({
           error: "",
           fixtureStaleMessage: matchDetailUpdateMessage(
-            snapshot,
+            acceptedSnapshot,
             this.coreMatches,
           ),
-          ...(snapshot?.times.deskContentUpdatedAt
+          ...(acceptedSnapshot?.times.deskContentUpdatedAt
             ? {
                 lastUpdated: formatTime(
-                  new Date(snapshot.times.deskContentUpdatedAt),
+                  new Date(acceptedSnapshot.times.deskContentUpdatedAt),
                 ),
               }
             : {}),
@@ -1678,7 +1679,7 @@ Page({
               options.forceRefresh === true,
               requestTrace,
               expectedEventId,
-              this.loadedSeason,
+              options.useActiveEventPointer ? undefined : this.loadedSeason,
             ));
         } catch (error) {
           publicationError = error;

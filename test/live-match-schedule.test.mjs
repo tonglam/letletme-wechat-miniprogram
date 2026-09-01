@@ -25,6 +25,10 @@ test("Live Matches uses the self-contained V3 publication before the cold Core f
     page,
     /const expectedEventId =\s*options\.useActiveEventPointer\s*\?\s*undefined[\s\S]*this\.currentEventId > 0/,
   );
+  assert.match(
+    page,
+    /options\.useActiveEventPointer \? undefined : this\.loadedSeason/,
+  );
   assert.match(page, /const useActiveEventPointer = context === null/);
   assert.match(page, /this\.armContextDeadline\(undefined, true\)/);
   assert.match(page, /void this\.loadData\(\{ useActiveEventPointer \}\)/);
@@ -337,9 +341,11 @@ test("heartbeat-only Match probes update metadata without rebuilding matches", (
     page.indexOf("acceptSnapshot:"),
     page.indexOf("onProbeError:"),
   );
-  assert.match(accept, /this\.liveSnapshot = snapshot/);
-  assert.match(accept, /fixtureStaleMessage: matchDetailUpdateMessage/);
-  assert.match(accept, /snapshot\?\.times\.deskContentUpdatedAt/);
+  assert.match(
+    accept,
+    /const acceptedSnapshot = snapshot[\s\S]*this\.liveSnapshot = acceptedSnapshot[\s\S]*fixtureStaleMessage: matchDetailUpdateMessage\(\s*acceptedSnapshot/,
+  );
+  assert.match(accept, /acceptedSnapshot\?\.times\.deskContentUpdatedAt/);
   assert.doesNotMatch(accept, /\bmatches\s*:|\bgroups\s*:/);
 });
 
