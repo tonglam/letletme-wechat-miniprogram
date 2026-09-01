@@ -250,7 +250,13 @@ const astNodeLimit = (document) => {
   // nested shape is intentionally larger than the generic 200-node client
   // budget, but remains below the same production ceiling used by the live
   // points operations.
-  if (["myTournamentGameweekReview", "myTournamentSeasonReview"].includes(rootName)) {
+  if (
+    [
+      "myTournamentGameweekReview",
+      "myTournamentSeasonReview",
+      "myTournamentSeasonReviewSection",
+    ].includes(rootName)
+  ) {
     return 320;
   }
   if (rootName === "tournamentOfficialH2H") return 240;
