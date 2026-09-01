@@ -63,7 +63,7 @@
     <view wx:if="{{showGameweek && v2Gameweek}}" class="section">
       <view class="section-heading">GW{{v2Event}} 单轮表现</view>
       <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'POINTS'}}" class="review-v2-stat-grid">
-        <view class="review-v2-stat"><text>本轮积分（Gross）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.grossPointsTotal}}</text></view>
+        <view class="review-v2-stat"><text wx:if="{{v2Gameweek.payload.points.headlineMetric !== 'net'}}">本轮积分（Gross）</text><text wx:else>本轮积分（Net）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.headlineMetric === 'net' ? v2Gameweek.payload.points.netPointsTotal : v2Gameweek.payload.points.grossPointsTotal}}</text></view>
         <view class="review-v2-stat"><text>转会成本</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.grossPointsTotal - v2Gameweek.payload.points.netPointsTotal}}</text></view>
         <view class="review-v2-stat"><text>Net（赛事排名）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.netPointsTotal}}</text></view>
       </view>

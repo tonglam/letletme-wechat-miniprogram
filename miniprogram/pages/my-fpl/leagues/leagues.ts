@@ -163,6 +163,15 @@ function payloadHasNext(
   return payload.knockout.hasNextPage;
 }
 
+function appendUnique<T>(
+  before: T[],
+  after: T[],
+  key: (value: T) => string,
+): T[] {
+  const seen = new Set(before.map(key));
+  return [...before, ...after.filter((value) => !seen.has(key(value)))];
+}
+
 function mergePayload(
   previous: MyTournamentReviewPayload | null,
   next: MyTournamentReviewPayload,
@@ -173,7 +182,11 @@ function mergePayload(
       format: "POINTS",
       points: {
         ...next.points,
-        rows: [...previous.points.rows, ...next.points.rows],
+        rows: appendUnique(
+          previous.points.rows,
+          next.points.rows,
+          (row) => String(row.entryId),
+        ),
       },
     };
   }
@@ -182,10 +195,16 @@ function mergePayload(
       format: "H2H",
       h2h: {
         ...next.h2h,
-        matches: [...previous.h2h.matches, ...next.h2h.matches],
-        standings: next.h2h.standings.length
-          ? next.h2h.standings
-          : previous.h2h.standings,
+        matches: appendUnique(
+          previous.h2h.matches,
+          next.h2h.matches,
+          (match) => String(match.matchId),
+        ),
+        standings: appendUnique(
+          previous.h2h.standings,
+          next.h2h.standings,
+          (row) => `${row.groupId}:${row.entryId}`,
+        ),
       },
     };
   }
@@ -194,7 +213,11 @@ function mergePayload(
       format: "KNOCKOUT",
       knockout: {
         ...next.knockout,
-        matches: [...previous.knockout.matches, ...next.knockout.matches],
+        matches: appendUnique(
+          previous.knockout.matches,
+          next.knockout.matches,
+          (match) => String(match.matchId),
+        ),
       },
     };
   }
@@ -206,32 +229,54 @@ function mergeSection(
   next: MyTournamentSeasonSection,
 ): MyTournamentSeasonSection {
   if (!previous) return next;
+  // A season section owns its own cursor. Never merge two different section
+  // projections into one payload: POINTS_STANDINGS and POINTS_TRAJECTORIES
+  // both expose `points`, while H2H standings and fixtures both expose `h2h`.
+  // The section key is therefore part of the merge contract.
+  if (previous.section !== next.section) return next;
+  const mergePoints =
+    previous.points && next.points
+      ? {
+          ...next.points,
+          rows: appendUnique(
+            previous.points.rows,
+            next.points.rows,
+            (row) => String(row.entryId),
+          ),
+        }
+      : (next.points ?? previous.points);
+  const mergeH2H =
+    previous.h2h && next.h2h
+      ? {
+          ...next.h2h,
+          matches: appendUnique(
+            previous.h2h.matches,
+            next.h2h.matches,
+            (match) => String(match.matchId),
+          ),
+          standings: appendUnique(
+            previous.h2h.standings,
+            next.h2h.standings,
+            (row) => `${row.groupId}:${row.entryId}`,
+          ),
+        }
+      : (next.h2h ?? previous.h2h);
+  const mergeKnockout =
+    previous.knockout && next.knockout
+      ? {
+          ...next.knockout,
+          matches: appendUnique(
+            previous.knockout.matches,
+            next.knockout.matches,
+            (match) => String(match.matchId),
+          ),
+        }
+      : (next.knockout ?? previous.knockout);
   return {
     ...next,
-    points:
-      previous.points && next.points
-        ? {
-            ...next.points,
-            rows: [...previous.points.rows, ...next.points.rows],
-          }
-        : (next.points ?? previous.points),
-    h2h:
-      previous.h2h && next.h2h
-        ? {
-            ...next.h2h,
-            matches: [...previous.h2h.matches, ...next.h2h.matches],
-            standings: next.h2h.standings.length
-              ? next.h2h.standings
-              : previous.h2h.standings,
-          }
-        : (next.h2h ?? previous.h2h),
-    knockout:
-      previous.knockout && next.knockout
-        ? {
-            ...next.knockout,
-            matches: [...previous.knockout.matches, ...next.knockout.matches],
-          }
-        : (next.knockout ?? previous.knockout),
+    points: mergePoints,
+    h2h: mergeH2H,
+    knockout: mergeKnockout,
   };
 }
 
@@ -241,26 +286,12 @@ type SeasonSectionPages = Partial<
 
 function combineSeasonSections(
   pages: SeasonSectionPages,
+  primarySection?: MyTournamentReviewSeasonSection | null,
 ): MyTournamentSeasonSection | null {
-  const sections = Object.values(pages).filter(
+  if (primarySection && pages[primarySection]) return pages[primarySection]!;
+  return Object.values(pages).find(
     (section): section is MyTournamentSeasonSection => Boolean(section),
-  );
-  if (!sections.length) return null;
-  const merged = sections.reduce(
-    mergeSection,
-    null as MyTournamentSeasonSection | null,
-  );
-  if (!merged) return null;
-  // Each section has its own cursor.  The UI only needs the aggregate flag;
-  // pagination uses seasonSectionPages below and never reuses this synthetic
-  // cursor for another section.
-  return {
-    ...merged,
-    pageInfo: {
-      hasNextPage: sections.some((section) => section.pageInfo.hasNextPage),
-      endCursor: null,
-    },
-  };
+  ) ?? null;
 }
 
 function reviewViewMeta(
@@ -339,9 +370,16 @@ function readLastPick(entryId: number): number {
   }
 }
 
+let upgradePromptRegistered = false;
+
 function promptForUpgrade(): void {
   try {
     const manager = wx.getUpdateManager();
+    // App-level update protection already owns this event. Registering page
+    // handlers on every 426 would produce duplicate modals and applyUpdate
+    // calls when a page is revisited.
+    if (upgradePromptRegistered) return;
+    upgradePromptRegistered = true;
     manager.onUpdateReady(() => {
       wx.showModal({
         title: "需要升级",
@@ -440,6 +478,11 @@ PerformancePage({
       return;
     }
     const forceRefresh = this.resumeForceRefresh;
+    try {
+      await getApp<IAppOption>().initAppData(forceRefresh);
+    } catch {
+      // The catalog request below remains the actionable boundary.
+    }
     await this.loadCatalog(
       forceRefresh,
       capturePageRequestTrace({
@@ -478,6 +521,11 @@ PerformancePage({
 
   async onPullDownRefresh() {
     try {
+      try {
+        await getApp<IAppOption>().initAppData(true);
+      } catch {
+        // Keep the refresh actionable through the catalog request.
+      }
       await this.loadCatalog(
         true,
         capturePageRequestTrace({
@@ -518,7 +566,29 @@ PerformancePage({
     });
     try {
       const entryId = (await refreshAuthoritativeFollow()) || 0;
-      if (!active()) return;
+      if (!this.pageVisible || requestId !== this.requestId) return;
+      if (entryId !== expectedEntryId) {
+        // A rebind/logout completed while the request was being prepared. Do
+        // not reuse the old connection cursor or attach old rows to the new
+        // viewer; restart from a fresh first page for the new binding.
+        if (!entryId) {
+          this.showEntryEmptyState();
+          return;
+        }
+        this.setData({
+          v2Loading: false,
+          v2CatalogLoadingMore: false,
+          entryId,
+        });
+        await this.loadCatalog(true, trace, scope, null, false);
+        return;
+      }
+      if (!active()) {
+        if (this.pageVisible && requestId === this.requestId) {
+          this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
+        }
+        return;
+      }
       if (!entryId && scope !== "ALL") {
         this.showEntryEmptyState();
         return;
@@ -549,7 +619,15 @@ PerformancePage({
         );
         if (active()) this.setData({ v2Scope: "ACCESSIBLE" });
       }
-      if (!active() || currentMyFplEntryId() !== entryId) return;
+      if (!active() || currentMyFplEntryId() !== entryId) {
+        if (this.pageVisible && requestId === this.requestId) {
+          this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
+          if (currentMyFplEntryId() && currentMyFplEntryId() !== expectedEntryId) {
+            void this.loadCatalog(true, trace, scope, null, false);
+          }
+        }
+        return;
+      }
       // Re-read the Web-owned binding immediately before committing the
       // catalog. A binding can change between the network response and this
       // state update; never attach the response to the new entry by accident.
@@ -652,7 +730,15 @@ PerformancePage({
         );
       }
     } catch (error) {
-      if (!active()) return;
+      if (!active()) {
+        if (this.pageVisible && requestId === this.requestId) {
+          this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
+          if (currentMyFplEntryId() !== expectedEntryId) {
+            void this.loadCatalog(true, trace, scope, null, false);
+          }
+        }
+        return;
+      }
       if (isClientUpgradeRequired(error)) {
         promptForUpgrade();
         this.retryOperation = "catalog";
@@ -696,6 +782,13 @@ PerformancePage({
       this.data.v2SelectedTournament?.tournamentId === tournamentId &&
       this.data.v2Event === eventId &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+    const settleStale = () => {
+      if (!this.pageVisible || requestId !== this.viewRequestId) return;
+      this.setData({ v2Loading: false, v2LoadingMore: false });
+      if (currentMyFplEntryId() !== expectedEntryId) {
+        void this.loadCatalog(true, trace);
+      }
+    };
     this.retryOperation = "review";
     this.retryPhaseId = null;
     this.setData({
@@ -725,7 +818,10 @@ PerformancePage({
               this.data.entryId,
             ),
       ]);
-      if (!active() || !season) return;
+      if (!active() || !season) {
+        settleStale();
+        return;
+      }
       let nextGameweek = gameweek;
       if (after && this.data.v2Gameweek?.payload && gameweek.payload) {
         nextGameweek = {
@@ -798,7 +894,10 @@ PerformancePage({
           const sections = settledSections.flatMap((result) =>
             result.status === "fulfilled" ? [result.value] : [],
           );
-          if (!active()) return;
+          if (!active()) {
+            settleStale();
+            return;
+          }
           this.seasonSectionPages = Object.fromEntries(
             sections.map((candidate) => [candidate.section, candidate]),
           ) as SeasonSectionPages;
@@ -808,7 +907,10 @@ PerformancePage({
             phaseId: phase.phaseId,
             entryId: expectedEntryId,
           };
-          section = combineSeasonSections(this.seasonSectionPages);
+          section = combineSeasonSections(
+            this.seasonSectionPages,
+            baseSection,
+          );
         }
       } else if (!after) {
         this.seasonSectionPages = {};
@@ -857,7 +959,10 @@ PerformancePage({
         emptyState: "",
       });
     } catch (error) {
-      if (!active()) return;
+      if (!active()) {
+        settleStale();
+        return;
+      }
       if (isClientUpgradeRequired(error)) {
         promptForUpgrade();
         this.setData({
@@ -899,6 +1004,13 @@ PerformancePage({
       this.data.v2Event === eventId &&
       this.data.v2SelectedPhaseId === phaseId &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+    const settleStale = () => {
+      if (!this.pageVisible || requestId !== this.viewRequestId) return;
+      this.setData({ v2Loading: false, v2LoadingMore: false });
+      if (currentMyFplEntryId() !== expectedEntryId) {
+        void this.loadCatalog(true);
+      }
+    };
     this.setData({
       v2SelectedPhaseId: phaseId,
       v2Format: phase.format,
@@ -981,7 +1093,10 @@ PerformancePage({
       const sections = settledSections.flatMap((result) =>
         result.status === "fulfilled" ? [result.value] : [],
       );
-      if (!active()) return;
+      if (!active()) {
+        settleStale();
+        return;
+      }
       this.seasonSectionPages = Object.fromEntries(
         sections.map((candidate) => [candidate.section, candidate]),
       ) as SeasonSectionPages;
@@ -991,7 +1106,10 @@ PerformancePage({
         phaseId,
         entryId: expectedEntryId,
       };
-      const section = combineSeasonSections(this.seasonSectionPages);
+      const section = combineSeasonSections(
+        this.seasonSectionPages,
+        baseSection,
+      );
       this.setData({
         v2SeasonSection: section,
         v2Loading: false,
@@ -1000,7 +1118,10 @@ PerformancePage({
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
       });
     } catch (error) {
-      if (!active()) return;
+      if (!active()) {
+        settleStale();
+        return;
+      }
       if (isClientUpgradeRequired(error)) {
         promptForUpgrade();
         this.setData({
@@ -1039,10 +1160,6 @@ PerformancePage({
         );
       const context = this.seasonSectionContext;
       const pages = this.seasonSectionPages;
-      const pendingSections = Object.values(pages).filter(
-        (candidate): candidate is MyTournamentSeasonSection =>
-          Boolean(candidate?.pageInfo.hasNextPage),
-      );
       if (
         !section ||
         !phase?.revision ||
@@ -1050,10 +1167,14 @@ PerformancePage({
         !context ||
         context.tournamentId !== selected.tournamentId ||
         context.eventId !== this.data.v2Event ||
-        context.phaseId !== phase.phaseId ||
-        !pendingSections.length
+        context.phaseId !== phase.phaseId
       )
         return;
+      // The visible section owns the button and cursor. Auxiliary trajectories
+      // or fixtures remain independent projections and must not be merged or
+      // allowed to fail the visible page's pagination.
+      const pendingSections = section.pageInfo.hasNextPage ? [section] : [];
+      if (!pendingSections.length) return;
       const requestId = ++this.viewRequestId;
       const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
       const active = () =>
@@ -1087,7 +1208,12 @@ PerformancePage({
             ),
           ),
         );
-        if (!active()) return;
+        if (!active()) {
+          if (this.pageVisible && requestId === this.viewRequestId) {
+            this.setData({ v2LoadingMore: false });
+          }
+          return;
+        }
         const nextPages: SeasonSectionPages = { ...pages };
         for (const next of nextSections) {
           const previous = nextPages[next.section];
@@ -1096,7 +1222,7 @@ PerformancePage({
             : next;
         }
         this.seasonSectionPages = nextPages;
-        const combined = combineSeasonSections(nextPages);
+        const combined = combineSeasonSections(nextPages, section.section);
         this.setData({
           v2SeasonSection: combined,
           v2LoadingMore: false,
@@ -1105,7 +1231,12 @@ PerformancePage({
         this.retryOperation = null;
         this.retryPhaseId = null;
       } catch (error) {
-        if (!active()) return;
+        if (!active()) {
+          if (this.pageVisible && requestId === this.viewRequestId) {
+            this.setData({ v2LoadingMore: false });
+          }
+          return;
+        }
         this.setData({
           v2LoadingMore: false,
           v2Error: error instanceof Error ? error.message : "加载更多失败",
