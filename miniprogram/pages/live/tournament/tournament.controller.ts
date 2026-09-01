@@ -95,6 +95,7 @@ import {
 import {
   getTournamentDetailDesk,
   getTournamentOfficialH2H,
+  getTournamentOfficialH2HHistory,
   type TournamentDetailDesk,
 } from "../../../services/tournament-detail.service";
 import {
@@ -119,6 +120,7 @@ import {
   traceableH2HBoard,
   visibleTournamentRoster,
   type H2HBoard,
+  type H2HHistoryMatch,
   type H2HMatch,
   type H2HStanding,
   type TournamentParticipantRow,
@@ -542,7 +544,7 @@ function boardSortOf(key: SortKey): LiveBoardSort {
     case "totalPoints":
       return "TOTAL_POINTS";
     case "overallRank":
-      return "RANK";
+      return "OVERALL_RANK";
     case "teamValue":
       return "TEAM_VALUE";
     case "entryName":
@@ -579,6 +581,25 @@ function liveStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string {
   }
   if (page.head.availability === "PENDING") return "正在获取官方分数";
   if (state === "FINAL") return "官方分数已结束";
+  return "官方实时";
+}
+
+function liveStatusFromHead(head: LeagueLiveHead): string {
+  if (
+    head.delivery.state === "STALE" ||
+    head.delivery.state === "DEGRADED"
+  ) {
+    return "官方数据延迟";
+  }
+  if (
+    head.delivery.state === "UNAVAILABLE" ||
+    head.availability === "ERROR" ||
+    head.availability === "MISSING"
+  ) {
+    return "官方分数不可用";
+  }
+  if (head.availability === "PENDING") return "正在获取官方分数";
+  if (head.delivery.state === "FINAL") return "官方分数已结束";
   return "官方实时";
 }
 
@@ -634,6 +655,7 @@ function chipCodeOf(raw: unknown): string {
 }
 
 function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
+  const missing = row.availability === "MISSING";
   const officialEventPoints = row.score?.eventPoints;
   const eventPointsKnown = typeof officialEventPoints === "number";
   const livePoints = numberValue(officialEventPoints);
@@ -679,13 +701,15 @@ function normalizeRow(row: LiveTournamentRow): DisplayTournamentRow {
         ? `-${transferCost}`
         : "0"
       : "—",
-    metaText: `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
+    metaText: missing
+      ? "官方未确认参赛数据"
+      : `队长 ${captain} · 开卡 ${chip} · 转会扣分 ${transferCostKnown ? transferCost : "—"} · ${played}/${played + toPlay}`,
     chipCode,
     displayCaptain:
       captain && captain !== "无队长"
         ? `${captain} (C)${captainPointsKnown ? ` ${row.captainPoints}分` : ""}`
         : "",
-    playedText: `${played}/${played + toPlay}`,
+    playedText: missing ? "—" : `${played}/${played + toPlay}`,
     overallRankText: overallRankKnown ? formatRank(row.overallRank) : "",
     teamValueText: teamValueKnown
       ? // The live-board payload exposes squad value in £m already (web
@@ -970,12 +994,12 @@ function displayH2HMatch(
   viewerEntryId?: number,
 ): DisplayH2HMatch {
   const homePoints =
-    typeof match.home.points === "number" && Number.isFinite(match.home.points)
-      ? match.home.points
+    typeof match.home.netPoints === "number" && Number.isFinite(match.home.netPoints)
+      ? match.home.netPoints
       : null;
   const awayPoints =
-    typeof match.away.points === "number" && Number.isFinite(match.away.points)
-      ? match.away.points
+    typeof match.away.netPoints === "number" && Number.isFinite(match.away.netPoints)
+      ? match.away.netPoints
       : null;
   const hasScore = homePoints != null && awayPoints != null;
   return {
@@ -1004,16 +1028,16 @@ function displayH2HMatch(
 
 /** MatchupHistoryBoard row: GW label + live/finished/upcoming badge + sides. */
 function displayH2HMatchup(
-  match: H2HMatch,
+  match: H2HMatch | H2HHistoryMatch,
   currentEventId: number | null | undefined,
 ): DisplayH2HMatchup {
   const homePoints =
-    typeof match.home.points === "number" && Number.isFinite(match.home.points)
-      ? match.home.points
+    typeof match.home.netPoints === "number" && Number.isFinite(match.home.netPoints)
+      ? match.home.netPoints
       : null;
   const awayPoints =
-    typeof match.away.points === "number" && Number.isFinite(match.away.points)
-      ? match.away.points
+    typeof match.away.netPoints === "number" && Number.isFinite(match.away.netPoints)
+      ? match.away.netPoints
       : null;
   const hasScore = homePoints != null && awayPoints != null;
   const statusText = h2hMatchupStatusText(match, currentEventId);
@@ -1265,6 +1289,8 @@ PerformancePage({
   h2hHeadRequest: null as Promise<void> | null,
   h2hHeadRequestId: 0,
   h2hTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  h2hMatchupsRequest: null as Promise<void> | null,
+  h2hMatchupsRequestKey: "",
   setupTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   detailDesk: null as TournamentDetailDesk | null,
   detailDeskKey: "",
@@ -1385,6 +1411,9 @@ PerformancePage({
       acceptSnapshot: (snapshot) => {
         this.boardHead = snapshot?.head || null;
         this.boardHeadSnapshot = snapshot;
+        if (snapshot?.head) {
+          this.setData({ scoreStatusText: liveStatusFromHead(snapshot.head) });
+        }
         // Per-entry partial errors survive an unchanged revision; only a fully
         // fresh rows payload clears them.
         if (shouldClearTournamentRowsError(this.failedEntryCount)) {
@@ -2260,9 +2289,9 @@ PerformancePage({
     incoming.forEach((row) => byEntry.set(numberValue(row.entry), row));
     const viewerId = numberValue(this.data.entryId);
     const compareIds = this.data.compareIds || [];
-    const rows = [...byEntry.values()].map((row, index) => {
+    const rows = [...byEntry.values()].map((row) => {
       const compared = compareIds.includes(numberValue(row.entry));
-      const visibleRank = numberValue(row.rank, index + 1);
+      const visibleRank = row.rank ?? 0;
       return {
         ...row,
         visibleRank,
@@ -2696,7 +2725,9 @@ PerformancePage({
     this.h2hRequestId += 1;
     this.h2hHeadRequestId += 1;
     this.h2hHeadRequest = null;
-    this.h2hHead = null;
+    this.h2hMatchupsRequest = null;
+    this.h2hMatchupsRequestKey = "";
+    this.setData({ h2hMatchupsLoading: false });
     if (this.h2hTimer) {
       clearTimeout(this.h2hTimer);
       this.h2hTimer = undefined;
@@ -2709,6 +2740,9 @@ PerformancePage({
 
   clearH2HState() {
     this.clearH2HTimers();
+    this.h2hHead = null;
+    this.h2hMatchupsRequest = null;
+    this.h2hMatchupsRequestKey = "";
     this.h2hActiveEventId = 0;
     this.detailDesk = null;
     this.detailDeskKey = "";
@@ -2733,6 +2767,13 @@ PerformancePage({
       return;
     }
     const tournamentId = Number(selected.id);
+    const historyRequestKey = `${tournamentId}:${entryId}:${eventId}`;
+    if (this.h2hMatchupsRequestKey !== historyRequestKey) {
+      this.setData({
+        h2hMatchupsLoaded: false,
+        h2hMatchupsFailed: false,
+      });
+    }
     const requestId = ++this.h2hRequestId;
     const preserveData = this.data.hasData || options.background === true;
     this.setData(
@@ -2824,6 +2865,13 @@ PerformancePage({
       return;
     }
     const tournamentId = Number(selected.id);
+    const historyRequestKey = `${tournamentId}:${entryId}:${eventId}`;
+    if (this.h2hMatchupsRequestKey !== historyRequestKey) {
+      this.setData({
+        h2hMatchupsLoaded: false,
+        h2hMatchupsFailed: false,
+      });
+    }
     const requestId = ++this.h2hRequestId;
     this.setData(
       this.data.hasData
@@ -2902,22 +2950,21 @@ PerformancePage({
     }
     const entryId = this.data.entryId;
     const traceable = traceableH2HBoard(board);
-    const standings = traceable
+    const standingsReady = traceable && board.standings?.state === "READY";
+    const retainedStandings = this.data.h2hStandings;
+    const standings = standingsReady
       ? sortH2HStandings(board.standings?.rows || [])
-      : [];
+      : null;
     const matches = traceable
       ? board.matches || []
       : scrubUntraceableH2HMatches(board.matches || []);
     const activeEventId = this.h2hActiveEventId || this.data.maxGw;
-    const showStandings = shouldShowH2HStandings(board.eventId, activeEventId);
-    const viewer = standings.find((row) => row.entryId === entryId) || null;
-    const matchupRows = matches
-      .filter(
-        (match) =>
-          match.home.entryId === entryId || match.away.entryId === entryId,
-      )
-      .map((match) => displayH2HMatchup(match, activeEventId));
-    this.h2hActiveEventId = board.eventId;
+    const showStandings =
+      shouldShowH2HStandings(board.eventId, activeEventId) &&
+      (standingsReady || retainedStandings.length > 0);
+    const viewer = standingsReady
+      ? board.standings?.rows.find((row) => row.entryId === entryId) || null
+      : null;
     this.setData({
       ...emptyH2HViewState(),
       hasData: true,
@@ -2931,19 +2978,24 @@ PerformancePage({
       h2hShowStandings: showStandings,
       h2hAwaitingSchedule:
         board.availability === "PENDING" && board.matches.length === 0,
-      h2hStandings: standings.map((row) => displayH2HStanding(row, entryId)),
+      h2hStandings: standings
+        ? standings.map((row) => displayH2HStanding(row, entryId))
+        : retainedStandings,
       h2hMatches: matches.map((match) => displayH2HMatch(match, entryId)),
-      h2hViewerRankText: viewer && viewer.rank ? String(viewer.rank) : "",
+      h2hViewerRankText:
+        viewer && viewer.rank
+          ? String(viewer.rank)
+          : this.data.h2hViewerRankText,
       h2hViewerMatchPointsText: viewer
         ? String(numberValue(viewer.matchPoints))
-        : "",
+        : this.data.h2hViewerMatchPointsText,
       h2hViewerRecordText: viewer
         ? `${numberValue(viewer.won)}-${numberValue(viewer.drawn)}-${numberValue(viewer.lost)}`
-        : "",
-      h2hMatchups: matchupRows,
-      h2hMatchupsLoading: false,
-      h2hMatchupsLoaded: true,
-      h2hMatchupsFailed: false,
+        : this.data.h2hViewerRecordText,
+      h2hMatchups: this.data.h2hMatchups,
+      h2hMatchupsLoading: this.data.h2hMatchupsLoading,
+      h2hMatchupsLoaded: this.data.h2hMatchupsLoaded,
+      h2hMatchupsFailed: this.data.h2hMatchupsFailed,
       scoreStatusText: `H2H ${h2hScoreStateText(board.availability, board.delivery.state)}`,
       scoreNextRefreshAt: board.times?.nextRefreshAt || "",
       lastUpdated: exactUpdatedTime(board.times?.contentUpdatedAt),
@@ -3086,11 +3138,90 @@ PerformancePage({
 
   async loadH2HMatchups(): Promise<void> {
     const entryId = this.data.entryId;
-    if (!entryId || !this.data.h2hActive) return;
-    // Match history is part of the already loaded tournament publication. A
-    // tab switch must not create a second viewer-wide network query.
-    if (this.data.h2hMatchupsLoaded) return;
-    this.setData({ h2hMatchupsLoading: false, h2hMatchupsLoaded: true });
+    const tournamentId = Number(this.data.selectedTournament?.id);
+    const eventId = this.h2hActiveEventId || this.data.event;
+    if (
+      !entryId ||
+      !this.data.h2hActive ||
+      !tournamentId ||
+      !Number.isSafeInteger(eventId) ||
+      eventId <= 0
+    ) {
+      return;
+    }
+    const requestKey = `${tournamentId}:${entryId}:${eventId}`;
+    if (
+      this.data.h2hMatchupsLoaded &&
+      this.h2hMatchupsRequestKey === requestKey
+    ) {
+      return;
+    }
+    if (
+      this.data.h2hMatchupsLoading &&
+      this.h2hMatchupsRequestKey === requestKey
+    ) {
+      return;
+    }
+    this.h2hMatchupsRequestKey = requestKey;
+    this.setData({ h2hMatchupsLoading: true, h2hMatchupsFailed: false });
+    const request = (async () => {
+      try {
+        const history = await getTournamentOfficialH2HHistory(
+          tournamentId,
+          eventId,
+          100,
+          capturePageRequestTrace({
+            callerSurface: "live-tournament-h2h-history",
+            trigger: "tab",
+          }),
+        );
+        if (
+          !this.pageVisible ||
+          this.h2hMatchupsRequestKey !== requestKey ||
+          Number(this.data.selectedTournament?.id) !== tournamentId
+        ) {
+          return;
+        }
+        const matchups = history.matches
+          .filter(
+            (match) =>
+              match.home.entryId === entryId || match.away.entryId === entryId,
+          )
+          .map((match) => displayH2HMatchup(match, eventId));
+        this.setData({
+          h2hMatchups: matchups,
+          h2hMatchupsLoading: false,
+          h2hMatchupsLoaded: true,
+          h2hMatchupsFailed: false,
+        });
+      } catch (error) {
+        if (!this.pageVisible || this.h2hMatchupsRequestKey !== requestKey) {
+          return;
+        }
+        miniLogger.warn(
+          "live-tournament.h2h-history",
+          error instanceof Error ? error.message : "failed",
+        );
+        this.setData({
+          h2hMatchupsLoading: false,
+          h2hMatchupsLoaded: false,
+          h2hMatchupsFailed: true,
+        });
+      }
+    })();
+    this.h2hMatchupsRequest = request;
+    void request.then(
+      () => {
+        if (this.h2hMatchupsRequest === request) {
+          this.h2hMatchupsRequest = null;
+        }
+      },
+      () => {
+        if (this.h2hMatchupsRequest === request) {
+          this.h2hMatchupsRequest = null;
+        }
+      },
+    );
   },
 
   async onOpenTournamentDetail() {

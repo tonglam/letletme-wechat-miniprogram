@@ -320,6 +320,7 @@ export interface LiveMatch {
 }
 
 export interface LiveTournamentRow {
+  availability?: "READY" | "MISSING";
   entry?: number;
   entryName?: string;
   playerName?: string;

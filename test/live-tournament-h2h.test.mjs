@@ -171,7 +171,7 @@ test("the setup card renders the web phase checklist", () => {
   assert.match(template, /\{\{item\.progressText\}\}/);
 });
 
-test("the 我的对阵 tab is derived from the loaded H2H publication", () => {
+test("the 我的对阵 tab loads bounded history on demand", () => {
   const service = source("miniprogram/services/tournament-detail.service.ts");
   const controller = source(
     "miniprogram/pages/live/tournament/tournament.controller.ts",
@@ -180,9 +180,13 @@ test("the 我的对阵 tab is derived from the loaded H2H publication", () => {
 
   assert.doesNotMatch(service, /entryOfficialH2HDesk/);
   assert.doesNotMatch(controller, /getEntryOfficialH2HMatchups/);
-  assert.match(controller, /const matchupRows = matches/);
-  assert.match(controller, /h2hMatchups: matchupRows/);
-  assert.match(controller, /if \(this\.data\.h2hMatchupsLoaded\) return;/);
+  assert.match(service, /tournamentOfficialH2HHistory/);
+  assert.match(controller, /getTournamentOfficialH2HHistory\(/);
+  assert.match(controller, /h2hMatchups: matchups/);
+  assert.match(
+    controller,
+    /this\.data\.h2hMatchupsLoaded[\s\S]*h2hMatchupsRequestKey/,
+  );
   assert.match(
     controller,
     /if \(tab === "mine"\) void this\.loadH2HMatchups\(\);/,

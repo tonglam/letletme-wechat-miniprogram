@@ -33,7 +33,7 @@ export type LiveBoardSort =
   | "PLAYED"
   | "TOTAL_POINTS"
   | "TEAM_VALUE"
-  | "RANK"
+  | "OVERALL_RANK"
   | "ENTRY_NAME";
 export type LiveBoardDirection = "ASC" | "DESC";
 export type LiveBoardPickScope = "ANY" | "STARTER" | "BENCH";
@@ -135,6 +135,18 @@ export function isCompleteLiveBoardPage(page: LiveBoardPage | null): boolean {
     return false;
   }
   const rows = page.viewerRow ? [...page.rows, page.viewerRow] : page.rows;
+  if (new Set(rows.map((row) => row.entry)).size !== rows.length) return false;
+  if (page.rows.length > page.filteredEntries) return false;
+  if (page.pageInfo.hasNextPage) {
+    if (!page.pageInfo.endCursor || page.rows.length >= page.filteredEntries) {
+      return false;
+    }
+  } else if (
+    page.pageInfo.endCursor !== null ||
+    page.rows.length !== page.filteredEntries
+  ) {
+    return false;
+  }
   return rows.every(
     (row) =>
       (row.availability === "READY" && row.score !== null) ||
@@ -431,6 +443,38 @@ function validateRevisionVector(
   }
 }
 
+function validateLeagueHeadRevisionVector(
+  value: unknown,
+  path: string,
+  missing: string[],
+): void {
+  if (!isRecord(value)) {
+    missing.push(path);
+    return;
+  }
+  for (const field of [
+    "publicationId",
+    "roster",
+    "scoreCore",
+    "fixtureIdentity",
+    "entryInputSet",
+    "identity",
+    "rules",
+    "algorithm",
+    "content",
+  ]) {
+    if (typeof value[field] !== "string" || value[field].length === 0) {
+      missing.push(path + "." + field);
+    }
+  }
+  if (!isInteger(value.generation) || value.generation < 1) {
+    missing.push(path + ".generation");
+  }
+  if (!isNullableString(value.officialRank)) {
+    missing.push(path + ".officialRank");
+  }
+}
+
 function validateLiveTimes(
   value: unknown,
   path: string,
@@ -521,10 +565,12 @@ function validateLeagueHead(
   validateLiveDelivery(value.delivery, path + ".delivery", missing);
   if (value.availability === "READY" && value.publication === null) {
     missing.push(path + ".publication");
+  } else if (value.publication === undefined) {
+    missing.push(path + ".publication");
   } else if (value.publication !== null) {
     if (!isRecord(value.publication)) missing.push(path + ".publication");
     else {
-      validateRevisionVector(
+      validateLeagueHeadRevisionVector(
         value.publication.revisions,
         path + ".publication.revisions",
         missing,
@@ -675,6 +721,23 @@ export function parseLiveBoardPage(
         entryIds.add(row.entry);
       }
     });
+    if (
+      isRecord(root.pageInfo) &&
+      typeof root.pageInfo.hasNextPage === "boolean" &&
+      isNullableString(root.pageInfo.endCursor)
+    ) {
+      if (
+        root.pageInfo.hasNextPage &&
+        (typeof root.pageInfo.endCursor !== "string" ||
+          root.pageInfo.endCursor.length === 0 ||
+          root.rows.length === 0)
+      ) {
+        missing.push("pageInfo.nextPage:cursor");
+      }
+      if (!root.pageInfo.hasNextPage && root.pageInfo.endCursor !== null) {
+        missing.push("pageInfo.endCursor:terminal");
+      }
+    }
   }
   if (root.viewerRow !== null)
     validateBoardRow(root.viewerRow, "viewerRow", missing);
@@ -1146,6 +1209,7 @@ export function readLiveBoardLastGood(
     ) {
       return null;
     }
+    if (!isCompleteLiveBoardPage(page)) return null;
     return {
       contractVersion: LIVE_BOARD_CONTRACT_VERSION,
       savedAt: Number(raw.savedAt) || 0,
@@ -1171,6 +1235,7 @@ export function writeLiveBoardLastGood(
   ) {
     return false;
   }
+  if (!isCompleteLiveBoardPage(page)) return false;
   const envelope: StoredLiveBoardLastGood = {
     contractVersion: LIVE_BOARD_CONTRACT_VERSION,
     savedAt: Date.now(),
@@ -1178,11 +1243,35 @@ export function writeLiveBoardLastGood(
     page,
   };
   try {
-    wx.setStorageSync(liveBoardLastGoodKey(scope), envelope);
+    const key = liveBoardLastGoodKey(scope);
+    wx.setStorageSync(key, envelope);
+    trimLiveBoardLastGoodStorage();
     return true;
   } catch {
     return false;
   }
+}
+
+const MAX_LIVE_BOARD_LAST_GOOD_ENTRIES = 8;
+
+function trimLiveBoardLastGoodStorage(): void {
+  try {
+    const { keys } = wx.getStorageInfoSync();
+    const entries = keys
+      .filter((key) => key.startsWith(`${LIVE_BOARD_LAST_GOOD_PREFIX}:`))
+      .map((key) => {
+        const stored = wx.getStorageSync(key) as unknown;
+        const savedAt =
+          isRecord(stored) && typeof stored.savedAt === "number"
+            ? stored.savedAt
+            : 0;
+        return { key, savedAt };
+      })
+      .sort((left, right) => right.savedAt - left.savedAt);
+    entries.slice(MAX_LIVE_BOARD_LAST_GOOD_ENTRIES).forEach(({ key }) => {
+      wx.removeStorageSync(key);
+    });
+  } catch {}
 }
 
 export function clearAllLiveBoardLastGood(): void {
@@ -1195,12 +1284,15 @@ export function clearAllLiveBoardLastGood(): void {
 }
 
 export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
-  const readyRows: TournamentLiveGraphQLRow[] = page.rows
+  const sourceRows =
+    page.viewerRow &&
+    !page.rows.some((row) => row.entry === page.viewerRow?.entry)
+      ? [...page.rows, page.viewerRow]
+      : page.rows;
+  const readyRows: TournamentLiveGraphQLRow[] = sourceRows
     .filter(
       (row): row is LiveBoardRow & { score: LiveScore } =>
-        row.availability === "READY" &&
-        row.score !== null &&
-        row.transferCost !== null,
+        row.availability === "READY" && row.score !== null,
     )
     .map((row) => ({
       entry: row.entry,
@@ -1216,11 +1308,39 @@ export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
       captainPoints: row.captainPoints,
       score: row.score,
     }));
-  return mapTournamentLiveRows(readyRows).map((row, index) => ({
+  const mappedReadyRows = mapTournamentLiveRows(readyRows).map((row, index) => ({
     ...row,
+    availability: "READY" as const,
     rank: row.rank,
     // The mapped row already prefers score.overallRank (fresher); the raw
     // board value is only the fallback (web liveEntries parity).
     overallRank: row.overallRank ?? readyRows[index]?.overallRank ?? undefined,
   }));
+  const missingRows = sourceRows
+    .filter((row) => row.availability === "MISSING" && row.score === null)
+    .map(
+      (row) =>
+        ({
+          availability: "MISSING" as const,
+          entry: row.entry,
+          entryName: row.entryName,
+          playerName: row.playerName,
+          rank: undefined,
+          overallRank: row.overallRank ?? undefined,
+          teamValue: row.teamValue ?? undefined,
+          chip: undefined,
+          captainName: undefined,
+          captainPoints: undefined,
+          played: undefined,
+          toPlay: undefined,
+          livePoints: undefined,
+          liveNetPoints: undefined,
+          liveTotalPoints: undefined,
+          totalPoints: undefined,
+          transferCost: undefined,
+          picks: [],
+          score: undefined,
+        }) satisfies LiveTournamentRow,
+    );
+  return [...mappedReadyRows, ...missingRows];
 }

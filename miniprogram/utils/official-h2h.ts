@@ -11,11 +11,7 @@ export type TournamentDetailKind = "SETUP" | "OFFICIAL_H2H" | "LIVE_POINTS";
 
 export type H2HAvailability = "READY" | "PENDING" | "MISSING" | "ERROR";
 export type H2HDeliveryState =
-  | "FRESH"
-  | "STALE"
-  | "DEGRADED"
-  | "FINAL"
-  | "UNAVAILABLE";
+  "FRESH" | "STALE" | "DEGRADED" | "FINAL" | "UNAVAILABLE";
 
 export interface H2HDelivery {
   state: H2HDeliveryState;
@@ -80,6 +76,20 @@ export interface H2HMatch {
   away: H2HMatchSide;
 }
 
+export interface H2HHistoryMatch {
+  officialMatchId: number;
+  eventId: number;
+  groupId: number;
+  sourceOrder: number;
+  phase: "REGULAR" | "KNOCKOUT";
+  knockoutName: string | null;
+  tiebreak: string | null;
+  isBye: boolean;
+  availability: H2HAvailability;
+  home: H2HMatchSide;
+  away: H2HMatchSide;
+}
+
 export interface H2HStanding {
   entryId: number;
   entryName: string;
@@ -140,9 +150,9 @@ export function isOfficialH2HTournamentRow(
 ): boolean {
   return Boolean(
     row &&
-      row.leagueType === "H2H" &&
-      row.rosterMode === "OFFICIAL_SYNC" &&
-      row.groupMode === "BATTLE_RACES",
+    row.leagueType === "H2H" &&
+    row.rosterMode === "OFFICIAL_SYNC" &&
+    row.groupMode === "BATTLE_RACES",
   );
 }
 
@@ -158,11 +168,11 @@ function hasCheckedAt(value: unknown): value is string {
 export function traceableH2HBoard(board: H2HBoard | null | undefined): boolean {
   return Boolean(
     board &&
-      board.availability === "READY" &&
-      board.revisions &&
-      hasRevision(board.revisions.content) &&
-      board.times &&
-      hasCheckedAt(board.times.contentUpdatedAt),
+    board.availability === "READY" &&
+    board.revisions &&
+    hasRevision(board.revisions.content) &&
+    board.times &&
+    hasCheckedAt(board.times.contentUpdatedAt),
   );
 }
 
@@ -201,10 +211,12 @@ export function h2hScoreStateText(
   availability: H2HAvailability,
   deliveryState?: H2HDeliveryState | null,
 ): string {
-  if (availability === "ERROR" || availability === "MISSING") return "暂时不可用";
+  if (availability === "ERROR" || availability === "MISSING")
+    return "暂时不可用";
   if (availability === "PENDING") return "正在获取";
   if (deliveryState === "FINAL") return "已结束";
-  if (deliveryState === "STALE" || deliveryState === "DEGRADED") return "官方数据延迟";
+  if (deliveryState === "STALE" || deliveryState === "DEGRADED")
+    return "官方数据延迟";
   return "进行中";
 }
 
@@ -220,14 +232,21 @@ export function h2hSideName(side: H2HMatchSide): string {
 }
 
 export function h2hMatchupStatusText(
-  match: Pick<H2HMatch, "eventId" | "availability" | "delivery">,
+  match: {
+    eventId: number;
+    availability: H2HAvailability;
+    delivery?: Pick<H2HDelivery, "state"> | null;
+  },
   currentEventId: number | null | undefined,
 ): "进行中" | "已结束" | "待开始" | "暂时不可用" {
   if (match.availability === "ERROR" || match.availability === "MISSING") {
     return "暂时不可用";
   }
+  if (currentEventId != null && match.eventId > currentEventId) {
+    return "待开始";
+  }
   if (
-    match.delivery.state === "FINAL" ||
+    match.delivery?.state === "FINAL" ||
     (currentEventId != null && match.eventId < currentEventId)
   ) {
     return "已结束";
