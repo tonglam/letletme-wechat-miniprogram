@@ -396,12 +396,15 @@ const myTournamentReviewOptions = (
   viewerEntryId?: number | null,
   validateCatalogViewer = false,
   cachePolicy: "network-only" | "reporting" = "reporting",
+  cacheRevision?: string | null,
 ) => ({
   cachePolicy,
   // An unverified viewer must not use a persisted personal cache. The page
   // refreshes the authoritative follow before supplying this variant.
   cacheTtl:
-    cachePolicy === "reporting" && Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
+    cachePolicy === "reporting" &&
+    Number.isSafeInteger(viewerEntryId) &&
+    Number(viewerEntryId) > 0
       ? MY_TOURNAMENT_REVIEW_CACHE_TTL_MS
       : 0,
   // A finalized review must never silently fall back to an older persisted
@@ -414,7 +417,7 @@ const myTournamentReviewOptions = (
     Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
       ? Number(viewerEntryId)
       : "none"
-  }`,
+  }${cacheRevision ? `|catalog-revision:${cacheRevision}` : ""}`,
   contract: MY_TOURNAMENT_REVIEW_CONTRACT,
   ...(Number.isSafeInteger(viewerEntryId) && Number(viewerEntryId) > 0
     ? {
@@ -431,9 +434,7 @@ const myTournamentReviewOptions = (
                   .myTournamentReviewCatalog
               : null;
           const responseViewerEntryId =
-            catalog &&
-            typeof catalog === "object" &&
-            !Array.isArray(catalog)
+            catalog && typeof catalog === "object" && !Array.isArray(catalog)
               ? Number((catalog as { viewerEntryId?: unknown }).viewerEntryId)
               : 0;
           return responseViewerEntryId === Number(viewerEntryId);
@@ -456,7 +457,13 @@ export async function getMyTournamentReviewCatalog(
   }>(
     GET_MY_TOURNAMENT_REVIEW_CATALOG,
     { scope, first: Math.min(100, Math.max(1, first)), after, search },
-    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId, true, "network-only"),
+    myTournamentReviewOptions(
+      forceRefresh,
+      trace,
+      viewerEntryId,
+      true,
+      "network-only",
+    ),
   );
   return data.myTournamentReviewCatalog;
 }
@@ -469,13 +476,21 @@ export async function getMyTournamentGameweekReview(
   after: string | null = null,
   revision: string | null = null,
   viewerEntryId?: number | null,
+  catalogRevision?: string | null,
 ): Promise<MyTournamentGameweekReview> {
   const data = await graphqlRequest<{
     myTournamentGameweekReview: MyTournamentGameweekReview;
   }>(
     GET_MY_TOURNAMENT_GAMEWEEK_REVIEW,
     { tournamentId, eventId, first: 100, after, revision },
-    myTournamentReviewOptions(forceRefresh, trace, viewerEntryId),
+    myTournamentReviewOptions(
+      forceRefresh,
+      trace,
+      viewerEntryId,
+      false,
+      "reporting",
+      catalogRevision,
+    ),
   );
   return data.myTournamentGameweekReview;
 }

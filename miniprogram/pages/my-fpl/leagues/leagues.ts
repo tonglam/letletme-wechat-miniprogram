@@ -107,7 +107,10 @@ function mergeCatalogPages(
   next: MyTournamentReviewCatalog,
 ): MyTournamentReviewCatalog {
   if (!previous) return next;
-  const byTournamentId = new Map<number, { cursor: string; node: MyTournamentReviewCatalogItem }>();
+  const byTournamentId = new Map<
+    number,
+    { cursor: string; node: MyTournamentReviewCatalogItem }
+  >();
   for (const edge of [...previous.edges, ...next.edges]) {
     byTournamentId.set(edge.node.tournamentId, edge);
   }
@@ -207,8 +210,11 @@ function mergeSection(
     ...next,
     points:
       previous.points && next.points
-        ? { ...next.points, rows: [...previous.points.rows, ...next.points.rows] }
-        : next.points ?? previous.points,
+        ? {
+            ...next.points,
+            rows: [...previous.points.rows, ...next.points.rows],
+          }
+        : (next.points ?? previous.points),
     h2h:
       previous.h2h && next.h2h
         ? {
@@ -218,14 +224,14 @@ function mergeSection(
               ? next.h2h.standings
               : previous.h2h.standings,
           }
-        : next.h2h ?? previous.h2h,
+        : (next.h2h ?? previous.h2h),
     knockout:
       previous.knockout && next.knockout
         ? {
             ...next.knockout,
             matches: [...previous.knockout.matches, ...next.knockout.matches],
           }
-        : next.knockout ?? previous.knockout,
+        : (next.knockout ?? previous.knockout),
   };
 }
 
@@ -265,7 +271,8 @@ function reviewViewMeta(
   phaseId: string | null,
 ): { format: MyTournamentReviewFormat | null; state: MyTournamentReviewState } {
   if (view === "gameweek") {
-    const format = payloadFormat(gameweek?.payload) ?? gameweek?.scope?.format ?? null;
+    const format =
+      payloadFormat(gameweek?.payload) ?? gameweek?.scope?.format ?? null;
     return {
       format: format ?? selected?.latestFinalizedScope?.format ?? null,
       state:
@@ -325,8 +332,7 @@ function persistLastPick(entryId: number, tournamentId: number): void {
 function readLastPick(entryId: number): number {
   try {
     const picks = wx.getStorageSync("my-fpl:tournament:last") as
-      | Record<string, number>
-      | undefined;
+      Record<string, number> | undefined;
     return Number(picks?.[String(entryId)]) || 0;
   } catch {
     return 0;
@@ -392,6 +398,7 @@ PerformancePage({
   requestId: 0,
   viewRequestId: 0,
   retryOperation: null as ReviewRetryOperation | null,
+  retryPhaseId: null as string | null,
   loadedEntryId: 0,
   loadedContextRevision: 0,
   loadedSeason: "" as string,
@@ -419,7 +426,10 @@ PerformancePage({
     if (!this.pageVisible || revision !== this.lifecycleRevision) return;
     await this.loadCatalog(
       false,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "load" }),
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "load",
+      }),
     );
   },
 
@@ -540,6 +550,11 @@ PerformancePage({
         if (active()) this.setData({ v2Scope: "ACCESSIBLE" });
       }
       if (!active() || currentMyFplEntryId() !== entryId) return;
+      // Re-read the Web-owned binding immediately before committing the
+      // catalog. A binding can change between the network response and this
+      // state update; never attach the response to the new entry by accident.
+      const authoritativeEntryId = currentMyFplEntryId() || 0;
+      if (authoritativeEntryId !== entryId) return;
       if (catalog.viewerEntryId && Number(catalog.viewerEntryId) !== entryId) {
         throw new Error("球队绑定已变更，请稍后重试");
       }
@@ -555,23 +570,34 @@ PerformancePage({
         items[0] ??
         null;
       const selectedIndex = selected
-        ? Math.max(0, items.findIndex((item) => item.tournamentId === selected.tournamentId))
+        ? Math.max(
+            0,
+            items.findIndex(
+              (item) => item.tournamentId === selected.tournamentId,
+            ),
+          )
         : 0;
       const eventIds = selected
-        ? eventIdsFromPhases(selected.phaseSummaries, selected.latestFinalizedEventId)
+        ? eventIdsFromPhases(
+            selected.phaseSummaries,
+            selected.latestFinalizedEventId,
+          )
         : [];
       const previousEventId = this.data.v2Event;
       const eventId =
-        selected && previousId === selected.tournamentId && eventIds.includes(previousEventId)
+        selected &&
+        previousId === selected.tournamentId &&
+        eventIds.includes(previousEventId)
           ? previousEventId
-          : selected?.latestFinalizedEventId ?? 0;
+          : (selected?.latestFinalizedEventId ?? 0);
       const aggregateState =
         selected?.latestFinalizedScope?.state ??
         selected?.state ??
         mergedCatalog.state ??
         "NOT_STARTED";
       this.loadedEntryId = entryId;
-      this.loadedContextRevision = getAppContextSnapshot()?.contextRevision ?? 0;
+      this.loadedContextRevision =
+        getAppContextSnapshot()?.contextRevision ?? 0;
       this.loadedSeason = getApp<IAppOption>().globalData.season || "";
       this.catalogAfter = mergedCatalog.pageInfo.endCursor;
       this.retryOperation = null;
@@ -618,7 +644,12 @@ PerformancePage({
         this.seasonSectionContext = null;
       }
       if (!append && selected && eventId) {
-        await this.loadReview(selected.tournamentId, eventId, forceRefresh, trace);
+        await this.loadReview(
+          selected.tournamentId,
+          eventId,
+          forceRefresh,
+          trace,
+        );
       }
     } catch (error) {
       if (!active()) return;
@@ -633,13 +664,17 @@ PerformancePage({
         });
       } else {
         this.retryOperation = "catalog";
-        this.setData({
+        const errorState: Partial<LeaguesData> = {
           v2Loading: false,
           v2CatalogLoadingMore: false,
-          v2State: "UNAVAILABLE",
-          v2StatusText: stateText("UNAVAILABLE"),
-          v2Error: error instanceof Error ? error.message : "赛事复盘目录暂时不可用",
-        });
+          v2Error:
+            error instanceof Error ? error.message : "赛事复盘目录暂时不可用",
+        };
+        if (!append) {
+          errorState.v2State = "UNAVAILABLE";
+          errorState.v2StatusText = stateText("UNAVAILABLE");
+        }
+        this.setData(errorState);
       }
     }
   },
@@ -653,6 +688,8 @@ PerformancePage({
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
+    const catalogRevision =
+      this.data.v2SelectedTournament?.latestFinalizedScope?.revision ?? null;
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -660,7 +697,12 @@ PerformancePage({
       this.data.v2Event === eventId &&
       (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
     this.retryOperation = "review";
-    this.setData({ v2Loading: true, v2LoadingMore: Boolean(after), v2Error: "" });
+    this.retryPhaseId = null;
+    this.setData({
+      v2Loading: true,
+      v2LoadingMore: Boolean(after),
+      v2Error: "",
+    });
     try {
       const [gameweek, season] = await Promise.all([
         getMyTournamentGameweekReview(
@@ -671,6 +713,7 @@ PerformancePage({
           after,
           this.data.v2Gameweek?.scope?.revision ?? null,
           this.data.entryId,
+          catalogRevision,
         ),
         after
           ? Promise.resolve(this.data.v2Season)
@@ -695,7 +738,7 @@ PerformancePage({
         (candidate) =>
           candidate.startEventId <= eventId && candidate.endEventId >= eventId,
       );
-      if (!after && season.state === "READY") {
+      if (!after && phase?.state === "READY") {
         const format = phase?.format ?? payloadFormat(gameweek.payload);
         const baseSection = sectionForFormat(format);
         if (phase?.revision && phase.semanticSha256 && baseSection) {
@@ -745,7 +788,16 @@ PerformancePage({
               ),
             );
           }
-          const sections = await Promise.all(requests);
+          const settledSections = await Promise.allSettled(requests);
+          const primarySection = settledSections[0];
+          if (!primarySection) throw new Error("赛事阶段暂时不可用");
+          if (primarySection.status === "rejected") throw primarySection.reason;
+          // Standings are the primary review. An auxiliary trajectory/fixture
+          // projection may be retried independently without hiding a valid
+          // primary section behind one failed request.
+          const sections = settledSections.flatMap((result) =>
+            result.status === "fulfilled" ? [result.value] : [],
+          );
           if (!active()) return;
           this.seasonSectionPages = Object.fromEntries(
             sections.map((candidate) => [candidate.section, candidate]),
@@ -764,7 +816,10 @@ PerformancePage({
       }
       const selected = this.data.v2SelectedTournament;
       const eventIds = selected
-        ? eventIdsFromPhases(selected.phaseSummaries, selected.latestFinalizedEventId)
+        ? eventIdsFromPhases(
+            selected.phaseSummaries,
+            selected.latestFinalizedEventId,
+          )
         : [eventId];
       const nextSeason: ReviewSeasonDisplay = {
         state: season.state,
@@ -782,6 +837,7 @@ PerformancePage({
       );
       const visibleState = visibleMeta.state;
       this.retryOperation = null;
+      this.retryPhaseId = null;
       this.setData({
         v2Loading: false,
         v2LoadingMore: false,
@@ -817,7 +873,8 @@ PerformancePage({
           v2LoadingMore: false,
           v2State: "UNAVAILABLE",
           v2StatusText: stateText("UNAVAILABLE"),
-          v2Error: error instanceof Error ? error.message : "赛事复盘暂时不可用",
+          v2Error:
+            error instanceof Error ? error.message : "赛事复盘暂时不可用",
         });
       }
     }
@@ -828,7 +885,9 @@ PerformancePage({
     const season = this.data.v2Season;
     const eventId = this.data.v2Event;
     if (!selected || !season || !eventId) return;
-    const phase = season.phases.find((candidate) => candidate.phaseId === phaseId);
+    const phase = season.phases.find(
+      (candidate) => candidate.phaseId === phaseId,
+    );
     if (!phase) return;
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
@@ -869,7 +928,10 @@ PerformancePage({
           phase.revision,
           phase.semanticSha256,
           true,
-          capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "tab" }),
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "tab",
+          }),
           null,
           this.data.entryId,
         ),
@@ -884,7 +946,10 @@ PerformancePage({
             phase.revision,
             phase.semanticSha256,
             true,
-            capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "tab" }),
+            capturePageRequestTrace({
+              callerSurface: "my-fpl-leagues-v2.1",
+              trigger: "tab",
+            }),
             null,
             this.data.entryId,
           ),
@@ -900,13 +965,22 @@ PerformancePage({
             phase.revision,
             phase.semanticSha256,
             true,
-            capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "tab" }),
+            capturePageRequestTrace({
+              callerSurface: "my-fpl-leagues-v2.1",
+              trigger: "tab",
+            }),
             null,
             this.data.entryId,
           ),
         );
       }
-      const sections = await Promise.all(requests);
+      const settledSections = await Promise.allSettled(requests);
+      const primarySection = settledSections[0];
+      if (!primarySection) throw new Error("赛事阶段暂时不可用");
+      if (primarySection.status === "rejected") throw primarySection.reason;
+      const sections = settledSections.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
       if (!active()) return;
       this.seasonSectionPages = Object.fromEntries(
         sections.map((candidate) => [candidate.section, candidate]),
@@ -935,11 +1009,14 @@ PerformancePage({
           v2Error: "赛事复盘需要升级小程序后继续",
         });
       } else {
+        this.retryOperation = "review";
+        this.retryPhaseId = phaseId;
         this.setData({
           v2Loading: false,
           v2State: "UNAVAILABLE",
           v2StatusText: stateText("UNAVAILABLE"),
-          v2Error: error instanceof Error ? error.message : "赛事阶段暂时不可用",
+          v2Error:
+            error instanceof Error ? error.message : "赛事阶段暂时不可用",
         });
       }
     }
@@ -983,7 +1060,8 @@ PerformancePage({
         this.pageVisible &&
         requestId === this.viewRequestId &&
         this.data.activeView === "season" &&
-        this.data.v2SelectedTournament?.tournamentId === selected.tournamentId &&
+        this.data.v2SelectedTournament?.tournamentId ===
+          selected.tournamentId &&
         this.data.v2Event === context.eventId &&
         this.data.v2SelectedPhaseId === context.phaseId &&
         (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
@@ -1025,6 +1103,7 @@ PerformancePage({
           v2HasNextPage: sectionPageInfo(combined).hasNextPage,
         });
         this.retryOperation = null;
+        this.retryPhaseId = null;
       } catch (error) {
         if (!active()) return;
         this.setData({
@@ -1040,7 +1119,10 @@ PerformancePage({
       selected.tournamentId,
       this.data.v2Event,
       true,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "pagination" }),
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "pagination",
+      }),
       after,
     );
   },
@@ -1086,7 +1168,9 @@ PerformancePage({
       v2Event: eventId,
       v2Format: selected.latestFinalizedScope?.format ?? null,
       v2State: selected.latestFinalizedScope?.state ?? selected.state,
-      v2StatusText: stateText(selected.latestFinalizedScope?.state ?? selected.state),
+      v2StatusText: stateText(
+        selected.latestFinalizedScope?.state ?? selected.state,
+      ),
       v2Gameweek: null,
       v2Season: null,
       v2SelectedPhaseId: null,
@@ -1101,7 +1185,10 @@ PerformancePage({
         selected.tournamentId,
         eventId,
         false,
-        capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "tab" }),
+        capturePageRequestTrace({
+          callerSurface: "my-fpl-leagues-v2.1",
+          trigger: "tab",
+        }),
       );
     }
   },
@@ -1131,18 +1218,29 @@ PerformancePage({
       selected.tournamentId,
       eventId,
       false,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "tab" }),
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "tab",
+      }),
     );
   },
 
   onViewTap(event: WechatMiniprogram.TouchEvent) {
     const nextView: LeagueView =
       event.currentTarget.dataset.view === "gameweek" ? "gameweek" : "season";
+    if (nextView !== this.data.activeView) {
+      // A phase request started in the hidden view must not commit after the
+      // user changes tabs. The request is allowed to finish on the wire, but
+      // its result is stale by definition.
+      this.viewRequestId += 1;
+    }
     const selected = this.data.v2SelectedTournament;
     const season = this.data.v2Season;
     const gameweek = this.data.v2Gameweek;
     const phase =
-      season?.phases.find((candidate) => candidate.phaseId === this.data.v2SelectedPhaseId) ??
+      season?.phases.find(
+        (candidate) => candidate.phaseId === this.data.v2SelectedPhaseId,
+      ) ??
       season?.phases.find(
         (candidate) =>
           candidate.startEventId <= this.data.v2Event &&
@@ -1155,15 +1253,23 @@ PerformancePage({
       gameweek,
       phase?.phaseId ?? null,
     );
+    const visibleState =
+      nextView === "season"
+        ? this.seasonSectionContext?.phaseId === phase?.phaseId
+          ? (this.data.v2SeasonSection?.state ?? meta.state)
+          : meta.state
+        : meta.state;
     this.setData({
       activeView: nextView,
       showSeason: nextView === "season",
       showGameweek: nextView === "gameweek",
       v2Format: meta.format,
-      v2State: meta.state,
-      v2StatusText: stateText(meta.state),
+      v2State: visibleState,
+      v2StatusText: stateText(visibleState),
       v2SelectedPhaseId:
-        nextView === "season" ? phase?.phaseId ?? this.data.v2SelectedPhaseId : this.data.v2SelectedPhaseId,
+        nextView === "season"
+          ? (phase?.phaseId ?? this.data.v2SelectedPhaseId)
+          : this.data.v2SelectedPhaseId,
       v2HasNextPage:
         nextView === "season"
           ? sectionPageInfo(this.data.v2SeasonSection).hasNextPage
@@ -1190,31 +1296,54 @@ PerformancePage({
     if (!this.data.v2Catalog?.adminReadAll) return;
     void this.loadCatalog(
       true,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "refresh" }),
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "refresh",
+      }),
       this.data.v2Scope === "ALL" ? "ACCESSIBLE" : "ALL",
     );
   },
 
   onRetry() {
-    if (this.retryOperation === "loadMore" && this.data.activeView === "season") {
+    if (
+      this.retryOperation === "loadMore" &&
+      this.data.activeView === "season"
+    ) {
       void this.onV2LoadMore();
       return;
     }
-    if (this.retryOperation === "review" || this.retryOperation === "loadMore") {
+    if (
+      this.retryOperation === "review" &&
+      this.data.activeView === "season" &&
+      this.retryPhaseId
+    ) {
+      void this.loadSeasonPhase(this.retryPhaseId);
+      return;
+    }
+    if (
+      this.retryOperation === "review" ||
+      this.retryOperation === "loadMore"
+    ) {
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         void this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
           true,
-          capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "refresh" }),
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "refresh",
+          }),
         );
         return;
       }
     }
     void this.loadCatalog(
       true,
-      capturePageRequestTrace({ callerSurface: "my-fpl-leagues-v2.1", trigger: "refresh" }),
+      capturePageRequestTrace({
+        callerSurface: "my-fpl-leagues-v2.1",
+        trigger: "refresh",
+      }),
     );
   },
 
