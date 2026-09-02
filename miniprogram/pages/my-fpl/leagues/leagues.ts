@@ -745,6 +745,9 @@ PerformancePage({
         after = null;
         append = false;
         this.catalogAfter = null;
+        this.retryAfter = null;
+        this.retryScope = "ACCESSIBLE";
+        this.retryOperation = "catalog";
         this.setData({
           v2Catalog: null,
           v2TournamentNames: [],
@@ -996,6 +999,12 @@ PerformancePage({
         : this.data.v2SelectedTournament
           ? catalogRevisionForEvent(this.data.v2SelectedTournament, eventId)
           : null;
+    // A page-one restart intentionally drops the old snapshot pin. Reusing
+    // the rendered Gameweek revision here would make a corrected historical
+    // snapshot fail again before the server can return its current head.
+    const requestRevision = after
+      ? catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null
+      : catalogRevision;
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -1101,7 +1110,7 @@ PerformancePage({
           forceRefresh,
           trace,
           after,
-          catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null,
+          requestRevision,
           this.data.entryId,
           catalogRevision,
         ),
@@ -1926,6 +1935,31 @@ PerformancePage({
           }
           return;
         }
+        if (isReviewRevisionMismatch(error)) {
+          // A correction invalidates the section cursor and its revision pin.
+          // Refresh the Season index first, then let loadReview fetch a new
+          // section head; merging this page into the old section would create
+          // a mixed-revision review.
+          this.seasonSectionPages = {};
+          this.seasonSectionContext = null;
+          this.setData({
+            v2LoadingMore: false,
+            v2SeasonSection: null,
+            v2SeasonError: "赛事快照已更新，正在重新加载",
+          });
+          void this.loadReview(
+            selected.tournamentId,
+            this.data.v2Event,
+            true,
+            capturePageRequestTrace({
+              callerSurface: "my-fpl-leagues-v2.1",
+              trigger: "refresh",
+            }),
+            null,
+            null,
+          );
+          return;
+        }
         if (isClientUpgradeRequired(error)) {
           promptForUpgrade();
           this.retryOperation = "loadMore";
@@ -2304,8 +2338,17 @@ PerformancePage({
       }
     }
     if (this.retryOperation === "catalog") {
-      const retryAfter = this.retryAfter;
       const retryScope = this.retryScope ?? this.data.v2Scope;
+      const currentSeason = String(
+        getApp<IAppOption>().globalData.season || "",
+      );
+      const seasonRolled = Boolean(
+        this.loadedSeason && currentSeason && this.loadedSeason !== currentSeason,
+      );
+      // A catalog cursor is scoped to both the season and the connection
+      // snapshot. Never replay it across a season boundary discovered by the
+      // explicit retry action.
+      const retryAfter = seasonRolled ? null : this.retryAfter;
       void this.loadCatalog(
         true,
         capturePageRequestTrace({

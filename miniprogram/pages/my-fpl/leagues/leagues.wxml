@@ -18,7 +18,7 @@
     <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
   </view>
 
-  <data-status id="perf-primary-content" wx:if="{{v2Error}}" status="stale" message="{{v2Error}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+  <data-status id="perf-primary-content" wx:if="{{v2Error}}" status="stale" message="{{v2Error}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" bind:retry="onRetry" />
   <app-loading wx:if="{{v2Loading}}" text="加载赛事复盘" />
   <view id="perf-primary-content" wx:elif="{{!v2SelectedTournament && !v2Error}}" class="section">
     <app-empty-state
@@ -44,8 +44,8 @@
       <button wx:if="{{v2Event}}" size="mini" bindtap="onGoLive">前往 Live 查看未结算数据</button>
     </view>
 
-    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{v2Season}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
-    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{v2Gameweek}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
+    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
+    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
 
     <view wx:if="{{showSeason && v2Season}}" class="section">
       <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.throughEventId}}</view>

@@ -23,7 +23,6 @@ test("retained-data notices are transient on every page surface that shows them"
     "miniprogram/pages/live/entry/entry.wxml",
     "miniprogram/pages/live/match/match.wxml",
     "miniprogram/pages/live/tournament/tournament.wxml",
-    "miniprogram/pages/my-fpl/leagues/leagues.wxml",
     "miniprogram/pages/my-fpl/team/team.wxml",
     "miniprogram/pages/summary/gameweek/gameweek.wxml"
   ];
@@ -36,4 +35,20 @@ test("retained-data notices are transient on every page surface that shows them"
       `${path} must not leave a retained-data notice permanently visible`
     );
   }
+});
+
+test("settled tournament-review errors stay persistent until the user retries", () => {
+  const template = source("miniprogram/pages/my-fpl/leagues/leagues.wxml");
+  assert.match(
+    template,
+    /data-status[^>]*wx:if="\{\{v2Error\}\}"[^>]*transient="\{\{false\}\}"/,
+  );
+  assert.match(
+    template,
+    /data-status[^>]*v2SeasonError[^>]*transient="\{\{false\}\}"/,
+  );
+  assert.match(
+    template,
+    /data-status[^>]*v2GameweekError[^>]*transient="\{\{false\}\}"/,
+  );
 });

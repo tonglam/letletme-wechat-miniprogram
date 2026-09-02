@@ -57,6 +57,8 @@ test("the Mini catalog is connection-shaped and supports a custom setup shell", 
   assert.match(service, /pageInfo: MyTournamentReviewPageInfo/);
   assert.match(service, /setupStatus: string/);
   assert.match(service, /latestFinalizedScope/);
+  assert.match(service, /eligibleAt readyAt observedAt/);
+  assert.match(service, /repairState errorCode/);
   assert.match(service, /adminReadAll/);
   assert.match(page, /scopeOverride/);
   assert.match(page, /v2Scope === "ALL"/);
@@ -116,7 +118,10 @@ test("the Mini review cache is keyed to V2.1 and cannot serve transient review s
 });
 
 test("review pagination and resident payloads are fenced across retries and season rollover", async () => {
-  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const [page, template] = await Promise.all([
+    read("miniprogram/pages/my-fpl/leagues/leagues.ts"),
+    read("miniprogram/pages/my-fpl/leagues/leagues.wxml"),
+  ]);
 
   assert.match(page, /retry\?\.operation === "loadMore"/);
   assert.match(page, /this\.onV2LoadMore\(\)/);
@@ -125,4 +130,10 @@ test("review pagination and resident payloads are fenced across retries and seas
   assert.match(page, /expectedSeason/);
   assert.match(page, /currentSeason !== expectedSeason/);
   assert.match(page, /v2Season: null/);
+  assert.match(page, /const requestRevision = after/);
+  assert.match(
+    page,
+    /isReviewRevisionMismatch\(error\)[\s\S]*v2SeasonSection: null[\s\S]*void this\.loadReview/,
+  );
+  assert.match(template, /wx:if="\{\{v2Error\}\}"[\s\S]*transient="\{\{false\}\}"/);
 });
