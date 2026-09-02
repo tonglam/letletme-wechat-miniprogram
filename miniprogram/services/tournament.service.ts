@@ -261,7 +261,7 @@ export interface MyTournamentReviewPhase {
   phaseId: string;
   format: MyTournamentReviewFormat;
   startEventId: number;
-  endEventId: number;
+  endEventId: number | null;
   state: MyTournamentReviewState;
   settledAt: string | null;
   publishedAt: string | null;

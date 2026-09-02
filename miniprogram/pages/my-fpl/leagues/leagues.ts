@@ -322,7 +322,7 @@ function reviewViewMeta(
     season?.phases.find(
       (candidate) =>
         candidate.startEventId <= (season?.throughEventId ?? 0) &&
-        candidate.endEventId >= (season?.throughEventId ?? 0),
+        phaseCoversEvent(candidate, season?.throughEventId ?? 0),
     );
   return {
     format: phase?.format ?? selected?.latestFinalizedScope?.format ?? null,
@@ -333,6 +333,25 @@ function reviewViewMeta(
       selected?.state ??
       "NOT_STARTED",
   };
+}
+
+function phaseCoversEvent(
+  phase: { startEventId: number; endEventId: number | null },
+  eventId: number,
+): boolean {
+  return (
+    phase.startEventId <= eventId &&
+    (phase.endEventId === null || phase.endEventId >= eventId)
+  );
+}
+
+function settleRequest<T>(
+  request: Promise<T>,
+): Promise<PromiseSettledResult<T>> {
+  return request.then(
+    (value) => ({ status: "fulfilled", value }) as const,
+    (reason) => ({ status: "rejected", reason }) as const,
+  );
 }
 
 function sectionForFormat(
@@ -354,7 +373,11 @@ function sectionPayloadReady(
   section: MyTournamentSeasonSection | null | undefined,
   expectedSection: MyTournamentReviewSeasonSection,
 ): section is MyTournamentSeasonSection {
-  if (!section || section.state !== "READY" || section.section !== expectedSection) {
+  if (
+    !section ||
+    section.state !== "READY" ||
+    section.section !== expectedSection
+  ) {
     return false;
   }
   if (
@@ -363,7 +386,10 @@ function sectionPayloadReady(
   ) {
     return section.points !== null;
   }
-  if (expectedSection === "H2H_STANDINGS" || expectedSection === "H2H_FIXTURES") {
+  if (
+    expectedSection === "H2H_STANDINGS" ||
+    expectedSection === "H2H_FIXTURES"
+  ) {
     return section.h2h !== null;
   }
   return section.knockout !== null;
@@ -428,10 +454,7 @@ function isReviewRevisionMismatch(error: unknown): boolean {
   const message = messages
     .filter((value): value is string => typeof value === "string")
     .join(" ");
-  return (
-    hasBadInput &&
-    /revision|cursor|snapshot/i.test(message)
-  );
+  return hasBadInput && /revision|cursor|snapshot/i.test(message);
 }
 
 function catalogRevisionForEvent(
@@ -439,7 +462,7 @@ function catalogRevisionForEvent(
   eventId: number,
 ): string | null {
   const latest = tournament.latestFinalizedScope;
-  return latest?.eventId === eventId ? latest.revision ?? null : null;
+  return latest?.eventId === eventId ? (latest.revision ?? null) : null;
 }
 
 PerformancePage({
@@ -492,6 +515,7 @@ PerformancePage({
     season: null,
   } as Record<ReviewSurface, ReviewSurfaceRetry>,
   loadedEntryId: 0,
+  hasLoadedEntryBinding: false,
   loadedContextRevision: 0,
   loadedSeason: "" as string,
   resumeForceRefresh: false,
@@ -642,7 +666,7 @@ PerformancePage({
       });
     }
     let resolvedScope = scope;
-    if (this.loadedEntryId !== 0 && this.loadedEntryId !== expectedEntryId) {
+    if (this.hasLoadedEntryBinding && this.loadedEntryId !== expectedEntryId) {
       // The authoritative binding can change while the page is resident. Do
       // not leave the previous entry's catalog or review rows mounted while
       // reconciliation for the new entry is still in flight.
@@ -680,7 +704,7 @@ PerformancePage({
     const active = () =>
       this.pageVisible &&
       requestId === this.requestId &&
-      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+      (currentMyFplEntryId() || 0) === expectedEntryId;
     this.retryOperation = "catalog";
     this.retryScope = scope;
     this.retryAfter = null;
@@ -702,10 +726,10 @@ PerformancePage({
         // A rebind/logout completed while the request was being prepared. Do
         // not reuse the old connection cursor or attach old rows to the new
         // viewer; restart from a fresh first page for the new binding.
-		if (!entryId && scope !== "ALL") {
-			this.showEntryEmptyState();
-			return;
-		}
+        if (!entryId && scope !== "ALL") {
+          this.showEntryEmptyState();
+          return;
+        }
         this.setData({
           v2Loading: false,
           v2CatalogLoadingMore: false,
@@ -782,7 +806,10 @@ PerformancePage({
       if (!active() || reboundEntryId !== entryId) {
         if (this.pageVisible && requestId === this.requestId) {
           this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
-          if (reboundEntryId !== expectedEntryId || reboundEntryId !== entryId) {
+          if (
+            reboundEntryId !== expectedEntryId ||
+            reboundEntryId !== entryId
+          ) {
             if (!reboundEntryId && resolvedScope !== "ALL") {
               this.showEntryEmptyState();
             } else {
@@ -801,7 +828,7 @@ PerformancePage({
       const reconciledEntryId = (await refreshAuthoritativeFollow()) || 0;
       if (!this.pageVisible || requestId !== this.requestId) return;
       if (reconciledEntryId !== entryId) {
-        if (!reconciledEntryId) {
+        if (!reconciledEntryId && resolvedScope !== "ALL") {
           this.showEntryEmptyState();
           return;
         }
@@ -810,7 +837,7 @@ PerformancePage({
           v2CatalogLoadingMore: false,
           entryId: reconciledEntryId,
         });
-        await this.loadCatalog(true, trace, scope, null, false);
+        await this.loadCatalog(true, trace, resolvedScope, null, false);
         return;
       }
       // Re-read the Web-owned binding immediately before committing the
@@ -818,7 +845,7 @@ PerformancePage({
       // state update; never attach the response to the new entry by accident.
       const authoritativeEntryId = currentMyFplEntryId() || 0;
       if (authoritativeEntryId !== entryId) {
-        if (!authoritativeEntryId) {
+        if (!authoritativeEntryId && resolvedScope !== "ALL") {
           this.showEntryEmptyState();
           return;
         }
@@ -827,7 +854,7 @@ PerformancePage({
           v2CatalogLoadingMore: false,
           entryId: authoritativeEntryId,
         });
-        await this.loadCatalog(true, trace, scope, null, false);
+        await this.loadCatalog(true, trace, resolvedScope, null, false);
         return;
       }
       if (catalog.viewerEntryId && Number(catalog.viewerEntryId) !== entryId) {
@@ -865,12 +892,16 @@ PerformancePage({
         eventIds.includes(previousEventId)
           ? previousEventId
           : (selected?.latestFinalizedEventId ?? 0);
-      const aggregateState =
-        selected?.latestFinalizedScope?.state ??
-        selected?.state ??
-        mergedCatalog.state ??
-        "NOT_STARTED";
+      const aggregateState = selected
+        ? (selected.latestFinalizedScope?.state ??
+          selected.state ??
+          mergedCatalog.state ??
+          "NOT_STARTED")
+        : mergedCatalog.state === "READY"
+          ? "NOT_STARTED"
+          : (mergedCatalog.state ?? "NOT_STARTED");
       this.loadedEntryId = entryId;
+      this.hasLoadedEntryBinding = true;
       this.loadedContextRevision =
         getAppContextSnapshot()?.contextRevision ?? 0;
       this.loadedSeason = getApp<IAppOption>().globalData.season || "";
@@ -915,11 +946,7 @@ PerformancePage({
         v2Loading: append ? this.data.v2Loading : Boolean(selected && eventId),
         v2CatalogLoadingMore: false,
         v2HasNextPage: false,
-        emptyState: selected
-          ? ""
-          : items.length
-            ? "view"
-            : "tournaments",
+        emptyState: selected ? "" : items.length ? "view" : "tournaments",
       });
       if (!append) {
         this.seasonSectionPages = {};
@@ -1003,8 +1030,10 @@ PerformancePage({
     // the rendered Gameweek revision here would make a corrected historical
     // snapshot fail again before the server can return its current head.
     const requestRevision = after
-      ? catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null
-      : catalogRevision;
+      ? catalogRevision === null
+        ? null
+        : (catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null)
+      : (catalogRevision ?? null);
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -1014,7 +1043,7 @@ PerformancePage({
         !String(getApp<IAppOption>().globalData.season || "") ||
         String(getApp<IAppOption>().globalData.season || "") ===
           expectedSeason) &&
-      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+      (currentMyFplEntryId() || 0) === expectedEntryId;
     const settleStale = () => {
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
@@ -1042,7 +1071,7 @@ PerformancePage({
         void this.loadCatalog(true, trace);
         return;
       }
-      if (currentMyFplEntryId() !== expectedEntryId) {
+      if ((currentMyFplEntryId() || 0) !== expectedEntryId) {
         void this.loadCatalog(true, trace);
       }
     };
@@ -1212,9 +1241,8 @@ PerformancePage({
             phases: season.phases,
           }
         : this.data.v2Season;
-      const phase = nextSeason?.phases.find(
-        (candidate) =>
-          candidate.startEventId <= eventId && candidate.endEventId >= eventId,
+      const phase = nextSeason?.phases.find((candidate) =>
+        phaseCoversEvent(candidate, eventId),
       );
       let sectionError: unknown = null;
       if (!after && season) {
@@ -1254,10 +1282,14 @@ PerformancePage({
           // Start the auxiliary reads at the same time, but await and publish
           // the primary standings page first. A slow trajectory/fixture read
           // must never keep the main Season review in a loading state.
-          const primarySettled = await Promise.allSettled([requests[0]!]);
-          const primarySection = primarySettled[0];
-          if (!primarySection) sectionError = new Error("赛事阶段暂时不可用");
-          else if (primarySection.status === "rejected")
+          // Attach terminal settlement handlers to every eager request before
+          // awaiting the primary section. This keeps optional projections from
+          // becoming unhandled rejections when the primary read fails.
+          const settledRequests = requests.map((request) =>
+            settleRequest(request),
+          );
+          const primarySection = await settledRequests[0]!;
+          if (primarySection.status === "rejected")
             sectionError = primarySection.reason;
           else if (!sectionPayloadReady(primarySection.value, baseSection))
             sectionError = new Error("赛事主复盘分节暂时不可用");
@@ -1303,19 +1335,10 @@ PerformancePage({
                   ? sectionPageInfo(section).hasNextPage
                   : payloadHasNext(nextGameweek?.payload),
             });
-            const auxiliaryResults = await Promise.allSettled(requests.slice(1));
+            const auxiliaryResults = await Promise.all(
+              settledRequests.slice(1),
+            );
             const sections = [primarySection.value];
-            const auxiliaryError = auxiliaryResults.find((result, index) => {
-              const requestedSection = requestedSections[index + 1];
-              if (result.status === "rejected") return true;
-              return !sectionPayloadReady(result.value, requestedSection!);
-            });
-            if (auxiliaryError) {
-              sectionError =
-                auxiliaryError.status === "rejected"
-                  ? auxiliaryError.reason
-                  : new Error("赛事辅助复盘分节暂时不可用");
-            }
             for (const [index, result] of auxiliaryResults.entries()) {
               if (result.status === "fulfilled") {
                 const requestedSection = requestedSections[index + 1];
@@ -1374,7 +1397,9 @@ PerformancePage({
           phaseId: phase?.phaseId ?? null,
         };
       const seasonSurfaceMessage =
-        seasonMessage || sectionMessage || (after ? this.data.v2SeasonError : "");
+        seasonMessage ||
+        sectionMessage ||
+        (after ? this.data.v2SeasonError : "");
       if (partialError) {
         this.retryOperation = after ? "loadMore" : "review";
         this.retryAfter = after;
@@ -1469,7 +1494,7 @@ PerformancePage({
         !String(getApp<IAppOption>().globalData.season || "") ||
         String(getApp<IAppOption>().globalData.season || "") ===
           expectedSeason) &&
-      (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+      (currentMyFplEntryId() || 0) === expectedEntryId;
     const settleStale = () => {
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
@@ -1497,7 +1522,7 @@ PerformancePage({
         void this.loadCatalog(true);
         return;
       }
-      if (currentMyFplEntryId() !== expectedEntryId) {
+      if ((currentMyFplEntryId() || 0) !== expectedEntryId) {
         void this.loadCatalog(true);
       }
     };
@@ -1524,7 +1549,9 @@ PerformancePage({
     try {
       const baseSection = sectionForFormat(phase.format);
       if (!baseSection) throw new Error("赛事阶段类型待发布");
-      const requestedSections: MyTournamentReviewSeasonSection[] = [baseSection];
+      const requestedSections: MyTournamentReviewSeasonSection[] = [
+        baseSection,
+      ];
       if (phase.format === "POINTS") {
         requestedSections.push("POINTS_TRAJECTORIES");
       }
@@ -1551,9 +1578,10 @@ PerformancePage({
       // Start all section reads together, then let the primary standings page
       // render as soon as it is ready. Auxiliary projections are best-effort
       // and must not block the selected phase.
-      const primarySettled = await Promise.allSettled([requests[0]!]);
-      const primarySection = primarySettled[0];
-      if (!primarySection) throw new Error("赛事阶段暂时不可用");
+      // Settle every eager request up front so auxiliary failures are always
+      // observed even when the primary section rejects early.
+      const settledRequests = requests.map((request) => settleRequest(request));
+      const primarySection = await settledRequests[0]!;
       if (primarySection.status === "rejected") throw primarySection.reason;
       if (!sectionPayloadReady(primarySection.value, baseSection))
         throw new Error("赛事主复盘分节暂时不可用");
@@ -1579,13 +1607,8 @@ PerformancePage({
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
         v2SeasonError: "",
       });
-      const auxiliaryResults = await Promise.allSettled(requests.slice(1));
+      const auxiliaryResults = await Promise.all(settledRequests.slice(1));
       const sections = [primarySection.value];
-      const auxiliaryError = auxiliaryResults.find((result, index) => {
-        const requestedSection = requestedSections[index + 1];
-        if (result.status === "rejected") return true;
-        return !sectionPayloadReady(result.value, requestedSection!);
-      });
       if (!active()) {
         settleStale();
         return;
@@ -1602,36 +1625,18 @@ PerformancePage({
         sections.map((candidate) => [candidate.section, candidate]),
       ) as SeasonSectionPages;
       section = combineSeasonSections(this.seasonSectionPages, baseSection);
-      if (auxiliaryError) {
-        this.retryOperation = "review";
-        this.retryPhaseId = phaseId;
-        this.retryBySurface.season = {
-          operation: "review",
-          after: null,
-          phaseId,
-        };
-      } else {
-        this.retryBySurface.season = null;
-      }
+      // Auxiliary trajectories/fixtures are not rendered by the compact Mini
+      // surface yet. They remain best-effort and must not turn a ready primary
+      // standings view into an error or a retry loop.
+      this.retryBySurface.season = null;
       this.setData({
         v2SeasonSection: section,
         v2Loading: false,
         v2State: section?.state ?? phase.state,
         v2StatusText: stateText(section?.state ?? phase.state),
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
-        v2SeasonError: auxiliaryError
-          ? auxiliaryError.status === "rejected" &&
-            isClientUpgradeRequired(auxiliaryError.reason)
-            ? "赛事复盘需要升级小程序后继续"
-            : "赛事辅助复盘分节暂时不可用"
-          : "",
+        v2SeasonError: "",
       });
-      if (
-        auxiliaryError?.status === "rejected" &&
-        isClientUpgradeRequired(auxiliaryError.reason)
-      ) {
-        promptForUpgrade();
-      }
     } catch (error) {
       if (!active()) {
         settleStale();
@@ -1724,12 +1729,13 @@ PerformancePage({
         this.data.v2Season?.phases.find(
           (candidate) =>
             candidate.startEventId <= this.data.v2Event &&
-            candidate.endEventId >= this.data.v2Event,
+            phaseCoversEvent(candidate, this.data.v2Event),
         );
       const context = this.seasonSectionContext;
       const pages = this.seasonSectionPages;
       const expectedSeason =
-        this.loadedSeason || String(getApp<IAppOption>().globalData.season || "");
+        this.loadedSeason ||
+        String(getApp<IAppOption>().globalData.season || "");
       const currentSeason = String(
         getApp<IAppOption>().globalData.season || "",
       );
@@ -1774,8 +1780,9 @@ PerformancePage({
         this.data.v2SelectedPhaseId === context.phaseId &&
         (!expectedSeason ||
           !String(getApp<IAppOption>().globalData.season || "") ||
-          String(getApp<IAppOption>().globalData.season || "") === expectedSeason) &&
-        (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+          String(getApp<IAppOption>().globalData.season || "") ===
+            expectedSeason) &&
+        (currentMyFplEntryId() || 0) === expectedEntryId;
       const reloadAfterRebind = (): boolean => {
         const currentEntryId = currentMyFplEntryId() || 0;
         if (currentEntryId === expectedEntryId) return false;
@@ -2168,7 +2175,7 @@ PerformancePage({
       season?.phases.find(
         (candidate) =>
           candidate.startEventId <= this.data.v2Event &&
-          candidate.endEventId >= this.data.v2Event,
+          phaseCoversEvent(candidate, this.data.v2Event),
       );
     const meta = reviewViewMeta(
       nextView,
@@ -2343,7 +2350,9 @@ PerformancePage({
         getApp<IAppOption>().globalData.season || "",
       );
       const seasonRolled = Boolean(
-        this.loadedSeason && currentSeason && this.loadedSeason !== currentSeason,
+        this.loadedSeason &&
+        currentSeason &&
+        this.loadedSeason !== currentSeason,
       );
       // A catalog cursor is scoped to both the season and the connection
       // snapshot. Never replay it across a season boundary discovered by the
