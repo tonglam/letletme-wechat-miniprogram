@@ -4,32 +4,25 @@ import test from "node:test";
 
 const source = (path) => readFileSync(path, "utf8");
 
-test("My FPL Leagues captures V2 traces before authoritative context waits", () => {
+test("My FPL Leagues captures V2.1 traces and waits for authoritative context", () => {
   const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const service = source("miniprogram/services/tournament.service.ts");
   const compact = page.replace(/\s+/g, " ");
-  assert.match(compact, /v2Enabled: true/);
   const startup = compact.slice(
     compact.indexOf("async onLoad()"),
     compact.indexOf("async onShow()"),
   );
   assert.match(
     startup,
-    /capturePageRequestTrace\(\{ callerSurface: "my-fpl-leagues", trigger: "load"/,
+    /capturePageRequestTrace\(\{ callerSurface: "my-fpl-leagues-v2\.1", trigger: "load"/,
   );
   assert.match(startup, /await waitForAuthoritativeFollow\(\)/);
-  assert.match(startup, /loadLeagues\(false, trace, lifecycleRevision\)/);
+  assert.match(startup, /loadCatalog\(/);
   const refresh = compact.slice(compact.indexOf("async onPullDownRefresh()"));
-  assert.match(
-    refresh,
-    /capturePageRequestTrace/,
-  );
-  assert.match(refresh, /initAppData\(true\)/);
-  assert.match(refresh, /loadLeagues\(true, trace\)/);
-  assert.match(
-    compact,
-    /async loadLeagues\(.*?if \(this\.data\.v2Enabled\) \{ await this\.loadV2Leagues\(forceRefresh, trace\); return; \}/,
-  );
-  assert.match(compact, /callerSurface: "my-fpl-leagues-v2"/);
+  assert.match(refresh, /capturePageRequestTrace/);
+  assert.match(refresh, /loadCatalog\(\s*true/);
+  assert.match(compact, /getMyTournamentReviewCatalog/);
+  assert.match(service, /my-tournament-review-v2\.1/);
 });
 
 test("League service wrappers pass explicit traces to GraphQL", () => {

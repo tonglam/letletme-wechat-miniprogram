@@ -21,9 +21,12 @@ test("Price preserves forced daily refresh and pagination cursor on resume", () 
 
 test("My FPL Leagues tracks forced loads independently of the loading placeholder", () => {
   const page = read("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(page, /loadPending: false[\s\S]*loadForceRefresh: false[\s\S]*resumeForceRefresh: false/);
-  assert.match(page, /this\.resumeForceRefresh = this\.resumeForceRefresh \|\| this\.loadForceRefresh/);
-  assert.match(page, /loadLeagues\(forceRefresh, trace, lifecycleRevision\)/);
+  assert.match(page, /requestId: 0[\s\S]*viewRequestId: 0/);
+  assert.match(page, /const requestId = \+\+this\.requestId/);
+  assert.match(page, /forceRefresh/);
+  assert.match(page, /loadCatalog\(/);
+  assert.match(page, /resumeForceRefresh/);
+  assert.doesNotMatch(page, /loadPending|loadForceRefresh|loadLeagues\(/);
 });
 
 test("Gameweek Summary retains a forced refresh after repeated hides", () => {

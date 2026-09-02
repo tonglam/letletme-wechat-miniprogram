@@ -14,7 +14,7 @@ test("Price query changes drop interrupted pagination ownership", () => {
 
 test("Leagues always settles the pull-down indicator after a hidden return", () => {
   const page = read("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(page, /async onPullDownRefresh\(\)[\s\S]*try \{[\s\S]*if \(!this\.pageVisible\) return;[\s\S]*\} finally \{[\s\S]*wx\.stopPullDownRefresh\(\)/);
+  assert.match(page, /async onPullDownRefresh\(\)[\s\S]*try \{[\s\S]*loadCatalog\([\s\S]*\} finally \{[\s\S]*wx\.stopPullDownRefresh\(\)/);
 });
 
 test("Network status ignores an initial probe older than a status event", () => {

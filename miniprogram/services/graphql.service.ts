@@ -78,6 +78,8 @@ interface GraphQLResponse<T> {
 export interface GraphQLOptions {
   authMode?: GraphQLAuthMode;
   cachePolicy?: GraphQLCachePolicyName;
+  /** Explicit server-side workload when a cache policy is overridden. */
+  workload?: GraphQLWorkload;
   cacheTtl?: number;
   staleTtl?: number;
   getCacheExpiry?: (data: unknown) => number;
@@ -92,7 +94,7 @@ export interface GraphQLOptions {
   /** Keep the prior authoritative value when a network response fails validation. */
   preserveCacheOnValidationFailure?: boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
-  contract?: "my-tournament-review-v2" | "live-points-v2";
+  contract?: "my-tournament-review-v2.1";
 }
 
 export interface PageRequestTrace {
@@ -182,7 +184,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
-  contract?: "my-tournament-review-v2" | "live-points-v2";
+  contract?: "my-tournament-review-v2.1";
 }
 
 export class GraphQLTransportError extends Error {
@@ -253,7 +255,7 @@ export function isViewerEntryAuthorizationError(error: unknown): boolean {
   return hasGraphQLCode(error, "VIEWER_ENTRY_REQUIRED");
 }
 
-/** Live Points is a hard cutover; old clients must show an upgrade state. */
+/** Version-gated review clients must show an upgrade state after hard cutover. */
 export function isClientUpgradeRequired(error: unknown): boolean {
   return hasGraphQLCode(error, "CLIENT_UPGRADE_REQUIRED");
 }
@@ -359,7 +361,8 @@ function resolvePolicy(
     persist: !mutation && policy.persist,
     cacheVariant,
     cacheable: !mutation && (freshTtl > 0 || Boolean(options?.getCacheExpiry)),
-    workload: getGraphQLWorkload(operationName, cachePolicy),
+    workload:
+      options?.workload ?? getGraphQLWorkload(operationName, cachePolicy),
     contract: options?.contract,
   };
 }
@@ -519,7 +522,7 @@ function toHttpError(
     code === "VIEWER_ENTRY_REQUIRED"
       ? "请先选择我的球队"
       : code === "CLIENT_UPGRADE_REQUIRED"
-        ? "当前版本不支持实时积分，请升级小程序后继续"
+        ? "当前版本不支持此功能，请升级小程序后继续"
         : httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
     statusCode,
@@ -539,7 +542,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
-  contract?: "my-tournament-review-v2" | "live-points-v2",
+  contract?: "my-tournament-review-v2.1",
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -607,7 +610,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
-  contract: "my-tournament-review-v2" | "live-points-v2" | undefined,
+  contract: "my-tournament-review-v2.1" | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
@@ -857,14 +860,14 @@ export function shouldCacheGraphQLData(
       data as {
         myTournamentReviewCatalog?: {
           state?: unknown;
-          tournaments?: Array<{ state?: unknown }>;
+          edges?: Array<{ node?: { state?: unknown } }>;
         } | null;
       }
     ).myTournamentReviewCatalog;
     return Boolean(
       catalog?.state === "READY" &&
-        Array.isArray(catalog.tournaments) &&
-        catalog.tournaments.every((tournament) => tournament.state === "READY"),
+      Array.isArray(catalog.edges) &&
+      catalog.edges.every((edge) => edge.node?.state === "READY"),
     );
   }
   if (operationName === "MyTournamentGameweekReview") {
@@ -877,12 +880,38 @@ export function shouldCacheGraphQLData(
     );
   }
   if (operationName === "MyTournamentSeasonReview") {
+    const review = (
+      data as {
+        myTournamentSeasonReview?: {
+          state?: unknown;
+          phases?: Array<{
+            state?: unknown;
+            revision?: unknown;
+            semanticSha256?: unknown;
+          }>;
+        } | null;
+      }
+    ).myTournamentSeasonReview;
+    return (
+      review?.state === "READY" &&
+      Array.isArray(review.phases) &&
+      review.phases.every(
+        (phase) =>
+          phase.state === "READY" &&
+          typeof phase.revision === "string" &&
+          phase.revision.length > 0 &&
+          typeof phase.semanticSha256 === "string" &&
+          phase.semanticSha256.length > 0,
+      )
+    );
+  }
+  if (operationName === "MyTournamentSeasonReviewSection") {
     return (
       (
         data as {
-          myTournamentSeasonReview?: { state?: unknown } | null;
+          myTournamentSeasonReviewSection?: { state?: unknown } | null;
         }
-      ).myTournamentSeasonReview?.state === "READY"
+      ).myTournamentSeasonReviewSection?.state === "READY"
     );
   }
   return true;

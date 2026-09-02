@@ -89,7 +89,9 @@ test("Live landing refreshes the displayed entry name after authority changes", 
 
 test("initial request failures do not also claim an empty list", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.wxml");
-  assert.match(leagues, /error && !tournaments\.length && !emptyState/);
+  assert.match(leagues, /data-status[^>]*wx:if="\{\{v2Error\}\}"/);
+  assert.match(leagues, /v2SelectedTournament && !v2Error/);
+  assert.match(leagues, /暂无可复盘赛事/);
 });
 
 test("failed event metadata is represented as unavailable, not offseason", () => {
@@ -492,18 +494,20 @@ test("fixture windows honor event and season cache identity on open and resume",
 test("website handoffs await clipboard success", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const action = source("miniprogram/utils/canonical-action.ts");
-  assert.match(leagues, /if \(await openWebsiteAction\(action\)\)/);
+  assert.match(leagues, /async onOpenWebsite\(\)[\s\S]*await openWebsiteAction/);
   assert.match(action, /success:[\s\S]*resolve\(true\)/);
   assert.match(action, /fail[\s\S]*resolve\(false\)/);
 });
 
-test("league handoff returns bypass the cached official league list", () => {
+test("review returns use the V2.1 catalog and bypass stale review state", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const service = source("miniprogram/services/tournament.service.ts");
   assert.match(
     leagues,
-    /if \(resumed \|\| this\.resumeOnShow\)[\s\S]*const forceRefresh = this\.resumeForceRefresh[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*initAppData\(false\)[\s\S]*shouldReloadLeagues\([\s\S]*this\.loadLeagues\(forceRefresh, trace, lifecycleRevision\)/,
+    /async onShow\(\)[\s\S]*loadCatalog\(/,
   );
-  assert.match(leagues, /cached\.season === season/);
+  assert.match(service, /staleTtl: 0/);
+  assert.doesNotMatch(leagues, /readTournamentsCache|cached\.season/);
 });
 
 test("fixture resume reloads instead of relabeling payload across seasons", () => {
@@ -550,34 +554,26 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
 
 test("initial league payloads use named session cache policies", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  const common = source("miniprogram/services/common.service.ts");
-  assert.match(
-    leagues,
-    /async onLoad\(\)[\s\S]*this\.loadLeagues\(false, trace, lifecycleRevision\)/,
-  );
-  assert.match(common, /getTeamList[\s\S]*if \(!_season\) throw new Error/);
-  assert.match(common, /getTeamList[\s\S]*season: _season/);
-  assert.doesNotMatch(common, /season:unknown/);
+  const service = source("miniprogram/services/tournament.service.ts");
+  assert.match(leagues, /async onLoad\(\)[\s\S]*loadCatalog\(/);
+  assert.match(service, /MyTournamentReviewCatalog/);
+  assert.match(service, /cachePolicy: "network-only"/);
+  assert.match(service, /contract: MY_TOURNAMENT_REVIEW_CONTRACT/);
 });
 
 test("resident tournament rows never cross a season", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(
-    leagues,
-    /loadedSeason: undefined[\s\S]*seasonChanged[\s\S]*tournaments: \[\], tournamentNames: \[\]/,
-  );
+  assert.match(leagues, /loadedSeason: ""/);
+  assert.match(leagues, /loadedSeason = getApp<IAppOption>\(\)\.globalData\.season/);
+  assert.match(leagues, /v2SelectedTournament: null/);
 });
 
-test("cold offline lists retain only their own persisted season cache", () => {
+test("cold review lists do not retain a persisted business snapshot", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  for (const page of [leagues]) {
-    assert.match(page, /readStored\w+Cache\(\)/);
-    assert.match(
-      page,
-      /const offlineCached = season \? null : readStored\w+Cache\(\)/,
-    );
-    assert.match(page, /offlineCached\?\.entryId === entryId/);
-  }
+  const service = source("miniprogram/services/tournament.service.ts");
+  assert.match(leagues, /persistLastPick/);
+  assert.doesNotMatch(leagues, /readStored\w+Cache|offlineCached/);
+  assert.match(service, /staleTtl: 0/);
 });
 
 test("player route keywords survive a failed first load for Retry", () => {
@@ -794,10 +790,8 @@ test("player route keywords are consumed before the first directory request sett
 test("personal responses never cross an authoritative follow change", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
-  assert.match(
-    leagues,
-    /currentEntryId !== entryId[\s\S]*this\.loadLeagues\(true\)/,
-  );
+  assert.match(leagues, /const active = \(\) => this\.pageVisible && requestId === this\.requestId/);
+  assert.match(leagues, /const active = \(\) =>[\s\S]*requestId === this\.viewRequestId/);
   assert.match(
     liveEntry,
     /restartForPrincipalChange\(\s*entryId[\s\S]*currentFollowEntryId\(\)/,
@@ -815,14 +809,10 @@ test("personal responses never cross an authoritative follow change", () => {
 
 test("league authorization recovery clears retained view state", () => {
   const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
-  assert.match(
-    leagues,
-    /refreshedEntryId === entryId[\s\S]*return;[\s\S]*this\.clearEntryScopedViewState\(\)[\s\S]*entryId = refreshedEntryId/,
-  );
-  assert.match(
-    leagues,
-    /if \(refreshedEntryId !== entryId\) \{[\s\S]*this\.clearEntryScopedViewState\(\)[\s\S]*this\.loadedEntryId = 0/,
-  );
+  assert.match(leagues, /await refreshAuthoritativeFollow\(\)/);
+  assert.match(leagues, /if \(catalog\.viewerEntryId && Number\(catalog\.viewerEntryId\) !== entryId\)/);
+  assert.match(leagues, /showEntryEmptyState\(\)/);
+  assert.match(leagues, /this\.viewRequestId \+= 1/);
 });
 
 test("account and entry search refresh viewer authority before snapshots", () => {

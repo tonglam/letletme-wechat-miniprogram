@@ -6,9 +6,6 @@ globalThis.Page = () => {};
 const teamModule = await import(
   "../miniprogram/pages/my-fpl/team/team.controller.ts"
 );
-const leaguesModule = await import(
-  "../miniprogram/pages/my-fpl/leagues/leagues.ts"
-);
 const summaryFormat = await import(
   "../miniprogram/utils/summary-format.ts"
 );
@@ -31,29 +28,10 @@ test("past-season rows use the authoritative season instead of row order", () =>
   assert.equal(teamModule.mapSeasonHistoryRow(historyRow, undefined).current, false);
 });
 
-test("league averages always keep two decimal places", () => {
+test("summary averages always keep two decimal places", () => {
   assert.equal(summaryFormat.formatAverageNumber(32.01020408163265), "32.01");
   assert.equal(summaryFormat.formatAverageNumber(0), "0.00");
   assert.equal(summaryFormat.formatAverageMoney(1000), "£100.00m");
-  assert.equal(
-    leaguesModule.metricAverageValueText("BENCH_POINTS", 6.020408163265306),
-    "6.02"
-  );
-  assert.equal(
-    leaguesModule.metricAverageValueText("TEAM_VALUE", 1000),
-    "£100.00m"
-  );
-});
-
-test("league overview average is not rounded to an integer", () => {
-  const tiles = leaguesModule.overviewStatTiles({
-    entryCount: 98,
-    leaderOverallPoints: 59,
-    averageOverallPoints: 32.01020408163265,
-    gapFirstSecond: 3
-  });
-
-  assert.equal(tiles.find((tile) => tile.label === "平均总分")?.value, "32.01");
 });
 
 test("league path summaries keep averages and differences at two decimals", () => {

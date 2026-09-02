@@ -1,348 +1,85 @@
-<block wx:if="{{v2Enabled}}">
-  <view class="page page-tabbar review-v2-page">
-    <view class="section toolbar review-v2-toolbar">
-      <view class="row">
-        <picker wx:if="{{v2TournamentNames.length}}" class="league-picker" mode="selector" range="{{v2TournamentNames}}" value="{{v2SelectedTournamentIndex}}" bindchange="onTournamentChange">
-          <view class="league-switch"><text class="league-name">{{v2SelectedTournament.name || '请选择赛事'}}</text></view>
-        </picker>
-        <view wx:else class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事复盘待就绪'}}</view>
-        <picker wx:if="{{v2EventIds.length}}" class="review-event-picker" mode="selector" range="{{v2EventIds}}" value="{{v2SelectedEventIndex}}" bindchange="onGwChange">
-          <view class="review-event-pill">GW{{v2Event}}</view>
-        </picker>
-      </view>
-      <view wx:if="{{v2Catalog && v2Catalog.adminReadAll}}" class="review-admin-scope" bindtap="onV2ScopeTap" hover-class="hover-dim">{{v2Scope === 'ALL' ? '管理员：只看我的赛事' : '管理员：查看全部赛事'}}</view>
-    </view>
-
-    <view wx:if="{{v2SelectedTournament}}" class="section tab-strip">
-      <view class="tab-item {{showSeason ? 'tab-active' : ''}}" data-view="season" catchtap="onViewTap" hover-class="hover-dim">赛季</view>
-      <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
-    </view>
-
-    <data-status id="perf-primary-content" wx:if="{{v2Error}}" status="stale" message="{{v2Error}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <app-loading wx:if="{{v2Loading}}" text="加载赛事复盘" />
-    <view id="perf-primary-content" wx:elif="{{!v2SelectedTournament && !v2Error}}" class="section">
-      <app-empty-state
-        eyebrow="{{emptyState === 'entry' ? emptyEyebrow : ''}}"
-        title="{{emptyState === 'entry' ? emptyTitle : '暂无可复盘赛事'}}"
-        description="{{emptyState === 'entry' ? emptyDescription : '创建或加入 LetLetMe 赛事并完成轮次结算后，会显示在这里。'}}"
-        actionText="{{emptyState === 'entry' ? emptyActionText : ''}}"
-        bind:action="onEmptyAction"
-      />
-    </view>
-    <block wx:elif="{{v2SelectedTournament}}">
-      <view id="{{v2Error ? '' : 'perf-primary-content'}}" class="section card review-v2-header">
-        <view class="review-v2-eyebrow">{{v2Format === 'H2H' ? 'H2H 对战' : (v2Format === 'KNOCKOUT' ? '淘汰赛' : (v2Format === 'POINTS' ? '积分赛' : '类型待发布'))}}</view>
-        <view class="review-v2-title">{{v2SelectedTournament.name}}</view>
-        <view class="review-v2-meta">{{v2SelectedTournament.totalTeamNum}} 支队伍 · {{v2StatusText}}</view>
-        <view class="review-v2-hint">这里是已结算快照复盘中心；未结算数据统一前往 Live。</view>
-      </view>
-      <view wx:if="{{showSeason && v2Season}}" class="section">
-        <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.throughEventId || v2Event}}</view>
-        <view wx:if="{{v2Season.points}}" class="review-v2-stat-grid">
-          <view class="review-v2-stat"><text>Gross 总分</text><text class="review-v2-stat-value">{{v2Season.points.seasonGrossPointsTotal}}</text></view>
-          <view class="review-v2-stat"><text>Net 总分</text><text class="review-v2-stat-value">{{v2Season.points.seasonNetPointsTotal}}</text></view>
-          <view class="review-v2-stat"><text>参赛队伍</text><text class="review-v2-stat-value">{{v2SelectedTournament.totalTeamNum}}</text></view>
-        </view>
-        <view wx:if="{{v2Season.points}}" class="review-v2-table">
-          <view class="review-v2-table-head"><text>#</text><text>球队</text><text>Gross</text><text>Net</text></view>
-          <view wx:for="{{v2Season.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.seasonGrossPoints === null || item.seasonGrossPoints === undefined ? '—' : item.seasonGrossPoints}}</text><text>{{item.seasonNetPoints === null || item.seasonNetPoints === undefined ? '—' : item.seasonNetPoints}}</text></view>
-        </view>
-        <view wx:if="{{v2Season.h2h}}" class="review-v2-h2h-list"><view class="section-heading">对战积分榜</view><view class="review-v2-table"><view class="review-v2-table-head review-v2-h2h-row"><text>#</text><text>组</text><text>球队</text><text>积分</text><text>战绩</text></view><view wx:for="{{v2Season.h2h.standings}}" wx:key="entryId" class="review-v2-table-row review-v2-h2h-row"><text>{{item.rank}}</text><text>G{{item.groupId}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.matchPoints}} 分</text><text>{{item.won}}胜 {{item.drawn}}平</text></view></view></view>
-        <view wx:if="{{v2Season.knockout}}" class="review-v2-knockout"><view class="section-heading">淘汰赛晋级路径</view><view wx:for="{{v2Season.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><view class="review-v2-match-score"><text class="{{item.home && item.home.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}}{{item.home && item.home.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text><text> — </text><text class="{{item.away && item.away.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}{{item.away && item.away.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text></view></view></view>
-        <view wx:if="{{v2Season.freshness}}" class="review-v2-freshness">赛季快照发布于 {{v2Season.freshness.publishedAt}}</view>
-      </view>
-
-      <view wx:if="{{showGameweek && v2Gameweek}}" class="section">
-        <view class="section-heading">GW{{v2Event}} 单轮表现</view>
-        <view wx:if="{{v2Gameweek.points}}" class="review-v2-stat-grid">
-          <view class="review-v2-stat"><text>本轮积分（Gross）</text><text class="review-v2-stat-value">{{v2Gameweek.points.grossPointsTotal}}</text></view>
-          <view class="review-v2-stat"><text>转会成本</text><text class="review-v2-stat-value">{{v2TransferCostTotal}}</text></view>
-          <view class="review-v2-stat"><text>Net</text><text class="review-v2-stat-value">{{v2Gameweek.points.netPointsTotal}}</text></view>
-        </view>
-        <view wx:if="{{v2Gameweek.points}}" class="review-v2-table">
-          <view class="review-v2-table-head"><text>#</text><text>球队</text><text>{{v2HeadlineLabel}}</text><text>转会成本 / Net</text></view>
-          <view wx:for="{{v2GameweekRows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.headlineValue === null || item.headlineValue === undefined ? '—' : item.headlineValue}}</text><text>{{item.transferCost === null || item.transferCost === undefined ? '—' : item.transferCost}} / {{item.netPoints === null || item.netPoints === undefined ? '—' : item.netPoints}}</text></view>
-        </view>
-        <view wx:if="{{v2Gameweek.h2h}}" class="review-v2-h2h-list"><view class="section-heading">本轮对战</view><view wx:for="{{v2Gameweek.h2h.matches}}" wx:key="matchId" class="review-v2-match-card"><text>{{item.isBye ? '轮空' : '小组 G' + item.groupId}}</text><text>{{item.home && item.home.isAverage ? '平均队伍' : (item.home ? item.home.entryName : '轮空')}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}} — {{item.away && item.away.isAverage ? '平均队伍' : (item.away ? item.away.entryName : '轮空')}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}</text></view></view>
-        <view wx:if="{{v2Gameweek.knockout}}" class="review-v2-knockout"><view class="section-heading">淘汰赛对阵</view><view wx:for="{{v2Gameweek.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><view class="review-v2-match-score"><text class="{{item.home && item.home.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}}{{item.home && item.home.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text><text> — </text><text class="{{item.away && item.away.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}{{item.away && item.away.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text></view></view></view>
-        <view wx:if="{{v2Gameweek.scope && v2Gameweek.scope.freshness}}" class="review-v2-freshness">快照发布于 {{v2Gameweek.scope.freshness.publishedAt}}</view>
-      </view>
-      <view wx:if="{{v2HasNextPage}}" class="section review-v2-load-more">
-        <button size="mini" loading="{{v2LoadingMore}}" disabled="{{v2Loading || v2LoadingMore}}" bindtap="onV2LoadMore">{{v2LoadingMore ? '正在加载…' : '加载更多'}}</button>
-      </view>
-    </block>
-    <view class="section"><view class="footnote" bindtap="onOpenWebsite" hover-class="hover-dim">创建、筹备和管理赛事请访问 LetLetMe 网页版</view></view>
-  </view>
-  <bottomNavBar active="myFpl" />
-</block>
-<block wx:else>
-<view class="page page-tabbar">
-  <!-- Toolbar — same language as the live tournament desk -->
-  <view class="section toolbar">
+<view class="page page-tabbar review-v2-page">
+  <view class="section toolbar review-v2-toolbar">
     <view class="row">
-      <picker wx:if="{{tournaments.length}}" class="league-picker" mode="selector" range="{{tournamentNames}}" value="{{selectedTournamentIndex}}" bindchange="onTournamentChange">
-        <view class="league-switch">
-          <text class="league-name">{{selectedTournament.name || '请选择赛事'}}</text>
-        </view>
+      <picker wx:if="{{v2TournamentNames.length}}" class="league-picker" mode="selector" range="{{v2TournamentNames}}" value="{{v2SelectedTournamentIndex}}" bindchange="onTournamentChange">
+        <view class="league-switch"><text class="league-name">{{v2SelectedTournament.name || '请选择赛事'}}</text></view>
       </picker>
-      <view wx:else>
-        <view class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事数据待就绪'}}</view>
-      </view>
-      <gw-picker wx:if="{{tournaments.length && !emptyState}}" compact="{{true}}" value="{{event}}" max="{{maxGw}}" bind:change="onGwChange" />
+      <view wx:elif="{{!v2TournamentNames.length}}" class="subtitle">{{emptyState === 'entry' ? '选择球队后加载赛事' : '赛事复盘待就绪'}}</view>
+      <picker wx:if="{{v2EventIds.length}}" class="review-event-picker" mode="selector" range="{{v2EventIds}}" value="{{v2SelectedEventIndex}}" bindchange="onGwChange">
+        <view class="review-event-pill">GW{{v2Event}}</view>
+      </picker>
     </view>
+    <view wx:if="{{v2Catalog && v2Catalog.adminReadAll}}" class="review-admin-scope" bindtap="onV2ScopeTap" hover-class="hover-dim">{{v2Scope === 'ALL' ? '管理员：只看我的赛事' : '管理员：查看全部赛事'}}</view>
+    <button wx:if="{{v2Catalog && v2Catalog.pageInfo.hasNextPage}}" class="review-catalog-load-more" size="mini" loading="{{v2CatalogLoadingMore}}" disabled="{{v2Loading || v2CatalogLoadingMore}}" bindtap="onCatalogLoadMore">加载更多赛事</button>
   </view>
 
-  <view wx:if="{{selectedTournament && !emptyState}}" class="section tab-strip">
+  <view wx:if="{{v2SelectedTournament}}" class="section tab-strip">
     <view class="tab-item {{showSeason ? 'tab-active' : ''}}" data-view="season" catchtap="onViewTap" hover-class="hover-dim">赛季</view>
     <view class="tab-item {{showGameweek ? 'tab-active' : ''}}" data-view="gameweek" catchtap="onViewTap" hover-class="hover-dim">单轮</view>
   </view>
 
-  <app-error-state id="perf-primary-content" wx:if="{{error && !tournaments.length && !emptyState}}" message="{{error}}" workload="interactive" bind:retry="onRetry" />
-  <app-loading wx:elif="{{loading}}" text="加载赛事" />
-  <view id="perf-primary-content" wx:elif="{{emptyState}}" class="section">
+  <data-status id="perf-primary-content" wx:if="{{v2Error}}" status="stale" message="{{v2Error}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" bind:retry="onRetry" />
+  <app-loading wx:if="{{v2Loading}}" text="加载赛事复盘" />
+  <view id="perf-primary-content" wx:elif="{{!v2SelectedTournament && !v2Error}}" class="section">
     <app-empty-state
-      eyebrow="{{emptyEyebrow}}"
-      title="{{emptyTitle}}"
-      description="{{emptyDescription}}"
-      actionText="{{emptyActionText}}"
-      featured="{{true}}"
+      eyebrow="{{emptyState === 'entry' ? emptyEyebrow : ''}}"
+      title="{{emptyState === 'entry' ? emptyTitle : (v2State !== 'NOT_STARTED' ? v2StatusText : '暂无可复盘赛事')}}"
+      description="{{emptyState === 'entry' ? emptyDescription : (v2State !== 'NOT_STARTED' ? '最新结算范围正在准备，点击重试检查状态。' : '创建或加入 LetLetMe 赛事并完成轮次结算后，会显示在这里。')}}"
+      actionText="{{emptyState === 'entry' ? emptyActionText : (v2State !== 'NOT_STARTED' ? '重新检查' : '去网页版创建赛事')}}"
       bind:action="onEmptyAction"
     />
-    <view wx:if="{{emptyState === 'tournaments'}}" class="manage-hint" bindtap="onCopyCompetitionLink" hover-class="hover-dim">创建和管理赛事请访问 LetLetMe 网页版 · 点击复制链接</view>
   </view>
 
-  <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <data-status wx:if="{{viewError && ((showSeason && hasSeasonData) || (showGameweek && hasGwData))}}" status="stale" message="{{viewError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
-    <app-error-state
-      id="perf-primary-content"
-      wx:if="{{viewError && ((showSeason && !hasSeasonData) || (showGameweek && !hasGwData))}}"
-      message="{{viewError}}"
-      workload="interactive"
-      bind:retry="onRetry"
-    />
-    <app-loading wx:if="{{viewLoading}}" text="加载赛事数据" />
+  <block wx:elif="{{v2SelectedTournament}}">
+    <view id="{{v2Error ? '' : 'perf-primary-content'}}" class="section card review-v2-header">
+      <view class="review-v2-eyebrow">{{v2Format === 'H2H' ? 'H2H 对战' : (v2Format === 'KNOCKOUT' ? '淘汰赛' : (v2Format === 'POINTS' ? '积分赛' : '类型待发布'))}}</view>
+      <view class="review-v2-title">{{v2SelectedTournament.name}}</view>
+      <view class="review-v2-meta">{{v2SelectedTournament.totalTeamNum}} 支队伍 · {{v2StatusText}}</view>
+      <view class="review-v2-hint">这是已结算快照复盘中心；未结算数据统一前往 Live。</view>
+    </view>
 
-    <!-- 赛季 · 你在赛事中 -->
-    <block wx:if="{{showSeason && !viewLoading && (!viewError || hasSeasonData)}}">
-      <view wx:if="{{!hasSeasonData && !viewError}}" id="perf-primary-content" class="section">
-        <app-empty-state title="该赛事暂无可用的积分榜数据" description="赛事完成第一轮结算后会显示赛季数据" />
-      </view>
-      <block wx:else>
-        <view id="perf-primary-content" class="section">
-          <view class="score-card scoreboard">
-            <view class="score-top">
-              <view class="score-identity">
-                <view class="score-team">你在赛事中</view>
-                <view class="score-manager">{{heroKicker}}</view>
-              </view>
-              <view class="score-hero">
-                <view class="score-label">赛事内排名</view>
-                <view class="score">{{heroRank}}</view>
-              </view>
-            </view>
-            <view class="score-sub">{{heroRankSub}}</view>
-          </view>
-        </view>
+    <view wx:if="{{v2State !== 'READY'}}" class="section card review-v2-state">
+      <view class="section-heading">GW{{v2Event || '—'}} · {{v2StatusText}}</view>
+      <view class="review-v2-hint">最新已结算轮次未就绪时不会回退到旧快照。完成结算后可重新进入查看。</view>
+      <button wx:if="{{v2Event}}" size="mini" bindtap="onGoLive">前往 Live 查看未结算数据</button>
+    </view>
 
-        <view class="section me-grid">
-          <view wx:for="{{meTiles}}" wx:key="label" class="me-tile">
-            <view class="me-tile-label">{{item.label}}</view>
-            <view class="me-tile-value">{{item.value}}</view>
-            <view class="me-tile-meta">{{item.meta || '　'}}</view>
-          </view>
-        </view>
+    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
+    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{false}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
 
-        <view class="section card">
-          <view class="section-heading">联赛概况</view>
-          <view class="stat-strip stat-strip-4">
-            <view wx:for="{{overviewStats}}" wx:key="label" class="stat">
-              <text class="stat-label">{{item.label}}</text>
-              <text class="stat-value">{{item.value}}</text>
-            </view>
-          </view>
-          <view class="section-heading leader-heading">联赛之最</view>
-          <view wx:for="{{leaderRows}}" wx:key="id" class="leader-row">
-            <text class="leader-label">{{item.label}}</text>
-            <view class="leader-main">
-              <text class="leader-name">{{item.name}}</text>
-              <view wx:if="{{item.meta}}" class="leader-meta">{{item.meta}}</view>
-            </view>
-            <text class="leader-value">{{item.value}}</text>
-          </view>
-        </view>
-
-        <view class="section card season-chart-card">
-          <view class="section-heading">赛季路径</view>
-          <app-loading wx:if="{{pathLoading && !pathVisible}}" text="加载赛事走势" />
-          <app-empty-state
-            wx:elif="{{!pathLoading && !pathVisible}}"
-            title="还不够画路径"
-            description="至少两个比赛周的积分榜后会显示你相对榜首和平均的走势"
-          />
-          <block wx:else>
-            <view class="chart-modes">
-              <view
-                wx:for="{{pathModes}}"
-                wx:key="id"
-                class="chart-mode {{pathMode === item.id ? 'chart-mode-on' : ''}}"
-                data-mode="{{item.id}}"
-                bindtap="onPathMode"
-                hover-class="hover-dim"
-              >{{item.label}}</view>
-            </view>
-            <view class="chart-summary">{{pathSummary}}</view>
-            <mini-chart
-              type="line"
-              points="{{pathSeries}}"
-              invertY="{{pathInvertY}}"
-              selectedX="{{pathSelectedGw || 0}}"
-              hasSelected="{{pathHasSelected}}"
-              bind:select="onPathSelect"
-            />
-            <view class="chart-hint">{{pathHint}}</view>
-          </block>
-        </view>
-      </block>
-    </block>
-
-    <!-- 单轮 · 我的表现 + 本轮看点 -->
-    <block wx:if="{{showGameweek && !viewLoading && (!viewError || hasGwData)}}">
-      <view wx:if="{{gwNotice}}" class="live-refresh-error">{{gwNotice}}</view>
-      <view wx:if="{{!hasGwData && !viewError}}" id="perf-primary-content" class="section">
-        <app-empty-state title="暂无赛事数据" description="本轮赛事结果结算后会显示在这里" />
-      </view>
-      <block wx:else>
-        <view id="perf-primary-content" class="section summary-grid">
-          <view wx:for="{{gwTiles}}" wx:key="label" class="summary-tile">
-            <view class="tile-label">{{item.label}}</view>
-            <view class="tile-value {{item.tone === 'good' ? 'tile-good' : ''}} {{item.tone === 'bad' ? 'tile-bad' : ''}}">{{item.value}}</view>
-            <view class="tile-meta {{item.tone === 'good' ? 'tile-good' : ''}} {{item.tone === 'bad' ? 'tile-bad' : ''}}">{{item.meta || '　'}}</view>
-          </view>
-        </view>
-
-        <view class="section card">
-          <view class="section-heading">本轮高分</view>
-            <app-empty-state wx:if="{{topRows.length === 0}}" title="本轮暂无得分数据" />
-            <view wx:for="{{topRows}}" wx:key="id" class="hl-row">
-              <view class="hl-main">
-                <view class="hl-title">{{item.title}}</view>
-                <view wx:if="{{item.meta}}" class="hl-meta">{{item.meta}}</view>
-              </view>
-              <text class="hl-value">{{item.value}}</text>
-            </view>
-        </view>
-
-        <view class="section hl-pair">
-          <view class="card hl-card">
-            <view class="section-heading">进步榜</view>
-            <app-empty-state wx:if="{{riserRows.length === 0}}" title="本轮无人名次上升" />
-            <view wx:for="{{riserRows}}" wx:key="id" class="hl-row">
-              <view class="hl-main">
-                <view class="hl-title">{{item.title}}</view>
-                <view class="hl-meta">{{item.meta}}</view>
-              </view>
-              <text class="hl-value hl-good">{{item.value}}</text>
-            </view>
-          </view>
-          <view class="card hl-card">
-            <view class="section-heading">退步榜</view>
-            <app-empty-state wx:if="{{fallerRows.length === 0}}" title="本轮无人名次下降" />
-            <view wx:for="{{fallerRows}}" wx:key="id" class="hl-row">
-              <view class="hl-main">
-                <view class="hl-title">{{item.title}}</view>
-                <view class="hl-meta">{{item.meta}}</view>
-              </view>
-              <text class="hl-value hl-bad">{{item.value}}</text>
-            </view>
-          </view>
-        </view>
-      </block>
-    </block>
-
-    <!-- 积分榜 — board language lifted from the live tournament desk -->
-    <block wx:if="{{(showSeason && hasSeasonData) || (showGameweek && hasGwData)}}">
-      <view class="section card filter-card">
-        <view class="filter-top">
-          <filter-bar class="filter-search" keyword="{{keyword}}" placeholder="搜索球队或经理" actionText="查" bind:search="onKeyword" bind:submit="onKeyword" bind:reset="onResetSearch" />
+    <view wx:if="{{showSeason && v2Season}}" class="section">
+      <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.throughEventId}}</view>
+      <view class="phase-timeline">
+        <view wx:for="{{v2Season.phases}}" wx:key="phaseId" data-phase-id="{{item.phaseId}}" bindtap="onPhaseTap" hover-class="hover-dim" class="phase-pill {{item.phaseId === v2SelectedPhaseId ? 'phase-active' : ''}} {{item.state === 'READY' ? 'phase-ready' : 'phase-pending'}}">
+          <text>{{item.format}}</text><text> GW{{item.startEventId}}–{{item.endEventId === null ? '进行中' : item.endEventId}}</text>
         </view>
       </view>
-
-      <view class="section sort-tabs">
-        <view
-          wx:for="{{sortOptions}}"
-          wx:key="key"
-          class="sort-tab {{sortKey === item.key ? 'active' : ''}}"
-          data-key="{{item.key}}"
-          bindtap="onSortTap"
-          hover-class="hover-dim"
-        >{{item.label}}{{sortKey === item.key ? (sortAsc ? ' ↑' : ' ↓') : ''}}</view>
+      <view wx:if="{{v2SeasonSection && v2SeasonSection.points}}" class="review-v2-table {{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net' ? 'review-v2-table-custom' : ''}}">
+        <view class="review-v2-table-head"><text>#</text><text>球队</text><text>Gross</text><text>Net</text><text wx:if="{{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net'}}">赛事分</text></view>
+        <view wx:for="{{v2SeasonSection.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.seasonGrossPoints === null || item.seasonGrossPoints === undefined ? '—' : item.seasonGrossPoints}}</text><text>{{item.seasonNetPoints === null || item.seasonNetPoints === undefined ? '—' : item.seasonNetPoints}}</text><text wx:if="{{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net'}}">{{item.tournamentScore === null || item.tournamentScore === undefined ? '—' : item.tournamentScore}}</text></view>
       </view>
+      <view wx:if="{{v2SeasonSection && v2SeasonSection.h2h}}" class="review-v2-h2h-list"><view class="section-heading">对战积分榜</view><view class="review-v2-table"><view class="review-v2-table-head review-v2-h2h-row"><text>#</text><text>组</text><text>球队</text><text>积分</text><text>战绩</text></view><view wx:for="{{v2SeasonSection.h2h.standings}}" wx:key="entryId" class="review-v2-table-row review-v2-h2h-row"><text>{{item.rank}}</text><text>G{{item.groupId}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.matchPoints}} 分</text><text>{{item.won}}胜 {{item.drawn}}平 {{item.lost}}负</text></view></view></view>
+      <view wx:if="{{v2SeasonSection && v2SeasonSection.knockout}}" class="review-v2-knockout"><view class="section-heading">淘汰赛晋级路径</view><view wx:for="{{v2SeasonSection.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><view class="review-v2-match-score"><text class="{{item.home && item.home.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}}{{item.home && item.home.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text><text> — </text><text class="{{item.away && item.away.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}{{item.away && item.away.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text></view></view></view>
+      <view wx:if="{{v2SeasonSection && v2SeasonSection.pageInfo.hasNextPage}}" class="section review-v2-load-more"><button size="mini" loading="{{v2LoadingMore}}" disabled="{{v2Loading || v2LoadingMore}}" bindtap="onV2LoadMore">加载更多</button></view>
+    </view>
 
-      <view class="section">
-        <view class="result-row">
-          <view class="result-count">{{boardFrom}}-{{boardTo}} / {{filteredCount}} 支 · 共 {{boardTotalRows || boardRows.length}}</view>
-        </view>
-        <app-empty-state
-          wx:if="{{displayedRows.length === 0}}"
-          title="没有匹配的球队"
-          description="换个关键词试试"
-          actionText="清除搜索"
-          bind:action="onResetSearch"
-        />
-        <view wx:else class="board">
-          <view class="board-head">
-            <text class="col-rank">#</text>
-            <text class="col-team">球队</text>
-            <text class="col-num col-c1">{{boardCol1}}</text>
-            <text class="col-num col-c2">{{boardCol2}}</text>
-            <text class="col-num col-c3">{{boardCol3}}</text>
-          </view>
-          <view
-            wx:for="{{displayedRows}}"
-            wx:key="entryId"
-            class="board-row {{item.me ? 'me' : ''}}"
-          >
-            <view class="col-rank">
-              <text>{{item.rankText}}</text>
-              <text wx:if="{{item.moveText}}" class="rank-move move-{{item.moveTone}}">{{item.moveText}}</text>
-            </view>
-            <view class="col-team">
-              <view class="team-line">
-                <text class="team-name">{{item.name}}</text>
-                <text wx:if="{{item.me}}" class="me-badge">我</text>
-              </view>
-              <view class="team-meta">
-                <text>{{item.manager}}</text>
-                <text wx:if="{{item.chip}}" class="chip-badge chip-{{item.chip}}">{{item.chip}}</text>
-              </view>
-            </view>
-            <text class="col-num col-c1 {{item.c1Tone === 'good' ? 'num-good' : ''}}">{{item.c1}}</text>
-            <text class="col-num col-c2 {{item.c2Tone === 'bad' ? 'num-bad' : ''}}">{{item.c2}}</text>
-            <text class="col-num col-c3">{{item.c3}}</text>
-          </view>
-          <view wx:if="{{boardPageCount > 1}}" class="board-pager">
-            <view
-              class="board-page-action {{hasPreviousBoardPage ? '' : 'board-page-disabled'}}"
-              bindtap="onPreviousBoardPage"
-              hover-class="hover-dim"
-            >上一页</view>
-            <text class="board-page-count">{{boardPage}} / {{boardPageCount}}</text>
-            <view
-              class="board-page-action {{hasNextBoardPage ? '' : 'board-page-disabled'}}"
-              bindtap="onNextBoardPage"
-              hover-class="hover-dim"
-            >下一页</view>
-          </view>
-        </view>
+    <view wx:if="{{showGameweek && v2Gameweek}}" class="section">
+      <view class="section-heading">GW{{v2Event}} 单轮表现</view>
+      <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'POINTS'}}" class="review-v2-stat-grid">
+        <view wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross' || v2Gameweek.payload.points.headlineMetric === 'net'}}" class="review-v2-stat"><text wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross'}}">本轮积分（Gross）</text><text wx:else>本轮积分（Net）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.headlineMetric === 'gross' ? v2Gameweek.payload.points.grossPointsTotal : v2Gameweek.payload.points.netPointsTotal}}</text></view>
+        <view class="review-v2-stat"><text>转会成本</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.grossPointsTotal - v2Gameweek.payload.points.netPointsTotal}}</text></view>
+        <view class="review-v2-stat"><text>Net（赛事排名）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.netPointsTotal}}</text></view>
       </view>
-    </block>
-
-    <view class="section">
-      <view class="footnote" bindtap="onOpenWebsite" hover-class="hover-dim">创建、筹备和管理赛事请访问 LetLetMe 网页版</view>
+      <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'POINTS'}}" class="review-v2-table">
+        <view class="review-v2-table-head"><text>#</text><text>球队</text><text wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross'}}">本轮 Gross</text><text wx:elif="{{v2Gameweek.payload.points.headlineMetric === 'net'}}">本轮 Net</text><text wx:else>本轮赛事分</text><text>Cost / Net</text></view>
+        <view wx:for="{{v2Gameweek.payload.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross'}}">{{item.grossPoints === null || item.grossPoints === undefined ? '—' : item.grossPoints}}</text><text wx:elif="{{v2Gameweek.payload.points.headlineMetric === 'net'}}">{{item.netPoints === null || item.netPoints === undefined ? '—' : item.netPoints}}</text><text wx:else>{{item.tournamentScore === null || item.tournamentScore === undefined ? '—' : item.tournamentScore}}</text><text>{{item.transferCost === null || item.transferCost === undefined ? '—' : item.transferCost}} / {{item.netPoints === null || item.netPoints === undefined ? '—' : item.netPoints}}</text></view>
+      </view>
+      <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'H2H'}}" class="review-v2-h2h-list"><view class="section-heading">本轮对战</view><view wx:for="{{v2Gameweek.payload.h2h.matches}}" wx:key="matchId" class="review-v2-match-card"><text>{{item.isBye ? '轮空' : '小组 G' + item.groupId}}</text><text>{{item.home && item.home.isAverage ? '平均队伍' : (item.home ? item.home.entryName : '轮空')}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}} — {{item.away && item.away.isAverage ? '平均队伍' : (item.away ? item.away.entryName : '轮空')}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}</text></view></view>
+      <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'KNOCKOUT'}}" class="review-v2-knockout"><view class="section-heading">淘汰赛对阵</view><view wx:for="{{v2Gameweek.payload.knockout.matches}}" wx:key="matchId" class="review-v2-match-card"><text>第{{item.round === null || item.round === undefined ? '—' : item.round}}轮 · {{item.name || '对阵'}}</text><view class="review-v2-match-score"><text class="{{item.home && item.home.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.home ? item.home.entryName : '轮空'}} {{item.home && item.home.netPoints !== null && item.home.netPoints !== undefined ? item.home.netPoints : '—'}}{{item.home && item.home.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text><text> — </text><text class="{{item.away && item.away.entryId === item.winnerEntryId ? 'review-v2-match-winner' : ''}}">{{item.away ? item.away.entryName : '轮空'}} {{item.away && item.away.netPoints !== null && item.away.netPoints !== undefined ? item.away.netPoints : '—'}}{{item.away && item.away.entryId === item.winnerEntryId ? '（晋级）' : ''}}</text></view></view></view>
+      <view wx:if="{{v2Gameweek.payload && ((v2Gameweek.payload.format === 'H2H' && v2Gameweek.payload.h2h.hasNextPage) || (v2Gameweek.payload.format === 'KNOCKOUT' && v2Gameweek.payload.knockout.hasNextPage) || (v2Gameweek.payload.format === 'POINTS' && v2Gameweek.payload.points.hasNextPage))}}" class="section review-v2-load-more"><button size="mini" loading="{{v2LoadingMore}}" disabled="{{v2Loading || v2LoadingMore}}" bindtap="onV2LoadMore">加载更多</button></view>
     </view>
   </block>
 
-  <bottomNavBar active="myFpl" />
+  <view class="section"><view class="footnote" bindtap="onOpenWebsite" hover-class="hover-dim">创建、筹备和管理赛事请访问 LetLetMe 网页版</view></view>
 </view>
- </block>
+<bottomNavBar active="myFpl" />

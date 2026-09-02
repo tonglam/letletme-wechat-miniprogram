@@ -10,18 +10,15 @@ const source = (path) => readFileSync(resolve(root, path), "utf8");
 test("Leagues cancels cold startup and resumes the V2 lifecycle", () => {
   const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
   const compact = page.replace(/\s+/g, " ");
+  assert.match(compact, /await waitForAuthoritativeFollow\(\)/);
+  assert.match(compact, /if \(!this\.pageVisible \|\| revision !== this\.lifecycleRevision\) return/);
+  assert.match(compact, /initAppData\(false\)/);
+  assert.match(compact, /loadCatalog\(\s*false/);
+  assert.match(compact, /getMyTournamentReviewCatalog/);
+  assert.doesNotMatch(compact, /v2Enabled|loadV2Leagues|loadLeagues/);
   assert.match(
     compact,
-    /await waitForAuthoritativeFollow\(\).*?lifecycleRevision !== this\.lifecycleRevision.*?initAppData\(false\).*?lifecycleRevision !== this\.lifecycleRevision/,
-  );
-  assert.match(compact, /loadLeagues\(false, trace, lifecycleRevision\)/);
-  assert.match(
-    compact,
-    /async loadLeagues\(.*?this\.data\.v2Enabled.*?loadV2Leagues\(forceRefresh, trace\)/,
-  );
-  assert.match(
-    compact,
-    /onHide\(\).*?resumeOnShow = this\.resumeOnShow \|\| this\.startupPending \|\| this\.data\.loading \|\| this\.loadPending.*?lifecycleRevision \+= 1.*?requestId \+= 1/,
+    /onHide\(\).*?lifecycleRevision \+= 1.*?requestId \+= 1.*?viewRequestId \+= 1/,
   );
 });
 

@@ -183,9 +183,9 @@ test("V2 review requests carry an explicit contract header", () => {
       "session",
       "secret-token",
       "wx-device-123",
-      "my-tournament-review-v2",
+      "my-tournament-review-v2.1",
     )["X-LetLetMe-Contract"],
-    "my-tournament-review-v2",
+    "my-tournament-review-v2.1",
   );
 });
 
@@ -213,7 +213,7 @@ test("V2 review cache accepts only fully READY snapshots", () => {
       shouldCacheGraphQLData("MyTournamentReviewCatalog", {
         myTournamentReviewCatalog: {
           state: "READY",
-          tournaments: [{ state: "READY" }, { state }],
+          edges: [{ node: { state: "READY" } }, { node: { state } }],
         },
       }),
       false,
@@ -228,15 +228,30 @@ test("V2 review cache accepts only fully READY snapshots", () => {
   );
   assert.equal(
     shouldCacheGraphQLData("MyTournamentSeasonReview", {
-      myTournamentSeasonReview: { state: "READY" },
+      myTournamentSeasonReview: {
+        state: "READY",
+        phases: [{ state: "READY", revision: "1", semanticSha256: "sha-1" }],
+      },
     }),
     true,
+  );
+  assert.equal(
+    shouldCacheGraphQLData("MyTournamentSeasonReview", {
+      myTournamentSeasonReview: {
+        state: "READY",
+        phases: [
+          { state: "READY", revision: "1", semanticSha256: "sha-1" },
+          { state: "PENDING", revision: null, semanticSha256: null },
+        ],
+      },
+    }),
+    false,
   );
   assert.equal(
     shouldCacheGraphQLData("MyTournamentReviewCatalog", {
       myTournamentReviewCatalog: {
         state: "READY",
-        tournaments: [{ state: "READY" }],
+        edges: [{ node: { state: "READY" } }],
       },
     }),
     true,
@@ -254,7 +269,7 @@ test("cache identity validation evicts a mismatched V2 catalog", async () => {
             state: "READY",
             viewerEntryId: responseViewerEntryId,
             adminReadAll: false,
-            tournaments: [{ state: "READY", tournamentId: 6953 }],
+            edges: [{ node: { state: "READY", tournamentId: 6953 } }],
           },
         },
       },
