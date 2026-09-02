@@ -141,7 +141,7 @@ test("an unavailable H2H refresh retains the last complete board", () => {
 
   assert.match(
     controller,
-    /board\.availability !== "READY" && this\.data\.hasData && this\.data\.h2hActive/,
+    /\(board\.availability !== "READY" \|\|[\s\S]*board\.delivery\.state === "UNAVAILABLE"\) && this\.data\.hasData && this\.data\.h2hActive/,
   );
   assert.match(controller, /errorSuffix: "当前显示上次成功结果"/);
 });

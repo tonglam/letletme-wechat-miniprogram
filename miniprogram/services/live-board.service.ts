@@ -1366,5 +1366,34 @@ export function boardRowsToLiveRows(
           score: undefined,
         }) satisfies LiveTournamentRow,
     );
-  return [...mappedReadyRows, ...missingRows];
+  const unavailableRows = sourceRows
+    .filter(
+      (row) =>
+        (row.availability === "ERROR" || row.availability === "PENDING") &&
+        row.score === null,
+    )
+    .map(
+      (row) =>
+        ({
+          entry: row.entry,
+          entryName: row.entryName,
+          playerName: row.playerName,
+          rank: row.liveRank ?? undefined,
+          overallRank: row.overallRank ?? undefined,
+          teamValue: row.teamValue ?? undefined,
+          chip: undefined,
+          captainName: row.captainName ?? undefined,
+          captainPoints: row.captainPoints ?? undefined,
+          played: row.played ?? undefined,
+          toPlay: row.toPlay ?? undefined,
+          livePoints: undefined,
+          liveNetPoints: undefined,
+          liveTotalPoints: undefined,
+          totalPoints: undefined,
+          transferCost: row.transferCost ?? undefined,
+          picks: [],
+          score: undefined,
+        }) satisfies LiveTournamentRow,
+    );
+  return [...mappedReadyRows, ...missingRows, ...unavailableRows];
 }

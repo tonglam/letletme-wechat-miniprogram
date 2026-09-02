@@ -169,6 +169,7 @@ export function traceableH2HBoard(board: H2HBoard | null | undefined): boolean {
   return Boolean(
     board &&
     board.availability === "READY" &&
+    board.delivery.state !== "UNAVAILABLE" &&
     board.revisions &&
     hasRevision(board.revisions.content) &&
     board.times &&
@@ -339,14 +340,58 @@ export function h2hMatchupStatusText(
   if (currentEventId != null && match.eventId > currentEventId) {
     return "待开始";
   }
-  if (
-    match.delivery?.state === "FINAL" ||
+  if (match.delivery?.state === "FINAL" ||
     (currentEventId != null && match.eventId < currentEventId)
   ) {
     return "已结束";
   }
   if (match.availability === "PENDING") return "待开始";
   return "进行中";
+}
+
+/** History rows lack per-match delivery; use board delivery for the active event. */
+export function h2hHistoryMatchupStatusText(
+  match: Pick<H2HHistoryMatch, "eventId" | "availability">,
+  activeEventId: number | null | undefined,
+  board: {
+    eventId: number;
+    availability: H2HAvailability;
+    delivery: Pick<H2HDelivery, "state">;
+  } | null,
+): "进行中" | "已结束" | "待开始" | "暂时不可用" {
+  if (match.availability === "ERROR" || match.availability === "MISSING") {
+    return "暂时不可用";
+  }
+  if (activeEventId != null && match.eventId > activeEventId) {
+    return "待开始";
+  }
+  if (activeEventId != null && match.eventId < activeEventId) {
+    return "已结束";
+  }
+  const delivery =
+    board &&
+    board.eventId === match.eventId &&
+    activeEventId != null &&
+    match.eventId === activeEventId
+      ? board.delivery
+      : null;
+  if (delivery?.state === "FINAL") return "已结束";
+  if (
+    delivery?.state === "UNAVAILABLE" ||
+    board?.availability === "ERROR" ||
+    board?.availability === "MISSING"
+  ) {
+    return "暂时不可用";
+  }
+  if (
+    delivery?.state === "FRESH" &&
+    board?.availability === "READY" &&
+    match.availability === "READY"
+  ) {
+    return "进行中";
+  }
+  if (match.availability === "PENDING") return "待开始";
+  return "待开始";
 }
 
 export function tournamentSetupPhaseText(phase?: string | null): string {
