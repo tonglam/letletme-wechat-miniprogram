@@ -407,14 +407,39 @@ function promptForUpgrade(): void {
 
 function isReviewRevisionMismatch(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; message?: unknown };
-  const code = typeof candidate.code === "string" ? candidate.code : "";
-  const message =
-    typeof candidate.message === "string" ? candidate.message : "";
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    extensions?: { code?: unknown };
+    errors?: Array<{
+      message?: unknown;
+      extensions?: { code?: unknown };
+    }>;
+  };
+  const codes = [candidate.code, candidate.extensions?.code];
+  const messages = [candidate.message];
+  for (const nested of candidate.errors ?? []) {
+    codes.push(nested.extensions?.code);
+    messages.push(nested.message);
+  }
+  const hasBadInput = codes.some(
+    (code) => code === "BAD_USER_INPUT" || code === "INVALID_CURSOR",
+  );
+  const message = messages
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
   return (
-    (code === "BAD_USER_INPUT" || code === "INVALID_CURSOR") &&
+    hasBadInput &&
     /revision|cursor|snapshot/i.test(message)
   );
+}
+
+function catalogRevisionForEvent(
+  tournament: MyTournamentReviewCatalogItem,
+  eventId: number,
+): string | null {
+  const latest = tournament.latestFinalizedScope;
+  return latest?.eventId === eventId ? latest.revision ?? null : null;
 }
 
 PerformancePage({
@@ -750,14 +775,19 @@ PerformancePage({
         resolvedScope = "ACCESSIBLE";
         this.retryScope = resolvedScope;
       }
-      if (!active() || currentMyFplEntryId() !== entryId) {
+      const reboundEntryId = currentMyFplEntryId() || 0;
+      if (!active() || reboundEntryId !== entryId) {
         if (this.pageVisible && requestId === this.requestId) {
           this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
-          if (
-            currentMyFplEntryId() &&
-            currentMyFplEntryId() !== expectedEntryId
-          ) {
-            void this.loadCatalog(true, trace, scope, null, false);
+          if (reboundEntryId !== expectedEntryId || reboundEntryId !== entryId) {
+            if (!reboundEntryId && resolvedScope !== "ALL") {
+              this.showEntryEmptyState();
+            } else {
+              // A logout/rebind may complete while the catalog is in flight.
+              // Restart with the new binding (or the still-authorized ALL
+              // scope) so an old page cannot remain mounted.
+              void this.loadCatalog(true, trace, resolvedScope, null, false);
+            }
           }
         }
         return;
@@ -899,15 +929,20 @@ PerformancePage({
           forceRefresh,
           trace,
           null,
-          selected.latestFinalizedScope?.revision ?? null,
+          catalogRevisionForEvent(selected, eventId),
         );
       }
     } catch (error) {
       if (!active()) {
         if (this.pageVisible && requestId === this.requestId) {
           this.setData({ v2Loading: false, v2CatalogLoadingMore: false });
-          if (currentMyFplEntryId() !== expectedEntryId) {
-            void this.loadCatalog(true, trace, scope, null, false);
+          const reboundEntryId = currentMyFplEntryId() || 0;
+          if (reboundEntryId !== expectedEntryId) {
+            if (!reboundEntryId && resolvedScope !== "ALL") {
+              this.showEntryEmptyState();
+            } else {
+              void this.loadCatalog(true, trace, resolvedScope, null, false);
+            }
           }
         }
         return;
@@ -958,8 +993,9 @@ PerformancePage({
     const catalogRevision =
       catalogRevisionOverride !== undefined
         ? catalogRevisionOverride
-        : (this.data.v2SelectedTournament?.latestFinalizedScope?.revision ??
-          null);
+        : this.data.v2SelectedTournament
+          ? catalogRevisionForEvent(this.data.v2SelectedTournament, eventId)
+          : null;
     const active = () =>
       this.pageVisible &&
       requestId === this.viewRequestId &&
@@ -1094,6 +1130,13 @@ PerformancePage({
         !after && seasonResult.status === "fulfilled"
           ? seasonResult.value
           : null;
+      if (gameweekError && isReviewRevisionMismatch(gameweekError)) {
+        // GraphQL wraps BAD_USER_INPUT inside GraphQLApplicationError.errors,
+        // so a cursor rejection can arrive through Promise.allSettled rather
+        // than the outer catch.  Restart at page one on the current head.
+        void this.loadReview(tournamentId, eventId, true, trace, null, null);
+        return;
+      }
       const observedRevision = gameweek?.scope?.revision ?? null;
       if (
         after &&
@@ -2030,7 +2073,7 @@ PerformancePage({
           trigger: "tab",
         }),
         null,
-        selected.latestFinalizedScope?.revision ?? null,
+        catalogRevisionForEvent(selected, eventId),
       );
     }
   },
@@ -2067,7 +2110,7 @@ PerformancePage({
         trigger: "tab",
       }),
       null,
-      selected.latestFinalizedScope?.revision ?? null,
+      catalogRevisionForEvent(selected, eventId),
     );
   },
 
@@ -2149,7 +2192,7 @@ PerformancePage({
           trigger: "tab",
         }),
         retry?.after ?? null,
-        selected.latestFinalizedScope?.revision ?? null,
+        catalogRevisionForEvent(selected, this.data.v2Event),
       );
       return;
     }
@@ -2219,7 +2262,7 @@ PerformancePage({
             trigger: "refresh",
           }),
           retry?.after ?? null,
-          selected.latestFinalizedScope?.revision ?? null,
+          catalogRevisionForEvent(selected, this.data.v2Event),
         );
         return;
       }
@@ -2255,7 +2298,7 @@ PerformancePage({
             trigger: "refresh",
           }),
           retryAfter,
-          selected.latestFinalizedScope?.revision ?? null,
+          catalogRevisionForEvent(selected, this.data.v2Event),
         );
         return;
       }
