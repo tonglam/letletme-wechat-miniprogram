@@ -326,9 +326,15 @@ export function h2hMatchupStatusText(
     delivery?: Pick<H2HDelivery, "state"> | null;
   },
   currentEventId: number | null | undefined,
-): "进行中" | "已结束" | "待开始" | "暂时不可用" {
+): "进行中" | "已结束" | "待开始" | "暂时不可用" | "官方数据延迟" {
   if (match.availability === "ERROR" || match.availability === "MISSING") {
     return "暂时不可用";
+  }
+  if (match.delivery?.state === "UNAVAILABLE") {
+    return "暂时不可用";
+  }
+  if (match.delivery?.state === "STALE" || match.delivery?.state === "DEGRADED") {
+    return "官方数据延迟";
   }
   if (currentEventId != null && match.eventId > currentEventId) {
     return "待开始";

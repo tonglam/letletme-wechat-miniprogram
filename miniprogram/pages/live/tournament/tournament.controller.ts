@@ -572,6 +572,8 @@ function boardChipOf(code: string): string {
 
 function liveStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string {
   const state = page.head.delivery.state;
+  const viewerRowUnavailable =
+    page.viewerRow != null && page.viewerRow.availability !== "READY";
   if (lastGood || state === "STALE" || state === "DEGRADED") {
     return "官方数据延迟";
   }
@@ -584,6 +586,13 @@ function liveStatusFromBoard(page: LiveBoardPage, lastGood: boolean): string {
   }
   if (page.head.availability === "PENDING") return "正在获取官方分数";
   if (state === "FINAL") return "官方分数已结束";
+  if (
+    viewerRowUnavailable &&
+    page.head.availability === "READY" &&
+    state === "FRESH"
+  ) {
+    return "部分经理分数不可用";
+  }
   return "官方实时";
 }
 
@@ -1061,7 +1070,7 @@ function displayH2HMatchup(
         ? "live"
         : statusText === "已结束"
           ? "finished"
-          : statusText === "暂时不可用"
+          : statusText === "暂时不可用" || statusText === "官方数据延迟"
             ? "unavailable"
             : "upcoming",
     homeName: h2hSideName(match.home) || "—",
@@ -2319,7 +2328,11 @@ PerformancePage({
         ...row,
         visibleRank,
         // Web TournamentTable highlights the podium ranks.
-        topRank: row.eventPointsKnown && visibleRank >= 1 && visibleRank <= 3,
+        topRank:
+          row.eventPointsKnown &&
+          typeof row.rank === "number" &&
+          row.rank >= 1 &&
+          row.rank <= 3,
         isMe: numberValue(row.entry) === viewerId,
         pinned: false,
         compared,
@@ -2347,7 +2360,7 @@ PerformancePage({
       boardRowsWithViewer(page)
         .filter((row) => row.availability !== "READY")
         .map((row) => row.entry),
-      [],
+      reset ? [] : this.unavailableEntryIds,
     );
     this.failedEntryCount = this.unavailableEntryIds.length;
     this.retainedRowCount = options.lastGood ? rows.length : 0;
@@ -3163,7 +3176,7 @@ PerformancePage({
             this.data.h2hActive &&
             this.data.h2hTab === "mine"
           ) {
-            void this.loadH2HMatchups();
+            void this.loadH2HMatchups({ forceRefresh: true });
           }
         } else {
           this.h2hHead = head;
@@ -3243,7 +3256,9 @@ PerformancePage({
     if (tab === "mine") void this.loadH2HMatchups();
   },
 
-  async loadH2HMatchups(): Promise<void> {
+  async loadH2HMatchups(
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<void> {
     const entryId = this.data.entryId;
     const tournamentId = Number(this.data.selectedTournament?.id);
     const eventId = this.h2hActiveEventId || this.data.event;
@@ -3274,7 +3289,8 @@ PerformancePage({
     }
     if (
       this.data.h2hMatchupsLoaded &&
-      this.h2hMatchupsRequestKey === requestKey
+      this.h2hMatchupsRequestKey === requestKey &&
+      !options.forceRefresh
     ) {
       return;
     }
@@ -3293,9 +3309,10 @@ PerformancePage({
           tournamentId,
           eventId,
           100,
+          options.forceRefresh === true,
           capturePageRequestTrace({
             callerSurface: "live-tournament-h2h-history",
-            trigger: "tab",
+            trigger: options.forceRefresh ? "refresh" : "tab",
           }),
         );
         if (
@@ -3952,7 +3969,7 @@ PerformancePage({
             this.data.h2hActive &&
             this.data.h2hTab === "mine"
           ) {
-            void this.loadH2HMatchups();
+            void this.loadH2HMatchups({ forceRefresh: true });
           }
         });
       }
@@ -4408,7 +4425,18 @@ PerformancePage({
       return;
     }
     const currentPage = this.boardPage;
-    const variables = this.buildBoardVariables(currentPage.pageInfo.endCursor);
+    const endCursor = currentPage.pageInfo.endCursor;
+    if (
+      currentPage.pageInfo.hasNextPage &&
+      (!endCursor || endCursor.trim() === "")
+    ) {
+      this.setData({
+        error: "分页状态异常",
+        errorSuffix: "已加载榜单保持不变",
+      });
+      return;
+    }
+    const variables = this.buildBoardVariables(endCursor);
     if (!variables) return;
     const requestKey = `board-more:${JSON.stringify(variables)}`;
     if (this.rowsRequest && this.rowsRequestKey === requestKey) {

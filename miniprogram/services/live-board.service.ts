@@ -1349,7 +1349,7 @@ export function boardRowsToLiveRows(
           entry: row.entry,
           entryName: row.entryName,
           playerName: row.playerName,
-          rank: undefined,
+          rank: row.liveRank ?? undefined,
           overallRank: row.overallRank ?? undefined,
           teamValue: row.teamValue ?? undefined,
           chip: undefined,

@@ -204,6 +204,7 @@ export async function getTournamentOfficialH2HHistory(
   tournamentId: number,
   eventId: number,
   limit = 100,
+  forceRefresh = false,
   trace?: PageRequestTrace,
 ): Promise<TournamentOfficialH2HHistory> {
   const data = await graphqlRequest<{
@@ -211,7 +212,7 @@ export async function getTournamentOfficialH2HHistory(
   }>(
     GET_TOURNAMENT_OFFICIAL_H2H_HISTORY,
     { tournamentId, eventId, limit },
-    { cachePolicy: "reporting", trace, contract: "live-points-v2" },
+    { cachePolicy: "reporting", forceRefresh, trace, contract: "live-points-v2" },
   );
   return data.tournamentOfficialH2HHistory;
 }

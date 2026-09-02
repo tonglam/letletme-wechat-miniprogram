@@ -102,7 +102,7 @@ test("the controller routes official H2H tournaments to the desk, not the board"
   );
   assert.match(
     controller,
-    /const boardRequest = this\.loadH2HBoard\(next\)[\s\S]*boardRequest\.then\(\(\) => \{[\s\S]*void this\.loadH2HMatchups\(\)/,
+    /const boardRequest = this\.loadH2HBoard\(next\)[\s\S]*boardRequest\.then\(\(\) => \{[\s\S]*void this\.loadH2HMatchups\(\{ forceRefresh: true \}\)/,
   );
   assert.match(
     controller,

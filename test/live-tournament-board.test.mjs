@@ -32,7 +32,10 @@ test("tournament board shows overall rank, team value, captain points, podium ra
   assert.match(template, /队值 \{\{item\.teamValueText\}\}/);
 
   // Podium ranks highlight like the web table.
-  assert.match(controller, /topRank: row\.eventPointsKnown && visibleRank >= 1 && visibleRank <= 3/);
+  assert.match(
+    controller,
+    /topRank:[\s\S]*typeof row\.rank === "number"[\s\S]*row\.rank >= 1[\s\S]*row\.rank <= 3/,
+  );
   assert.match(template, /col-rank \{\{item\.topRank \? 'top3' : ''\}\}/);
 });
 
