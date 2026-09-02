@@ -1019,6 +1019,8 @@ PerformancePage({
     trace?: PageRequestTrace,
     after: string | null = null,
     catalogRevisionOverride?: string | null,
+    preferredPhaseId?: string | null,
+    retrySurface?: ReviewSurface,
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
@@ -1077,11 +1079,15 @@ PerformancePage({
         void this.loadCatalog(true, trace);
       }
     };
+    const fetchGameweek =
+      !retrySurface || retrySurface === "gameweek" || Boolean(after);
+    const fetchSeason = !after && (!retrySurface || retrySurface === "season");
     this.retryOperation = "review";
     this.retryScope = null;
-    this.retryPhaseId = null;
+    if (!retrySurface || retrySurface === "season") this.retryPhaseId = null;
     this.retryAfter = after;
     if (after) this.retryBySurface.gameweek = null;
+    else if (retrySurface) this.retryBySurface[retrySurface] = null;
     else {
       this.retryBySurface.gameweek = null;
       this.retryBySurface.season = null;
@@ -1092,8 +1098,8 @@ PerformancePage({
       v2Loading: !after,
       v2LoadingMore: Boolean(after),
       v2Error: "",
-      v2GameweekError: after ? this.data.v2GameweekError : "",
-      v2SeasonError: after ? this.data.v2SeasonError : "",
+      v2GameweekError: fetchGameweek ? "" : this.data.v2GameweekError,
+      v2SeasonError: fetchSeason ? "" : this.data.v2SeasonError,
     });
     const recoverViewerAuthorization = async (
       error: unknown,
@@ -1135,26 +1141,28 @@ PerformancePage({
       // other tab or turn an otherwise usable review into an all-or-nothing
       // error state.
       const [gameweekResult, seasonResult] = await Promise.allSettled([
-        getMyTournamentGameweekReview(
-          tournamentId,
-          eventId,
-          forceRefresh,
-          trace,
-          after,
-          requestRevision,
-          this.data.entryId,
-          catalogRevision,
-        ),
-        after
-          ? Promise.resolve(this.data.v2Season)
-          : getMyTournamentSeasonReview(
+        fetchGameweek
+          ? getMyTournamentGameweekReview(
+              tournamentId,
+              eventId,
+              forceRefresh,
+              trace,
+              after,
+              requestRevision,
+              this.data.entryId,
+              catalogRevision,
+            )
+          : Promise.resolve(this.data.v2Gameweek),
+        fetchSeason
+          ? getMyTournamentSeasonReview(
               tournamentId,
               eventId,
               forceRefresh,
               trace,
               this.data.entryId,
               catalogRevision,
-            ),
+            )
+          : Promise.resolve(this.data.v2Season),
       ]);
       if (!active()) {
         settleStale();
@@ -1167,14 +1175,22 @@ PerformancePage({
       const gameweek =
         gameweekResult.status === "fulfilled" ? gameweekResult.value : null;
       const season =
-        !after && seasonResult.status === "fulfilled"
+        fetchSeason && seasonResult.status === "fulfilled"
           ? seasonResult.value
-          : null;
+          : this.data.v2Season;
       if (gameweekError && isReviewRevisionMismatch(gameweekError)) {
         // GraphQL wraps BAD_USER_INPUT inside GraphQLApplicationError.errors,
         // so a cursor rejection can arrive through Promise.allSettled rather
         // than the outer catch.  Restart at page one on the current head.
-        void this.loadReview(tournamentId, eventId, true, trace, null, null);
+        void this.loadReview(
+          tournamentId,
+          eventId,
+          true,
+          trace,
+          null,
+          null,
+          this.data.v2SelectedPhaseId,
+        );
         return;
       }
       const observedRevision = gameweek?.scope?.revision ?? null;
@@ -1199,6 +1215,7 @@ PerformancePage({
           trace,
           null,
           observedRevision,
+          this.data.v2SelectedPhaseId,
         );
         return;
       }
@@ -1224,8 +1241,10 @@ PerformancePage({
           after: null,
           phaseId: null,
         };
-      if (!gameweekError && !after) this.retryBySurface.gameweek = null;
-      if (!seasonError && !after) this.retryBySurface.season = null;
+      if (fetchGameweek && !gameweekError && !after)
+        this.retryBySurface.gameweek = null;
+      if (fetchSeason && !seasonError && !after)
+        this.retryBySurface.season = null;
       let nextGameweek = gameweek ?? this.data.v2Gameweek;
       if (after && gameweek?.payload && this.data.v2Gameweek?.payload) {
         nextGameweek = {
@@ -1243,18 +1262,24 @@ PerformancePage({
             phases: season.phases,
           }
         : this.data.v2Season;
-      const phase = nextSeason?.phases.find((candidate) =>
-        phaseCoversEvent(candidate, eventId),
-      );
+      const phase =
+        (preferredPhaseId
+          ? nextSeason?.phases.find(
+              (candidate) => candidate.phaseId === preferredPhaseId,
+            )
+          : null) ??
+        nextSeason?.phases.find((candidate) =>
+          phaseCoversEvent(candidate, eventId),
+        );
       let sectionError: unknown = null;
-      if (!after && season) {
+      if (!after && fetchSeason && season) {
         // A fresh Season index owns a new section set. Do not retain a section
         // from another event/phase while the current set is being verified.
         this.seasonSectionPages = {};
         this.seasonSectionContext = null;
         section = null;
       }
-      if (!after && season && phase?.state === "READY") {
+      if (!after && fetchSeason && season && phase?.state === "READY") {
         const format = phase.format ?? payloadFormat(gameweek?.payload);
         const baseSection = sectionForFormat(format);
         if (phase?.revision && phase.semanticSha256 && baseSection) {
@@ -1361,7 +1386,7 @@ PerformancePage({
             );
           }
         }
-      } else if (!after && season) {
+      } else if (!after && fetchSeason && season) {
         this.seasonSectionPages = {};
         this.seasonSectionContext = null;
       }
@@ -1385,7 +1410,7 @@ PerformancePage({
         selected,
         nextSeason,
         nextGameweek,
-        phase?.phaseId ?? null,
+        fetchSeason ? (phase?.phaseId ?? null) : this.data.v2SelectedPhaseId,
       );
       const visibleState = visibleMeta.state;
       if (sectionError && isReviewRevisionMismatch(sectionError)) {
@@ -1407,6 +1432,7 @@ PerformancePage({
           trace,
           null,
           null,
+          phase?.phaseId ?? this.data.v2SelectedPhaseId,
         );
         return;
       }
@@ -1420,11 +1446,18 @@ PerformancePage({
           after: null,
           phaseId: phase?.phaseId ?? null,
         };
-      const seasonSurfaceMessage =
-        seasonMessage ||
-        sectionMessage ||
-        (after ? this.data.v2SeasonError : "");
-      if (partialError) {
+      const gameweekSurfaceMessage = fetchGameweek
+        ? gameweekMessage
+        : this.data.v2GameweekError;
+      const seasonSurfaceMessage = fetchSeason
+        ? seasonMessage ||
+          sectionMessage ||
+          (after ? this.data.v2SeasonError : "")
+        : this.data.v2SeasonError;
+      const hasSurfaceRetry = Boolean(
+        this.retryBySurface.gameweek || this.retryBySurface.season,
+      );
+      if (partialError || hasSurfaceRetry) {
         this.retryOperation = after ? "loadMore" : "review";
         this.retryAfter = after;
       } else {
@@ -1438,7 +1471,9 @@ PerformancePage({
         v2LoadingMore: false,
         v2Gameweek: nextGameweek,
         v2Season: nextSeason,
-        v2SelectedPhaseId: phase?.phaseId ?? null,
+        v2SelectedPhaseId: fetchSeason
+          ? (phase?.phaseId ?? null)
+          : this.data.v2SelectedPhaseId,
         v2SeasonSection: section,
         v2EventIds: eventIds,
         v2SelectedEventIndex: Math.max(0, eventIds.indexOf(eventId)),
@@ -1449,7 +1484,7 @@ PerformancePage({
           partialError && isClientUpgradeRequired(partialError),
         ),
         v2Error: "",
-        v2GameweekError: gameweekMessage,
+        v2GameweekError: gameweekSurfaceMessage,
         v2SeasonError: seasonSurfaceMessage,
         v2HasNextPage:
           this.data.activeView === "season"
@@ -1468,7 +1503,15 @@ PerformancePage({
       if (after && isReviewRevisionMismatch(error)) {
         // The old cursor was rejected after a correction. Fetch the first page
         // again so no stale continuation is shown or retried indefinitely.
-        void this.loadReview(tournamentId, eventId, true, trace, null, null);
+        void this.loadReview(
+          tournamentId,
+          eventId,
+          true,
+          trace,
+          null,
+          null,
+          this.data.v2SelectedPhaseId,
+        );
         return;
       }
       if (isClientUpgradeRequired(error)) {
@@ -1684,6 +1727,7 @@ PerformancePage({
           }),
           null,
           null,
+          phaseId,
         );
         return;
       }
@@ -2009,6 +2053,7 @@ PerformancePage({
             }),
             null,
             null,
+            context.phaseId,
           );
           return;
         }
@@ -2279,6 +2324,8 @@ PerformancePage({
         }),
         retry?.after ?? null,
         catalogRevisionForEvent(selected, this.data.v2Event),
+        phase?.phaseId ?? this.data.v2SelectedPhaseId,
+        nextView,
       );
       return;
     }
@@ -2349,6 +2396,8 @@ PerformancePage({
           }),
           retry?.after ?? null,
           catalogRevisionForEvent(selected, this.data.v2Event),
+          retry?.phaseId ?? null,
+          surface,
         );
         return;
       }
@@ -2385,6 +2434,7 @@ PerformancePage({
           }),
           retryAfter,
           catalogRevisionForEvent(selected, this.data.v2Event),
+          this.data.v2SelectedPhaseId,
         );
         return;
       }
