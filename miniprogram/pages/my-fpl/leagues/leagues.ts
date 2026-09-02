@@ -1219,8 +1219,14 @@ PerformancePage({
         );
         return;
       }
-      const firstError = gameweekError ?? seasonError;
-      if (firstError && (await recoverViewerAuthorization(firstError))) return;
+      const authorizationError = [gameweekError, seasonError].find((error) =>
+        isViewerEntryAuthorizationError(error),
+      );
+      if (
+        authorizationError &&
+        (await recoverViewerAuthorization(authorizationError))
+      )
+        return;
       const messageFor = (error: unknown): string =>
         isClientUpgradeRequired(error)
           ? "赛事复盘需要升级小程序后继续"
@@ -1253,6 +1259,8 @@ PerformancePage({
         };
       }
       let section = this.data.v2SeasonSection;
+      const preservedGameweekMessage = this.data.v2GameweekError;
+      const preservedSeasonMessage = this.data.v2SeasonError;
       const nextSeason: ReviewSeasonDisplay | null = season
         ? {
             state: season.state,
@@ -1355,8 +1363,12 @@ PerformancePage({
               v2Format: format,
               v2State: section.state,
               v2StatusText: stateText(section.state),
-              v2GameweekError: gameweekMessage,
-              v2SeasonError: seasonMessage,
+              v2GameweekError: fetchGameweek
+                ? gameweekMessage
+                : preservedGameweekMessage,
+              v2SeasonError: fetchSeason
+                ? seasonMessage
+                : preservedSeasonMessage,
               v2HasNextPage:
                 this.data.activeView === "season"
                   ? sectionPageInfo(section).hasNextPage
@@ -1436,9 +1448,17 @@ PerformancePage({
         );
         return;
       }
-      const partialError = gameweekError ?? seasonError ?? sectionError;
-      if (partialError && (await recoverViewerAuthorization(partialError)))
+      const partialAuthorizationError = [
+        gameweekError,
+        seasonError,
+        sectionError,
+      ].find((error) => isViewerEntryAuthorizationError(error));
+      if (
+        partialAuthorizationError &&
+        (await recoverViewerAuthorization(partialAuthorizationError))
+      )
         return;
+      const partialError = gameweekError ?? seasonError ?? sectionError;
       const sectionMessage = sectionError ? messageFor(sectionError) : "";
       if (sectionError)
         this.retryBySurface.season = {
@@ -1448,12 +1468,12 @@ PerformancePage({
         };
       const gameweekSurfaceMessage = fetchGameweek
         ? gameweekMessage
-        : this.data.v2GameweekError;
+        : preservedGameweekMessage;
       const seasonSurfaceMessage = fetchSeason
         ? seasonMessage ||
           sectionMessage ||
-          (after ? this.data.v2SeasonError : "")
-        : this.data.v2SeasonError;
+          (after ? preservedSeasonMessage : "")
+        : preservedSeasonMessage;
       const hasSurfaceRetry = Boolean(
         this.retryBySurface.gameweek || this.retryBySurface.season,
       );
