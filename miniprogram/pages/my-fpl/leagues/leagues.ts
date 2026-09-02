@@ -680,6 +680,10 @@ PerformancePage({
       this.retryAfter = null;
       this.retryBySurface.gameweek = null;
       this.retryBySurface.season = null;
+      // The incoming cursor belongs to the previous binding.  Do not let a
+      // catalog retry append it to the newly resolved viewer's connection.
+      after = null;
+      append = false;
       this.setData({
         v2Catalog: null,
         v2TournamentNames: [],
@@ -1030,9 +1034,7 @@ PerformancePage({
     // the rendered Gameweek revision here would make a corrected historical
     // snapshot fail again before the server can return its current head.
     const requestRevision = after
-      ? catalogRevision === null
-        ? null
-        : (catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null)
+      ? (catalogRevision ?? this.data.v2Gameweek?.scope?.revision ?? null)
       : (catalogRevision ?? null);
     const active = () =>
       this.pageVisible &&
@@ -1179,9 +1181,9 @@ PerformancePage({
       if (
         after &&
         gameweek &&
-        catalogRevision &&
+        requestRevision &&
         observedRevision &&
-        observedRevision !== catalogRevision
+        observedRevision !== requestRevision
       ) {
         // A correction creates a new immutable revision. A continuation cursor
         // from the old revision is never safe to merge; restart the review at
@@ -1386,6 +1388,28 @@ PerformancePage({
         phase?.phaseId ?? null,
       );
       const visibleState = visibleMeta.state;
+      if (sectionError && isReviewRevisionMismatch(sectionError)) {
+        // A section request can straddle a correction even when the Gameweek
+        // request succeeded.  Drop every resident section page and reload the
+        // Season index so its phase revision/hash become the new cursor base.
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.setData({
+          v2Loading: false,
+          v2LoadingMore: false,
+          v2SeasonSection: null,
+          v2SeasonError: "赛事快照已更新，正在重新加载",
+        });
+        void this.loadReview(
+          tournamentId,
+          eventId,
+          true,
+          trace,
+          null,
+          null,
+        );
+        return;
+      }
       const partialError = gameweekError ?? seasonError ?? sectionError;
       if (partialError && (await recoverViewerAuthorization(partialError)))
         return;
@@ -1640,6 +1664,27 @@ PerformancePage({
     } catch (error) {
       if (!active()) {
         settleStale();
+        return;
+      }
+      if (isReviewRevisionMismatch(error)) {
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.setData({
+          v2Loading: false,
+          v2SeasonSection: null,
+          v2SeasonError: "赛事快照已更新，正在重新加载",
+        });
+        void this.loadReview(
+          selected.tournamentId,
+          this.data.v2Event,
+          true,
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "refresh",
+          }),
+          null,
+          null,
+        );
         return;
       }
       if (isViewerEntryAuthorizationError(error)) {

@@ -54,7 +54,7 @@
           <text>{{item.format}}</text><text> GW{{item.startEventId}}–{{item.endEventId === null ? '进行中' : item.endEventId}}</text>
         </view>
       </view>
-      <view wx:if="{{v2SeasonSection && v2SeasonSection.points}}" class="review-v2-table">
+      <view wx:if="{{v2SeasonSection && v2SeasonSection.points}}" class="review-v2-table {{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net' ? 'review-v2-table-custom' : ''}}">
         <view class="review-v2-table-head"><text>#</text><text>球队</text><text>Gross</text><text>Net</text><text wx:if="{{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net'}}">赛事分</text></view>
         <view wx:for="{{v2SeasonSection.points.rows}}" wx:key="entryId" class="review-v2-table-row"><text>{{item.rank === null || item.rank === undefined ? '—' : item.rank}}</text><text class="review-v2-team">{{item.entryName}}</text><text>{{item.seasonGrossPoints === null || item.seasonGrossPoints === undefined ? '—' : item.seasonGrossPoints}}</text><text>{{item.seasonNetPoints === null || item.seasonNetPoints === undefined ? '—' : item.seasonNetPoints}}</text><text wx:if="{{v2SeasonSection.points.headlineMetric !== 'gross' && v2SeasonSection.points.headlineMetric !== 'net'}}">{{item.tournamentScore === null || item.tournamentScore === undefined ? '—' : item.tournamentScore}}</text></view>
       </view>

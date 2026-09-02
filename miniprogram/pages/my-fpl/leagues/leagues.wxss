@@ -739,6 +739,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.review-v2-table-custom .review-v2-table-head,
+.review-v2-table-custom .review-v2-table-row {
+  grid-template-columns: 56rpx minmax(0, 1fr) 88rpx 88rpx 100rpx;
+}
+
 .review-v2-table-head {
   background: var(--track);
   color: var(--muted-ink);
@@ -812,6 +817,11 @@
 
   .review-v2-h2h-row {
     grid-template-columns: 36rpx 42rpx minmax(0, 1fr) 72rpx 96rpx;
+  }
+
+  .review-v2-table-custom .review-v2-table-head,
+  .review-v2-table-custom .review-v2-table-row {
+    grid-template-columns: 44rpx minmax(0, 1fr) 68rpx 68rpx 76rpx;
   }
 
   .review-v2-stat-grid {
