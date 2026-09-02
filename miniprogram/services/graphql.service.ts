@@ -522,7 +522,7 @@ function toHttpError(
     code === "VIEWER_ENTRY_REQUIRED"
       ? "请先选择我的球队"
       : code === "CLIENT_UPGRADE_REQUIRED"
-        ? "当前版本不支持赛事复盘，请升级小程序后继续"
+        ? "当前版本不支持此功能，请升级小程序后继续"
         : httpErrorMessage(statusCode),
     isTransientGraphQLStatus(statusCode),
     statusCode,

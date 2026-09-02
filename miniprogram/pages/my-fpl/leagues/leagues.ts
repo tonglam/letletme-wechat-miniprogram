@@ -1481,7 +1481,8 @@ PerformancePage({
             };
             this.setData({
               v2Loading: false,
-              v2Error: "球队状态尚未同步，请稍后重试",
+              v2Error: "",
+              v2SeasonError: "球队状态尚未同步，请稍后重试",
             });
           }
         } catch {
@@ -1494,7 +1495,8 @@ PerformancePage({
           };
           this.setData({
             v2Loading: false,
-            v2Error: "球队状态尚未同步，请稍后重试",
+            v2Error: "",
+            v2SeasonError: "球队状态尚未同步，请稍后重试",
           });
         }
         return;
@@ -1509,7 +1511,8 @@ PerformancePage({
         this.setData({
           v2Loading: false,
           v2UpgradeRequired: true,
-          v2Error: "赛事复盘需要升级小程序后继续",
+          v2Error: "",
+          v2SeasonError: "赛事复盘需要升级小程序后继续",
         });
       } else {
         this.retryOperation = "review";
@@ -1523,7 +1526,8 @@ PerformancePage({
           v2Loading: false,
           v2State: "UNAVAILABLE",
           v2StatusText: stateText("UNAVAILABLE"),
-          v2Error:
+          v2Error: "",
+          v2SeasonError:
             error instanceof Error ? error.message : "赛事阶段暂时不可用",
         });
       }
@@ -1595,6 +1599,62 @@ PerformancePage({
           !String(getApp<IAppOption>().globalData.season || "") ||
           String(getApp<IAppOption>().globalData.season || "") === expectedSeason) &&
         (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
+      const reloadAfterRebind = (): boolean => {
+        const currentEntryId = currentMyFplEntryId() || 0;
+        if (currentEntryId === expectedEntryId) return false;
+        // A pagination response is bound to the entry that produced its
+        // cursor. If the Web-owned binding changed while it was in flight,
+        // clear the old catalog/review immediately and restart reconciliation
+        // instead of leaving the previous entry's rows mounted.
+        this.viewRequestId += 1;
+        this.catalogAfter = null;
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.retryOperation = null;
+        this.retryPhaseId = null;
+        this.retryAfter = null;
+        this.retryBySurface.gameweek = null;
+        this.retryBySurface.season = null;
+        if (!currentEntryId) {
+          this.showEntryEmptyState();
+          return true;
+        }
+        this.setData({
+          entryId: currentEntryId,
+          v2Catalog: null,
+          v2TournamentNames: [],
+          v2SelectedTournamentIndex: 0,
+          v2SelectedTournament: null,
+          v2EventIds: [],
+          v2SelectedEventIndex: 0,
+          v2Event: 0,
+          v2Format: null,
+          v2State: "NOT_STARTED",
+          v2StatusText: stateText("NOT_STARTED"),
+          v2Gameweek: null,
+          v2Season: null,
+          v2SelectedPhaseId: null,
+          v2SeasonSection: null,
+          v2Loading: false,
+          v2LoadingMore: false,
+          v2CatalogLoadingMore: false,
+          v2HasNextPage: false,
+          v2Error: "",
+          v2GameweekError: "",
+          v2SeasonError: "",
+        });
+        void this.loadCatalog(
+          true,
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "refresh",
+          }),
+          this.data.v2Scope,
+          null,
+          false,
+        );
+        return true;
+      };
       this.retryOperation = "loadMore";
       this.retryAfter = null;
       this.retryBySurface.season = null;
@@ -1632,6 +1692,7 @@ PerformancePage({
         if (!nextSections.length) throw new Error("赛事阶段暂时不可用");
         if (!active()) {
           if (this.pageVisible && requestId === this.viewRequestId) {
+            if (reloadAfterRebind()) return;
             this.setData({ v2LoadingMore: false });
           }
           const currentSeason = String(
@@ -1673,6 +1734,7 @@ PerformancePage({
       } catch (error) {
         if (!active()) {
           if (this.pageVisible && requestId === this.viewRequestId) {
+            if (reloadAfterRebind()) return;
             this.setData({ v2LoadingMore: false });
           }
           return;
