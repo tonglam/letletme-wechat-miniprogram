@@ -37,10 +37,13 @@ const {
   ENTRY_LIVE_COMPETITION_BOARD_QUERY,
   LIVE_BOARD_CONTRACT_VERSION,
   LiveBoardInvalidResponseError,
+  boardRowsToLiveRows,
+  boardRowsWithViewer,
   clearAllLiveBoardLastGood,
   getEntryLiveCompetitionBoardPage,
   isCompleteLiveBoardPage,
   liveBoardLastGoodKey,
+  parseLeagueLiveHead,
   parseLiveBoardPage,
   readLiveBoardLastGood,
   writeLiveBoardLastGood,
@@ -314,6 +317,41 @@ test("only a complete publication can replace an existing board", () => {
     ),
     false,
   );
+  assert.equal(
+    isCompleteLiveBoardPage({
+      ...page,
+      head: { ...page.head, contentRevision: null },
+    }),
+    false,
+  );
+  assert.equal(
+    isCompleteLiveBoardPage({
+      ...page,
+      head: { ...page.head, contentRevision: "" },
+    }),
+    false,
+  );
+});
+
+test("viewer overlay is included once for display but omitted from full-board traversal", () => {
+  const page = parseLiveBoardPage(
+    validPage({
+      filteredEntries: 1,
+      pageInfo: { hasNextPage: false, endCursor: null },
+      viewerRow: {
+        ...validPage().rows[0],
+        entry: 999,
+      },
+    }),
+  );
+  assert.deepEqual(
+    boardRowsWithViewer(page).map((row) => row.entry),
+    [123, 999],
+  );
+  assert.deepEqual(
+    boardRowsToLiveRows(page, { includeViewer: false }).map((row) => row.entry),
+    [123],
+  );
 });
 
 test("last-good cache is strictly scoped and does not expire by wall-clock age", () => {
@@ -519,6 +557,21 @@ test("malformed V2 success becomes a stable error and records internal diagnosti
   assert.match(
     diagnostic.message,
     /missing=head.publication.times.sourceCheckedAt/,
+  );
+});
+
+test("malformed head validation preserves request metadata", () => {
+  assert.throws(
+    () =>
+      parseLeagueLiveHead(
+        { ...validPage().head, contentRevision: "" },
+        { requestId: "request-bad-head", durationMs: 42 },
+      ),
+    (error) =>
+      error instanceof LiveBoardInvalidResponseError &&
+      error.requestId === "request-bad-head" &&
+      error.durationMs === 42 &&
+      error.missingFields.includes("head.contentRevision"),
   );
 });
 

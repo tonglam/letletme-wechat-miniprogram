@@ -3,6 +3,7 @@ import { getEntryPointsRaceTournament } from "../../../services/tournament.servi
 import { getLiveSnapshot } from "../../../services/live.service";
 import { getApiSessionToken } from "../../../services/auth.service";
 import {
+  boardRowsWithViewer,
   boardRowsToLiveRows,
   getEntryLiveCompetitionBoardPage,
   getLeagueLiveHead,
@@ -2343,7 +2344,7 @@ PerformancePage({
     this.officialCoverage = page.head.availability === "READY" ? 1 : 0;
     this.officialTotalEntries = page.totalEntries;
     this.unavailableEntryIds = mergeUnavailableTournamentEntryIds(
-      page.rows
+      boardRowsWithViewer(page)
         .filter((row) => row.availability !== "READY")
         .map((row) => row.entry),
       [],
@@ -4559,7 +4560,11 @@ PerformancePage({
       ) {
         throw new Error("榜单已更新，请重新分享");
       }
-      allRows.push(...boardRowsToLiveRows(result.page).map(normalizeRow));
+      allRows.push(
+        ...boardRowsToLiveRows(result.page, { includeViewer: false }).map(
+          normalizeRow,
+        ),
+      );
       hasMore = result.page.pageInfo.hasNextPage;
       after = result.page.pageInfo.endCursor;
     }

@@ -133,7 +133,9 @@ export function isCompleteLiveBoardPage(
     !page ||
     page.head.availability !== "READY" ||
     page.head.publication === null ||
-    page.head.delivery.state === "UNAVAILABLE"
+    page.head.delivery.state === "UNAVAILABLE" ||
+    typeof page.head.contentRevision !== "string" ||
+    page.head.contentRevision.trim().length === 0
   ) {
     return false;
   }
@@ -567,6 +569,13 @@ function validateLeagueHead(
   }
   if (!isNullableString(value.contentRevision))
     missing.push(path + ".contentRevision");
+  if (
+    value.availability === "READY" &&
+    (typeof value.contentRevision !== "string" ||
+      value.contentRevision.trim().length === 0)
+  ) {
+    missing.push(path + ".contentRevision");
+  }
   if (!isNullableDate(value.nextRefreshAt))
     missing.push(path + ".nextRefreshAt");
   validateLiveDelivery(value.delivery, path + ".delivery", missing);
@@ -750,12 +759,16 @@ export function parseLiveBoardPage(
   return root as unknown as LiveBoardPage;
 }
 
-export function parseLeagueLiveHead(value: unknown): LeagueLiveHead {
+export function parseLeagueLiveHead(
+  value: unknown,
+  options: { requestId?: string; durationMs?: number } = {},
+): LeagueLiveHead {
   const root =
     isRecord(value) && "leagueLiveHead" in value ? value.leagueLiveHead : value;
   const missing: string[] = [];
   validateLeagueHead(root, "head", missing);
-  if (missing.length > 0) throw new LiveBoardInvalidResponseError(missing);
+  if (missing.length > 0)
+    throw new LiveBoardInvalidResponseError(missing, options);
   return root as LeagueLiveHead;
 }
 
@@ -901,7 +914,7 @@ export async function getLeagueLiveHead(
       requestId: result.meta.requestId,
       durationMs: Date.now() - startedAt,
     };
-    const head = parseLeagueLiveHead(result.data);
+    const head = parseLeagueLiveHead(result.data, errorOptions);
     const mismatches: string[] = [];
     if (head.eventId !== variables.eventId)
       mismatches.push("head.eventId:mismatch");
@@ -1287,12 +1300,19 @@ export function clearAllLiveBoardLastGood(): void {
   } catch {}
 }
 
-export function boardRowsToLiveRows(page: LiveBoardPage): LiveTournamentRow[] {
-  const sourceRows =
-    page.viewerRow &&
+export function boardRowsWithViewer(page: LiveBoardPage): LiveBoardRow[] {
+  return page.viewerRow &&
     !page.rows.some((row) => row.entry === page.viewerRow?.entry)
-      ? [...page.rows, page.viewerRow]
-      : page.rows;
+    ? [...page.rows, page.viewerRow]
+    : page.rows;
+}
+
+export function boardRowsToLiveRows(
+  page: LiveBoardPage,
+  options: { includeViewer?: boolean } = {},
+): LiveTournamentRow[] {
+  const sourceRows =
+    options.includeViewer === false ? page.rows : boardRowsWithViewer(page);
   const readyRows: TournamentLiveGraphQLRow[] = sourceRows
     .filter(
       (row): row is LiveBoardRow & { score: LiveScore } =>
