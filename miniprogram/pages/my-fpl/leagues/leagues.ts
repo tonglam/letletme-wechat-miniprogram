@@ -562,6 +562,11 @@ PerformancePage({
       this.retryAfter = null;
       this.retryBySurface.gameweek = null;
       this.retryBySurface.season = null;
+      // A cursor is scoped to the season and connection snapshot. Never
+      // append a new-season page to the previous season's catalog.
+      after = null;
+      append = false;
+      this.catalogAfter = null;
       this.setData({
         v2EventIds: [],
         v2SelectedEventIndex: 0,
@@ -674,6 +679,30 @@ PerformancePage({
         if (scope !== "ALL" || !isViewerEntryAuthorizationError(error)) {
           throw error;
         }
+        // An ALL cursor is not valid for the ACCESSIBLE connection after the
+        // admin capability is revoked. Drop the old scope and restart from
+        // the first accessible page so revoked rows cannot survive a merge.
+        after = null;
+        append = false;
+        this.catalogAfter = null;
+        this.setData({
+          v2Catalog: null,
+          v2TournamentNames: [],
+          v2SelectedTournamentIndex: 0,
+          v2SelectedTournament: null,
+          v2EventIds: [],
+          v2SelectedEventIndex: 0,
+          v2Event: 0,
+          v2Format: null,
+          v2State: "NOT_STARTED",
+          v2StatusText: stateText("NOT_STARTED"),
+          v2Gameweek: null,
+          v2Season: null,
+          v2SelectedPhaseId: null,
+          v2SeasonSection: null,
+          v2GameweekError: "",
+          v2SeasonError: "",
+        });
         catalog = await getMyTournamentReviewCatalog(
           "ACCESSIBLE",
           true,
@@ -1194,7 +1223,8 @@ PerformancePage({
           after: null,
           phaseId: phase?.phaseId ?? null,
         };
-      const seasonSurfaceMessage = seasonMessage || sectionMessage;
+      const seasonSurfaceMessage =
+        seasonMessage || sectionMessage || (after ? this.data.v2SeasonError : "");
       if (partialError) {
         this.retryOperation = after ? "loadMore" : "review";
         this.retryAfter = after;
@@ -1517,6 +1547,25 @@ PerformancePage({
         );
       const context = this.seasonSectionContext;
       const pages = this.seasonSectionPages;
+      const expectedSeason =
+        this.loadedSeason || String(getApp<IAppOption>().globalData.season || "");
+      const currentSeason = String(
+        getApp<IAppOption>().globalData.season || "",
+      );
+      if (expectedSeason && currentSeason && currentSeason !== expectedSeason) {
+        // A continuation cursor is bound to the season that produced it. The
+        // retry path may discover a rollover before the request starts, so
+        // restart catalog reconciliation instead of issuing the old cursor.
+        this.seasonSectionPages = {};
+        this.seasonSectionContext = null;
+        this.catalogAfter = null;
+        this.setData({
+          v2LoadingMore: false,
+          v2SeasonError: "赛事赛季已切换，正在重新加载",
+        });
+        void this.loadCatalog(true);
+        return;
+      }
       if (
         !section ||
         !phase?.revision ||
@@ -1542,6 +1591,9 @@ PerformancePage({
           selected.tournamentId &&
         this.data.v2Event === context.eventId &&
         this.data.v2SelectedPhaseId === context.phaseId &&
+        (!expectedSeason ||
+          !String(getApp<IAppOption>().globalData.season || "") ||
+          String(getApp<IAppOption>().globalData.season || "") === expectedSeason) &&
         (!expectedEntryId || currentMyFplEntryId() === expectedEntryId);
       this.retryOperation = "loadMore";
       this.retryAfter = null;
@@ -1581,6 +1633,22 @@ PerformancePage({
         if (!active()) {
           if (this.pageVisible && requestId === this.viewRequestId) {
             this.setData({ v2LoadingMore: false });
+          }
+          const currentSeason = String(
+            getApp<IAppOption>().globalData.season || "",
+          );
+          if (
+            expectedSeason &&
+            currentSeason &&
+            currentSeason !== expectedSeason
+          ) {
+            this.seasonSectionPages = {};
+            this.seasonSectionContext = null;
+            this.setData({
+              v2LoadingMore: false,
+              v2SeasonError: "赛事赛季已切换，正在重新加载",
+            });
+            void this.loadCatalog(true);
           }
           return;
         }

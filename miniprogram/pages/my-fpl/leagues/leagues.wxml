@@ -44,8 +44,8 @@
       <button wx:if="{{v2Event}}" size="mini" bindtap="onGoLive">前往 Live 查看未结算数据</button>
     </view>
 
-    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
-    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{true}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
+    <data-status wx:if="{{showSeason && v2SeasonError}}" status="stale" message="{{v2SeasonError}}" workload="interactive" transient="{{v2Season}}" showRetry="{{true}}" data-review-view="season" bind:retry="onRetry" />
+    <data-status wx:if="{{showGameweek && v2GameweekError}}" status="stale" message="{{v2GameweekError}}" workload="interactive" transient="{{v2Gameweek}}" showRetry="{{true}}" data-review-view="gameweek" bind:retry="onRetry" />
 
     <view wx:if="{{showSeason && v2Season}}" class="section">
       <view class="section-heading">赛季竞争格局 · 截至 GW{{v2Season.throughEventId}}</view>
@@ -66,7 +66,7 @@
     <view wx:if="{{showGameweek && v2Gameweek}}" class="section">
       <view class="section-heading">GW{{v2Event}} 单轮表现</view>
       <view wx:if="{{v2Gameweek.payload && v2Gameweek.payload.format === 'POINTS'}}" class="review-v2-stat-grid">
-        <view class="review-v2-stat"><text wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross'}}">本轮积分（Gross）</text><text wx:elif="{{v2Gameweek.payload.points.headlineMetric === 'net'}}">本轮积分（Net）</text><text wx:else>本轮积分（赛事分）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.headlineMetric === 'gross' ? v2Gameweek.payload.points.grossPointsTotal : (v2Gameweek.payload.points.headlineMetric === 'net' ? v2Gameweek.payload.points.netPointsTotal : '—')}}</text></view>
+        <view wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross' || v2Gameweek.payload.points.headlineMetric === 'net'}}" class="review-v2-stat"><text wx:if="{{v2Gameweek.payload.points.headlineMetric === 'gross'}}">本轮积分（Gross）</text><text wx:else>本轮积分（Net）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.headlineMetric === 'gross' ? v2Gameweek.payload.points.grossPointsTotal : v2Gameweek.payload.points.netPointsTotal}}</text></view>
         <view class="review-v2-stat"><text>转会成本</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.grossPointsTotal - v2Gameweek.payload.points.netPointsTotal}}</text></view>
         <view class="review-v2-stat"><text>Net（赛事排名）</text><text class="review-v2-stat-value">{{v2Gameweek.payload.points.netPointsTotal}}</text></view>
       </view>
