@@ -32,7 +32,10 @@ test("tournament board shows overall rank, team value, captain points, podium ra
   assert.match(template, /队值 \{\{item\.teamValueText\}\}/);
 
   // Podium ranks highlight like the web table.
-  assert.match(controller, /topRank: row\.eventPointsKnown && visibleRank >= 1 && visibleRank <= 3/);
+  assert.match(
+    controller,
+    /topRank:[\s\S]*typeof row\.rank === "number"[\s\S]*row\.rank >= 1[\s\S]*row\.rank <= 3/,
+  );
   assert.match(template, /col-rank \{\{item\.topRank \? 'top3' : ''\}\}/);
 });
 
@@ -52,9 +55,9 @@ test("tournament board offers an image share of the visible rows", () => {
   );
 });
 
-test("the board pipeline keeps score-level overall rank ahead of the row value", () => {
+test("the V2 board pipeline keeps the publication row overall rank", () => {
   const service = source("miniprogram/services/live-board.service.ts");
-  assert.match(service, /overallRank: row\.overallRank \?\? page\.rows\[index\]\?\.overallRank/);
+  assert.match(service, /overallRank: row\.overallRank \?\? readyRows\[index\]\?\.overallRank/);
 });
 
 test("tournament detail sheet drops stale responses from a previous selection", () => {

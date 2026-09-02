@@ -118,7 +118,26 @@ test("Live Points and Live Matches use distinct hard-cut contracts", () => {
 });
 
 test("Live Points covers every gated root and both previously omitted Mini desks", () => {
-  assert.equal(LIVE_POINTS_V2_ROOT_FIELDS.length, 16);
+  assert.deepEqual(new Set(LIVE_POINTS_V2_ROOT_FIELDS), new Set([
+    "calcLivePointsByEntry",
+    "calcLivePointsForEntries",
+    "liveScores",
+    "playerLive",
+    "eventLive",
+    "eventLiveExplain",
+    "eventLiveExplains",
+    "liveSnapshot",
+    "liveContext",
+    "entryLiveCompetitionBoard",
+    "leagueLiveHead",
+    "tournamentOfficialH2H",
+    "tournamentOfficialH2HHistory",
+    "tournamentSelectionIndex",
+    "tournamentEntrySquads",
+    "tournamentDetailDesk",
+    "gameweekDesk",
+    "homeGameweek",
+  ]));
   for (const document of [
     MINI_HOME_DREAM_TEAM_QUERY,
     GET_TOURNAMENT_DETAIL_DESK,

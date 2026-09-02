@@ -1,71 +1,123 @@
 /**
- * Official H2H tournament view models and pure presentation logic.
+ * V2 official H2H publication models and pure presentation helpers.
  *
- * Web parity anchors (letletme-web):
- * - lib/tournament/liveTournament.ts isOfficialH2HTournament — kind detection
- *   from list fields: leagueType H2H + rosterMode OFFICIAL_SYNC + groupMode
- *   BATTLE_RACES.
- * - live-score-v2.ts traceableLiveScore — standings/match
- *   scores only render when the score has a traceable source + revision +
- *   checkedAt; otherwise the table is empty and matches render as VS.
- * - OfficialH2HCompetitionView — standings sort (rank asc, then matchPoints
- *   desc, pointsFor desc, entryId asc), match card labels, awaiting-schedule
- *   card, and the future-GW standings gate
- *   (lib/tournament/official-h2h-presentation.ts).
- * Labels mirror messages/zh-CN.json (LiveTournament / TournamentLifecycle).
+ * The live contract is publication-scoped: one response contains the
+ * tournament head, its independent standings overlay, and every match for
+ * the requested event. It never exposes derived winner or match-point fields;
+ * those belong to the exact official standings/final-result lane.
  */
 
 export type TournamentDetailKind = "SETUP" | "OFFICIAL_H2H" | "LIVE_POINTS";
 
-export type OfficialH2HScoreSource =
-  | "FPL_EVENT_LIVE"
-  | "FPL_H2H_FINAL"
-  | "UNAVAILABLE";
+export type H2HAvailability = "READY" | "PENDING" | "MISSING" | "ERROR";
+export type H2HDeliveryState =
+  "FRESH" | "STALE" | "DEGRADED" | "FINAL" | "UNAVAILABLE";
 
-export interface OfficialH2HMatchSide {
-  entryId?: number | null;
-  entryName?: string | null;
-  playerName?: string | null;
-  isAverage?: boolean | null;
-  points?: number | null;
-  matchPoints?: number | null;
+export interface H2HDelivery {
+  state: H2HDeliveryState;
+  servedFrom:
+    | "REDIS_CURRENT"
+    | "REDIS_PREVIOUS"
+    | "PROCESS_LKG"
+    | "POSTGRES_CHECKPOINT"
+    | "FINAL_RESULT"
+    | "UNAVAILABLE";
+  reasonCodes: string[];
 }
 
-export interface OfficialH2HMatch {
+export interface H2HRevisionVector {
+  publicationId: string;
+  generation: number;
+  roster: string;
+  scoreCore: string;
+  fixtureIdentity: string;
+  entryInputSet: string;
+  identity: string;
+  officialRank: string | null;
+  rules: string;
+  algorithm: string;
+  content: string;
+}
+
+export interface H2HTimes {
+  sourceCheckedAt: string;
+  contentUpdatedAt: string;
+  publishedAt: string;
+  checkpointedAt: string | null;
+  servedAt: string;
+  staleAt: string;
+  nextRefreshAt: string | null;
+}
+
+export interface H2HMatchSide {
+  availability: H2HAvailability;
+  entryId: number | null;
+  entryName: string;
+  playerName: string | null;
+  isAverage: boolean;
+  points: number | null;
+  netPoints: number | null;
+}
+
+export interface H2HMatch {
   officialMatchId: number;
   eventId: number;
+  groupId: number;
   sourceOrder: number;
-  phase?: string | null;
-  knockoutName?: string | null;
-  isBye?: boolean | null;
-  winnerEntryId?: number | null;
-  tiebreak?: string | null;
-  sourceCheckedAt?: string | null;
-  home: OfficialH2HMatchSide;
-  away: OfficialH2HMatchSide;
+  phase: "REGULAR" | "KNOCKOUT";
+  knockoutName: string | null;
+  tiebreak: string | null;
+  isBye: boolean;
+  availability: H2HAvailability;
+  delivery: H2HDelivery;
+  revisions: H2HRevisionVector;
+  times: H2HTimes;
+  home: H2HMatchSide;
+  away: H2HMatchSide;
 }
 
-export interface OfficialH2HStanding {
-  entryId: number;
-  entryName?: string | null;
-  playerName?: string | null;
-  rank?: number | null;
-  matchPoints?: number | null;
-  played?: number | null;
-  won?: number | null;
-  drawn?: number | null;
-  lost?: number | null;
-  pointsFor?: number | null;
-}
-
-export interface OfficialH2HBoard {
+export interface H2HHistoryMatch {
+  officialMatchId: number;
   eventId: number;
-  awaitingSchedule?: boolean | null;
-  scoreSource?: string | null;
-  scoreRevision?: string | null;
-  scoreCheckedAt?: string | null;
-  standings?: OfficialH2HStanding[] | null;
-  matches?: OfficialH2HMatch[] | null;
+  groupId: number;
+  sourceOrder: number;
+  phase: "REGULAR" | "KNOCKOUT";
+  knockoutName: string | null;
+  tiebreak: string | null;
+  isBye: boolean;
+  availability: H2HAvailability;
+  home: H2HMatchSide;
+  away: H2HMatchSide;
+}
+
+export interface H2HStanding {
+  entryId: number;
+  entryName: string;
+  playerName: string | null;
+  rank: number | null;
+  matchPoints: number | null;
+  played: number | null;
+  won: number | null;
+  drawn: number | null;
+  lost: number | null;
+  pointsFor: number | null;
+}
+
+export interface H2HStandings {
+  throughEventId: number;
+  state: "READY" | "STALE" | "UPDATING" | "UNAVAILABLE";
+  sourceCheckedAt: string | null;
+  rows: H2HStanding[];
+}
+
+export interface H2HBoard {
+  eventId: number;
+  availability: H2HAvailability;
+  delivery: H2HDelivery;
+  revisions: H2HRevisionVector | null;
+  times: H2HTimes | null;
+  standings: H2HStandings | null;
+  matches: H2HMatch[];
 }
 
 export interface TournamentSetupProgress {
@@ -85,63 +137,68 @@ export interface TournamentParticipantRow {
 export const TOURNAMENT_ROSTER_PREVIEW = 20;
 export const TOURNAMENT_ROSTER_STEP = 20;
 
-/** lib/tournament/liveTournament.ts isOfficialH2HTournament. */
+/** The official-sync battle-race tournament kind. */
 export function isOfficialH2HTournamentRow(
-  row: {
-    leagueType?: string | null;
-    rosterMode?: string | null;
-    groupMode?: string | null;
-  } | null
-  | undefined,
+  row:
+    | {
+        leagueType?: string | null;
+        rosterMode?: string | null;
+        groupMode?: string | null;
+      }
+    | null
+    | undefined,
 ): boolean {
   return Boolean(
     row &&
-      row.leagueType === "H2H" &&
-      row.rosterMode === "OFFICIAL_SYNC" &&
-      row.groupMode === "BATTLE_RACES",
+    row.leagueType === "H2H" &&
+    row.rosterMode === "OFFICIAL_SYNC" &&
+    row.groupMode === "BATTLE_RACES",
   );
 }
 
-function hasRevision(value?: string | null): boolean {
+function hasRevision(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function hasCheckedAt(value?: string | null): boolean {
-  return Boolean(value && Number.isFinite(Date.parse(value)));
+function hasCheckedAt(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
-/** live-score-v2.ts traceableLiveScore. */
-export function traceableOfficialH2HBoard(
-  board?: Pick<
-    OfficialH2HBoard,
-    "scoreSource" | "scoreRevision" | "scoreCheckedAt"
-  > | null,
-): boolean {
+/** A board is traceable only when its complete publication has content time. */
+export function traceableH2HBoard(board: H2HBoard | null | undefined): boolean {
   return Boolean(
     board &&
-      (board.scoreSource === "FPL_EVENT_LIVE" ||
-        board.scoreSource === "FPL_H2H_FINAL") &&
-      hasRevision(board.scoreRevision) &&
-      hasCheckedAt(board.scoreCheckedAt),
+    board.availability === "READY" &&
+    board.delivery.state !== "UNAVAILABLE" &&
+    board.revisions &&
+    hasRevision(board.revisions.content) &&
+    board.times &&
+    hasCheckedAt(board.times.contentUpdatedAt),
   );
 }
 
-/**
- * OfficialH2HCompetitionView standings order: rank asc (unranked last), then
- * matchPoints desc, pointsFor desc, entryId asc.
- */
-export function sortOfficialH2HStandings(
-  standings: readonly OfficialH2HStanding[],
-): OfficialH2HStanding[] {
-  return [...standings].sort((left, right) => {
-    const leftRank =
-      typeof left.rank === "number" && Number.isFinite(left.rank)
-        ? left.rank
-        : Number.MAX_SAFE_INTEGER;
-    const rightRank =
-      typeof right.rank === "number" && Number.isFinite(right.rank)
-        ? right.rank
-        : Number.MAX_SAFE_INTEGER;
+export function canRetainOfficialH2HStandings(
+  previous: H2HBoard | null | undefined,
+  next: H2HBoard,
+): boolean {
+  if (
+    !previous ||
+    previous.eventId !== next.eventId ||
+    !previous.standings ||
+    !previous.revisions ||
+    !next.revisions
+  ) {
+    return false;
+  }
+  return (["roster", "fixtureIdentity", "identity"] as const).every(
+    (key) => previous.revisions?.[key] === next.revisions?.[key],
+  );
+}
+
+export function sortH2HStandings(rows: readonly H2HStanding[]): H2HStanding[] {
+  return [...rows].sort((left, right) => {
+    const leftRank = left.rank ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = right.rank ?? Number.MAX_SAFE_INTEGER;
     return (
       leftRank - rightRank ||
       (right.matchPoints ?? 0) - (left.matchPoints ?? 0) ||
@@ -151,85 +208,192 @@ export function sortOfficialH2HStandings(
   });
 }
 
-/** Untraceable scores render as upcoming: no points, no winner. */
+/** Remove scores from an unavailable match while retaining its schedule. */
 export function scrubUntraceableH2HMatches(
-  matches: readonly OfficialH2HMatch[],
-): OfficialH2HMatch[] {
+  matches: readonly H2HMatch[],
+): H2HMatch[] {
   return matches.map((match) => ({
     ...match,
-    home: { ...match.home, points: null, matchPoints: null },
-    away: { ...match.away, points: null, matchPoints: null },
-    winnerEntryId: null,
-    sourceCheckedAt: null,
+    home: { ...match.home, points: null, netPoints: null },
+    away: { ...match.away, points: null, netPoints: null },
   }));
 }
 
-/** lib/tournament/official-h2h-presentation.ts shouldShowOfficialH2HStandings. */
-export function shouldShowOfficialH2HStandings(
+function sameH2HMatchIdentity(left: H2HMatch, right: H2HMatch): boolean {
+  return (
+    left.officialMatchId === right.officialMatchId &&
+    left.eventId === right.eventId &&
+    left.groupId === right.groupId &&
+    left.sourceOrder === right.sourceOrder &&
+    left.phase === right.phase &&
+    left.knockoutName === right.knockoutName &&
+    left.tiebreak === right.tiebreak &&
+    left.isBye === right.isBye &&
+    left.home.entryId === right.home.entryId &&
+    left.away.entryId === right.away.entryId &&
+    left.home.isAverage === right.home.isAverage &&
+    left.away.isAverage === right.away.isAverage
+  );
+}
+
+/**
+ * Keep a same-event READY match when a newer composite response temporarily
+ * reports that match as PENDING/ERROR. The match publication is the LKG
+ * boundary; never retain a row after its schedule identity changes.
+ */
+export function retainOfficialH2HMatches(
+  previous: readonly H2HMatch[],
+  next: readonly H2HMatch[],
+): H2HMatch[] {
+  if (previous.length === 0 || previous.length !== next.length) {
+    return [...next];
+  }
+  const previousById = new Map(
+    previous.map((match) => [match.officialMatchId, match]),
+  );
+  const nextIds = new Set(next.map((match) => match.officialMatchId));
+  if (
+    previous.some((match) => !nextIds.has(match.officialMatchId)) ||
+    next.some((match) => !previousById.has(match.officialMatchId))
+  ) {
+    return [...next];
+  }
+  return next.map((match) => {
+    const previousMatch = previousById.get(match.officialMatchId);
+    if (
+      !previousMatch ||
+      previousMatch.availability !== "READY" ||
+      (match.availability !== "PENDING" && match.availability !== "ERROR") ||
+      !sameH2HMatchIdentity(previousMatch, match)
+    ) {
+      return match;
+    }
+    return {
+      ...previousMatch,
+      delivery: {
+        ...previousMatch.delivery,
+        state:
+          previousMatch.delivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+        servedFrom:
+          previousMatch.delivery.servedFrom === "FINAL_RESULT"
+            ? "FINAL_RESULT"
+            : "PROCESS_LKG",
+        reasonCodes: [
+          ...new Set([
+            ...previousMatch.delivery.reasonCodes,
+            "MATCH_PUBLICATION_FALLBACK",
+          ]),
+        ],
+      },
+    };
+  });
+}
+
+export function shouldShowH2HStandings(
   eventId: number,
   activeEventId?: number | null,
 ): boolean {
   return activeEventId == null || eventId <= activeEventId;
 }
 
-/** Score-source badge text (LiveTournament live/completed/pending). */
-export function officialH2HScoreSourceText(
-  scoreSource?: string | null,
+export function h2hScoreStateText(
+  availability: H2HAvailability,
+  deliveryState?: H2HDeliveryState | null,
 ): string {
-  if (scoreSource === "FPL_EVENT_LIVE") return "进行中";
-  if (scoreSource === "FPL_H2H_FINAL") return "已结束";
-  return "待开始";
+  if (availability === "ERROR" || availability === "MISSING")
+    return "暂时不可用";
+  if (availability === "PENDING") return "正在获取";
+  if (deliveryState === "FINAL") return "已结束";
+  if (deliveryState === "STALE" || deliveryState === "DEGRADED")
+    return "官方数据延迟";
+  return "进行中";
 }
 
-export function officialH2HPhaseLabel(match: {
+export function h2hPhaseLabel(match: {
   phase?: string | null;
   knockoutName?: string | null;
 }): string {
-  if (match.phase === "KNOCKOUT") {
-    return match.knockoutName || "淘汰赛";
-  }
-  return "常规赛";
+  return match.phase === "KNOCKOUT" ? match.knockoutName || "淘汰赛" : "常规赛";
 }
 
-/** Average placeholder side in an official schedule (平均队). */
-export function officialH2HSideName(side: OfficialH2HMatchSide): string {
-  if (side.isAverage) return "平均队";
-  return side.entryName || "";
+export function h2hSideName(side: H2HMatchSide): string {
+  return side.isAverage ? "平均队" : side.entryName || "—";
 }
 
-/**
- * Web MatchupHistoryBoard status badge: live when the entry desk flags its
- * current event live, finished for past events or a final current one, else
- * upcoming (进行中/已结束/待开始).
- */
-export function officialH2HMatchupStatusText(
-  match: { eventId: number },
-  desk?: {
-    eventId?: number | null;
-    isLive?: boolean | null;
-    isFinal?: boolean | null;
-  } | null,
-): "进行中" | "已结束" | "待开始" {
-  const currentEventId =
-    desk && typeof desk.eventId === "number" ? desk.eventId : null;
-  if (
-    desk?.isLive === true &&
-    currentEventId != null &&
-    match.eventId === currentEventId
-  ) {
-    return "进行中";
+export function h2hMatchupStatusText(
+  match: {
+    eventId: number;
+    availability: H2HAvailability;
+    delivery?: Pick<H2HDelivery, "state"> | null;
+  },
+  currentEventId: number | null | undefined,
+): "进行中" | "已结束" | "待开始" | "暂时不可用" | "官方数据延迟" {
+  if (match.availability === "ERROR" || match.availability === "MISSING") {
+    return "暂时不可用";
   }
-  if (
-    currentEventId != null &&
-    (match.eventId < currentEventId ||
-      (match.eventId === currentEventId && desk?.isFinal === true))
+  if (match.delivery?.state === "UNAVAILABLE") {
+    return "暂时不可用";
+  }
+  if (match.delivery?.state === "STALE" || match.delivery?.state === "DEGRADED") {
+    return "官方数据延迟";
+  }
+  if (currentEventId != null && match.eventId > currentEventId) {
+    return "待开始";
+  }
+  if (match.delivery?.state === "FINAL" ||
+    (currentEventId != null && match.eventId < currentEventId)
   ) {
     return "已结束";
   }
+  if (match.availability === "PENDING") return "待开始";
+  return "进行中";
+}
+
+/** History rows lack per-match delivery; use board delivery for the active event. */
+export function h2hHistoryMatchupStatusText(
+  match: Pick<H2HHistoryMatch, "eventId" | "availability">,
+  activeEventId: number | null | undefined,
+  board: {
+    eventId: number;
+    availability: H2HAvailability;
+    delivery: Pick<H2HDelivery, "state">;
+  } | null,
+): "进行中" | "已结束" | "待开始" | "暂时不可用" {
+  if (match.availability === "ERROR" || match.availability === "MISSING") {
+    return "暂时不可用";
+  }
+  if (activeEventId != null && match.eventId > activeEventId) {
+    return "待开始";
+  }
+  if (activeEventId != null && match.eventId < activeEventId) {
+    return "已结束";
+  }
+  const delivery =
+    board &&
+    board.eventId === match.eventId &&
+    activeEventId != null &&
+    match.eventId === activeEventId
+      ? board.delivery
+      : null;
+  if (delivery?.state === "FINAL") return "已结束";
+  if (
+    delivery?.state === "UNAVAILABLE" ||
+    board?.availability === "ERROR" ||
+    board?.availability === "MISSING"
+  ) {
+    return "暂时不可用";
+  }
+  if (
+    delivery?.state === "FRESH" &&
+    board?.availability === "READY" &&
+    match.availability === "READY"
+  ) {
+    return "进行中";
+  }
+  if (match.availability === "PENDING") return "待开始";
   return "待开始";
 }
 
-/** TournamentLifecycle phase labels (LC.phase) plus queue/terminal states. */
 export function tournamentSetupPhaseText(phase?: string | null): string {
   switch (phase) {
     case "SYNCING_ENTRIES":
@@ -252,7 +416,6 @@ export function tournamentSetupPhaseText(phase?: string | null): string {
   }
 }
 
-/** Web polls the directory every 5s while setup is in flight. */
 export function isTournamentSetupInFlight(
   setup?: TournamentSetupProgress | null,
 ): boolean {
@@ -283,7 +446,6 @@ export function tournamentGroupModeText(groupMode?: string | null): string {
   return "无小组赛";
 }
 
-/** Web TournamentDetailClient SETUP_PHASES order. */
 export const TOURNAMENT_SETUP_PHASES = [
   "SYNCING_ENTRIES",
   "BUILDING_STRUCTURE",
@@ -301,12 +463,6 @@ export interface TournamentSetupPhaseRow {
   progressText: string;
 }
 
-/**
- * Web TournamentDetailClient setup checklist: READY counts as past every
- * phase, QUEUED activates the first one, and the active phase carries its
- * completed/total counter unless the backend reports INDETERMINATE progress
- * (then the web shows indeterminateProgress instead).
- */
 export function tournamentSetupPhaseRows(
   setup?: TournamentSetupProgress | null,
 ): TournamentSetupPhaseRow[] {
@@ -360,7 +516,6 @@ export function tournamentLeagueTypeText(leagueType?: string | null): string {
   return leagueType || "—";
 }
 
-/** LT.gameweekRange 第 {start}–{end} 轮, else 未安排. */
 export function tournamentEventRangeText(
   startedEventId?: number | null,
   endedEventId?: number | null,
@@ -371,7 +526,6 @@ export function tournamentEventRangeText(
   return "未安排";
 }
 
-/** Roster search: name, manager, or entry id substring (case-insensitive). */
 export function filterTournamentRoster(
   participants: readonly TournamentParticipantRow[],
   query: string,
@@ -389,10 +543,6 @@ export function filterTournamentRoster(
   });
 }
 
-/**
- * Visible roster window: top `visibleCount` rows, with the viewer pinned into
- * the window when they would otherwise be cut (web TournamentRosterList).
- */
 export function visibleTournamentRoster(
   filtered: readonly TournamentParticipantRow[],
   visibleCount: number,

@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = (path) =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\s+/g, " ");
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(
+    /\s+/g,
+    " ",
+  );
 
 test("the live picker includes official H2H tournaments", () => {
   const service = source("miniprogram/services/tournament.service.ts");
@@ -19,7 +22,9 @@ test("the live picker includes official H2H tournaments", () => {
 
 test("the picker splits classic and H2H leagues like the web", () => {
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
   const groups = source("miniprogram/utils/tournament-picker-groups.ts");
 
   // Web TournamentSelector: leagueType === "H2H" picks the 对战联赛 group,
@@ -28,32 +33,58 @@ test("the picker splits classic and H2H leagues like the web", () => {
   assert.match(groups, /leagueType === "H2H"/);
   assert.match(groups, /选择积分联赛/);
   assert.match(groups, /选择对战联赛/);
-  assert.match(template, /range="\{\{classicTournamentNames\}\}" value="\{\{selectedClassicIndex\}\}" bindchange="onClassicTournamentChange"/);
-  assert.match(template, /range="\{\{h2hTournamentNames\}\}" value="\{\{selectedH2HIndex\}\}" bindchange="onH2HTournamentChange"/);
+  assert.match(
+    template,
+    /range="\{\{classicTournamentNames\}\}" value="\{\{selectedClassicIndex\}\}" bindchange="onClassicTournamentChange"/,
+  );
+  assert.match(
+    template,
+    /range="\{\{h2hTournamentNames\}\}" value="\{\{selectedH2HIndex\}\}" bindchange="onH2HTournamentChange"/,
+  );
   // The single combined picker is gone.
   assert.doesNotMatch(template, /onTournamentChange/);
   // Both groups route through the same selection pipeline.
   assert.match(controller, /onTournamentGroupChange\(event, "classic"\)/);
   assert.match(controller, /onTournamentGroupChange\(event, "h2h"\)/);
-  assert.match(controller, /buildTournamentPickerState\(this\.data\.tournaments, selectedTournament\)/);
-  assert.match(controller, /buildTournamentPickerState\(tournaments, selectedTournament\)/);
+  assert.match(
+    controller,
+    /buildTournamentPickerState\(this\.data\.tournaments, selectedTournament\)/,
+  );
+  assert.match(
+    controller,
+    /buildTournamentPickerState\(tournaments, selectedTournament\)/,
+  );
 });
 
-test("the detail desk query selects kind, setup, participants and the H2H board", () => {
+test("the detail desk is metadata-only and the H2H publication is separate", () => {
   const service = source("miniprogram/services/tournament-detail.service.ts");
 
-  assert.match(service, /tournamentDetailDesk\(tournamentId: \$tournamentId, entryId: \$entryId, eventId: \$eventId\)/);
-  assert.match(service, /kind context \{ season coreRevision activeEventId requestedEventId \}/);
+  assert.match(
+    service,
+    /tournamentDetailDesk\(tournamentId: \$tournamentId, entryId: \$entryId, eventId: \$eventId\)/,
+  );
+  assert.match(
+    service,
+    /kind context \{ season coreRevision activeEventId requestedEventId \}/,
+  );
   assert.match(service, /participants \{ entryId entryName playerName \}/);
-  assert.match(service, /setup \{ status phase completedUnits totalUnits progressMode \}/);
-  assert.match(service, /officialH2H \{ eventId awaitingSchedule scoreSource scoreRevision scoreCheckedAt/);
-  // The Mini deliberately omits the desk's live block — the board pipeline owns it.
-  assert.doesNotMatch(service, /live \{/);
-  assert.match(service, /tournamentOfficialH2H\(tournamentId: \$tournamentId, eventId: \$eventId\)/);
+  assert.match(
+    service,
+    /setup \{[\s\S]*status phase completedUnits totalUnits/,
+  );
+  assert.match(service, /export const GET_TOURNAMENT_OFFICIAL_H2H/);
+  assert.match(service, /availability[\s\S]*delivery[\s\S]*revisions/);
+  assert.match(
+    service,
+    /matches \{[\s\S]*officialMatchId[\s\S]*home[\s\S]*away/,
+  );
+  assert.doesNotMatch(service, /entryOfficialH2HDesk/);
 });
 
 test("the controller routes official H2H tournaments to the desk, not the board", () => {
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
 
   assert.match(
     controller,
@@ -67,7 +98,15 @@ test("the controller routes official H2H tournaments to the desk, not the board"
   // GW changes on an H2H view refetch the board only.
   assert.match(
     controller,
-    /isOfficialH2HTournamentRow\(this\.data\.selectedTournament\)\) \{[\s\S]*void this\.loadH2HBoard\(next\)/,
+    /isOfficialH2HTournamentRow\(this\.data\.selectedTournament\)\) \{[\s\S]*const boardRequest = this\.loadH2HBoard\(next\)/,
+  );
+  assert.match(
+    controller,
+    /const boardRequest = this\.loadH2HBoard\(next\)[\s\S]*boardRequest\.then\(\(\) => \{[\s\S]*void this\.loadH2HMatchups\(\{ forceRefresh: true \}\)/,
+  );
+  assert.match(
+    controller,
+    /\.\.\.emptyH2HViewState\(\),\s*h2hTab: this\.data\.h2hTab,\s*h2hMatchups: \[\],\s*h2hMatchupsLoading: false,\s*h2hMatchupsLoaded: false/,
   );
   // Web cadences: 60s current-GW refresh, 5s setup polling.
   assert.match(controller, /H2H_REFRESH_MS = 60000/);
@@ -79,18 +118,54 @@ test("the controller routes official H2H tournaments to the desk, not the board"
   );
 });
 
-test("the H2H board applies the web traceability gate before rendering scores", () => {
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+test("the H2H board applies the V2 traceability gate before rendering scores", () => {
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
+
+  assert.match(controller, /const traceable = traceableH2HBoard\(board\);/);
+  assert.match(
+    controller,
+    /scrubUntraceableH2HMatches\(candidateMatches\)/,
+  );
+  assert.match(
+    controller,
+    /shouldShowH2HStandings\(\s*board\.eventId,\s*activeEventId\s*,?\s*\)/,
+  );
+});
+
+test("an unavailable H2H refresh retains the last complete board", () => {
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
 
   assert.match(
     controller,
-    /const traceable = traceableOfficialH2HBoard\(board\);/,
+    /\(board\.availability !== "READY" \|\|[\s\S]*board\.delivery\.state === "UNAVAILABLE"\) && this\.data\.hasData && this\.data\.h2hActive/,
   );
-  assert.match(controller, /scrubUntraceableH2HMatches\(board\.matches \|\| \[\]\)/);
+  assert.match(controller, /errorSuffix: "当前显示上次成功结果"/);
+});
+
+test("a single H2H match refresh cannot erase its same-event READY LKG", () => {
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
+  const helper = source("miniprogram/utils/official-h2h.ts");
+
+  assert.match(helper, /export function retainOfficialH2HMatches/);
+  assert.match(helper, /export function canRetainOfficialH2HStandings/);
+  assert.match(helper, /previousMatch\.availability !== "READY"/);
+  assert.match(helper, /MATCH_PUBLICATION_FALLBACK/);
   assert.match(
     controller,
-    /shouldShowOfficialH2HStandings\( board\.eventId, activeEventId, \)/,
+    /retainOfficialH2HMatches\(this\.h2hMatchSnapshot, candidateMatches\)/,
   );
+  assert.match(controller, /h2hMatchSnapshot: \[\] as H2HMatch\[\]/);
+  assert.match(
+    controller,
+    /canRetainOfficialH2HStandings\(this\.h2hBoardSnapshot, board\)/,
+  );
+  assert.match(controller, /h2hBoardSnapshot = null/);
 });
 
 test("the H2H template renders standings, fixtures and the setup card", () => {
@@ -110,40 +185,41 @@ test("the H2H template renders standings, fixtures and the setup card", () => {
 
 test("the setup card renders the web phase checklist", () => {
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
 
   // Web TournamentDetailClient: READY completes every phase, the active
   // phase carries completed/total unless INDETERMINATE.
   assert.match(controller, /tournamentSetupPhaseRows\(setup\)/);
-  assert.match(controller, /setupPhases: failed \? \[\] : tournamentSetupPhaseRows/);
+  assert.match(
+    controller,
+    /setupPhases: failed \? \[\] : tournamentSetupPhaseRows/,
+  );
   assert.match(template, /wx:for="\{\{setupPhases\}\}"/);
   assert.match(template, /class="setup-phase-row \{\{item\.state\}\}"/);
   assert.match(template, /\{\{item\.progressText\}\}/);
 });
 
-test("the 我的对阵 tab lazy-loads the viewer's entry desk once", () => {
+test("the 我的对阵 tab loads bounded history on demand", () => {
   const service = source("miniprogram/services/tournament-detail.service.ts");
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
 
-  // Web GET_ENTRY_OFFICIAL_H2H_MATCHUPS: the entry-wide desk, picked by
-  // tournamentId (MatchupHistoryBoard).
+  assert.doesNotMatch(service, /entryOfficialH2HDesk/);
+  assert.doesNotMatch(controller, /getEntryOfficialH2HMatchups/);
+  assert.match(service, /tournamentOfficialH2HHistory/);
+  assert.match(controller, /getTournamentOfficialH2HHistory\(/);
+  assert.match(controller, /h2hMatchups: matchups/);
   assert.match(
-    service,
-    /entryOfficialH2HDesk\(entryId: \$entryId\) \{ tournamentId eventId isLive isFinal matches/,
+    controller,
+    /this\.data\.h2hMatchupsLoaded[\s\S]*h2hMatchupsRequestKey/,
   );
   assert.match(
     controller,
-    /desks\.find\(\(candidate\) => candidate\.tournamentId === tournamentId\)/,
-  );
-  // Badges follow the desk's own event/isLive/isFinal.
-  assert.match(controller, /officialH2HMatchupStatusText\(match, desk\)/);
-  // First activation loads; afterwards the desk piggybacks on the 60s board
-  // refresh so live badges stay accurate.
-  assert.match(controller, /if \(tab === "mine"\) void this\.loadH2HMatchups\(\);/);
-  assert.match(
-    controller,
-    /this\.data\.h2hMatchupsLoaded\) \{ void this\.loadH2HMatchups\(\{ background: true, forceRefresh: true \}\)/,
+    /if \(tab === "mine"\) void this\.loadH2HMatchups\(\);/,
   );
   assert.match(template, /data-tab="mine" bindtap="onH2HTabTap"/);
   assert.match(template, /wx:for="\{\{h2hMatchups\}\}"/);
@@ -154,7 +230,9 @@ test("the 我的对阵 tab lazy-loads the viewer's entry desk once", () => {
 });
 
 test("the H2H view shares the visible tab as text or image", () => {
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
   const shareText = source("miniprogram/utils/live-share.ts");
 
@@ -183,7 +261,9 @@ test("the H2H view shares the visible tab as text or image", () => {
 
 test("the detail disclosure opens from the toolbar and lists statistics, rules and roster", () => {
   const template = source("miniprogram/pages/live/tournament/tournament.wxml");
-  const controller = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
 
   assert.match(template, /bindtap="onOpenTournamentDetail"/);
   assert.match(template, /wx:if="\{\{detailOpen\}\}"/);
@@ -194,8 +274,17 @@ test("the detail disclosure opens from the toolbar and lists statistics, rules a
   assert.match(template, /\{\{detailKnockoutModeText\}\}/);
   assert.match(template, /bindinput="onDetailRosterSearchInput"/);
   assert.match(template, /bindtap="onOpenDetailRosterEntry"/);
-  assert.match(controller, /visibleTournamentRoster\( filtered, visibleCount, viewerEntryId, \)/);
-  assert.match(controller, /filterTournamentRoster\(this\.detailParticipants, keyword\)/);
+  assert.match(
+    controller,
+    /visibleTournamentRoster\( filtered, visibleCount, viewerEntryId, \)/,
+  );
+  assert.match(
+    controller,
+    /filterTournamentRoster\(this\.detailParticipants, keyword\)/,
+  );
   // Roster rows deep-link to the viewer's live entry page like the web.
-  assert.match(controller, /onOpenDetailRosterEntry[\s\S]*routes\.liveEntry\}\?entry=/);
+  assert.match(
+    controller,
+    /onOpenDetailRosterEntry[\s\S]*routes\.liveEntry\}\?entry=/,
+  );
 });

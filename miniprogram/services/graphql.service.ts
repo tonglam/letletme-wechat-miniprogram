@@ -92,7 +92,7 @@ export interface GraphQLOptions {
   /** Keep the prior authoritative value when a network response fails validation. */
   preserveCacheOnValidationFailure?: boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
-  contract?: "my-tournament-review-v2";
+  contract?: "my-tournament-review-v2" | "live-points-v2";
 }
 
 export interface PageRequestTrace {
@@ -182,7 +182,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
-  contract?: "my-tournament-review-v2";
+  contract?: "my-tournament-review-v2" | "live-points-v2";
 }
 
 export class GraphQLTransportError extends Error {
@@ -539,7 +539,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
-  contract?: "my-tournament-review-v2",
+  contract?: "my-tournament-review-v2" | "live-points-v2",
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -567,7 +567,9 @@ export const LIVE_POINTS_V2_ROOT_FIELDS = [
   "liveSnapshot",
   "liveContext",
   "entryLiveCompetitionBoard",
-  "entryLiveCompetitionsDesk",
+  "leagueLiveHead",
+  "tournamentOfficialH2H",
+  "tournamentOfficialH2HHistory",
   "tournamentSelectionIndex",
   "tournamentEntrySquads",
   "tournamentDetailDesk",
@@ -605,7 +607,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
-  contract: "my-tournament-review-v2" | undefined,
+  contract: "my-tournament-review-v2" | "live-points-v2" | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
