@@ -106,6 +106,8 @@ import {
   h2hPhaseLabel,
   h2hScoreStateText,
   h2hSideName,
+  canRetainOfficialH2HStandings,
+  retainOfficialH2HMatches,
   scrubUntraceableH2HMatches,
   shouldShowH2HStandings,
   sortH2HStandings,
@@ -1001,7 +1003,11 @@ function displayH2HMatch(
     typeof match.away.netPoints === "number" && Number.isFinite(match.away.netPoints)
       ? match.away.netPoints
       : null;
-  const hasScore = homePoints != null && awayPoints != null;
+  const hasAvailableSides =
+    match.availability === "READY" &&
+    match.home.availability === "READY" &&
+    match.away.availability === "READY";
+  const hasScore = hasAvailableSides && homePoints != null && awayPoints != null;
   return {
     key: String(match.officialMatchId),
     orderText: `#${String(match.sourceOrder + 1).padStart(2, "0")}`,
@@ -1039,7 +1045,11 @@ function displayH2HMatchup(
     typeof match.away.netPoints === "number" && Number.isFinite(match.away.netPoints)
       ? match.away.netPoints
       : null;
-  const hasScore = homePoints != null && awayPoints != null;
+  const hasAvailableSides =
+    match.availability === "READY" &&
+    match.home.availability === "READY" &&
+    match.away.availability === "READY";
+  const hasScore = hasAvailableSides && homePoints != null && awayPoints != null;
   const statusText = h2hMatchupStatusText(match, currentEventId);
   return {
     key: String(match.officialMatchId),
@@ -1286,11 +1296,16 @@ PerformancePage({
   h2hRequestId: 0,
   h2hActiveEventId: 0,
   h2hHead: null as LeagueLiveHead | null,
+  h2hMatchSnapshot: [] as H2HMatch[],
+  h2hBoardSnapshot: null as H2HBoard | null,
   h2hHeadRequest: null as Promise<void> | null,
   h2hHeadRequestId: 0,
   h2hTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   h2hMatchupsRequest: null as Promise<void> | null,
   h2hMatchupsRequestKey: "",
+  h2hMatchupsScopeKey: "",
+  h2hMatchupsRefreshPending: false,
+  h2hMatchupsResumePending: false,
   setupTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   detailDesk: null as TournamentDetailDesk | null,
   detailDeskKey: "",
@@ -1665,6 +1680,11 @@ PerformancePage({
       } else if (this.data.h2hActive) {
         this.scheduleH2HRefresh(this.data.event);
         void this.probeH2HHead(this.data.event);
+        if (this.h2hMatchupsResumePending && this.data.h2hTab === "mine") {
+          this.h2hMatchupsResumePending = false;
+          this.h2hMatchupsRequestKey = "";
+          void this.loadH2HMatchups();
+        }
       } else if (!this.data.hasData && this.data.event > 0) {
         void this.loadH2HDesk();
       }
@@ -1712,6 +1732,7 @@ PerformancePage({
     this.resumeDirectoryForceRefresh = false;
     this.resumeStartupAfterShow = false;
     this.resumeRowsAfterShow = false;
+    this.h2hMatchupsResumePending = false;
     this.directoryRequestPending = false;
     this.directoryRequestForceRefresh = false;
     this.startupPending = false;
@@ -2260,9 +2281,10 @@ PerformancePage({
     reset: boolean,
     options: { lastGood?: boolean } = {},
   ) {
+    const complete = isCompleteLiveBoardPage(page, { firstPage: reset });
     if (
-      !isCompleteLiveBoardPage(page) &&
-      this.data.hasData &&
+      !complete &&
+      (this.data.hasData || page.head.availability === "READY") &&
       !options.lastGood
     ) {
       this.setData({
@@ -2722,11 +2744,17 @@ PerformancePage({
   },
 
   clearH2HTimers() {
+    const historyRequestInFlight = Boolean(this.h2hMatchupsRequest);
+    this.h2hMatchupsResumePending =
+      this.h2hMatchupsResumePending ||
+      (this.data.h2hTab === "mine" &&
+        (this.data.h2hMatchupsLoading ||
+          !this.data.h2hMatchupsLoaded ||
+          historyRequestInFlight));
     this.h2hRequestId += 1;
     this.h2hHeadRequestId += 1;
     this.h2hHeadRequest = null;
-    this.h2hMatchupsRequest = null;
-    this.h2hMatchupsRequestKey = "";
+    if (!this.data.h2hMatchupsLoaded) this.h2hMatchupsRequestKey = "";
     this.setData({ h2hMatchupsLoading: false });
     if (this.h2hTimer) {
       clearTimeout(this.h2hTimer);
@@ -2740,9 +2768,13 @@ PerformancePage({
 
   clearH2HState() {
     this.clearH2HTimers();
+    this.h2hMatchupsResumePending = false;
+    this.h2hMatchupsRefreshPending = false;
     this.h2hHead = null;
-    this.h2hMatchupsRequest = null;
+    this.h2hMatchSnapshot = [];
+    this.h2hBoardSnapshot = null;
     this.h2hMatchupsRequestKey = "";
+    this.h2hMatchupsScopeKey = "";
     this.h2hActiveEventId = 0;
     this.detailDesk = null;
     this.detailDeskKey = "";
@@ -2768,8 +2800,16 @@ PerformancePage({
     }
     const tournamentId = Number(selected.id);
     const historyRequestKey = `${tournamentId}:${entryId}:${eventId}`;
-    if (this.h2hMatchupsRequestKey !== historyRequestKey) {
+    if (this.h2hMatchupsScopeKey !== historyRequestKey) {
+      // Advance the request identity before awaiting the board. An older
+      // history response must not be able to land after GW navigation and
+      // overwrite the newly selected event's matchup list.
+      this.h2hMatchupsScopeKey = historyRequestKey;
+      this.h2hMatchupsRequestKey = "";
+      this.h2hMatchSnapshot = [];
+      this.h2hBoardSnapshot = null;
       this.setData({
+        h2hMatchups: [],
         h2hMatchupsLoaded: false,
         h2hMatchupsFailed: false,
       });
@@ -2866,8 +2906,16 @@ PerformancePage({
     }
     const tournamentId = Number(selected.id);
     const historyRequestKey = `${tournamentId}:${entryId}:${eventId}`;
-    if (this.h2hMatchupsRequestKey !== historyRequestKey) {
+    if (this.h2hMatchupsScopeKey !== historyRequestKey) {
+      // Invalidate any in-flight history request immediately; the board read
+      // below is asynchronous and must not leave the previous event's rows
+      // eligible for commit.
+      this.h2hMatchupsScopeKey = historyRequestKey;
+      this.h2hMatchupsRequestKey = "";
+      this.h2hMatchSnapshot = [];
+      this.h2hBoardSnapshot = null;
       this.setData({
+        h2hMatchups: [],
         h2hMatchupsLoaded: false,
         h2hMatchupsFailed: false,
       });
@@ -2949,15 +2997,38 @@ PerformancePage({
       return;
     }
     const entryId = this.data.entryId;
+    const previousBoardSnapshot = this.h2hBoardSnapshot;
     const traceable = traceableH2HBoard(board);
     const standingsReady = traceable && board.standings?.state === "READY";
-    const retainedStandings = this.data.h2hStandings;
+    const canRetainStandings =
+      traceable &&
+      canRetainOfficialH2HStandings(this.h2hBoardSnapshot, board);
+    const retainedStandings = canRetainStandings ? this.data.h2hStandings : [];
     const standings = standingsReady
       ? sortH2HStandings(board.standings?.rows || [])
       : null;
+    const candidateMatches = board.matches || [];
     const matches = traceable
-      ? board.matches || []
-      : scrubUntraceableH2HMatches(board.matches || []);
+      ? retainOfficialH2HMatches(this.h2hMatchSnapshot, candidateMatches)
+      : this.h2hMatchSnapshot.length > 0
+        ? this.h2hMatchSnapshot
+        : scrubUntraceableH2HMatches(candidateMatches);
+    if (traceable) {
+      this.h2hMatchSnapshot = matches;
+      // Keep the committed raw standings publication as the retention
+      // baseline. A transient UPDATING/UNAVAILABLE response must not become
+      // the new baseline merely because its scope metadata is valid.
+      this.h2hBoardSnapshot = {
+        ...board,
+        matches,
+        standings:
+          standings !== null
+            ? board.standings
+            : canRetainStandings
+              ? previousBoardSnapshot?.standings || null
+              : null,
+      };
+    }
     const activeEventId = this.h2hActiveEventId || this.data.maxGw;
     const showStandings =
       shouldShowH2HStandings(board.eventId, activeEventId) &&
@@ -2981,7 +3052,7 @@ PerformancePage({
       h2hStandings: standings
         ? standings.map((row) => displayH2HStanding(row, entryId))
         : retainedStandings,
-      h2hMatches: matches.map((match) => displayH2HMatch(match, entryId)),
+      h2hMatches: matches.map((match: H2HMatch) => displayH2HMatch(match, entryId)),
       h2hViewerRankText:
         viewer && viewer.rank
           ? String(viewer.rank)
@@ -3045,12 +3116,39 @@ PerformancePage({
         ) {
           return;
         }
+        const usableHead =
+          head.availability === "READY" &&
+          head.publication !== null &&
+          head.contentRevision !== null &&
+          head.delivery.state !== "UNAVAILABLE";
+        if (!usableHead) {
+          if (this.data.hasData) {
+            this.setData({
+              error: "H2H 刷新失败，当前显示上次成功结果",
+              errorSuffix: "当前显示上次成功结果",
+            });
+            this.syncDisplayState();
+          }
+          this.scheduleH2HRefresh(eventId);
+          return;
+        }
         const previous = this.h2hHead;
         const contentChanged =
           !previous ||
           previous.eventId !== head.eventId ||
           previous.contentRevision !== head.contentRevision;
         if (contentChanged) {
+          const refreshMatchups = this.data.h2hTab === "mine";
+          if (refreshMatchups) {
+            this.h2hMatchupsRequestKey = "";
+            if (this.h2hMatchupsRequest)
+              this.h2hMatchupsRefreshPending = true;
+            this.setData({
+              h2hMatchupsLoading: false,
+              h2hMatchupsLoaded: false,
+              h2hMatchupsFailed: false,
+            });
+          }
           // Only a changed content revision can authorize the expensive H2H
           // publication read. A heartbeat only updates the status below.
           await this.loadH2HBoard(eventId, {
@@ -3058,6 +3156,14 @@ PerformancePage({
             forceRefresh: true,
             propagateError: true,
           });
+          if (
+            refreshMatchups &&
+            this.pageVisible &&
+            this.data.h2hActive &&
+            this.data.h2hTab === "mine"
+          ) {
+            void this.loadH2HMatchups();
+          }
         } else {
           this.h2hHead = head;
           this.setData({
@@ -3149,7 +3255,22 @@ PerformancePage({
     ) {
       return;
     }
-    const requestKey = `${tournamentId}:${entryId}:${eventId}`;
+    const requestKey = `${tournamentId}:${entryId}:${eventId}:${
+      this.h2hHead?.eventId === eventId
+        ? this.h2hHead.contentRevision || "none"
+        : "none"
+    }`;
+    if (this.h2hMatchupsRequest) {
+      if (this.h2hMatchupsRequestKey !== requestKey) {
+        // The in-flight request cannot be cancelled. Keep it as the single
+        // flight, invalidate its response, and queue exactly one request for
+        // the newest publication after it settles.
+        this.h2hMatchupsRequestKey = requestKey;
+        this.h2hMatchupsRefreshPending = true;
+        this.setData({ h2hMatchupsLoading: true, h2hMatchupsFailed: false });
+      }
+      return this.h2hMatchupsRequest;
+    }
     if (
       this.data.h2hMatchupsLoaded &&
       this.h2hMatchupsRequestKey === requestKey
@@ -3162,6 +3283,7 @@ PerformancePage({
     ) {
       return;
     }
+    this.h2hMatchupsRefreshPending = false;
     this.h2hMatchupsRequestKey = requestKey;
     this.setData({ h2hMatchupsLoading: true, h2hMatchupsFailed: false });
     const request = (async () => {
@@ -3178,8 +3300,18 @@ PerformancePage({
         if (
           !this.pageVisible ||
           this.h2hMatchupsRequestKey !== requestKey ||
-          Number(this.data.selectedTournament?.id) !== tournamentId
+          Number(this.data.selectedTournament?.id) !== tournamentId ||
+          this.h2hActiveEventId !== eventId
         ) {
+          return;
+        }
+        if (history.availability !== "READY") {
+          this.h2hMatchupsRequestKey = "";
+          this.setData({
+            h2hMatchupsLoading: false,
+            h2hMatchupsLoaded: false,
+            h2hMatchupsFailed: false,
+          });
           return;
         }
         const matchups = history.matches
@@ -3210,18 +3342,19 @@ PerformancePage({
       }
     })();
     this.h2hMatchupsRequest = request;
-    void request.then(
-      () => {
-        if (this.h2hMatchupsRequest === request) {
-          this.h2hMatchupsRequest = null;
-        }
-      },
-      () => {
-        if (this.h2hMatchupsRequest === request) {
-          this.h2hMatchupsRequest = null;
-        }
-      },
-    );
+    const settleRequest = () => {
+      if (this.h2hMatchupsRequest !== request) return;
+      this.h2hMatchupsRequest = null;
+      if (!this.h2hMatchupsRefreshPending) return;
+      this.h2hMatchupsRefreshPending = false;
+      if (!this.pageVisible) {
+        this.h2hMatchupsResumePending = true;
+        return;
+      }
+      if (!this.data.h2hActive || this.data.h2hTab !== "mine") return;
+      void this.loadH2HMatchups();
+    };
+    void request.then(settleRequest, settleRequest);
   },
 
   async onOpenTournamentDetail() {
@@ -3798,17 +3931,30 @@ PerformancePage({
       // H2H GW navigation refetches the board only (web
       // GET_TOURNAMENT_OFFICIAL_H2H); the desk context is already cached, and
       // the user's tab survives the switch. Matchup history spans every GW,
-      // so it stays too.
+      // but its request is event-bound, so the old event's rows are cleared and
+      // reloaded after the new board has settled.
       this.clearH2HTimers();
+      const reloadMatchups = this.data.h2hTab === "mine";
       this.setData({
         ...emptyH2HViewState(),
         h2hTab: this.data.h2hTab,
-        h2hMatchups: this.data.h2hMatchups,
-        h2hMatchupsLoading: this.data.h2hMatchupsLoading,
-        h2hMatchupsLoaded: this.data.h2hMatchupsLoaded,
-        h2hMatchupsFailed: this.data.h2hMatchupsFailed,
+        h2hMatchups: [],
+        h2hMatchupsLoading: false,
+        h2hMatchupsLoaded: false,
+        h2hMatchupsFailed: false,
       });
-      void this.loadH2HBoard(next);
+      const boardRequest = this.loadH2HBoard(next);
+      if (reloadMatchups) {
+        void boardRequest.then(() => {
+          if (
+            this.pageVisible &&
+            this.data.h2hActive &&
+            this.data.h2hTab === "mine"
+          ) {
+            void this.loadH2HMatchups();
+          }
+        });
+      }
       return;
     }
     this.liveRefresh?.sync();

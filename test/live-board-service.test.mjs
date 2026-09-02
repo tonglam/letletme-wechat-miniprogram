@@ -217,6 +217,14 @@ test("light board parser requires the complete V2 contract and never requests pi
     parseLiveBoardPage(validPage()).head.contentRevision,
     "content-r1",
   );
+  assert.equal(
+    parseLiveBoardPage(
+      validPage({
+        pageInfo: { hasNextPage: false, endCursor: "cursor-terminal" },
+      }),
+    ).pageInfo.endCursor,
+    "cursor-terminal",
+  );
   assert.doesNotMatch(ENTRY_LIVE_COMPETITION_BOARD_QUERY, /pickList/);
   assert.throws(
     () =>
@@ -251,6 +259,13 @@ test("only a complete publication can replace an existing board", () => {
   assert.equal(
     isCompleteLiveBoardPage({
       ...page,
+      viewerRow: page.rows[0],
+    }),
+    true,
+  );
+  assert.equal(
+    isCompleteLiveBoardPage({
+      ...page,
       head: { ...page.head, availability: "PENDING" },
     }),
     false,
@@ -268,6 +283,36 @@ test("only a complete publication can replace an existing board", () => {
       rows: [{ ...page.rows[0], availability: "MISSING", score: null }],
     }),
     true,
+  );
+  assert.equal(
+    isCompleteLiveBoardPage({
+      ...page,
+      filteredEntries: 2,
+    }),
+    true,
+  );
+  assert.equal(
+    isCompleteLiveBoardPage(
+      {
+        ...page,
+        filteredEntries: 2,
+        pageInfo: { hasNextPage: false, endCursor: "cursor-terminal" },
+      },
+      { firstPage: true },
+    ),
+    false,
+  );
+  assert.equal(
+    isCompleteLiveBoardPage(
+      {
+        ...page,
+        rows: [],
+        filteredEntries: 1,
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      { firstPage: true },
+    ),
+    false,
   );
 });
 

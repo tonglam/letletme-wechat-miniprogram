@@ -98,7 +98,15 @@ test("the controller routes official H2H tournaments to the desk, not the board"
   // GW changes on an H2H view refetch the board only.
   assert.match(
     controller,
-    /isOfficialH2HTournamentRow\(this\.data\.selectedTournament\)\) \{[\s\S]*void this\.loadH2HBoard\(next\)/,
+    /isOfficialH2HTournamentRow\(this\.data\.selectedTournament\)\) \{[\s\S]*const boardRequest = this\.loadH2HBoard\(next\)/,
+  );
+  assert.match(
+    controller,
+    /const boardRequest = this\.loadH2HBoard\(next\)[\s\S]*boardRequest\.then\(\(\) => \{[\s\S]*void this\.loadH2HMatchups\(\)/,
+  );
+  assert.match(
+    controller,
+    /\.\.\.emptyH2HViewState\(\),\s*h2hTab: this\.data\.h2hTab,\s*h2hMatchups: \[\],\s*h2hMatchupsLoading: false,\s*h2hMatchupsLoaded: false/,
   );
   // Web cadences: 60s current-GW refresh, 5s setup polling.
   assert.match(controller, /H2H_REFRESH_MS = 60000/);
@@ -118,7 +126,7 @@ test("the H2H board applies the V2 traceability gate before rendering scores", (
   assert.match(controller, /const traceable = traceableH2HBoard\(board\);/);
   assert.match(
     controller,
-    /scrubUntraceableH2HMatches\(board\.matches \|\| \[\]\)/,
+    /scrubUntraceableH2HMatches\(candidateMatches\)/,
   );
   assert.match(
     controller,
@@ -136,6 +144,28 @@ test("an unavailable H2H refresh retains the last complete board", () => {
     /board\.availability !== "READY" && this\.data\.hasData && this\.data\.h2hActive/,
   );
   assert.match(controller, /errorSuffix: "当前显示上次成功结果"/);
+});
+
+test("a single H2H match refresh cannot erase its same-event READY LKG", () => {
+  const controller = source(
+    "miniprogram/pages/live/tournament/tournament.controller.ts",
+  );
+  const helper = source("miniprogram/utils/official-h2h.ts");
+
+  assert.match(helper, /export function retainOfficialH2HMatches/);
+  assert.match(helper, /export function canRetainOfficialH2HStandings/);
+  assert.match(helper, /previousMatch\.availability !== "READY"/);
+  assert.match(helper, /MATCH_PUBLICATION_FALLBACK/);
+  assert.match(
+    controller,
+    /retainOfficialH2HMatches\(this\.h2hMatchSnapshot, candidateMatches\)/,
+  );
+  assert.match(controller, /h2hMatchSnapshot: \[\] as H2HMatch\[\]/);
+  assert.match(
+    controller,
+    /canRetainOfficialH2HStandings\(this\.h2hBoardSnapshot, board\)/,
+  );
+  assert.match(controller, /h2hBoardSnapshot = null/);
 });
 
 test("the H2H template renders standings, fixtures and the setup card", () => {

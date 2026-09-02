@@ -176,6 +176,24 @@ export function traceableH2HBoard(board: H2HBoard | null | undefined): boolean {
   );
 }
 
+export function canRetainOfficialH2HStandings(
+  previous: H2HBoard | null | undefined,
+  next: H2HBoard,
+): boolean {
+  if (
+    !previous ||
+    previous.eventId !== next.eventId ||
+    !previous.standings ||
+    !previous.revisions ||
+    !next.revisions
+  ) {
+    return false;
+  }
+  return (["roster", "fixtureIdentity", "identity"] as const).every(
+    (key) => previous.revisions?.[key] === next.revisions?.[key],
+  );
+}
+
 export function sortH2HStandings(rows: readonly H2HStanding[]): H2HStanding[] {
   return [...rows].sort((left, right) => {
     const leftRank = left.rank ?? Number.MAX_SAFE_INTEGER;
@@ -198,6 +216,76 @@ export function scrubUntraceableH2HMatches(
     home: { ...match.home, points: null, netPoints: null },
     away: { ...match.away, points: null, netPoints: null },
   }));
+}
+
+function sameH2HMatchIdentity(left: H2HMatch, right: H2HMatch): boolean {
+  return (
+    left.officialMatchId === right.officialMatchId &&
+    left.eventId === right.eventId &&
+    left.groupId === right.groupId &&
+    left.sourceOrder === right.sourceOrder &&
+    left.phase === right.phase &&
+    left.knockoutName === right.knockoutName &&
+    left.tiebreak === right.tiebreak &&
+    left.isBye === right.isBye &&
+    left.home.entryId === right.home.entryId &&
+    left.away.entryId === right.away.entryId &&
+    left.home.isAverage === right.home.isAverage &&
+    left.away.isAverage === right.away.isAverage
+  );
+}
+
+/**
+ * Keep a same-event READY match when a newer composite response temporarily
+ * reports that match as PENDING/ERROR. The match publication is the LKG
+ * boundary; never retain a row after its schedule identity changes.
+ */
+export function retainOfficialH2HMatches(
+  previous: readonly H2HMatch[],
+  next: readonly H2HMatch[],
+): H2HMatch[] {
+  if (previous.length === 0 || previous.length !== next.length) {
+    return [...next];
+  }
+  const previousById = new Map(
+    previous.map((match) => [match.officialMatchId, match]),
+  );
+  const nextIds = new Set(next.map((match) => match.officialMatchId));
+  if (
+    previous.some((match) => !nextIds.has(match.officialMatchId)) ||
+    next.some((match) => !previousById.has(match.officialMatchId))
+  ) {
+    return [...next];
+  }
+  return next.map((match) => {
+    const previousMatch = previousById.get(match.officialMatchId);
+    if (
+      !previousMatch ||
+      previousMatch.availability !== "READY" ||
+      (match.availability !== "PENDING" && match.availability !== "ERROR") ||
+      !sameH2HMatchIdentity(previousMatch, match)
+    ) {
+      return match;
+    }
+    return {
+      ...previousMatch,
+      delivery: {
+        ...previousMatch.delivery,
+        state:
+          previousMatch.delivery.state === "FINAL" ? "FINAL" : "DEGRADED",
+        servedFrom:
+          previousMatch.delivery.servedFrom === "FINAL_RESULT"
+            ? "FINAL_RESULT"
+            : "PROCESS_LKG",
+        reasonCodes: [
+          ...new Set([
+            ...previousMatch.delivery.reasonCodes,
+            "MATCH_PUBLICATION_FALLBACK",
+          ]),
+        ],
+      },
+    };
+  });
 }
 
 export function shouldShowH2HStandings(
