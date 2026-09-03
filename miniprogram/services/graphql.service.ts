@@ -75,6 +75,10 @@ interface GraphQLResponse<T> {
   errors?: GraphQLErrorInfo[];
 }
 
+export type GraphQLContractVersion =
+  | "live-points-v2"
+  | "my-tournament-review-v2.1";
+
 export interface GraphQLOptions {
   authMode?: GraphQLAuthMode;
   cachePolicy?: GraphQLCachePolicyName;
@@ -94,7 +98,7 @@ export interface GraphQLOptions {
   /** Keep the prior authoritative value when a network response fails validation. */
   preserveCacheOnValidationFailure?: boolean;
   /** Explicit consumer contract required by version-gated GraphQL roots. */
-  contract?: "my-tournament-review-v2.1";
+  contract?: GraphQLContractVersion;
 }
 
 export interface PageRequestTrace {
@@ -184,7 +188,7 @@ interface ResolvedRequestPolicy {
   cacheVariant: string;
   cacheable: boolean;
   workload: GraphQLWorkload;
-  contract?: "my-tournament-review-v2.1";
+  contract?: GraphQLContractVersion;
 }
 
 export class GraphQLTransportError extends Error {
@@ -542,7 +546,7 @@ export function buildGraphQLRequestHeaders(
   authMode: GraphQLAuthMode,
   token: string | null,
   deviceId: string,
-  contract?: "my-tournament-review-v2.1",
+  contract?: GraphQLContractVersion,
 ): Record<string, string> {
   const header: Record<string, string> = {
     "content-type": "application/json",
@@ -610,7 +614,7 @@ function makeRequest<T>(
   operationName: string,
   authMode: GraphQLAuthMode,
   workload: GraphQLWorkload,
-  contract: "my-tournament-review-v2.1" | undefined,
+  contract: GraphQLContractVersion | undefined,
   retryOnUnauthorized = true,
   token = authMode === "session" ? getApiSessionToken() : null,
   onNetworkAttempt?: () => void,
