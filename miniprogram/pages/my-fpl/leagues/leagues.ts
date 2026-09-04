@@ -510,10 +510,7 @@ PerformancePage({
   retryScope: null as MyTournamentReviewScope | null,
   retryPhaseId: null as string | null,
   retryAfter: null as string | null,
-  retryBySurface: {
-    gameweek: null,
-    season: null,
-  } as Record<ReviewSurface, ReviewSurfaceRetry>,
+  retryBySurface: null as unknown as Record<ReviewSurface, ReviewSurfaceRetry>,
   loadedEntryId: 0,
   hasLoadedEntryBinding: false,
   loadedContextRevision: 0,
@@ -530,6 +527,13 @@ PerformancePage({
   } | null,
 
   async onLoad() {
+    // Nested objects declared on the Page definition are deep-cloned by the
+    // runtime and trigger a DevTools "Free data" warning. This state belongs
+    // to the concrete page instance, so initialize it at the lifecycle edge.
+    this.retryBySurface = {
+      gameweek: null,
+      season: null,
+    };
     this.pageVisible = true;
     const revision = this.lifecycleRevision;
     await waitForAuthoritativeFollow();

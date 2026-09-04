@@ -17,6 +17,20 @@ test("team detail Retry forces the cached team read", () => {
   assert.match(service, /cachePolicy: "team-directory"[\s\S]*forceRefresh/);
 });
 
+test("team detail renders current contract fields and explains pending records", () => {
+  const page = read("miniprogram/pages/data/team-detail/team-detail.ts");
+  const template = read("miniprogram/pages/data/team-detail/team-detail.wxml");
+  const directory = read("miniprogram/pages/data/teams/teams.wxml");
+  const service = read("miniprogram/services/team.service.ts");
+
+  assert.match(service, /export const TEAM[\s\S]*played[\s\S]*strengthOverallHome[\s\S]*strengthOverallAway/);
+  assert.match(page, /buildTeamSummaryPresentation/);
+  assert.match(template, /赛季战绩尚未同步/);
+  assert.match(template, /主客场强度/);
+  assert.match(directory, /基础资料、赛季战绩和强度/);
+  assert.doesNotMatch(directory, /阵容、赛程和定位球/);
+});
+
 test("Live Tournament preserves forced startup across hide and show", () => {
   const page = read("miniprogram/pages/live/tournament/tournament.controller.ts");
   assert.match(page, /resumeStartupForceRefresh/);

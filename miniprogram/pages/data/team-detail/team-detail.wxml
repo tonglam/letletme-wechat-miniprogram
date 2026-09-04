@@ -25,10 +25,30 @@
     <view class="section card">
       <view class="strength-row">
         <text class="strength-label">强度</text>
-        <view class="strength-dots">
+        <view wx:if="{{hasStrength}}" class="strength-dots">
           <view wx:for="{{strengthDots}}" wx:key="index" class="strength-dot {{item ? 'on' : ''}}"></view>
         </view>
-        <text class="strength-value">{{team.strength || '-'}} / 5</text>
+        <text wx:if="{{hasStrength}}" class="strength-value">{{team.strength}} / 5</text>
+        <text wx:else class="strength-pending">综合强度待同步</text>
+      </view>
+    </view>
+    <view class="section card team-detail-card">
+      <view class="section-heading">赛季战绩</view>
+      <view wx:if="{{hasSeasonRecord}}" class="team-metric-grid">
+        <view wx:for="{{seasonMetrics}}" wx:key="label" class="team-metric">
+          <text class="team-metric-label">{{item.label}}</text>
+          <text class="team-metric-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:else class="team-data-note">赛季战绩尚未同步，以下仅展示已发布的球队强度。</view>
+    </view>
+    <view wx:if="{{venueStrengths.length}}" class="section card team-detail-card">
+      <view class="section-heading">主客场强度</view>
+      <view class="venue-strength-list">
+        <view wx:for="{{venueStrengths}}" wx:key="label" class="venue-strength-row">
+          <text class="team-metric-label">{{item.label}}</text>
+          <text class="team-metric-value">{{item.value}}</text>
+        </view>
       </view>
     </view>
   </block>

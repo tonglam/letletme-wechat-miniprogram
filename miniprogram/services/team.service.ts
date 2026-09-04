@@ -1,13 +1,21 @@
 import { graphqlRequest, type PageRequestTrace } from "./graphql.service";
 import type { TeamSummary } from "../models/team";
 
-const TEAM = `
+export const TEAM = `
   query Team($id: Int!) {
     team(id: $id) {
       id
       name
       shortName
       strength
+      position
+      points
+      played
+      win
+      draw
+      loss
+      strengthOverallHome
+      strengthOverallAway
     }
   }
 `;
@@ -17,7 +25,15 @@ interface TeamResponse {
     id: number;
     name: string;
     shortName: string;
-    strength: number;
+    strength: number | null;
+    position: number;
+    points: number;
+    played: number;
+    win: number;
+    draw: number;
+    loss: number;
+    strengthOverallHome: number;
+    strengthOverallAway: number;
   } | null;
 }
 
@@ -42,7 +58,15 @@ export async function getTeamSummary(
     id: data.team.id,
     name: data.team.name,
     shortName: data.team.shortName,
-    strength: data.team.strength
+    strength: data.team.strength,
+    position: data.team.position,
+    points: data.team.points,
+    played: data.team.played,
+    win: data.team.win,
+    draw: data.team.draw,
+    loss: data.team.loss,
+    strengthOverallHome: data.team.strengthOverallHome,
+    strengthOverallAway: data.team.strengthOverallAway
   };
 }
 

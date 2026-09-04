@@ -4,6 +4,7 @@ import {
   REQUEST_TIMEOUT_MS,
 } from "../config/env";
 import { storageKeys } from "../config/storage-keys";
+import { devicePlatform } from "../utils/system-info";
 
 export type ClientTelemetrySurface =
   | "home"
@@ -120,7 +121,7 @@ function currentEnvironment(): {
   const synthetic = getMiniProgramEnv() === "develop";
   let isDevTools = false;
   try {
-    isDevTools = wx.getSystemInfoSync().platform === "devtools";
+    isDevTools = devicePlatform() === "devtools";
   } catch {
     // Node tests and older runtimes default to the real-device bucket.
   }

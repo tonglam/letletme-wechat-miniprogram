@@ -2,7 +2,15 @@ export interface TeamSummary {
   id?: number | string;
   name: string;
   shortName?: string;
-  strength?: number;
+  strength?: number | null;
+  position?: number;
+  points?: number;
+  played?: number;
+  win?: number;
+  draw?: number;
+  loss?: number;
+  strengthOverallHome?: number;
+  strengthOverallAway?: number;
 }
 
 export interface TeamFixture {

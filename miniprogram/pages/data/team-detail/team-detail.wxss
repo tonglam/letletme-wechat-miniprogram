@@ -32,3 +32,69 @@
   font-size: 24rpx;
   font-weight: 800;
 }
+
+.strength-pending,
+.team-data-note {
+  color: var(--muted-ink);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.strength-pending {
+  margin-left: auto;
+}
+
+.team-detail-card .section-heading {
+  margin-bottom: 20rpx;
+}
+
+.team-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.team-metric {
+  padding: 18rpx;
+  border-radius: 12rpx;
+  background: var(--track);
+}
+
+.team-metric-label,
+.team-metric-value {
+  display: block;
+}
+
+.team-metric-label {
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
+.team-metric-value {
+  margin-top: 8rpx;
+  color: var(--ink);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.venue-strength-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.venue-strength-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.venue-strength-row:last-child {
+  border-bottom: 0;
+}
+
+.venue-strength-row .team-metric-value {
+  margin-top: 0;
+  font-size: 24rpx;
+}

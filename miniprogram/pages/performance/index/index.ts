@@ -9,6 +9,7 @@ import {
   formatDuration,
   nearestRankDuration
 } from "../../../utils/performance-summary";
+import { deviceSystem } from "../../../utils/system-info";
 
 type Rating = "good" | "avg" | "poor" | "none";
 
@@ -173,9 +174,7 @@ PerformancePage({
     wx.getNetworkType({
       success: (res) => this.setData({ networkType: formatNetworkType(res.networkType) })
     });
-    wx.getSystemInfo({
-      success: (info) => this.setData({ system: info.system || "-" })
-    });
+    this.setData({ system: deviceSystem() || "-" });
   },
 
   onRefresh() {

@@ -95,3 +95,19 @@ test("deprecated getSystemInfoSync stays behind the system-info helper", () => {
   assert.match(helper, /getWindowInfo/);
   assert.match(helper, /getDeviceInfo/);
 });
+
+test("performance diagnostics read system details through the modern helper", () => {
+  const page = source("miniprogram/pages/performance/index/index.ts");
+  const helper = source("miniprogram/utils/system-info.ts");
+  assert.match(page, /deviceSystem\(\)/);
+  assert.doesNotMatch(page, /wx\.getSystemInfo\(/);
+  assert.match(helper, /export function deviceSystem/);
+});
+
+test("active gameweeks do not present zero placeholders as published scores", () => {
+  const page = source("miniprogram/pages/summary/gameweek/gameweek.ts");
+  assert.match(
+    page,
+    /HEADLINE_LABELS\.indexOf\(row\.label\) < 0 \|\| Number\(row\.value\) > 0/,
+  );
+});
