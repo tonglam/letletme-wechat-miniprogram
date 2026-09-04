@@ -51,6 +51,8 @@ const { ENTRY_LOOKUP_QUERY } =
   await import("../miniprogram/services/entry.service.ts");
 const { PLAYER_DETAIL } =
   await import("../miniprogram/services/player.service.ts");
+const { TEAM } =
+  await import("../miniprogram/services/team.service.ts");
 const {
   LIVE_MATCHES_CONTRACT_VERSION,
   LIVE_POINTS_CONTRACT_VERSION,
@@ -97,6 +99,7 @@ const operations = [
   ["TOURNAMENT_ENTRY_SQUADS_QUERY", TOURNAMENT_ENTRY_SQUADS_QUERY],
   ["ENTRY_LOOKUP_QUERY", ENTRY_LOOKUP_QUERY],
   ["PLAYER_DETAIL", PLAYER_DETAIL],
+  ["TEAM", TEAM],
 ];
 
 const rootFieldsForDocument = (document) => {

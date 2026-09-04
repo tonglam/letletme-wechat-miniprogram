@@ -1,6 +1,6 @@
 <view class="page page-tabbar">
   <view class="section">
-    <view class="subtitle">20 支球队的阵容、赛程和定位球。</view>
+    <view class="subtitle">20 支球队的基础资料、赛季战绩和强度。</view>
   </view>
 
   <app-error-state id="perf-primary-content" wx:if="{{error}}" message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />

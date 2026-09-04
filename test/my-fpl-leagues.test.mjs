@@ -137,3 +137,12 @@ test("review pagination and resident payloads are fenced across retries and seas
   );
   assert.match(template, /wx:if="\{\{v2Error\}\}"[\s\S]*transient="\{\{false\}\}"/);
 });
+
+test("nested retry state is initialized on the page instance", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(page, /retryBySurface: null as unknown/);
+  assert.match(
+    page,
+    /async onLoad\(\) \{[\s\S]*this\.retryBySurface = \{[\s\S]*gameweek: null,[\s\S]*season: null/,
+  );
+});

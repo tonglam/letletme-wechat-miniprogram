@@ -9,6 +9,11 @@ import {
   type PageRequestTrace
 } from "../../../services/graphql.service";
 
+interface TeamMetric {
+  label: string;
+  value: string;
+}
+
 PerformancePage({
   data: {
     loading: false,
@@ -18,7 +23,11 @@ PerformancePage({
     teamId: "",
     season: "",
     team: undefined as TeamSummary | undefined,
-    strengthDots: [] as boolean[]
+    strengthDots: [] as boolean[],
+    hasStrength: false,
+    hasSeasonRecord: false,
+    seasonMetrics: [] as TeamMetric[],
+    venueStrengths: [] as TeamMetric[]
   },
 
   routeSeason: "",
@@ -102,10 +111,10 @@ PerformancePage({
       this.setData({ season, errorWorkload: "player-stats" });
       const team = await getTeamSummary(this.data.teamId, season, forceRefresh, trace);
       if (!isActiveRequest()) return;
-      const strength = Math.max(0, Math.min(5, Number(team.strength) || 0));
+      const presentation = buildTeamSummaryPresentation(team);
       this.setData({
         team,
-        strengthDots: Array.from({ length: 5 }, (_, index) => index < strength)
+        ...presentation
       });
       setPageTitle(team.name || "球队详情");
     } catch (error) {
@@ -131,3 +140,54 @@ PerformancePage({
     wx.redirectTo({ url: routes.dataTeams });
   }
 });
+
+export function buildTeamSummaryPresentation(team: TeamSummary): {
+  strengthDots: boolean[];
+  hasStrength: boolean;
+  hasSeasonRecord: boolean;
+  seasonMetrics: TeamMetric[];
+  venueStrengths: TeamMetric[];
+} {
+  const strength = boundedStrength(team.strength);
+  const played = nonNegativeInteger(team.played);
+  const hasSeasonRecord = played > 0;
+  const venueStrengths = [
+    { label: "主场整体", value: boundedStrength(team.strengthOverallHome) },
+    { label: "客场整体", value: boundedStrength(team.strengthOverallAway) }
+  ]
+    .filter((metric) => metric.value > 0)
+    .map((metric) => ({ label: metric.label, value: `${metric.value} / 5` }));
+
+  return {
+    strengthDots: Array.from({ length: 5 }, (_, index) => index < strength),
+    hasStrength: strength > 0,
+    hasSeasonRecord,
+    seasonMetrics: hasSeasonRecord ? [
+      { label: "排名", value: positiveIntegerText(team.position) },
+      { label: "积分", value: String(nonNegativeInteger(team.points)) },
+      { label: "已赛", value: String(played) },
+      {
+        label: "战绩",
+        value: `${nonNegativeInteger(team.win)}胜 ${nonNegativeInteger(team.draw)}平 ${nonNegativeInteger(team.loss)}负`
+      }
+    ] : [],
+    venueStrengths
+  };
+}
+
+function boundedStrength(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(5, Math.round(parsed)));
+}
+
+function nonNegativeInteger(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.round(parsed));
+}
+
+function positiveIntegerText(value: unknown): string {
+  const parsed = nonNegativeInteger(value);
+  return parsed > 0 ? String(parsed) : "-";
+}

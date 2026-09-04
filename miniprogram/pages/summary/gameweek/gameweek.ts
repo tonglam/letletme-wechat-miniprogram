@@ -526,7 +526,7 @@ function mapGameweekData(
 
 const HEADLINE_LABELS = ["最高分", "平均分"];
 
-function mapOverallStats(
+export function mapOverallStats(
   summary: SummaryRecord,
   transfersInRows: DisplayRow[],
   transfersOutRows: DisplayRow[]
@@ -582,7 +582,10 @@ function mapOverallStats(
       label: "最多转出",
       value: transfersOutRows[0]?.title || fieldText(summary, ["mostTransferredOutWebName", "mostTransferOutWebName"])
     }
-  ].filter((row) => row.value !== "-");
+  ].filter((row) => (
+    row.value !== "-"
+    && (HEADLINE_LABELS.indexOf(row.label) < 0 || Number(row.value) > 0)
+  ));
 }
 
 function formatPlayerTeam(playerName: string, teamShortName: string): string {

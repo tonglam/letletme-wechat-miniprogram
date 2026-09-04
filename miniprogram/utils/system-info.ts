@@ -6,7 +6,7 @@
  * the modern API exists, so no deprecation warning fires on current clients.
  */
 type WindowInfoLike = { pixelRatio?: unknown };
-type DeviceInfoLike = { platform?: unknown };
+type DeviceInfoLike = { platform?: unknown; system?: unknown };
 
 export function windowPixelRatio(): number {
   const getWindowInfo = (wx as unknown as { getWindowInfo?: () => WindowInfoLike }).getWindowInfo;
@@ -18,4 +18,10 @@ export function devicePlatform(): string {
   const getDeviceInfo = (wx as unknown as { getDeviceInfo?: () => DeviceInfoLike }).getDeviceInfo;
   const info = typeof getDeviceInfo === "function" ? getDeviceInfo() : wx.getSystemInfoSync();
   return String(info.platform ?? "");
+}
+
+export function deviceSystem(): string {
+  const getDeviceInfo = (wx as unknown as { getDeviceInfo?: () => DeviceInfoLike }).getDeviceInfo;
+  const info = typeof getDeviceInfo === "function" ? getDeviceInfo() : wx.getSystemInfoSync();
+  return String(info.system ?? "");
 }

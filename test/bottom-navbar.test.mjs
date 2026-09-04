@@ -104,11 +104,17 @@ test("tab bar centers icon+label in the full visual bar height", () => {
   assert.match(appWxss, /--tabbar-floor:\s*6px/);
   assert.doesNotMatch(barWxml, /van-tabbar/);
   assert.doesNotMatch(barWxml, /<van-icon/);
+  assert.doesNotMatch(barWxml, /van-icon-/);
   assert.match(barWxml, /bindtap="onTapTab"/);
   assert.match(barWxml, /edgeVisible && !show/);
   assert.doesNotMatch(barWxml, /<cover-view/);
-  assert.match(barWxml, /van-icon-\{\{item\.icon\}\}/);
+  assert.match(barWxml, /ll-tabbar-icon--\{\{item\.name\}\}/);
   assert.match(barWxml, /<privacy-dialog/);
+  assert.doesNotMatch(barWxss, /miniprogram_npm\/@vant\/weapp\/icon/);
+  assert.doesNotMatch(barWxss, /at\.alicdn\.com/);
+  for (const name of ["live", "myFpl", "explore", "me", "perf"]) {
+    assert.match(barWxss, new RegExp(`ll-tabbar-icon--${name}`));
+  }
   assert.match(
     readFileSync(join(root, "components/navigation/bottomNavBar/bottomNavBar.json"), "utf8"),
     /privacy-dialog/
@@ -116,6 +122,33 @@ test("tab bar centers icon+label in the full visual bar height", () => {
   assert.match(barWxss, /\.ll-tabbar-item\s*\{[^}]*justify-content:\s*center/s);
   assert.match(barWxss, /\.ll-tabbar-item\s*\{[^}]*height:\s*100%/s);
   assert.match(barWxss, /\.ll-tabbar\s*\{[^}]*height:\s*calc\(\s*var\(--tabbar-height\)/s);
+});
+
+test("a detached bottom nav ignores an already-queued edge reveal", () => {
+  const { context } = navbarContext("pages/live/index/index", "live");
+  let callback;
+  let setDataCalls = 0;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (next) => {
+    callback = next;
+    return 17;
+  };
+  globalThis.clearTimeout = () => {};
+  context.setData = function (patch) {
+    setDataCalls += 1;
+    this.data = { ...this.data, ...patch };
+  };
+  try {
+    navbar.lifetimes.attached.call(context);
+    navbar.lifetimes.detached.call(context);
+    callback();
+    assert.equal(context.data.edgeVisible, false);
+    assert.equal(setDataCalls, 2, "only attached synchronization may update component data");
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
 });
 
 test("gameweek and data routes derive the explore highlight; summary/tournament derives none", () => {

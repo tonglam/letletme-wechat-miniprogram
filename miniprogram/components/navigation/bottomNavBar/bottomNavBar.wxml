@@ -10,7 +10,9 @@
       bindtap="onTapTab"
       data-name="{{item.name}}"
     >
-      <view class="van-icon van-icon-{{item.icon}} ll-tabbar-icon"></view>
+      <view class="ll-tabbar-icon ll-tabbar-icon--{{item.name}}" aria-hidden="true">
+        <view class="ll-tabbar-icon-core" />
+      </view>
       <text class="ll-tabbar-label">{{item.label}}</text>
     </view>
   </view>

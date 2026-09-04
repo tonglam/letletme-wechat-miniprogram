@@ -13,18 +13,23 @@ interface NavMenu {
 
 interface NavTab {
   name: string;
-  icon: string;
   label: string;
 }
 
 const TABS: NavTab[] = [
-  { name: "live", icon: "fire-o", label: "实时" },
-  { name: "myFpl", icon: "user-o", label: "我的FPL" },
-  { name: "explore", icon: "guide-o", label: "探索" },
-  { name: "me", icon: "manager-o", label: "我" }
+  { name: "live", label: "实时" },
+  { name: "myFpl", label: "我的FPL" },
+  { name: "explore", label: "探索" },
+  { name: "me", label: "我" }
 ];
 
-const PERF_TAB: NavTab = { name: "perf", icon: "chart-trending-o", label: "性能" };
+const PERF_TAB: NavTab = { name: "perf", label: "性能" };
+
+type BottomNavHost = WechatMiniprogram.Component.TrivialInstance & {
+  edgeRevealTimer?: number;
+  edgeRevealRevision?: number;
+  edgeRevealDetached?: boolean;
+};
 
 const MENU_MAP: Record<string, NavMenu> = {
   me: {
@@ -132,11 +137,13 @@ Component({
 
   lifetimes: {
     attached() {
+      (this as BottomNavHost).edgeRevealDetached = false;
       this.syncPerfVisibility();
       this.setActiveFromRoute();
       this.scheduleEdgeReveal();
     },
     detached() {
+      (this as BottomNavHost).edgeRevealDetached = true;
       this.clearEdgeReveal();
     }
   },
@@ -225,17 +232,23 @@ Component({
 
     scheduleEdgeReveal() {
       this.clearEdgeReveal();
-      const host = this as WechatMiniprogram.Component.TrivialInstance & { edgeRevealTimer?: number };
+      const host = this as BottomNavHost;
+      if (host.edgeRevealDetached) return;
+      const revision = (host.edgeRevealRevision ?? 0) + 1;
+      host.edgeRevealRevision = revision;
       host.edgeRevealTimer = setTimeout(() => {
+        if (host.edgeRevealRevision !== revision) return;
         host.edgeRevealTimer = 0;
-        if (!this.data.show && !this.data.edgeVisible) {
-          this.setData({ edgeVisible: true });
+        if (host.edgeRevealDetached) return;
+        if (!host.data.show && !host.data.edgeVisible) {
+          host.setData({ edgeVisible: true });
         }
       }, 360) as unknown as number;
     },
 
     clearEdgeReveal() {
-      const host = this as WechatMiniprogram.Component.TrivialInstance & { edgeRevealTimer?: number };
+      const host = this as BottomNavHost;
+      host.edgeRevealRevision = (host.edgeRevealRevision ?? 0) + 1;
       if (host.edgeRevealTimer) {
         clearTimeout(host.edgeRevealTimer);
         host.edgeRevealTimer = 0;

@@ -10,7 +10,10 @@ import { storageKeys } from "../miniprogram/config/storage-keys.ts";
 function installWx(storage, requests, onRequest = () => {}, { envVersion = "release", platform = "ios" } = {}) {
   globalThis.wx = {
     getAccountInfoSync: () => ({ miniProgram: { envVersion } }),
-    getSystemInfoSync: () => ({ platform }),
+    getDeviceInfo: () => ({ platform }),
+    getSystemInfoSync: () => {
+      throw new Error("modern runtimes must not use deprecated getSystemInfoSync");
+    },
     getStorageSync: (key) => storage.get(key),
     setStorageSync: (key, value) => storage.set(key, value),
     removeStorageSync: (key) => storage.delete(key),
