@@ -974,9 +974,10 @@ function validateSelectionIndex(
         missing.push(path);
         return;
       }
-      for (const field of ["playerId", "teamId", "count"]) {
+      for (const field of ["playerId", "teamId"]) {
         if (!isPositiveInteger(value[field])) missing.push(`${path}.${field}`);
       }
+      if (!isNonNegativeInteger(value.count)) missing.push(`${path}.count`);
       for (const field of [
         "playerName",
         "teamName",
