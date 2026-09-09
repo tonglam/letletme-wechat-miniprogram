@@ -41,6 +41,7 @@ const {
   boardRowsWithViewer,
   clearAllLiveBoardLastGood,
   getEntryLiveCompetitionBoardPage,
+  getTournamentSelectionIndex,
   isCompleteLiveBoardPage,
   liveBoardLastGoodKey,
   parseLeagueLiveHead,
@@ -214,6 +215,66 @@ beforeEach(async () => {
   purgeGraphQLStorageCache();
   await restoreSession();
 });
+
+function selectionIndexResponse(rowOverrides = {}) {
+  return {
+    tournamentId: 3,
+    eventId: 3,
+    scoreCoreRevision: "score-r1",
+    rows: [{
+      playerId: 11,
+      playerName: "Mosquera",
+      teamId: 1,
+      teamName: "Arsenal",
+      teamShortName: "ARS",
+      position: "DEFENDER",
+      count: 0,
+      percentage: 0,
+      ...rowOverrides,
+    }],
+  };
+}
+
+function selectionIndexSuccess(index) {
+  return (options) => options.success({
+    statusCode: 200,
+    header: { "x-request-id": "request-selection-index" },
+    data: { data: { tournamentSelectionIndex: index } },
+  });
+}
+
+const selectionIndexRequest = {
+  entryId: 123,
+  tournamentId: 3,
+  ref: { season: "2026", eventId: 3, scoreCoreRevision: "score-r1" },
+};
+
+test("selection index preserves zero-ownership players through the request boundary", async () => {
+  const index = selectionIndexResponse();
+  installRuntime(selectionIndexSuccess(index));
+
+  assert.deepEqual(await getTournamentSelectionIndex(selectionIndexRequest), index);
+  assert.equal(requests.length, 1);
+});
+
+for (const [field, value] of [
+  ["count", -1],
+  ["count", 0.5],
+  ["count", "0"],
+  ["count", null],
+  ["playerId", 0],
+  ["teamId", 0],
+]) {
+  test(`selection index rejects invalid ${field} ${JSON.stringify(value)}`, async () => {
+    installRuntime(selectionIndexSuccess(selectionIndexResponse({ [field]: value })));
+
+    await assert.rejects(
+      getTournamentSelectionIndex(selectionIndexRequest),
+      (error) => error instanceof LiveBoardInvalidResponseError &&
+        error.missingFields.includes(`rows[0].${field}`),
+    );
+  });
+}
 
 test("light board parser requires the complete V2 contract and never requests pickList", () => {
   assert.equal(
