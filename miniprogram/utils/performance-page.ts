@@ -1,4 +1,7 @@
-import { PagePerformanceTracker } from "./page-performance";
+import {
+  consumeAppBackgroundResume,
+  PagePerformanceTracker,
+} from "./page-performance";
 
 type Lifecycle = (this: InstrumentedPage, ...args: unknown[]) => unknown;
 
@@ -121,7 +124,10 @@ export const PerformancePage = ((options: unknown): void => {
     onLoad(this: InstrumentedPage, ...args: unknown[]) {
       wrapSetData(this);
       this.__performanceVisible = true;
-      const generation = startTracker(this, "cold-launch");
+      const generation = startTracker(
+        this,
+        consumeAppBackgroundResume() ? "warm-enter" : "cold-launch",
+      );
       beginLifecycle(this, generation);
       const result = originalOnLoad?.apply(this, args);
       observeLifecycleSettlement(result, this, generation);
@@ -131,7 +137,10 @@ export const PerformancePage = ((options: unknown): void => {
       this.__performanceVisible = true;
       let generation = this.__performanceGeneration ?? 0;
       if (this.__performanceShown) {
-        generation = startTracker(this, "warm-enter");
+        generation = startTracker(
+          this,
+          consumeAppBackgroundResume() ? "warm-enter" : "in-page-navigation",
+        );
       }
       this.__performanceShown = true;
       beginLifecycle(this, generation);

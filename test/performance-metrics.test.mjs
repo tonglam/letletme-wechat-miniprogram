@@ -14,6 +14,8 @@ globalThis.wx = {
 const { clearPerf, flushPerfNow, getPerf, recordApi } = await import("../miniprogram/utils/perf.ts");
 const {
   PagePerformanceTracker,
+  markAppBackgrounded,
+  consumeAppBackgroundResume,
   getActivePagePerformanceTrace
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
@@ -150,6 +152,13 @@ test("page session classifies only the first load as cold and completion cannot 
   assert.equal(secondRecord.trigger, "in-page-navigation");
   second.disconnect();
   clearPerf();
+});
+
+test("page lifecycle consumes a background resume once", () => {
+  assert.equal(consumeAppBackgroundResume(), false);
+  markAppBackgrounded();
+  assert.equal(consumeAppBackgroundResume(), true);
+  assert.equal(consumeAppBackgroundResume(), false);
 });
 
 test("in-page navigation route-ready telemetry has its own measurement kind", () => {

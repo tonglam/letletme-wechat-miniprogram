@@ -429,9 +429,10 @@ test("client telemetry keeps samples from different releases in separate queues"
     });
     const persisted = storage.get(storageKeys.clientTelemetryQueue);
     assert.equal(persisted.schemaVersion, 2);
+    const currentRelease = miniClientRelease();
     assert.deepEqual(
       persisted.queues.map((item) => item.clientRelease).sort(),
-      ["miniprogram-development-development", "miniprogram-old-release-oldsha"],
+      [currentRelease, "miniprogram-old-release-oldsha"].sort(),
     );
     assert.equal(
       persisted.queues.find(
@@ -441,7 +442,7 @@ test("client telemetry keeps samples from different releases in separate queues"
     );
     assert.equal(
       persisted.queues.find(
-        (item) => item.clientRelease === "miniprogram-development-development",
+        (item) => item.clientRelease === currentRelease,
       ).samples.length,
       1,
     );

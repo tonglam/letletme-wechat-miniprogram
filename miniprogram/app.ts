@@ -25,6 +25,7 @@ import {
   requestDiagnosticDisclosure,
 } from "./utils/privacy";
 import { flushPerfNow } from "./utils/perf";
+import { markAppBackgrounded } from "./utils/page-performance";
 
 App<IAppOption>({
   globalData: {
@@ -110,6 +111,7 @@ App<IAppOption>({
   },
 
   onHide() {
+    markAppBackgrounded();
     void flushPerfNow();
     void flushClientTelemetry();
   },

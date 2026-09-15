@@ -19,6 +19,19 @@ function monotonicNow(): number {
 let sequence = 0;
 let activeTracker: PagePerformanceTracker | undefined;
 let coldLaunchClaimed = false;
+let appWasBackgrounded = false;
+
+/** Called by the app lifecycle so page onShow can distinguish a real resume. */
+export function markAppBackgrounded(): void {
+  appWasBackgrounded = true;
+}
+
+/** Consume the one page-show attribution for a real app background resume. */
+export function consumeAppBackgroundResume(): boolean {
+  if (!appWasBackgrounded) return false;
+  appWasBackgrounded = false;
+  return true;
+}
 
 function resolveTrigger(
   requested: PagePerformanceRecord["trigger"]
