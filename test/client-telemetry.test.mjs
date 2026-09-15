@@ -277,6 +277,48 @@ test("client runtime errors remain countable after an aggregate is acknowledged"
   }
 });
 
+test("client runtime errors after send acknowledgement stay queued separately", async () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map();
+  const requests = [];
+  try {
+    installWx(storage, requests);
+    recordClientRuntimeError(
+      Object.assign(new Error("first"), { name: "TypeError" }),
+    );
+    const firstFlush = flushClientTelemetry();
+    assert.equal(requests.length, 1);
+    recordClientRuntimeError(
+      Object.assign(new Error("second"), { name: "TypeError" }),
+    );
+    assert.equal(
+      storage.get(storageKeys.clientTelemetryQueue).samples.length,
+      2,
+    );
+    requests[0].success({ statusCode: 202, data: { accepted: true } });
+    await firstFlush;
+    const pending = storage.get(storageKeys.clientTelemetryQueue);
+    assert.equal(pending.samples.length, 1);
+    assert.equal(pending.samples[0].occurrenceCount, 1);
+  } finally {
+    globalThis.wx = previousWx;
+  }
+});
+
+test("client runtime error strings retain a bounded class and source location", () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map();
+  try {
+    installWx(storage, []);
+    recordClientRuntimeError("TypeError: secret at pages/home/home.ts:12:4");
+    const sample = storage.get(storageKeys.clientTelemetryQueue).samples[0];
+    assert.equal(sample.errorClass, "TypeError");
+    assert.equal(sample.fingerprint, "runtime.TypeError.pages.home.home.ts");
+  } finally {
+    globalThis.wx = previousWx;
+  }
+});
+
 test("client runtime errors cap distinct fingerprints and preserve overflow as other", () => {
   const previousWx = globalThis.wx;
   const storage = new Map();
@@ -304,6 +346,102 @@ test("client runtime errors cap distinct fingerprints and preserve overflow as o
           !Object.prototype.hasOwnProperty.call(sample, "message"),
       ),
     );
+  } finally {
+    globalThis.wx = previousWx;
+  }
+});
+
+test("client telemetry keeps samples from different releases in separate queues", () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map([
+    [
+      storageKeys.clientTelemetryQueue,
+      {
+        batchId: "11111111-1111-4111-8111-111111111111",
+        clientRelease: "miniprogram-old-release-oldsha",
+        samples: [
+          {
+            observedAt: new Date().toISOString(),
+            surface: "other",
+            metric: "update_failure",
+            deviceGroup: "wechat_phone",
+            sampleSource: "real",
+            result: "error",
+            reasonCode: "unknown",
+            measurementKind: "request",
+            samplingProbability: 1,
+          },
+        ],
+      },
+    ],
+  ]);
+  try {
+    installWx(storage, []);
+    enqueueClientTelemetry({
+      surface: "other",
+      metric: "update_failure",
+      result: "error",
+    });
+    const persisted = storage.get(storageKeys.clientTelemetryQueue);
+    assert.equal(persisted.schemaVersion, 2);
+    assert.deepEqual(
+      persisted.queues.map((item) => item.clientRelease).sort(),
+      ["miniprogram-development-development", "miniprogram-old-release-oldsha"],
+    );
+    assert.equal(
+      persisted.queues.find(
+        (item) => item.clientRelease === "miniprogram-old-release-oldsha",
+      ).samples.length,
+      1,
+    );
+    assert.equal(
+      persisted.queues.find(
+        (item) => item.clientRelease === "miniprogram-development-development",
+      ).samples.length,
+      1,
+    );
+  } finally {
+    globalThis.wx = previousWx;
+  }
+});
+
+test("client runtime error aggregates never exceed the persisted occurrence bound", () => {
+  const previousWx = globalThis.wx;
+  const storage = new Map([
+    [
+      storageKeys.clientTelemetryQueue,
+      {
+        batchId: "11111111-1111-4111-8111-111111111111",
+        clientRelease: miniClientRelease(),
+        samples: [
+          {
+            observedAt: new Date().toISOString(),
+            surface: "other",
+            metric: "runtime_error",
+            deviceGroup: "wechat_phone",
+            sampleSource: "real",
+            result: "error",
+            reasonCode: "unknown",
+            measurementKind: "request",
+            samplingProbability: 1,
+            errorClass: "TypeError",
+            fingerprint: "runtime.TypeError.unknown",
+            occurrenceCount: 1000,
+            firstObservedAt: new Date().toISOString(),
+            lastObservedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    ],
+  ]);
+  try {
+    installWx(storage, []);
+    recordClientRuntimeError(
+      Object.assign(new Error("another"), { name: "TypeError" }),
+    );
+    const samples = storage.get(storageKeys.clientTelemetryQueue).samples;
+    assert.ok(samples.length >= 2);
+    assert.ok(samples.every((sample) => sample.occurrenceCount <= 1000));
   } finally {
     globalThis.wx = previousWx;
   }

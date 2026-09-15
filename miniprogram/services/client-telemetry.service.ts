@@ -84,11 +84,17 @@ type InFlightTelemetrySlice = {
   samples: ClientTelemetrySample[];
 };
 
+type PendingTelemetryStorage = {
+  schemaVersion: 2;
+  queues: PendingTelemetryQueue[];
+};
+
 const MAX_QUEUE_SAMPLES = 100;
 const BATCH_SIZE = 50;
 const FLUSH_SAMPLE_COUNT = 20;
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_SAMPLE_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_OCCURRENCE_COUNT = 1000;
 const MAX_SAMPLE_VALUES: Partial<Record<ClientTelemetryMetric, number>> = {
   route_ready_ms: 10_000_000,
   api_duration_ms: 10_000_000,
@@ -157,6 +163,7 @@ const seenRuntimeErrorObjects = new WeakSet<object>();
 const runtimeErrorFingerprints = new Map<string, number>();
 
 let queue: PendingTelemetryQueue | null = null;
+let queues: PendingTelemetryQueue[] = [];
 let queueOwner: unknown;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushInFlight: Promise<void> | null = null;
@@ -186,18 +193,44 @@ function loadQueue(): PendingTelemetryQueue {
     const stored = wx.getStorageSync(
       storageKeys.clientTelemetryQueue,
     ) as unknown;
-    if (isQueue(stored)) {
-      queue = pruneExpiredSamples(stored);
-      persistQueue();
-      return queue;
-    }
+    const storedQueues = isTelemetryStorage(stored)
+      ? stored.queues
+      : isQueue(stored)
+        ? [stored]
+        : [];
+    queues = storedQueues
+      .map((candidate) => pruneExpiredSamples(candidate))
+      .filter((candidate) => candidate.samples.length > 0);
+    const currentRelease = miniClientRelease();
+    queue = queues.find(
+      (candidate) => candidate.clientRelease === currentRelease,
+    ) ?? {
+      batchId: createBatchId(),
+      clientRelease: currentRelease,
+      samples: [],
+    };
+    if (!queues.includes(queue)) queues.push(queue);
+    persistQueue();
+    return queue;
   } catch {}
+  queues = [];
   queue = {
     batchId: createBatchId(),
     clientRelease: miniClientRelease(),
     samples: [],
   };
+  queues.push(queue);
   return queue;
+}
+
+function isTelemetryStorage(value: unknown): value is PendingTelemetryStorage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<PendingTelemetryStorage>;
+  return (
+    candidate.schemaVersion === 2 &&
+    Array.isArray(candidate.queues) &&
+    candidate.queues.every(isQueue)
+  );
 }
 
 function isQueue(value: unknown): value is PendingTelemetryQueue {
@@ -317,19 +350,10 @@ function pruneExpiredSamples(
       timestamp <= now + 5 * 60 * 1000
     );
   });
-  // Once a queue is empty there is no older client evidence left to preserve;
-  // bind the next batch to the currently running build. Non-empty queues keep
-  // their producing build so delayed retries remain attributable.
-  const clientRelease =
-    samples.length > 0 ? value.clientRelease : miniClientRelease();
-  if (
-    samples.length === value.samples.length &&
-    clientRelease === value.clientRelease
-  )
-    return value;
+  if (samples.length === value.samples.length) return value;
   return {
     batchId: samples.length > 0 ? value.batchId : createBatchId(),
-    clientRelease,
+    clientRelease: value.clientRelease,
     samples,
   };
 }
@@ -337,7 +361,18 @@ function pruneExpiredSamples(
 function persistQueue(): void {
   if (!queue) return;
   try {
-    wx.setStorageSync(storageKeys.clientTelemetryQueue, queue);
+    const retainedQueues = queues.filter(
+      (candidate) => candidate.samples.length > 0 || candidate === queue,
+    );
+    wx.setStorageSync(
+      storageKeys.clientTelemetryQueue,
+      retainedQueues.length === 1
+        ? retainedQueues[0]
+        : ({
+            schemaVersion: 2,
+            queues: retainedQueues,
+          } satisfies PendingTelemetryStorage),
+    );
   } catch {
     // Telemetry is best effort and must never affect the product path.
   }
@@ -500,35 +535,48 @@ export async function flushClientTelemetry(): Promise<void> {
     await flushInFlight;
     return;
   }
-  const pending = pruneExpiredSamples(loadQueue());
-  queue = pending;
+  loadQueue();
+  queues = queues
+    .map((candidate) => pruneExpiredSamples(candidate))
+    .filter((candidate) => candidate.samples.length > 0 || candidate === queue);
   persistQueue();
-  if (!pending.samples.length) return;
-  const samples = pending.samples.slice(0, BATCH_SIZE);
+  const pendingQueues = queues.filter(
+    (candidate) => candidate.samples.length > 0,
+  );
+  if (!pendingQueues.length) return;
   const run = (async () => {
-    // Keep the sent objects protected until the acknowledgement arrives. New
-    // samples may be appended while the request is in flight, and queue cap
-    // eviction must never remove an unacknowledged sample.
-    inFlightSlice = { batchId: pending.batchId, samples };
-    let delivered = false;
-    try {
-      delivered = await sendBatch(pending, samples);
-    } catch {
-      delivered = false;
-    }
-    const current = loadQueue();
-    if (delivered && current.batchId === pending.batchId) {
-      const acknowledged = new Set(samples);
-      current.samples = current.samples.filter(
-        (candidate) => !acknowledged.has(candidate),
+    for (const pending of pendingQueues) {
+      // Keep the sent objects protected until the acknowledgement arrives. New
+      // samples may be appended while the request is in flight, and queue cap
+      // eviction must never remove an unacknowledged sample.
+      const samples = pending.samples.slice(0, BATCH_SIZE);
+      inFlightSlice = { batchId: pending.batchId, samples };
+      let delivered = false;
+      try {
+        delivered = await sendBatch(pending, samples);
+      } catch {
+        delivered = false;
+      }
+      const current = queues.find(
+        (candidate) => candidate.batchId === pending.batchId,
       );
-      // A new slice is a new idempotency unit. Retain the old batchId only
-      // while retrying this exact unacknowledged slice.
-      current.batchId = createBatchId();
-      persistQueue();
+      if (delivered && current) {
+        const acknowledged = new Set(samples);
+        current.samples = current.samples.filter(
+          (candidate) => !acknowledged.has(candidate),
+        );
+        // A new slice is a new idempotency unit. Retain the old batchId only
+        // while retrying this exact unacknowledged slice.
+        current.batchId = createBatchId();
+        if (current.samples.length === 0 && current !== queue) {
+          queues = queues.filter((candidate) => candidate !== current);
+        }
+        persistQueue();
+      }
+      inFlightSlice = null;
     }
-    inFlightSlice = null;
-    if (current.samples.length) scheduleFlush();
+    if (queues.some((candidate) => candidate.samples.length > 0))
+      scheduleFlush();
   })();
   flushInFlight = run;
   await run;
@@ -539,7 +587,7 @@ function runtimeErrorDetails(error: unknown): {
   errorClass: string;
   fingerprint: string;
 } {
-  const errorClass =
+  let errorClass =
     error &&
     typeof error === "object" &&
     "name" in error &&
@@ -547,26 +595,31 @@ function runtimeErrorDetails(error: unknown): {
       ? error.name.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64) || "unknown"
       : "unknown";
   let location = "unknown";
-  if (error && typeof error === "object" && "stack" in error) {
-    let stack: unknown;
+  let stack: unknown;
+  if (typeof error === "string") {
+    const message = error.slice(0, 8_192);
+    const classMatch = message.match(/^([A-Za-z][A-Za-z0-9._-]{0,63})\s*:/);
+    if (classMatch) errorClass = classMatch[1];
+    stack = message;
+  } else if (error && typeof error === "object" && "stack" in error) {
     try {
       stack = error.stack;
     } catch {
       stack = undefined;
     }
-    if (typeof stack === "string") {
-      for (const line of stack.slice(0, 8_192).split(/\r?\n/)) {
-        const match = line.match(
-          /(?:^|[\s/])((?:miniprogram\/)?(?:pages|components|services|utils|config)\/[A-Za-z0-9._/-]+)/,
-        );
-        if (!match) continue;
-        location = match[1]
-          .replace(/[^A-Za-z0-9._-]+/g, ".")
-          .replace(/^\.+|\.+$/g, "")
-          .slice(0, 80);
-        if (!location) location = "unknown";
-        break;
-      }
+  }
+  if (typeof stack === "string") {
+    for (const line of stack.slice(0, 8_192).split(/\r?\n/)) {
+      const match = line.match(
+        /(?:^|[\s/])((?:miniprogram\/)?(?:pages|components|services|utils|config)\/[A-Za-z0-9._/-]+)/,
+      );
+      if (!match) continue;
+      location = match[1]
+        .replace(/[^A-Za-z0-9._-]+/g, ".")
+        .replace(/^\.+|\.+$/g, "")
+        .slice(0, 80);
+      if (!location) location = "unknown";
+      break;
     }
   }
   return { errorClass, fingerprint: `runtime.${errorClass}.${location}` };
@@ -591,12 +644,16 @@ function mergeQueuedRuntimeError(
       sample.fingerprint === targetFingerprint,
   );
   if (targetSample) {
-    targetSample.occurrenceCount =
+    const combinedCount =
       (targetSample.occurrenceCount ?? 1) + (source.occurrenceCount ?? 1);
     const sourceFirst = source.firstObservedAt ?? source.observedAt;
     const sourceLast = source.lastObservedAt ?? source.observedAt;
     const targetFirst = targetSample.firstObservedAt ?? targetSample.observedAt;
     const targetLast = targetSample.lastObservedAt ?? targetSample.observedAt;
+    targetSample.occurrenceCount = Math.min(
+      MAX_OCCURRENCE_COUNT,
+      combinedCount,
+    );
     targetSample.firstObservedAt =
       Date.parse(sourceFirst) < Date.parse(targetFirst)
         ? sourceFirst
@@ -604,6 +661,15 @@ function mergeQueuedRuntimeError(
     targetSample.lastObservedAt =
       Date.parse(sourceLast) > Date.parse(targetLast) ? sourceLast : targetLast;
     target.samples.splice(sourceIndex, 1);
+    let remaining = combinedCount - MAX_OCCURRENCE_COUNT;
+    while (remaining > 0) {
+      const occurrenceCount = Math.min(MAX_OCCURRENCE_COUNT, remaining);
+      target.samples.push({
+        ...targetSample,
+        occurrenceCount,
+      });
+      remaining -= occurrenceCount;
+    }
     return;
   }
   target.samples[sourceIndex] = {
@@ -637,15 +703,24 @@ export function recordClientRuntimeError(error?: unknown): void {
     fingerprint = "runtime.other";
     errorClass = "other";
   }
+  const inFlightSamples =
+    inFlightSlice?.batchId === queueState.batchId
+      ? new Set(inFlightSlice.samples)
+      : null;
   const queued = queueState.samples.find(
     (sample) =>
       sample.metric === "runtime_error" &&
       sample.fingerprint === fingerprint &&
+      !inFlightSamples?.has(sample) &&
+      (sample.occurrenceCount ?? 1) < MAX_OCCURRENCE_COUNT &&
       Date.parse(sample.lastObservedAt ?? sample.observedAt) >=
         now - RUNTIME_ERROR_WINDOW_MS,
   );
   if (queued) {
-    queued.occurrenceCount = (queued.occurrenceCount ?? 1) + 1;
+    queued.occurrenceCount = Math.min(
+      MAX_OCCURRENCE_COUNT,
+      (queued.occurrenceCount ?? 1) + 1,
+    );
     queued.lastObservedAt = new Date(now).toISOString();
     runtimeErrorFingerprints.set(fingerprint, now);
     persistQueue();
