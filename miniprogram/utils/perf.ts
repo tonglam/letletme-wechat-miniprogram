@@ -320,6 +320,13 @@ export function recordPagePerformance(
       surface: surfaceForTelemetry(record.route),
       metric: "route_ready_ms",
       result: record.completeAt === undefined ? "error" : "ok",
+      measurementKind:
+        record.trigger === "cold-launch"
+          ? "initial_navigation"
+          : record.trigger === "warm-enter"
+            ? "background_resume"
+            : "interaction",
+      reasonCode: record.completeAt === undefined ? "unknown" : "none",
       value: Math.max(0, completion - record.routeStartedAt),
     });
   }

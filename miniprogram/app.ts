@@ -121,13 +121,13 @@ App<IAppOption>({
   },
 
   onError(error: string) {
-    recordClientRuntimeError();
+    recordClientRuntimeError(error);
     this.reportError(`[app] uncaught error: ${error}`);
   },
 
   onUnhandledRejection(event: { reason?: unknown }) {
-    recordClientRuntimeError();
     const reason = event?.reason;
+    recordClientRuntimeError(reason);
     let message = "";
     if (reason instanceof Error) {
       message = reason.message;

@@ -11,6 +11,8 @@
     "test:coverage": "node scripts/check-coverage.mjs",
     "check:style": "node scripts/check-style-drift.mjs",
     "check:production-origin": "node scripts/check-production-origin.mjs",
+    "prepare:release-provenance": "node scripts/write-build-provenance.mjs",
+    "check:release-provenance": "node scripts/check-build-provenance.mjs",
     "assets:squad-pitch": "node scripts/convert-squad-pitch-assets.mjs",
     "package:check": "npm pack --dry-run",
     "prune:vant": "node scripts/prune-vant.mjs"

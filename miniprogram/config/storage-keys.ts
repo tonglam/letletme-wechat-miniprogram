@@ -25,7 +25,9 @@ export const storageKeys = {
   pendingBugReportDraft: "pending-bug-report-draft",
   diagnosticDisclosure: "auth-diagnostic-disclosure-v1",
   lastPriceChangeBoard: "price-change-board:last-good:v2",
-  clientTelemetryQueue: "client-telemetry:queue:v1",
+  // v1 remains readable by older installed bundles. New bundles use the
+  // additive v2 contract and never reinterpret a v1 queue as v2 data.
+  clientTelemetryQueue: "client-telemetry:queue:v2",
   lastPlayerCode: "stat-player",
   lastPlayerSeason: "stat-player-season",
   lastTeamId: "stat-team",

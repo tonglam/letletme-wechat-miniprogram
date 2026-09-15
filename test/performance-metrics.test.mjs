@@ -155,7 +155,7 @@ test("page session classifies only the first load as cold and completion cannot 
 test("route-ready telemetry waits for an explicitly expected secondary completion", () => {
   const previousRandom = Math.random;
   const previousWx = globalThis.wx;
-  const telemetryKey = "client-telemetry:queue:v1";
+  const telemetryKey = "client-telemetry:queue:v2";
   storage.delete(telemetryKey);
   globalThis.wx = {
     ...previousWx,
@@ -186,6 +186,8 @@ test("route-ready telemetry waits for an explicitly expected secondary completio
     assert.equal(telemetry.samples.length, 1);
     assert.equal(telemetry.samples[0].metric, "route_ready_ms");
     assert.equal(telemetry.samples[0].result, "ok");
+    assert.equal(telemetry.samples[0].measurementKind, "background_resume");
+    assert.equal(telemetry.samples[0].samplingProbability, 0.25);
   } finally {
     Math.random = previousRandom;
     globalThis.wx = previousWx;
