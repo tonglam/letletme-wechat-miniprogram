@@ -82,6 +82,14 @@ test("home starts entry/market/supplement with fixtures, not after fixture commi
   assert.match(page, /getMiniHomeSupplement/);
 });
 
+test("home consumes a resume marker when deadline refresh deliberately skips tracking", () => {
+  const page = source("miniprogram/pages/home/index/index.ts");
+  assert.match(
+    page,
+    /const deadlineTriggered = this\._resumeRefreshDeadlineTriggered;[\s\S]*if \(deadlineTriggered\) consumeAppBackgroundResume\(\);[\s\S]*this\._perfTracker = deadlineTriggered\s*\n\s*\? undefined/,
+  );
+});
+
 test("home deadline pill is the next-event GW badge, matching the web scoreboard", () => {
   const template = source("miniprogram/pages/home/index/index.wxml");
   const deadline = template.slice(

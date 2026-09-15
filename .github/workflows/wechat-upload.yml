@@ -61,6 +61,11 @@ jobs:
           echo "Verified main SHA $checkout_sha"
       - name: Verify production origin
         run: npm run check:production-origin
+      - name: Bind build identity to the exact release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: npm run prepare:release-provenance && npm run check:release-provenance
       - run: npm run lint:strict && npm run typecheck && npm test && npm run test:coverage && npm run check:style && npm run package:check
       - name: Prepare runtime dependency lock for security scans
         run: |

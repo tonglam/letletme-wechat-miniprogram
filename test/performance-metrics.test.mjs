@@ -14,6 +14,8 @@ globalThis.wx = {
 const { clearPerf, flushPerfNow, getPerf, recordApi } = await import("../miniprogram/utils/perf.ts");
 const {
   PagePerformanceTracker,
+  markAppBackgrounded,
+  consumeAppBackgroundResume,
   getActivePagePerformanceTrace
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
@@ -146,16 +148,80 @@ test("page session classifies only the first load as cold and completion cannot 
   const secondRecord = getPerf().pagePerformance.find(
     (item) => item.navigationId === second.navigationId
   );
-  assert.equal(second.trigger, "warm-enter");
-  assert.equal(secondRecord.trigger, "warm-enter");
+  assert.equal(second.trigger, "in-page-navigation");
+  assert.equal(secondRecord.trigger, "in-page-navigation");
   second.disconnect();
   clearPerf();
+});
+
+test("page lifecycle consumes a background resume once", () => {
+  assert.equal(consumeAppBackgroundResume(), false);
+  markAppBackgrounded();
+  assert.equal(consumeAppBackgroundResume(), true);
+  assert.equal(consumeAppBackgroundResume(), false);
+
+  markAppBackgrounded();
+  const resumed = new PagePerformanceTracker({}, "pages/test/resumed", "warm-enter");
+  assert.equal(resumed.trigger, "warm-enter");
+  resumed.disconnect();
+
+  const returned = new PagePerformanceTracker({}, "pages/test/returned", "warm-enter");
+  assert.equal(returned.trigger, "in-page-navigation");
+  returned.disconnect();
+
+  markAppBackgrounded();
+  const refreshed = new PagePerformanceTracker({}, "pages/test/refreshed", "refresh");
+  assert.equal(refreshed.trigger, "refresh");
+  assert.equal(consumeAppBackgroundResume(), false);
+  refreshed.disconnect();
+});
+
+test("page lifecycle preserves an already-resolved resume trigger", () => {
+  markAppBackgrounded();
+  assert.equal(consumeAppBackgroundResume(), true);
+
+  const tracker = new PagePerformanceTracker(
+    {},
+    "pages/test/resolved-resume",
+    "warm-enter",
+    { triggerResolved: true },
+  );
+  assert.equal(tracker.trigger, "warm-enter");
+  tracker.disconnect();
+});
+
+test("in-page navigation route-ready telemetry has its own measurement kind", () => {
+  const previousRandom = Math.random;
+  const previousWx = globalThis.wx;
+  const telemetryKey = "client-telemetry:queue:v2";
+  storage.delete(telemetryKey);
+  globalThis.wx = {
+    ...previousWx,
+    setStorageSync: (key, value) => storage.set(key, value),
+    removeStorageSync: (key) => storage.delete(key),
+  };
+  Math.random = () => 0;
+  try {
+    clearPerf();
+    const tracker = new PagePerformanceTracker(
+      {},
+      "pages/test/in-page",
+      "in-page-navigation"
+    );
+    tracker.mark("softFailureAt");
+    const telemetry = storage.get(telemetryKey);
+    assert.equal(telemetry.samples[0].measurementKind, "in_page_navigation");
+  } finally {
+    Math.random = previousRandom;
+    globalThis.wx = previousWx;
+    clearPerf();
+  }
 });
 
 test("route-ready telemetry waits for an explicitly expected secondary completion", () => {
   const previousRandom = Math.random;
   const previousWx = globalThis.wx;
-  const telemetryKey = "client-telemetry:queue:v1";
+  const telemetryKey = "client-telemetry:queue:v2";
   storage.delete(telemetryKey);
   globalThis.wx = {
     ...previousWx,
@@ -171,6 +237,7 @@ test("route-ready telemetry waits for an explicitly expected secondary completio
       observe(_selector, next) { callback = next; },
       disconnect() {}
     };
+    markAppBackgrounded();
     const tracker = new PagePerformanceTracker(
       { createIntersectionObserver: () => observer },
       "pages/test/secondary-boundary",
@@ -186,6 +253,8 @@ test("route-ready telemetry waits for an explicitly expected secondary completio
     assert.equal(telemetry.samples.length, 1);
     assert.equal(telemetry.samples[0].metric, "route_ready_ms");
     assert.equal(telemetry.samples[0].result, "ok");
+    assert.equal(telemetry.samples[0].measurementKind, "background_resume");
+    assert.equal(telemetry.samples[0].samplingProbability, 0.25);
   } finally {
     Math.random = previousRandom;
     globalThis.wx = previousWx;

@@ -19,12 +19,33 @@ function monotonicNow(): number {
 let sequence = 0;
 let activeTracker: PagePerformanceTracker | undefined;
 let coldLaunchClaimed = false;
+let appWasBackgrounded = false;
+
+/** Called by the app lifecycle so page onShow can distinguish a real resume. */
+export function markAppBackgrounded(): void {
+  appWasBackgrounded = true;
+}
+
+/** Consume the one page-show attribution for a real app background resume. */
+export function consumeAppBackgroundResume(): boolean {
+  if (!appWasBackgrounded) return false;
+  appWasBackgrounded = false;
+  return true;
+}
 
 function resolveTrigger(
   requested: PagePerformanceRecord["trigger"]
 ): PagePerformanceRecord["trigger"] {
+  const resumedFromBackground = consumeAppBackgroundResume();
+  if (requested === "warm-enter") {
+    return resumedFromBackground ? "warm-enter" : "in-page-navigation";
+  }
+  // A refresh tracker may be the first tracker created after an app resume.
+  // Consume the shared flag even though refresh remains its own measurement.
+  if (requested === "refresh") return requested;
   if (requested !== "cold-launch") return requested;
-  if (coldLaunchClaimed) return "warm-enter";
+  if (resumedFromBackground) return "warm-enter";
+  if (coldLaunchClaimed) return "in-page-navigation";
   coldLaunchClaimed = true;
   return requested;
 }
@@ -62,11 +83,12 @@ export class PagePerformanceTracker {
   constructor(
     private readonly page: PageOwner,
     route: string,
-    trigger: PagePerformanceRecord["trigger"]
+    trigger: PagePerformanceRecord["trigger"],
+    options: { triggerResolved?: boolean } = {},
   ) {
     sequence += 1;
     this.route = route;
-    this.trigger = resolveTrigger(trigger);
+    this.trigger = options.triggerResolved ? trigger : resolveTrigger(trigger);
     this.navigationId = `${route}:${Date.now().toString(36)}:${sequence.toString(36)}`;
     this.record = {
       navigationId: this.navigationId,

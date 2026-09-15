@@ -60,7 +60,10 @@ import {
   shouldRefreshAppContext,
   type AppContextSnapshot,
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  consumeAppBackgroundResume,
+} from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
 import {
@@ -492,6 +495,23 @@ Page({
     this.pageVisible = true;
     const resumed = this.hasShown;
     this.hasShown = true;
+    // Consume the app-level resume marker before auth/persistence waits can
+    // hide the page. The resolved trigger is carried into the eventual
+    // tracker so a skipped lifecycle cannot leak attribution to the next page.
+    const resumedFromBackground = resumed && consumeAppBackgroundResume();
+    const resumedTrigger = resumedFromBackground
+      ? "warm-enter"
+      : "in-page-navigation";
+    const resumeForcedRefresh = resumed && this.resumeForcedRefreshAfterShow;
+    if (resumed) {
+      this.perfTracker?.disconnect();
+      this.perfTracker = new PagePerformanceTracker(
+        this,
+        "pages/live/entry/entry",
+        resumeForcedRefresh ? "refresh" : resumedTrigger,
+        { triggerResolved: true },
+      );
+    }
     const resumeEntryIdentity = resumed && this.resumeEntryIdentityAfterShow;
     if (resumed && !this.hasRouteEntry) {
       await waitForAuthoritativeFollow();
@@ -519,14 +539,7 @@ Page({
     const previousEntryId = this.data.entryId;
     let showContext = getAppContextSnapshot();
     if (resumed) {
-      const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
       this.resumeForcedRefreshAfterShow = false;
-      this.perfTracker?.disconnect();
-      this.perfTracker = new PagePerformanceTracker(
-        this,
-        "pages/live/entry/entry",
-        resumeForcedRefresh ? "refresh" : "warm-enter",
-      );
       if (resumeForcedRefresh) {
         await this.runForcedRefresh(this.perfTracker);
         return;

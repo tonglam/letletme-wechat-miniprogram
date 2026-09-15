@@ -66,7 +66,7 @@ function observeLifecycleSettlement(
 
 function startTracker(
   page: InstrumentedPage,
-  trigger: "cold-launch" | "warm-enter" | "refresh"
+  trigger: "cold-launch" | "in-page-navigation" | "warm-enter" | "refresh"
 ): number {
   page.__performanceTracker?.disconnect();
   const generation = (page.__performanceGeneration ?? 0) + 1;
@@ -131,7 +131,10 @@ export const PerformancePage = ((options: unknown): void => {
       this.__performanceVisible = true;
       let generation = this.__performanceGeneration ?? 0;
       if (this.__performanceShown) {
-        generation = startTracker(this, "warm-enter");
+        generation = startTracker(
+          this,
+          "warm-enter",
+        );
       }
       this.__performanceShown = true;
       beginLifecycle(this, generation);

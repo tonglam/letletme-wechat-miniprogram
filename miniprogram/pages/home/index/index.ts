@@ -55,7 +55,10 @@ import {
   ensureAppContext,
   getAppContextSnapshot
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  consumeAppBackgroundResume,
+} from "../../../utils/page-performance";
 import type { PageRequestTrace } from "../../../services/graphql.service";
 import { observeSoftTimeout, setDataAsync } from "../../../utils/page-request";
 
@@ -479,6 +482,7 @@ Page({
       const deadlineTriggered = this._resumeRefreshDeadlineTriggered;
       this._resumeRefreshOnShow = false;
       this._resumeRefreshDeadlineTriggered = false;
+      if (deadlineTriggered) consumeAppBackgroundResume();
       this._perfTracker = deadlineTriggered
         ? undefined
         : new PagePerformanceTracker(this, "pages/home/index/index", "refresh");
