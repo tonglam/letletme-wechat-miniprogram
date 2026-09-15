@@ -502,6 +502,16 @@ Page({
     const resumedTrigger = resumedFromBackground
       ? "warm-enter"
       : "in-page-navigation";
+    const resumeForcedRefresh = resumed && this.resumeForcedRefreshAfterShow;
+    if (resumed) {
+      this.perfTracker?.disconnect();
+      this.perfTracker = new PagePerformanceTracker(
+        this,
+        "pages/live/entry/entry",
+        resumeForcedRefresh ? "refresh" : resumedTrigger,
+        { triggerResolved: true },
+      );
+    }
     const resumeEntryIdentity = resumed && this.resumeEntryIdentityAfterShow;
     if (resumed && !this.hasRouteEntry) {
       await waitForAuthoritativeFollow();
@@ -529,14 +539,7 @@ Page({
     const previousEntryId = this.data.entryId;
     let showContext = getAppContextSnapshot();
     if (resumed) {
-      const resumeForcedRefresh = this.resumeForcedRefreshAfterShow;
       this.resumeForcedRefreshAfterShow = false;
-      this.perfTracker?.disconnect();
-      this.perfTracker = new PagePerformanceTracker(
-        this,
-        "pages/live/entry/entry",
-        resumeForcedRefresh ? "refresh" : resumedTrigger,
-      );
       if (resumeForcedRefresh) {
         await this.runForcedRefresh(this.perfTracker);
         return;

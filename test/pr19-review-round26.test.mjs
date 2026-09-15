@@ -26,7 +26,7 @@ test("Live Entry consumes resume attribution before custom lifecycle awaits", ()
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(
     entry,
-    /const resumedFromBackground = resumed && consumeAppBackgroundResume\(\);[\s\S]*const resumedTrigger = resumedFromBackground[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*await this\.revalidateEntryPersistence\(\)[\s\S]*resumeForcedRefresh \? "refresh" : resumedTrigger/,
+    /const resumedFromBackground = resumed && consumeAppBackgroundResume\(\);[\s\S]*const resumedTrigger = resumedFromBackground[\s\S]*const resumeForcedRefresh = resumed && this\.resumeForcedRefreshAfterShow[\s\S]*new PagePerformanceTracker\([\s\S]*resumeForcedRefresh \? "refresh" : resumedTrigger[\s\S]*triggerResolved: true[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*await this\.revalidateEntryPersistence\(\)/,
   );
 });
 

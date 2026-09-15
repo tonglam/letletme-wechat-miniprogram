@@ -176,6 +176,20 @@ test("page lifecycle consumes a background resume once", () => {
   refreshed.disconnect();
 });
 
+test("page lifecycle preserves an already-resolved resume trigger", () => {
+  markAppBackgrounded();
+  assert.equal(consumeAppBackgroundResume(), true);
+
+  const tracker = new PagePerformanceTracker(
+    {},
+    "pages/test/resolved-resume",
+    "warm-enter",
+    { triggerResolved: true },
+  );
+  assert.equal(tracker.trigger, "warm-enter");
+  tracker.disconnect();
+});
+
 test("in-page navigation route-ready telemetry has its own measurement kind", () => {
   const previousRandom = Math.random;
   const previousWx = globalThis.wx;

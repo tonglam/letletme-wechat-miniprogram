@@ -83,11 +83,12 @@ export class PagePerformanceTracker {
   constructor(
     private readonly page: PageOwner,
     route: string,
-    trigger: PagePerformanceRecord["trigger"]
+    trigger: PagePerformanceRecord["trigger"],
+    options: { triggerResolved?: boolean } = {},
   ) {
     sequence += 1;
     this.route = route;
-    this.trigger = resolveTrigger(trigger);
+    this.trigger = options.triggerResolved ? trigger : resolveTrigger(trigger);
     this.navigationId = `${route}:${Date.now().toString(36)}:${sequence.toString(36)}`;
     this.record = {
       navigationId: this.navigationId,
