@@ -22,6 +22,14 @@ test("Home invalidates hidden secondary work and resumes it with a new owner", (
   assert.match(home, /startSecondaryData\(\)[\s\S]*\+\+this\._loadRequestId[\s\S]*loadSecondaryData/);
 });
 
+test("Live Entry consumes resume attribution before custom lifecycle awaits", () => {
+  const entry = source("miniprogram/pages/live/entry/entry.ts");
+  assert.match(
+    entry,
+    /const resumedFromBackground = resumed && consumeAppBackgroundResume\(\);[\s\S]*const resumedTrigger = resumedFromBackground[\s\S]*await waitForAuthoritativeFollow\(\)[\s\S]*await this\.revalidateEntryPersistence\(\)[\s\S]*resumeForcedRefresh \? "refresh" : resumedTrigger/,
+  );
+});
+
 for (const path of [
   "miniprogram/pages/data/player-detail/player-detail.ts",
   "miniprogram/pages/data/team-detail/team-detail.ts"
