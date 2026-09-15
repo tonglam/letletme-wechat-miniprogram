@@ -36,7 +36,15 @@ export function consumeAppBackgroundResume(): boolean {
 function resolveTrigger(
   requested: PagePerformanceRecord["trigger"]
 ): PagePerformanceRecord["trigger"] {
+  const resumedFromBackground = consumeAppBackgroundResume();
+  if (requested === "warm-enter") {
+    return resumedFromBackground ? "warm-enter" : "in-page-navigation";
+  }
+  // A refresh tracker may be the first tracker created after an app resume.
+  // Consume the shared flag even though refresh remains its own measurement.
+  if (requested === "refresh") return requested;
   if (requested !== "cold-launch") return requested;
+  if (resumedFromBackground) return "warm-enter";
   if (coldLaunchClaimed) return "in-page-navigation";
   coldLaunchClaimed = true;
   return requested;

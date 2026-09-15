@@ -159,6 +159,21 @@ test("page lifecycle consumes a background resume once", () => {
   markAppBackgrounded();
   assert.equal(consumeAppBackgroundResume(), true);
   assert.equal(consumeAppBackgroundResume(), false);
+
+  markAppBackgrounded();
+  const resumed = new PagePerformanceTracker({}, "pages/test/resumed", "warm-enter");
+  assert.equal(resumed.trigger, "warm-enter");
+  resumed.disconnect();
+
+  const returned = new PagePerformanceTracker({}, "pages/test/returned", "warm-enter");
+  assert.equal(returned.trigger, "in-page-navigation");
+  returned.disconnect();
+
+  markAppBackgrounded();
+  const refreshed = new PagePerformanceTracker({}, "pages/test/refreshed", "refresh");
+  assert.equal(refreshed.trigger, "refresh");
+  assert.equal(consumeAppBackgroundResume(), false);
+  refreshed.disconnect();
 });
 
 test("in-page navigation route-ready telemetry has its own measurement kind", () => {
@@ -208,6 +223,7 @@ test("route-ready telemetry waits for an explicitly expected secondary completio
       observe(_selector, next) { callback = next; },
       disconnect() {}
     };
+    markAppBackgrounded();
     const tracker = new PagePerformanceTracker(
       { createIntersectionObserver: () => observer },
       "pages/test/secondary-boundary",
