@@ -198,6 +198,51 @@ test("client telemetry drops samples that can no longer satisfy Data's time wind
   }
 });
 
+test("client telemetry rebinds the current queue after a later prune", async () => {
+  const previousWx = globalThis.wx;
+  const previousNow = Date.now;
+  const storage = new Map();
+  const requests = [];
+  const base = previousNow();
+  const almostExpired = new Date(
+    base - 24 * 60 * 60 * 1000 + 1000,
+  ).toISOString();
+  let nowCalls = 0;
+  Date.now = () => base + (nowCalls++ === 0 ? 0 : 2000);
+  storage.set(storageKeys.clientTelemetryQueue, {
+    batchId: "11111111-1111-4111-8111-111111111111",
+    clientRelease: miniClientRelease(),
+    samples: [
+      {
+        observedAt: almostExpired,
+        surface: "live_matches",
+        metric: "runtime_error",
+        deviceGroup: "wechat_phone",
+        sampleSource: "real",
+        result: "error",
+        reasonCode: "unknown",
+        measurementKind: "request",
+        samplingProbability: 1,
+      },
+    ],
+  });
+  try {
+    installWx(storage, requests, (options) =>
+      options.success({ statusCode: 202, data: { accepted: true } }),
+    );
+    await flushClientTelemetry();
+    assert.equal(requests.length, 0);
+
+    enqueueClientTelemetry(errorSample());
+    const persisted = storage.get(storageKeys.clientTelemetryQueue);
+    assert.equal(persisted.clientRelease, miniClientRelease());
+    assert.equal(persisted.samples.length, 1);
+  } finally {
+    Date.now = previousNow;
+    globalThis.wx = previousWx;
+  }
+});
+
 test("client telemetry rebinds an empty persisted queue to the current build", () => {
   const previousWx = globalThis.wx;
   const storage = new Map([

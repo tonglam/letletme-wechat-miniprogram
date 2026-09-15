@@ -537,9 +537,17 @@ export async function flushClientTelemetry(): Promise<void> {
     return;
   }
   loadQueue();
-  queues = queues
-    .map((candidate) => pruneExpiredSamples(candidate))
-    .filter((candidate) => candidate.samples.length > 0 || candidate === queue);
+  const currentQueueIndex = queue ? queues.indexOf(queue) : -1;
+  const prunedQueues = queues.map((candidate) =>
+    pruneExpiredSamples(candidate),
+  );
+  // pruneExpiredSamples returns a replacement object when it removes stale
+  // samples. Rebind the current queue by position before filtering, otherwise
+  // new samples can be appended to an object that is no longer persisted.
+  if (currentQueueIndex >= 0) queue = prunedQueues[currentQueueIndex];
+  queues = prunedQueues.filter(
+    (candidate) => candidate.samples.length > 0 || candidate === queue,
+  );
   persistQueue();
   const pendingQueues = queues.filter(
     (candidate) => candidate.samples.length > 0,
@@ -630,19 +638,22 @@ function mergeQueuedRuntimeError(
   target: PendingTelemetryQueue,
   sourceFingerprint: string,
   targetFingerprint: string,
-): void {
-  if (sourceFingerprint === targetFingerprint) return;
+  protectedSamples?: Set<ClientTelemetrySample> | null,
+): boolean {
+  if (sourceFingerprint === targetFingerprint) return true;
   const sourceIndex = target.samples.findIndex(
     (sample) =>
       sample.metric === "runtime_error" &&
-      sample.fingerprint === sourceFingerprint,
+      sample.fingerprint === sourceFingerprint &&
+      !protectedSamples?.has(sample),
   );
-  if (sourceIndex < 0) return;
+  if (sourceIndex < 0) return false;
   const source = target.samples[sourceIndex];
   const targetSample = target.samples.find(
     (sample) =>
       sample.metric === "runtime_error" &&
-      sample.fingerprint === targetFingerprint,
+      sample.fingerprint === targetFingerprint &&
+      !protectedSamples?.has(sample),
   );
   if (targetSample) {
     const combinedCount =
@@ -671,13 +682,14 @@ function mergeQueuedRuntimeError(
       });
       remaining -= occurrenceCount;
     }
-    return;
+    return true;
   }
   target.samples[sourceIndex] = {
     ...source,
     errorClass: "other",
     fingerprint: targetFingerprint,
   };
+  return true;
 }
 
 export function recordClientRuntimeError(error?: unknown): void {
@@ -688,26 +700,51 @@ export function recordClientRuntimeError(error?: unknown): void {
     seenRuntimeErrorObjects.add(error);
   }
   const queueState = loadQueue();
+  const inFlightSamples =
+    inFlightSlice?.batchId === queueState.batchId
+      ? new Set(inFlightSlice.samples)
+      : null;
   let fingerprint = details.fingerprint;
   let errorClass = details.errorClass;
   if (
     !runtimeErrorFingerprints.has(fingerprint) &&
     runtimeErrorFingerprints.size >= MAX_RUNTIME_ERROR_FINGERPRINTS
   ) {
-    const oldest = [...runtimeErrorFingerprints.keys()].find(
+    let overflowMerged = false;
+    const overflowKeys = [...runtimeErrorFingerprints.keys()].filter(
       (key) => key !== "runtime.other",
     );
+    const oldest =
+      overflowKeys.find((key) =>
+        queueState.samples.some(
+          (sample) =>
+            sample.metric === "runtime_error" &&
+            sample.fingerprint === key &&
+            !inFlightSamples?.has(sample),
+        ),
+      ) ?? overflowKeys[0];
     if (typeof oldest === "string") {
-      mergeQueuedRuntimeError(queueState, oldest, "runtime.other");
+      overflowMerged = mergeQueuedRuntimeError(
+        queueState,
+        oldest,
+        "runtime.other",
+        inFlightSamples,
+      );
       runtimeErrorFingerprints.delete(oldest);
     }
     fingerprint = "runtime.other";
     errorClass = "other";
+    const hasPendingOther = queueState.samples.some(
+      (sample) =>
+        sample.metric === "runtime_error" &&
+        sample.fingerprint === "runtime.other" &&
+        !inFlightSamples?.has(sample),
+    );
+    // If every retained aggregate is in flight, keep the bounded set intact
+    // and let this overflow occurrence drop rather than mutate an acknowledged
+    // payload or create a 33rd distinct fingerprint.
+    if (!overflowMerged && !hasPendingOther) return;
   }
-  const inFlightSamples =
-    inFlightSlice?.batchId === queueState.batchId
-      ? new Set(inFlightSlice.samples)
-      : null;
   const queued = queueState.samples.find(
     (sample) =>
       sample.metric === "runtime_error" &&

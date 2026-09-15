@@ -46,7 +46,7 @@ export interface ApiRecordDetails {
 export interface PagePerformanceRecord {
   navigationId: string;
   route: string;
-  trigger: "cold-launch" | "warm-enter" | "refresh";
+  trigger: "cold-launch" | "in-page-navigation" | "warm-enter" | "refresh";
   routeStartedAt: number;
   contextReadyAt?: number;
   primaryRequestStartAt?: number;
@@ -323,9 +323,11 @@ export function recordPagePerformance(
       measurementKind:
         record.trigger === "cold-launch"
           ? "initial_navigation"
-          : record.trigger === "warm-enter"
-            ? "background_resume"
-            : "interaction",
+          : record.trigger === "in-page-navigation"
+            ? "in_page_navigation"
+            : record.trigger === "warm-enter"
+              ? "background_resume"
+              : "interaction",
       reasonCode: record.completeAt === undefined ? "unknown" : "none",
       value: Math.max(0, completion - record.routeStartedAt),
     });

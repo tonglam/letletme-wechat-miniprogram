@@ -24,7 +24,7 @@ function resolveTrigger(
   requested: PagePerformanceRecord["trigger"]
 ): PagePerformanceRecord["trigger"] {
   if (requested !== "cold-launch") return requested;
-  if (coldLaunchClaimed) return "warm-enter";
+  if (coldLaunchClaimed) return "in-page-navigation";
   coldLaunchClaimed = true;
   return requested;
 }

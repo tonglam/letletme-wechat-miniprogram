@@ -146,10 +146,38 @@ test("page session classifies only the first load as cold and completion cannot 
   const secondRecord = getPerf().pagePerformance.find(
     (item) => item.navigationId === second.navigationId
   );
-  assert.equal(second.trigger, "warm-enter");
-  assert.equal(secondRecord.trigger, "warm-enter");
+  assert.equal(second.trigger, "in-page-navigation");
+  assert.equal(secondRecord.trigger, "in-page-navigation");
   second.disconnect();
   clearPerf();
+});
+
+test("in-page navigation route-ready telemetry has its own measurement kind", () => {
+  const previousRandom = Math.random;
+  const previousWx = globalThis.wx;
+  const telemetryKey = "client-telemetry:queue:v2";
+  storage.delete(telemetryKey);
+  globalThis.wx = {
+    ...previousWx,
+    setStorageSync: (key, value) => storage.set(key, value),
+    removeStorageSync: (key) => storage.delete(key),
+  };
+  Math.random = () => 0;
+  try {
+    clearPerf();
+    const tracker = new PagePerformanceTracker(
+      {},
+      "pages/test/in-page",
+      "in-page-navigation"
+    );
+    tracker.mark("softFailureAt");
+    const telemetry = storage.get(telemetryKey);
+    assert.equal(telemetry.samples[0].measurementKind, "in_page_navigation");
+  } finally {
+    Math.random = previousRandom;
+    globalThis.wx = previousWx;
+    clearPerf();
+  }
 });
 
 test("route-ready telemetry waits for an explicitly expected secondary completion", () => {

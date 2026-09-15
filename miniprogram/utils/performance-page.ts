@@ -66,7 +66,7 @@ function observeLifecycleSettlement(
 
 function startTracker(
   page: InstrumentedPage,
-  trigger: "cold-launch" | "warm-enter" | "refresh"
+  trigger: "cold-launch" | "in-page-navigation" | "warm-enter" | "refresh"
 ): number {
   page.__performanceTracker?.disconnect();
   const generation = (page.__performanceGeneration ?? 0) + 1;
