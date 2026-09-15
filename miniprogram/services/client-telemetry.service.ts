@@ -391,7 +391,8 @@ function createBatchId(): string {
 }
 
 function scheduleFlush(): void {
-  if (flushTimer || !queue?.samples.length) return;
+  if (flushTimer || !queues.some((candidate) => candidate.samples.length > 0))
+    return;
   const timer = setTimeout(() => {
     flushTimer = null;
     void flushClientTelemetry();
