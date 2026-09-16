@@ -315,15 +315,23 @@ PerformancePage({
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId
     );
-    if (!isActiveRequest()) return;
+    const interaction = interactionHandler
+      ? getPageInteractionToken(this, interactionHandler)
+      : null;
+    const failSupersededInteraction = () => {
+      if (interaction && interaction.tracker.hasPendingInteraction(interaction.interactionId)) {
+        interaction.tracker.completeInteraction(interaction.interactionId, "failed");
+      }
+    };
+    if (!isActiveRequest()) {
+      failSupersededInteraction();
+      return;
+    }
     const loadStart = Date.now();
     const season = getApp<IAppOption>().globalData.season;
     const startEvent = this.data.startEvent;
     const horizon = this.data.horizon;
     const windowKey = `${season || "unknown"}:${startEvent}:${horizon}`;
-    const interaction = interactionHandler
-      ? getPageInteractionToken(this, interactionHandler)
-      : null;
     // Keep any complete window as the last-good view while a different target
     // window is loading.  A failed 8-round request must not turn a usable
     // 5-round page into an empty screen or relabel the old cards as new data.
@@ -353,7 +361,10 @@ PerformancePage({
         getFixtureWindow(startEvent, horizon, season, forceRefresh, trace),
         getTeamList(season, forceRefresh, trace)
       ]);
-      if (!isActiveRequest()) return;
+      if (!isActiveRequest()) {
+        failSupersededInteraction();
+        return;
+      }
       this.fixtures = fixtures;
       this.teams = teams;
       this.loadedSeason = season;
@@ -388,7 +399,10 @@ PerformancePage({
         durationBucket: durationBucket(Date.now() - loadStart)
       });
     } catch (error) {
-      if (!isActiveRequest()) return;
+      if (!isActiveRequest()) {
+        failSupersededInteraction();
+        return;
+      }
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,

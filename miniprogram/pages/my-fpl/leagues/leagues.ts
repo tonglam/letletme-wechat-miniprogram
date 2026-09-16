@@ -35,6 +35,7 @@ import {
 } from "../../../services/graphql.service";
 import {
   getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
   runPageInteractionDelegation,
 } from "../../../utils/page-performance";
 
@@ -1043,6 +1044,7 @@ PerformancePage({
     catalogRevisionOverride?: string | null,
     preferredPhaseId?: string | null,
     retrySurface?: ReviewSurface,
+    interactionId?: string,
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
@@ -1071,6 +1073,10 @@ PerformancePage({
           expectedSeason) &&
       (currentMyFplEntryId() || 0) === expectedEntryId;
     const settleStale = () => {
+      const tracker = getCurrentPagePerformanceTracker();
+      if (interactionId && tracker?.hasPendingInteraction(interactionId)) {
+        tracker.completeInteraction(interactionId, "failed", false);
+      }
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
       const currentSeason = String(
@@ -1138,6 +1144,8 @@ PerformancePage({
             v2Loading: false,
             v2LoadingMore: false,
             v2Error: "球队绑定已更新，正在重新加载赛事复盘",
+          }, () => {
+            this.observeReviewInteraction(interactionId, "primary", true);
           });
           void this.loadCatalog(true, trace);
         } else {
@@ -1147,6 +1155,8 @@ PerformancePage({
             v2Loading: false,
             v2LoadingMore: false,
             v2Error: "球队状态尚未同步，请稍后重试",
+          }, () => {
+            this.observeReviewInteraction(interactionId, "primary", true);
           });
         }
       } catch {
@@ -1156,6 +1166,8 @@ PerformancePage({
           v2Loading: false,
           v2LoadingMore: false,
           v2Error: "球队状态尚未同步，请稍后重试",
+        }, () => {
+          this.observeReviewInteraction(interactionId, "primary", true);
         });
       }
       return true;
@@ -1215,6 +1227,8 @@ PerformancePage({
           null,
           null,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1241,6 +1255,8 @@ PerformancePage({
           null,
           observedRevision,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1399,10 +1415,31 @@ PerformancePage({
                   ? sectionPageInfo(section).hasNextPage
                   : payloadHasNext(nextGameweek?.payload),
             }, () => {
+              if (!active()) {
+                settleStale();
+                return;
+              }
               const tracker = getCurrentPagePerformanceTracker();
               tracker?.mark("defaultContentAt");
+              const surface = this.data.activeView;
               if (retrySurface || trace?.trigger === "tab") {
-                wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+                wx.nextTick(() => {
+                  this.observeReviewInteraction(
+                    interactionId,
+                    surface,
+                    surface === "gameweek"
+                      ? Boolean(gameweekMessage)
+                      : Boolean(seasonMessage),
+                  );
+                });
+              } else {
+                this.observeReviewInteraction(
+                  interactionId,
+                  surface,
+                  surface === "gameweek"
+                    ? Boolean(gameweekMessage)
+                    : Boolean(seasonMessage),
+                );
               }
             });
             const auxiliaryResults = await Promise.all(
@@ -1476,6 +1513,8 @@ PerformancePage({
           null,
           null,
           phase?.phaseId ?? this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1543,10 +1582,31 @@ PerformancePage({
             : payloadHasNext(nextGameweek?.payload),
         emptyState: "",
       }, () => {
+        if (!active()) {
+          settleStale();
+          return;
+        }
         const tracker = getCurrentPagePerformanceTracker();
         tracker?.mark("defaultContentAt");
+        const surface = this.data.activeView;
         if (retrySurface || trace?.trigger === "tab") {
-          wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+          wx.nextTick(() => {
+            this.observeReviewInteraction(
+              interactionId,
+              surface,
+              surface === "gameweek"
+                ? Boolean(gameweekSurfaceMessage)
+                : Boolean(seasonSurfaceMessage),
+            );
+          });
+        } else {
+          this.observeReviewInteraction(
+            interactionId,
+            surface,
+            surface === "gameweek"
+              ? Boolean(gameweekSurfaceMessage)
+              : Boolean(seasonSurfaceMessage),
+          );
         }
         tracker?.mark("secondaryCompleteAt");
       });
@@ -1569,6 +1629,8 @@ PerformancePage({
           null,
           null,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1579,6 +1641,8 @@ PerformancePage({
           v2LoadingMore: false,
           v2UpgradeRequired: true,
           v2Error: "赛事复盘需要升级小程序后继续",
+        }, () => {
+          this.observeReviewInteraction(interactionId, "primary", true);
         });
       } else {
         this.retryOperation = "review";
@@ -1590,6 +1654,8 @@ PerformancePage({
           v2StatusText: stateText("UNAVAILABLE"),
           v2Error:
             error instanceof Error ? error.message : "赛事复盘暂时不可用",
+        }, () => {
+          this.observeReviewInteraction(interactionId, "primary", true);
         });
       }
     }
@@ -1735,7 +1801,7 @@ PerformancePage({
       }, () => {
         const tracker = getCurrentPagePerformanceTracker();
         tracker?.mark("defaultContentAt");
-        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-review-season", { errorVisible: false }));
       });
       const auxiliaryResults = await Promise.all(settledRequests.slice(1));
       const sections = [primarySection.value];
@@ -2221,9 +2287,40 @@ PerformancePage({
     );
   },
 
-  selectTournament(index: number) {
+  observeReviewInteraction(
+    interactionId: string | undefined,
+    surface: ReviewSurface | "primary",
+    errorVisible: boolean,
+  ) {
+    const selector = errorVisible
+      ? surface === "gameweek"
+        ? "#perf-review-gameweek-error"
+        : surface === "season"
+          ? "#perf-review-season-error"
+          : "#perf-primary-content"
+      : surface === "gameweek"
+        ? "#perf-review-gameweek"
+        : surface === "season"
+          ? "#perf-review-season"
+          : "#perf-primary-content";
+    getCurrentPagePerformanceTracker()?.observeOnDemandVisible(selector, {
+      errorVisible,
+      ...(interactionId ? { interactionId } : {}),
+    });
+  },
+
+  selectTournament(index: number, interactionId?: string): Promise<void> {
     const selected = catalogItems(this.data.v2Catalog)[index];
-    if (!selected) return;
+    if (!selected) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return Promise.resolve();
+    }
     const eventIds = eventIdsFromPhases(
       selected.phaseSummaries,
       selected.latestFinalizedEventId,
@@ -2237,7 +2334,18 @@ PerformancePage({
     this.retryBySurface.gameweek = null;
     this.retryBySurface.season = null;
     persistLastPick(this.data.entryId, selected.tournamentId);
-    this.setData({
+    const selectionRequestId = this.viewRequestId;
+    const selectionIsCurrent = () =>
+      this.viewRequestId === selectionRequestId &&
+      this.data.v2SelectedTournament?.tournamentId === selected.tournamentId;
+    const failSelectionInteraction = () => {
+      const tracker = getCurrentPagePerformanceTracker();
+      if (interactionId && tracker?.hasPendingInteraction(interactionId)) {
+        tracker.completeInteraction(interactionId, "failed", false);
+      }
+    };
+    const renderSelection = new Promise<void>((resolve) => {
+      this.setData({
       v2SelectedTournamentIndex: index,
       v2SelectedTournament: selected,
       v2EventIds: eventIds,
@@ -2258,31 +2366,66 @@ PerformancePage({
       v2GameweekError: "",
       v2SeasonError: "",
       emptyState: eventId ? "" : "view",
+      }, () => {
+        if (!selectionIsCurrent()) {
+          failSelectionInteraction();
+          resolve();
+          return;
+        }
+        if (!eventId) {
+          this.observeReviewInteraction(interactionId, "primary", false);
+        }
+        resolve();
+      });
     });
     if (eventId) {
-      void this.loadReview(
-        selected.tournamentId,
-        eventId,
-        false,
-        capturePageRequestTrace({
-          callerSurface: "my-fpl-leagues-v2.1",
-          trigger: "tab",
-        }),
-        null,
-        catalogRevisionForEvent(selected, eventId),
-      );
+      return renderSelection.then(() => {
+        if (!selectionIsCurrent()) {
+          failSelectionInteraction();
+          return;
+        }
+        return this.loadReview(
+          selected.tournamentId,
+          eventId,
+          false,
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "tab",
+          }),
+          null,
+          catalogRevisionForEvent(selected, eventId),
+          null,
+          undefined,
+          interactionId,
+        );
+      });
     }
+    return renderSelection;
   },
 
   onTournamentChange(event: WechatMiniprogram.PickerChange) {
-    this.selectTournament(Number(event.detail.value));
+    const interactionId = getPageInteractionToken(
+      this,
+      "onTournamentChange",
+    )?.interactionId;
+    return this.selectTournament(Number(event.detail.value), interactionId);
   },
 
   onGwChange(event: WechatMiniprogram.PickerChange) {
+    const interactionId = getPageInteractionToken(this, "onGwChange")?.interactionId;
     const index = Number(event.detail.value);
     const eventId = this.data.v2EventIds[index];
     const selected = this.data.v2SelectedTournament;
-    if (!selected || !eventId) return;
+    if (!selected || !eventId) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return Promise.resolve();
+    }
     this.setData({
       v2SelectedEventIndex: index,
       v2Event: eventId,
@@ -2307,6 +2450,9 @@ PerformancePage({
       }),
       null,
       catalogRevisionForEvent(selected, eventId),
+      null,
+      undefined,
+      interactionId,
     );
   },
 
@@ -2598,5 +2744,6 @@ PerformancePage({
     switchToLive();
   },
 }, {
+  explicitInteractionHandlers: ["onTournamentChange", "onGwChange"],
   primaryError: isPrimaryLeaguesError,
 });
