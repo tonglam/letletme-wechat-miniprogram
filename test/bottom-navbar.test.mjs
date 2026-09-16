@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -148,6 +148,35 @@ test("a detached bottom nav ignores an already-queued edge reveal", () => {
   } finally {
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
+test("bottom navigation is locally registered only on pages that render it", () => {
+  const root = fileURLToPath(new URL("../miniprogram/", import.meta.url));
+  const app = JSON.parse(readFileSync(join(root, "app.json"), "utf8"));
+  assert.equal(app.usingComponents?.bottomNavBar, undefined);
+
+  const pageFiles = [];
+  const visit = (directory) => {
+    for (const name of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, name.name);
+      if (name.isDirectory()) visit(path);
+      else if (name.isFile() && name.name.endsWith(".wxml")) pageFiles.push(path);
+    }
+  };
+  visit(join(root, "pages"));
+  const bottomPages = pageFiles.filter((path) =>
+    readFileSync(path, "utf8").includes("<bottomNavBar"),
+  );
+  assert.equal(bottomPages.length, 19);
+  for (const wxmlPath of bottomPages) {
+    const jsonPath = wxmlPath.replace(/\.wxml$/, ".json");
+    const page = JSON.parse(readFileSync(jsonPath, "utf8"));
+    assert.equal(
+      page.usingComponents?.bottomNavBar,
+      "../../../components/navigation/bottomNavBar/bottomNavBar",
+      jsonPath,
+    );
   }
 });
 

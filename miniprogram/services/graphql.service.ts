@@ -20,7 +20,10 @@ import {
   initializeNetworkStatus,
   isKnownOffline,
 } from "../utils/network-status";
-import { getActivePagePerformanceTrace } from "../utils/page-performance";
+import {
+  getActivePagePerformanceTrace,
+  getCurrentPagePerformanceTrace,
+} from "../utils/page-performance";
 import {
   getGraphQLCachePolicy,
   getGraphQLWorkload,
@@ -108,6 +111,8 @@ export interface PageRequestTrace {
   forceReason?: "user-refresh" | "deadline-crossed" | "context-missing";
   contextRevision: number;
   cacheVariantHash?: string;
+  /** Per-request redacted identity used to explain same-name operations. */
+  requestFingerprint?: string;
 }
 
 export interface GraphQLReadMeta {
@@ -146,7 +151,8 @@ function resolvePageRequestTrace(
 ): PageRequestTrace | undefined {
   if (explicitTrace === null) return undefined;
   if (explicitTrace) return explicitTrace;
-  const activeTrace = getActivePagePerformanceTrace();
+  const activeTrace =
+    getActivePagePerformanceTrace() ?? getCurrentPagePerformanceTrace();
   if (!activeTrace) return undefined;
 
   let contextRevision = 0;
@@ -411,6 +417,7 @@ function recordRequest(
     forceReason: trace?.forceReason,
     contextRevision: trace?.contextRevision,
     cacheVariantHash: trace?.cacheVariantHash || cacheVariantHash,
+    requestFingerprint: trace?.requestFingerprint,
     requestId,
     statusCode: details?.status,
     code: details?.code,
@@ -942,6 +949,9 @@ export async function graphqlRead<T>(
   }
 
   const identity = requestIdentity(query, variables, policy, token);
+  const requestTrace = trace
+    ? { ...trace, requestFingerprint: hashKey(identity.requestKey) }
+    : undefined;
   let cached = policy.cacheable
     ? readCacheEntry(identity.cacheKey, identity.requestKey)
     : undefined;
@@ -975,7 +985,7 @@ export async function graphqlRead<T>(
       cached.source,
       false,
       cached.entry.storedAt,
-      trace,
+      requestTrace,
       cacheVariantHash,
     );
     return {
@@ -1008,7 +1018,7 @@ export async function graphqlRead<T>(
         "in-flight",
         false,
         result.meta.storedAt,
-        trace,
+        requestTrace,
         cacheVariantHash,
         result.meta.requestId,
         {
@@ -1035,7 +1045,7 @@ export async function graphqlRead<T>(
         "in-flight",
         false,
         undefined,
-        trace,
+        requestTrace,
         cacheVariantHash,
         error instanceof GraphQLTransportError ? error.requestId : undefined,
         error instanceof GraphQLTransportError
@@ -1074,7 +1084,7 @@ export async function graphqlRead<T>(
         "stale",
         false,
         staleCandidate.storedAt,
-        trace,
+        requestTrace,
         cacheVariantHash,
         undefined,
         {
@@ -1113,7 +1123,7 @@ export async function graphqlRead<T>(
       "network",
       false,
       undefined,
-      trace,
+      requestTrace,
       cacheVariantHash,
       undefined,
       {
@@ -1148,7 +1158,7 @@ export async function graphqlRead<T>(
         "stale",
         false,
         staleCandidate.storedAt,
-        trace,
+        requestTrace,
         cacheVariantHash,
       );
       return {
@@ -1172,7 +1182,7 @@ export async function graphqlRead<T>(
       "network",
       false,
       undefined,
-      trace,
+      requestTrace,
       cacheVariantHash,
     );
     throw new GraphQLTransportError("当前处于离线状态，请检查网络后重试", true);
@@ -1300,7 +1310,7 @@ export async function graphqlRead<T>(
         "network",
         networkAttempted,
         undefined,
-        trace,
+        requestTrace,
         cacheVariantHash,
         response.requestId,
         { status: response.statusCode },
@@ -1342,7 +1352,7 @@ export async function graphqlRead<T>(
           "stale",
           networkAttempted,
           staleCandidate.storedAt,
-          trace,
+          requestTrace,
           cacheVariantHash,
           transportError?.requestId,
           transportError
@@ -1395,7 +1405,7 @@ export async function graphqlRead<T>(
         "network",
         networkAttempted,
         undefined,
-        trace,
+        requestTrace,
         cacheVariantHash,
         error instanceof GraphQLTransportError ? error.requestId : undefined,
         error instanceof GraphQLTransportError

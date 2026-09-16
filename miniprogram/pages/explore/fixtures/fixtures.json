@@ -7,6 +7,7 @@
     "data-status": "../../../components/data-status/data-status",
     "gw-picker": "../../../components/gw-picker/gw-picker",
     "fixture-chip": "../../../components/fixture-chip/fixture-chip",
-    "evidence-source": "../../../components/evidence-source/evidence-source"
+    "evidence-source": "../../../components/evidence-source/evidence-source",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

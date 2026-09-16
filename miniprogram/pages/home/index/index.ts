@@ -58,6 +58,7 @@ import {
 import {
   PagePerformanceTracker,
   consumeAppBackgroundResume,
+  instrumentPageInteractions,
 } from "../../../utils/page-performance";
 import type { PageRequestTrace } from "../../../services/graphql.service";
 import { observeSoftTimeout, setDataAsync } from "../../../utils/page-request";
@@ -338,7 +339,7 @@ export function homePersonalLeaguesMatchEntry(
     && entryId === personalEntryId;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     fixtureLoading: false,
@@ -524,7 +525,7 @@ Page({
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
-        wx.nextTick(() => tracker.observePrimary("#perf-primary-fixtures"));
+        wx.nextTick(() => tracker.observePrimary("#perf-primary-home-content"));
         recordHomeFixtureTiming({
           surface: "home-fixtures",
           trigger: "onShow",
@@ -761,7 +762,11 @@ Page({
         }, () => {
           this.syncFixtureLiveRefresh();
           tracker?.mark("primarySetDataAt");
-          wx.nextTick(() => tracker?.observePrimary("#perf-primary-fixtures"));
+          // The fixture desk is the home page's default business module. Keep
+          // its data-commit boundary separate from the viewport observation so
+          // route-to-default and route-to-visible can be reported independently.
+          tracker?.mark("defaultContentAt");
+          wx.nextTick(() => tracker?.observePrimary("#perf-primary-home-content"));
           const fixtureSetDataCallbackAt = Date.now();
           recordRenderCommit({
             surface: "home-fixtures",
@@ -875,7 +880,7 @@ Page({
     const message = error instanceof Error ? error.message : "赛季和比赛轮信息加载失败";
     const hasFixtureRows = this.data.fixtureCount > 0;
     const primarySelector = hasFixtureRows
-      ? "#perf-primary-fixtures"
+      ? "#perf-primary-home-content"
       : "#perf-primary-home-error";
     this.setData({
       loading: false,
@@ -1755,7 +1760,7 @@ Page({
   onRetryFixtures() {
     this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
   }
-});
+}));
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 

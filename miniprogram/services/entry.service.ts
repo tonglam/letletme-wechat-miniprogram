@@ -413,6 +413,7 @@ export async function getEntryEventTransfers(
     // sharing one key would let a 30-minute history serve stand in for the
     // live view, and a memory-only live write could never replace a
     // persisted stale entry.
+    authMode: "public",
     cacheVariant: isLiveEvent ? "live" : "history",
     cachePolicy: isLiveEvent ? "live" : "reporting",
     forceRefresh,
@@ -428,6 +429,7 @@ export async function getEntryEventTransfers(
 export async function getEntryAllTransfers(entry: number, forceRefresh = false): Promise<EntryTransfer[]> {
   const data = await graphqlRequest<GetEntryTransferHistoryResponse>(GET_ENTRY_TRANSFER_HISTORY, { entryId: entry }, {
     // Same freshness class as historical per-event views: share their entry.
+    authMode: "public",
     cacheVariant: "history",
     cachePolicy: "reporting",
     forceRefresh

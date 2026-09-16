@@ -33,6 +33,7 @@ import {
   isViewerEntryAuthorizationError,
   type PageRequestTrace,
 } from "../../../services/graphql.service";
+import { getCurrentPagePerformanceTracker } from "../../../utils/page-performance";
 
 type LeagueView = "season" | "gameweek";
 type LeagueEmptyState = "" | "entry" | "tournaments" | "view";
@@ -69,6 +70,7 @@ interface LeaguesData {
   v2SelectedPhaseId: string | null;
   v2SeasonSection: MyTournamentSeasonSection | null;
   v2Loading: boolean;
+  v2LoadingSurface: ReviewSurface | null;
   v2LoadingMore: boolean;
   v2CatalogLoadingMore: boolean;
   v2HasNextPage: boolean;
@@ -483,6 +485,7 @@ PerformancePage({
     v2SelectedPhaseId: null,
     v2SeasonSection: null,
     v2Loading: true,
+    v2LoadingSurface: null,
     v2LoadingMore: false,
     v2CatalogLoadingMore: false,
     v2HasNextPage: false,
@@ -588,6 +591,7 @@ PerformancePage({
     this.viewRequestId += 1;
     this.setData({
       v2Loading: false,
+      v2LoadingSurface: null,
       v2LoadingMore: false,
       v2CatalogLoadingMore: false,
     });
@@ -718,6 +722,7 @@ PerformancePage({
     this.retryAfter = null;
     this.setData({
       v2Loading: !append,
+      v2LoadingSurface: null,
       v2LoadingMore: false,
       v2CatalogLoadingMore: append,
       v2Error: "",
@@ -961,13 +966,18 @@ PerformancePage({
         this.seasonSectionContext = null;
       }
       if (!append && selected && eventId) {
-        await this.loadReview(
+        // The default surface is Season. Let the catalog and picker render as
+        // soon as they are authoritative, then load only that visible surface;
+        // Gameweek is fetched when the user opens its tab.
+        void this.loadReview(
           selected.tournamentId,
           eventId,
           forceRefresh,
           trace,
           null,
           catalogRevisionForEvent(selected, eventId),
+          null,
+          "season",
         );
       }
     } catch (error) {
@@ -1100,6 +1110,9 @@ PerformancePage({
       // Keep the already rendered page mounted while fetching a continuation;
       // the inline loading state belongs to the load-more control.
       v2Loading: !after,
+      v2LoadingSurface: !after
+        ? (retrySurface ?? this.data.activeView)
+        : this.data.v2LoadingSurface,
       v2LoadingMore: Boolean(after),
       v2Error: "",
       v2GameweekError: fetchGameweek ? "" : this.data.v2GameweekError,
@@ -1377,6 +1390,12 @@ PerformancePage({
                 this.data.activeView === "season"
                   ? sectionPageInfo(section).hasNextPage
                   : payloadHasNext(nextGameweek?.payload),
+            }, () => {
+              const tracker = getCurrentPagePerformanceTracker();
+              tracker?.mark("defaultContentAt");
+              if (retrySurface || trace?.trigger === "tab") {
+                wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
+              }
             });
             const auxiliaryResults = await Promise.all(
               settledRequests.slice(1),
@@ -1515,6 +1534,13 @@ PerformancePage({
             ? sectionPageInfo(section).hasNextPage
             : payloadHasNext(nextGameweek?.payload),
         emptyState: "",
+      }, () => {
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        if (retrySurface || trace?.trigger === "tab") {
+          wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
+        }
+        tracker?.mark("secondaryCompleteAt");
       });
       if (partialError && isClientUpgradeRequired(partialError))
         promptForUpgrade();
@@ -1626,6 +1652,7 @@ PerformancePage({
       v2StatusText: stateText(phase.state),
       v2SeasonSection: null,
       v2Loading: true,
+      v2LoadingSurface: "season",
       v2LoadingMore: false,
       v2HasNextPage: false,
       v2Error: "",
@@ -1697,6 +1724,10 @@ PerformancePage({
         v2StatusText: stateText(section.state),
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
         v2SeasonError: "",
+      }, () => {
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
       });
       const auxiliaryResults = await Promise.all(settledRequests.slice(1));
       const sections = [primarySection.value];
@@ -1727,6 +1758,8 @@ PerformancePage({
         v2StatusText: stateText(section?.state ?? phase.state),
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
         v2SeasonError: "",
+      }, () => {
+        getCurrentPagePerformanceTracker()?.mark("secondaryCompleteAt");
       });
     } catch (error) {
       if (!active()) {

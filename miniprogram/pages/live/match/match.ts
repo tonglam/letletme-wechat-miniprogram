@@ -15,7 +15,10 @@ import {
   getAppContextSnapshot,
   shouldRefreshAppContext,
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
   canReplaceLiveMatchdayLkg,
@@ -829,7 +832,7 @@ export function contextDeadlineTargetAt(
   return deadline <= now ? now + 30_000 : deadline;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     refreshing: false,
@@ -2214,4 +2217,4 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}));

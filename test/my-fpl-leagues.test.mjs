@@ -46,6 +46,24 @@ test("My FPL uses the V2.1 settled tournament-review contract", async () => {
   assert.doesNotMatch(service, /GET_MY_FPL_COMPETITION|MyFplCompetition/);
 });
 
+test("the default review surface loads Season on demand after the catalog", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(
+    page,
+    /if \(!append && selected && eventId\) \{[\s\S]*void this\.loadReview\([\s\S]*catalogRevisionForEvent\(selected, eventId\),[\s\S]*null,[\s\S]*"season"/,
+  );
+});
+
+test("catalog and selected review keep separate loading surfaces", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const template = await read("miniprogram/pages/my-fpl/leagues/leagues.wxml");
+  assert.match(page, /v2LoadingSurface: ReviewSurface \| null/);
+  assert.match(page, /v2LoadingSurface: !after[\s\S]*retrySurface \?\? this\.data\.activeView/);
+  assert.match(template, /v2Loading && !v2SelectedTournament/);
+  assert.match(template, /v2LoadingSurface === 'season'/);
+  assert.match(template, /v2LoadingSurface === 'gameweek'/);
+});
+
 test("the Mini catalog is connection-shaped and supports a custom setup shell", async () => {
   const service = await read("miniprogram/services/tournament.service.ts");
   const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");

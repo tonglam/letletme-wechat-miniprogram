@@ -594,7 +594,7 @@
       </view>
     </view>
   </view>
-  <view wx:if="{{detailOpen}}" class="flt-root">
+  <view id="perf-on-demand-content" wx:if="{{detailOpen}}" class="flt-root">
     <view class="flt-mask" bindtap="onCloseTournamentDetail"></view>
     <view class="flt-sheet">
       <view class="flt-head">

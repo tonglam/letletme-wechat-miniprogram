@@ -10,6 +10,7 @@
     "player-row": "../../../components/player-row/player-row",
     "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet",
     "squad-pitch": "../../../components/squad-pitch/squad-pitch",
-    "mini-chart": "../../../components/mini-chart/mini-chart"
+    "mini-chart": "../../../components/mini-chart/mini-chart",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

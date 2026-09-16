@@ -28,7 +28,7 @@
   <app-loading wx:elif="{{loading}}" text="加载首页数据" />
 
   <block wx:else>
-    <view class="deadline-card scoreboard section">
+    <view id="perf-primary-home-content" class="deadline-card scoreboard section">
       <view class="deadline-top">
         <view>
           <view class="deadline-label">下一轮截止</view>

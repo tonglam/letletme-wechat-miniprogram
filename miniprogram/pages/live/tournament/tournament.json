@@ -9,6 +9,7 @@
     "filter-bar": "../../../components/filter-bar/filter-bar",
     "gw-picker": "../../../components/gw-picker/gw-picker",
     "live-status-bar": "../../../components/live-status-bar/live-status-bar",
-    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

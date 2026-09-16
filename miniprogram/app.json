@@ -35,7 +35,6 @@
   },
   "__usePrivacyCheck__": true,
   "usingComponents": {
-    "bottomNavBar": "./components/navigation/bottomNavBar/bottomNavBar",
     "privacy-dialog": "./components/privacy-dialog/privacy-dialog"
   },
   "style": "v2",

@@ -63,6 +63,7 @@ import {
 import {
   PagePerformanceTracker,
   consumeAppBackgroundResume,
+  instrumentPageInteractions,
 } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -256,7 +257,7 @@ function formatTime(date: Date): string {
   return `${hours}:${minutes}`;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     refreshing: false,
@@ -1209,6 +1210,7 @@ Page({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
+              navigationTracker?.mark("defaultContentAt");
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
@@ -1309,6 +1311,7 @@ Page({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
+              navigationTracker?.mark("defaultContentAt");
               wx.nextTick(() => navigationTracker?.observePrimary());
             },
           );
@@ -1399,6 +1402,12 @@ Page({
           priorSnapshotNextRefreshAt,
         );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
+        const includeTransfersForRequest = this.loadTransfersAfterLive;
+        if (includeTransfersForRequest) {
+          // The squad/score is the primary task. Transfer history is a default
+          // secondary module and must not hold the route action open.
+          navigationTracker?.expectSecondaryCompletion();
+        }
         this.setData(
           {
             hasData: true,
@@ -1461,22 +1470,29 @@ Page({
           },
           () => {
             navigationTracker?.mark("primarySetDataAt");
+            navigationTracker?.mark("defaultContentAt");
             wx.nextTick(() => navigationTracker?.observePrimary());
           },
         );
         this.liveRefresh?.sync();
-        if (
-          this.pageVisible &&
-          requestId === this.liveRequestId &&
-          this.loadTransfersAfterLive
-        ) {
+        if (this.pageVisible && requestId === this.liveRequestId && includeTransfersForRequest) {
           this.loadTransfersAfterLive = false;
-          await this.loadTransfers(
+          const transfersRequest = this.loadTransfers(
             entryId,
             eventId,
             options.forceRefresh === true,
             requestTrace,
           );
+          void transfersRequest.finally(() => {
+            if (
+              navigationTracker &&
+              this.pageVisible &&
+              this.perfTracker === navigationTracker &&
+              requestId === this.liveRequestId
+            ) {
+              navigationTracker.mark("secondaryCompleteAt");
+            }
+          });
         }
         this.syncDisplayState();
       } catch (error) {
@@ -1729,6 +1745,8 @@ Page({
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
+    }, () => {
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content"));
     });
   },
 
@@ -1744,6 +1762,8 @@ Page({
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
+    }, () => {
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content"));
     });
   },
 
@@ -1858,7 +1878,7 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}));
 
 function emptyLiveOverlayState(): {
   playerDetailOpen: false;

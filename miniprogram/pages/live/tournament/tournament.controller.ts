@@ -78,6 +78,7 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import { getCurrentPagePerformanceTracker } from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
 import {
   exportTournamentBoardShareImage,
@@ -1382,10 +1383,14 @@ PerformancePage({
     )
       return;
     this.loadedSeason = context.season || undefined;
+    // The live window is public and independent of the viewer binding. Start
+    // it while the authoritative identity is being refreshed so directory
+    // loading can begin as soon as the principal gate is ready.
+    const liveWindowPromise = getLiveSnapshot().catch(() => null);
     await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.startupGeneration !== startupGeneration)
       return;
-    const liveWindow = await getLiveSnapshot().catch(() => null);
+    const liveWindow = await liveWindowPromise;
     this.liveSnapshot = liveWindow;
     const currentGw =
       liveWindow &&
@@ -2740,6 +2745,7 @@ PerformancePage({
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(variables.entryId)) return;
         this.applyBoardPage(result.page, true);
+        getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
         const writeScope = this.currentBoardScope();
         if (
           writeScope &&
@@ -2917,6 +2923,7 @@ PerformancePage({
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
       this.applyH2HBoard(board);
+      getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
     } catch (error) {
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       this.setData({
@@ -3428,6 +3435,7 @@ PerformancePage({
       this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
     if (cached) {
       this.applyDetailDesk(cached);
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content"));
       return;
     }
     // A pending request only dedupes a reopen of the SAME tournament; a
@@ -3456,6 +3464,7 @@ PerformancePage({
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content"));
     } catch (error) {
       if (requestId !== this.detailRequestId) return;
       if (!this.pageVisible || !this.data.detailOpen) return;

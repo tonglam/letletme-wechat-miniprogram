@@ -16,7 +16,10 @@ const {
   PagePerformanceTracker,
   markAppBackgrounded,
   consumeAppBackgroundResume,
-  getActivePagePerformanceTrace
+  getActivePagePerformanceTrace,
+  getCurrentPagePerformanceTrace,
+  getCurrentPagePerformanceTracker,
+  instrumentPageInteractions,
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
 const {
@@ -107,6 +110,146 @@ test("soft timeout is UI-only and late completion remains possible", async () =>
   assert.equal(softFailures, 1);
   resolveTask();
   await task;
+});
+
+test("stage markers keep default and optional content separate", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const page = {
+    __performanceVisible: true,
+    __performanceTracker: null,
+    createIntersectionObserver() { return observer; }
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/stages", "warm-enter");
+  page.__performanceTracker = tracker;
+  tracker.expectSecondaryCompletion();
+  tracker.mark("defaultContentAt");
+  tracker.observePrimary();
+  callback({ intersectionRatio: 1 });
+  assert.equal(getCurrentPagePerformanceTracker(), tracker);
+  assert.deepEqual(getCurrentPagePerformanceTrace(), {
+    navigationId: tracker.navigationId,
+    route: tracker.route,
+    trigger: tracker.trigger,
+  });
+  tracker.mark("secondaryCompleteAt");
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.defaultContentAt);
+  assert.ok(record.primaryViewportVisibleAt);
+  assert.ok(record.secondaryCompleteAt);
+  assert.equal(record.completeAt, record.secondaryCompleteAt);
+  delete globalThis.getCurrentPages;
+});
+
+test("an error surface records error visibility without successful completion", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const page = {
+    data: { error: "网络连接失败，请检查网络后重试" },
+    __performanceVisible: true,
+    createIntersectionObserver() { return observer; }
+  };
+  const tracker = new PagePerformanceTracker(page, "pages/test/error", "warm-enter");
+  tracker.observePrimary();
+  callback({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.errorVisibleAt);
+  assert.ok(record.primaryViewportVisibleAt);
+  assert.equal(record.completeAt, undefined);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("interaction markers keep handler completion separate from visible content", () => {
+  clearPerf();
+  let now = 100;
+  globalThis.wx.getPerformance = () => ({ now: () => (now += 10) });
+  const page = { __performanceVisible: true, createIntersectionObserver() {} };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/interactions", "warm-enter");
+  const token = tracker.beginInteraction("onTab", "tab:overview");
+  tracker.markInteractionHandlerCompleted(token.interactionId);
+  let record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions[0].status, "completed");
+  assert.ok(record.interactions[0].handlerCompletedAt >= record.interactions[0].startedAt);
+  tracker.mark("onDemandVisibleAt");
+  record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions[0].status, "completed");
+  assert.equal(record.interactions[0].resultVisibleAt, undefined);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("default commits do not close an interaction before its viewport marker", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const page = { data: {}, __performanceVisible: true, createIntersectionObserver() { return observer; } };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/interaction-viewport", "warm-enter");
+  const token = tracker.beginInteraction("onTab", "tab:season");
+  tracker.markInteractionHandlerCompleted(token.interactionId);
+  tracker.mark("defaultContentAt");
+  let record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions[0].resultVisibleAt, undefined);
+  tracker.observeInteractionVisible("#target");
+  callback({ intersectionRatio: 1 });
+  record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.interactions[0].resultVisibleAt);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("page interaction instrumentation records the actual handler and preserves return values", () => {
+  clearPerf();
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/instrumented", "warm-enter");
+  const calls = [];
+  const definition = instrumentPageInteractions({
+    onLoad() { calls.push("lifecycle"); },
+    onTap(value) { calls.push(value); return "handled"; },
+    helper() { calls.push("helper"); },
+  });
+  assert.equal(definition.onTap.call(page, "tap"), "handled");
+  definition.helper.call(page);
+  assert.deepEqual(calls, ["tap", "helper"]);
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions.length, 1);
+  assert.equal(record.interactions[0].handler, "onTap");
+  assert.ok(record.interactions[0].handlerCompletedAt >= record.interactions[0].startedAt);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("API records retain redacted HTTP diagnostics for network failures", () => {
+  clearPerf();
+  recordApi("GetEntryTransferHistory", 42, false, {
+    source: "network",
+    networkAttempted: true,
+    requestId: "req-redacted",
+    statusCode: 403,
+    code: "FORBIDDEN",
+  });
+  const record = getPerf().apiRecords.at(-1);
+  assert.equal(record.statusCode, 403);
+  assert.equal(record.code, "FORBIDDEN");
+  assert.equal(record.requestId, "req-redacted");
 });
 
 test("page session classifies only the first load as cold and completion cannot precede primary visible", () => {

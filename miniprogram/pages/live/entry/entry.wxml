@@ -185,7 +185,7 @@
       </view>
     </view>
   </block>
-  <player-live-sheet wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" shareable="{{true}}" shareBusy="{{playerShareBusy}}" bind:close="onClosePlayer" bind:shareimage="onSharePlayerImage" />
+  <player-live-sheet id="perf-on-demand-content" wx:if="{{!error && !loading}}" show="{{playerDetailOpen}}" detail="{{playerDetail}}" shareable="{{true}}" shareBusy="{{playerShareBusy}}" bind:close="onClosePlayer" bind:shareimage="onSharePlayerImage" />
   <copy-fallback show="{{shareSheetOpen}}" text="{{shareText}}" bind:close="onCloseShareSheet" />
   <bottomNavBar active="live" />
 </view>

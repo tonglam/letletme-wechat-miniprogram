@@ -25,7 +25,10 @@ import {
   getAppContextSnapshot,
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import { copyShareText } from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
 import { formatPriceMovementShareText } from "../../../utils/explore-share";
@@ -587,7 +590,7 @@ function ownershipDateOptions(latestDate: string | null | undefined): string[] {
 const initialChangeDate = formatPricePickerDate();
 const initialDailyEmptyState = getDailyPriceEmptyState(initialChangeDate);
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     activeMode: "daily",
     loading: false,
@@ -1701,4 +1704,4 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}));

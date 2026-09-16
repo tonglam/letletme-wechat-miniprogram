@@ -6,6 +6,7 @@ import {
   type MiniChartType
 } from "../../utils/mini-chart";
 import { drawMiniChartPlan, type MiniChartCanvas2D, type MiniChartContext2D } from "../../utils/mini-chart-canvas";
+import { windowPixelRatio } from "../../utils/system-info";
 
 interface MiniChartHost {
   chartCanvas?: MiniChartCanvas2D | null;
@@ -78,10 +79,10 @@ Component({
       });
       const canvas = rect?.node;
       if (!canvas || !rect) return false;
-      // pixelRatio 应取 wx.getWindowInfo(getSystemInfoSync 已废弃),但项目锁定的
-      // miniprogram-api-typings 2.x 还没有它的声明 —— 窄断言 + 旧基础库回退。
-      const windowInfo = (wx as unknown as { getWindowInfo?: () => { pixelRatio?: number } }).getWindowInfo?.();
-      const dpr = Number((windowInfo || wx.getSystemInfoSync()).pixelRatio) || 1;
+      // Keep the modern API/legacy fallback in one helper so current clients
+      // never execute the deprecated call while older base libraries retain
+      // the existing pixel-ratio behavior.
+      const dpr = windowPixelRatio();
       const width = Number(rect.width) || 0;
       const height = Number(rect.height) || 0;
       if (width <= 0 || height <= 0) return false;
@@ -155,4 +156,3 @@ Component({
     }
   }
 });
-

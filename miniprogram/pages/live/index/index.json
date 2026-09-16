@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "实时",
   "usingComponents": {
-    "entry-card": "../../../components/entry-card/entry-card"
+    "entry-card": "../../../components/entry-card/entry-card",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

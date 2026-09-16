@@ -24,8 +24,7 @@ test("Live Entry uses one CalcLive root and no independent LiveSnapshot root", (
 test("V2 pending/unavailable preserves same-event data and controls polling", () => {
   const page = source("miniprogram/pages/live/entry/entry.ts");
   const noPicks = page.indexOf('result.availability === "NO_PICKS"');
-  const transferLoad = page.indexOf("await this.loadTransfers", noPicks);
-  assert.ok(noPicks >= 0 && transferLoad > noPicks);
+  assert.ok(noPicks >= 0);
   const branch = page.slice(noPicks, page.indexOf("const players", noPicks));
   assert.match(branch, /transfers: \[\]/);
   assert.match(branch, /this\.liveRefresh\?\.stop\(\)/);
@@ -38,6 +37,11 @@ test("V2 pending/unavailable preserves same-event data and controls polling", ()
   assert.match(page, /LIVE_POINTS_UNAVAILABLE_ERROR/);
   assert.match(page, /this\.liveSnapshot\?\.nextRefreshAt/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
+  assert.match(page, /expectSecondaryCompletion\(\)/);
+  assert.match(
+    page,
+    /const transfersRequest = this\.loadTransfers\([\s\S]*transfersRequest\.finally\([\s\S]*secondaryCompleteAt/,
+  );
 });
 
 test("no-entry state observes primary only after setData commits", () => {

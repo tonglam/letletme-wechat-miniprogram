@@ -1,4 +1,7 @@
-import { PagePerformanceTracker } from "./page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "./page-performance";
 
 type Lifecycle = (this: InstrumentedPage, ...args: unknown[]) => unknown;
 
@@ -109,7 +112,9 @@ function wrapSetData(page: InstrumentedPage): void {
  * primary boundary is simply the first rendered data, empty, or error state.
  */
 export const PerformancePage = ((options: unknown): void => {
-  const definition = options as Record<string, unknown>;
+  const definition = instrumentPageInteractions(
+    options as Record<string, unknown>,
+  );
   const originalOnLoad = definition.onLoad as Lifecycle | undefined;
   const originalOnShow = definition.onShow as Lifecycle | undefined;
   const originalOnPullDownRefresh = definition.onPullDownRefresh as Lifecycle | undefined;

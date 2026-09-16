@@ -57,7 +57,10 @@ import {
   getAppContextSnapshot,
   shouldRefreshAppContext,
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import {
   capturePageRequestTrace,
   isViewerEntryAuthorizationError,
@@ -300,7 +303,7 @@ interface EntrySummaryData {
   pastSeasonHasSelected: boolean;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     error: "",
@@ -1480,7 +1483,7 @@ Page({
     }
     this.loadData(true);
   },
-});
+}));
 
 function emptySeasonChartState() {
   return {

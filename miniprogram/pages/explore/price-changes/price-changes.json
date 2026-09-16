@@ -7,6 +7,7 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
     "filter-bar": "../../../components/filter-bar/filter-bar",
-    "copy-fallback": "../../../components/copy-fallback/copy-fallback"
+    "copy-fallback": "../../../components/copy-fallback/copy-fallback",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

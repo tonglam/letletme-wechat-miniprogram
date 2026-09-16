@@ -106,8 +106,11 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   EntryLeagues: { authMode: "session", cachePolicy: "reporting" },
   EntryHistory: { authMode: "session", cachePolicy: "reporting" },
   EntryEventResult: { authMode: "session", cachePolicy: "reporting" },
-  GetEntryTransferHistory: { authMode: "session", cachePolicy: "reporting" },
-  EntryTransferHistory: { authMode: "session", cachePolicy: "reporting" },
+  // Official FPL transfer history is public entry data.  Keep the same
+  // reporting/live freshness policies, but do not require a viewer session or
+  // put a bearer token into the request/cache identity.
+  GetEntryTransferHistory: { authMode: "public", cachePolicy: "reporting" },
+  EntryTransferHistory: { authMode: "public", cachePolicy: "reporting" },
   EntryTournaments: { authMode: "session", cachePolicy: "reporting" },
   TournamentSummary: { authMode: "session", cachePolicy: "reporting" },
   TournamentSelectionStats: { authMode: "session", cachePolicy: "reporting" },
