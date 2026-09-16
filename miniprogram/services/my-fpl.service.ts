@@ -172,7 +172,9 @@ export async function getCurrentSnapshotState(event: number): Promise<LiveSnapsh
     return undefined;
   }
   try {
-    const snapshot = await getLiveSnapshot(event);
+    // Phase derivation is a lightweight background probe; it does not belong
+    // to the visible page navigation trace.
+    const snapshot = await getLiveSnapshot(event, null);
     return snapshot?.state;
   } catch {
     return undefined;

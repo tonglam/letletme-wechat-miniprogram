@@ -1397,7 +1397,7 @@ PerformancePage({
     // The live window is public and independent of the viewer binding. Start
     // it while the authoritative identity is being refreshed so directory
     // loading can begin as soon as the principal gate is ready.
-    const liveWindowPromise = getLiveSnapshot().catch(() => null);
+    const liveWindowPromise = getLiveSnapshot(undefined, trace).catch(() => null);
     await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.startupGeneration !== startupGeneration)
       return;
@@ -1443,10 +1443,9 @@ PerformancePage({
           },
           {
             expectedSeason: scope.season,
-            trace: capturePageRequestTrace({
-              callerSurface: "live-tournament-board-head",
-              trigger: "refresh",
-            }),
+            // This is an automatic revision probe, so keep it out of the
+            // completed navigation trace.
+            trace: null,
           },
         );
         return leagueHeadProbeSnapshot(head);
@@ -3224,10 +3223,8 @@ PerformancePage({
           {
             expectedSeason:
               this.loadedSeason || this.liveSnapshot?.season || undefined,
-            trace: capturePageRequestTrace({
-              callerSurface: "live-tournament-h2h-head",
-              trigger: "refresh",
-            }),
+            // H2H head checks are background polling, not user actions.
+            trace: null,
           },
         );
         if (

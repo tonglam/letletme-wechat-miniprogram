@@ -80,29 +80,36 @@ PerformancePage({
   },
 
   unlinkWebAccount() {
-    wx.showModal({
-      title: '解除网页关联？',
-      content: '只会解除网页版账户关系。小程序账户、当前设备会话和小程序球队都会保留。',
-      confirmText: '解除关联',
-      confirmColor: '#c9183f',
-      success: async ({ confirm }) => {
-        if (!confirm) return;
-        this.setData({ unlinking: true, error: '' });
-        try {
-          await unlinkMiniProgramWebAccount();
-          this.setData({
-            accountLinked: false,
-            accountEmail: '',
-            email: '',
-            code: ''
-          });
-          wx.showToast({ title: '已解除网页关联', icon: 'success' });
-        } catch (error) {
-          this.setData({ error: error instanceof Error ? error.message : '解除关联失败' });
-        } finally {
-          this.setData({ unlinking: false });
-        }
-      }
+    return new Promise<void>((resolve, reject) => {
+      wx.showModal({
+        title: '解除网页关联？',
+        content: '只会解除网页版账户关系。小程序账户、当前设备会话和小程序球队都会保留。',
+        confirmText: '解除关联',
+        confirmColor: '#c9183f',
+        success: async ({ confirm }) => {
+          if (!confirm) {
+            resolve();
+            return;
+          }
+          this.setData({ unlinking: true, error: '' });
+          try {
+            await unlinkMiniProgramWebAccount();
+            this.setData({
+              accountLinked: false,
+              accountEmail: '',
+              email: '',
+              code: ''
+            });
+            wx.showToast({ title: '已解除网页关联', icon: 'success' });
+          } catch (error) {
+            this.setData({ error: error instanceof Error ? error.message : '解除关联失败' });
+          } finally {
+            this.setData({ unlinking: false });
+            resolve();
+          }
+        },
+        fail: reject,
+      });
     });
   },
 

@@ -997,7 +997,7 @@ Page(instrumentPageInteractions({
         const head = await getLiveMatchdayHead(
           this.currentEventId,
           true,
-          undefined,
+          null,
           this.loadedSeason,
         );
         if (!head) {
@@ -1010,7 +1010,7 @@ Page(instrumentPageInteractions({
           const liveResult = await getLiveMatchByStatusSnapshot(
             "all",
             true,
-            undefined,
+            null,
             this.currentEventId,
             this.loadedSeason,
           );

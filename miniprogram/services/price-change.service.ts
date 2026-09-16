@@ -369,7 +369,12 @@ export async function getPriceChangeLiveCursor(): Promise<PriceChangeLiveCursor 
     const read = await graphqlRead<{ priceChangeLiveCursor: PriceChangeLiveCursor | null }>(
       PRICE_CHANGE_LIVE_CURSOR_QUERY,
       {},
-      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+      {
+        authMode: "public",
+        cachePolicy: "network-only",
+        forceRefresh: true,
+        trace: null,
+      },
     );
     if (read.errors.length > 0) return null;
     return read.data.priceChangeLiveCursor ?? null;
@@ -387,7 +392,12 @@ export async function getPriceChangeLiveBoard(
     const read = await graphqlRead<{ priceChangeLiveBoard: PriceChangeLiveBoard | null }>(
       PRICE_CHANGE_LIVE_BOARD_QUERY,
       { revision: revision || null, sourceHash: sourceHash || null },
-      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+      {
+        authMode: "public",
+        cachePolicy: "network-only",
+        forceRefresh: true,
+        trace: null,
+      },
     );
     if (read.errors.length > 0) return null;
     return read.data.priceChangeLiveBoard ?? null;

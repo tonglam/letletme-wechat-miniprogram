@@ -1233,7 +1233,7 @@ Page(instrumentPageInteractions({
 
   onRetry() {
     this.setData({ error: "" });
-    void this.refreshHome().finally(() => this.startCountdown());
+    return this.refreshHome().finally(() => this.startCountdown());
   },
 
   onCloseNotice() {

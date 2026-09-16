@@ -442,7 +442,9 @@ Page(instrumentPageInteractions({
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
-      probe: () => getLiveSnapshot(),
+      // Automatic publication probes must not inherit the completed page
+      // navigation trace; only an explicit user refresh owns that trace.
+      probe: () => getLiveSnapshot(undefined, null),
       getNextRefreshAt: () =>
         firstRefreshDeadline(
           this.data.scoreNextRefreshAt,
