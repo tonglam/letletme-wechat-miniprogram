@@ -65,6 +65,7 @@ import {
   consumeAppBackgroundResume,
   getPageInteractionToken,
   instrumentPageInteractions,
+  runPageInteractionDelegation,
 } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -1725,11 +1726,10 @@ Page(instrumentPageInteractions({
 
   onEntryLookupAction() {
     if (this.data.entryLookupRetryable) {
-      this.onRetry();
-      return;
+      return runPageInteractionDelegation(this, () => this.onRetry());
     }
     if (isDeterministicEntryIdentityFailure(this.data.entryLookupStatus)) {
-      this.onChooseEntry();
+      return runPageInteractionDelegation(this, () => this.onChooseEntry());
     }
   },
 

@@ -17,8 +17,11 @@ export function setPageTitle(title: string): void {
 
 export function navigateTo(path: string, query: Record<string, string | number | undefined> = {}): void {
   const url = `${path}${encodeQuery(query)}`;
-  handoffPageInteraction(url);
-  wx.navigateTo({ url });
+  const handoff = handoffPageInteraction(url);
+  wx.navigateTo({
+    url,
+    fail: () => handoff?.rollback(),
+  });
 }
 
 export function goToEntrySearch(): void {
@@ -46,11 +49,17 @@ export function goToLiveEntry(entryId?: number): void {
 }
 
 export function switchToHome(): void {
-  handoffPageInteraction(routes.home);
-  wx.redirectTo({ url: routes.home });
+  const handoff = handoffPageInteraction(routes.home);
+  wx.redirectTo({
+    url: routes.home,
+    fail: () => handoff?.rollback(),
+  });
 }
 
 export function switchToLive(): void {
-  handoffPageInteraction(routes.liveIndex);
-  wx.redirectTo({ url: routes.liveIndex });
+  const handoff = handoffPageInteraction(routes.liveIndex);
+  wx.redirectTo({
+    url: routes.liveIndex,
+    fail: () => handoff?.rollback(),
+  });
 }

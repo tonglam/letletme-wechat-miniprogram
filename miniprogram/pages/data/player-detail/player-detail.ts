@@ -154,8 +154,11 @@ PerformancePage({
   },
 
   onBackToPlayers() {
-    handoffPageInteraction(routes.dataPlayers);
-    wx.redirectTo({ url: routes.dataPlayers });
+    const handoff = handoffPageInteraction(routes.dataPlayers);
+    wx.redirectTo({
+      url: routes.dataPlayers,
+      fail: () => handoff?.rollback(),
+    });
   }
 });
 

@@ -14,6 +14,8 @@ type PageOwner = {
   __performanceInteractionTokens?: Record<string, PageInteractionToken>;
   /** Synchronous wrapper depth used to avoid double-counting delegated taps. */
   __performanceInteractionDepth?: number;
+  /** Explicit delegation scope for calls that continue after an await. */
+  __performanceInteractionDelegationDepth?: number;
   createIntersectionObserver?: (
     options: WechatMiniprogram.CreateIntersectionObserverOption
   ) => WechatMiniprogram.IntersectionObserver;
@@ -25,7 +27,13 @@ type NavigationInteraction = {
   target?: string;
   startedAt: number;
   targetRoute?: string;
+  sourceTracker: PagePerformanceTracker;
 };
+
+export interface PageInteractionHandoff {
+  /** Restore the source action as a failed interaction when navigation rejects. */
+  rollback(): void;
+}
 
 function monotonicNow(): number {
   try {
@@ -176,17 +184,51 @@ export function getCurrentPageInteractionToken(): PageInteractionToken | null {
  * Move the current user action to the route that a navigation helper is about
  * to open. The destination tracker adopts the same interaction id and start
  * time, so a source-page tap is measured until the destination content is
- * actually visible. The source record is retired to avoid duplicate samples.
+ * actually visible. The source record is retired to avoid duplicate samples;
+ * callers must invoke the returned rollback when the navigation API rejects.
  */
-export function handoffPageInteraction(targetRoute?: string): void {
+export function handoffPageInteraction(
+  targetRoute?: string,
+): PageInteractionHandoff | null {
   const token = getCurrentPageInteractionToken();
-  if (!token) return;
+  if (!token) return null;
   const interaction = token.tracker.takeInteractionForNavigation(token.interactionId);
-  if (!interaction) return;
-  pendingNavigationInteraction = {
+  if (!interaction) return null;
+  const pending: NavigationInteraction = {
     ...interaction,
     targetRoute: normalizeRoute(targetRoute),
   };
+  pendingNavigationInteraction = pending;
+  return {
+    rollback: () => {
+      if (pendingNavigationInteraction !== pending) return;
+      pendingNavigationInteraction = undefined;
+      pending.sourceTracker.restoreInteractionFromNavigation(pending);
+    },
+  };
+}
+
+/**
+ * Mark a call as an explicit delegated continuation. Unlike the page-wide
+ * wrapper depth, this scope lasts only for the call that is being delegated,
+ * so unrelated user events can still create their own interaction records
+ * while an async handler is suspended.
+ */
+export function runPageInteractionDelegation<T>(
+  page: unknown,
+  delegate: () => T,
+): T {
+  const owner = page as PageOwner;
+  owner.__performanceInteractionDelegationDepth =
+    (owner.__performanceInteractionDelegationDepth ?? 0) + 1;
+  try {
+    return delegate();
+  } finally {
+    owner.__performanceInteractionDelegationDepth = Math.max(
+      0,
+      (owner.__performanceInteractionDelegationDepth ?? 1) - 1,
+    );
+  }
 }
 
 export function getActivePagePerformanceTrace(): ActivePagePerformanceTrace | null {
@@ -339,9 +381,14 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       // Page handlers sometimes delegate to another on* handler (for example
       // an empty-state action calling the shared retry method). Both methods
       // are wrapped in this loop, but the delegation is still one user event.
-      // Bypass the nested wrapper for the synchronous call stack so it cannot
-      // create a second interaction record or visibility observer.
-      if ((this.__performanceInteractionDepth ?? 0) > 0) {
+      // Bypass a nested wrapper for the synchronous call stack or an explicit
+      // delegated continuation so it cannot create a second interaction
+      // record or visibility observer. The synchronous depth is released as
+      // soon as a promise is returned; it must not span independent events.
+      if (
+        (this.__performanceInteractionDepth ?? 0) > 0 ||
+        (this.__performanceInteractionDelegationDepth ?? 0) > 0
+      ) {
         return handler.apply(this, args);
       }
       this.__performanceInteractionDepth =
@@ -397,21 +444,14 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
         throw error;
       }
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+        releaseDepth();
         void Promise.resolve(result).then(
           () => {
-            try {
-              settleHandler();
-            } finally {
-              releaseDepth();
-            }
+            settleHandler();
           },
           () => {
-            try {
-              rebindToCurrentTracker();
-              token?.tracker.completeInteraction(token.interactionId, "failed");
-            } finally {
-              releaseDepth();
-            }
+            rebindToCurrentTracker();
+            token?.tracker.completeInteraction(token.interactionId, "failed");
           },
         );
       } else {
@@ -531,10 +571,7 @@ export class PagePerformanceTracker {
       (item) => item.interactionId === interactionId,
     );
     if (!interaction) return;
-    interaction.handlerCompletedAt = Math.max(
-      interaction.handlerCompletedAt ?? timestamp,
-      timestamp,
-    );
+    interaction.handlerCompletedAt ??= timestamp;
     interaction.status = status;
     if (visible === true) {
       interaction.resultVisibleAt = Math.max(
@@ -785,7 +822,23 @@ export class PagePerformanceTracker {
       handler: interaction.handler,
       ...(interaction.target ? { target: interaction.target } : {}),
       startedAt: interaction.startedAt,
+      sourceTracker: this,
     };
+  }
+
+  restoreInteractionFromNavigation(interaction: NavigationInteraction): void {
+    if (this.readInteraction(interaction.interactionId)) return;
+    const restored: PageInteractionRecord = {
+      interactionId: interaction.interactionId,
+      handler: interaction.handler,
+      ...(interaction.target ? { target: interaction.target } : {}),
+      startedAt: interaction.startedAt,
+      handlerCompletedAt: monotonicNow(),
+      status: "failed",
+    };
+    const previous = this.record.interactions ?? [];
+    this.record.interactions = [...previous, restored].slice(-32);
+    this.flush();
   }
 
   private adoptPendingNavigationInteraction(): void {

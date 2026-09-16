@@ -22,6 +22,7 @@ const {
   handoffPageInteraction,
   getPageInteractionToken,
   instrumentPageInteractions,
+  runPageInteractionDelegation,
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
 const {
@@ -241,6 +242,18 @@ test("interaction markers keep handler completion separate from visible content"
   delete globalThis.getCurrentPages;
 });
 
+test("interaction completion preserves the handler boundary", () => {
+  clearPerf();
+  const tracker = new PagePerformanceTracker({}, "pages/test/handler-boundary", "warm-enter");
+  const token = tracker.beginInteraction("onTap", "button:open");
+  tracker.completeInteraction(token.interactionId, "completed", undefined, 200);
+  tracker.completeInteraction(token.interactionId, "completed", true, 300);
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions[0].handlerCompletedAt, 200);
+  assert.equal(record.interactions[0].resultVisibleAt, 300);
+  tracker.disconnect();
+});
+
 test("default commits do not close an interaction before its viewport marker", () => {
   clearPerf();
   let callback;
@@ -456,7 +469,7 @@ test("async delegated handlers keep one interaction context through await", asyn
   const definition = instrumentPageInteractions({
     async onRetry() {
       await Promise.resolve();
-      this.onV2LoadMore();
+      runPageInteractionDelegation(this, () => this.onV2LoadMore());
     },
     onV2LoadMore() {},
   });
@@ -466,6 +479,38 @@ test("async delegated handlers keep one interaction context through await", asyn
   const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
   assert.equal(record.interactions.length, 1);
   assert.equal(record.interactions[0].handler, "onRetry");
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("independent actions remain measurable while an async handler is suspended", async () => {
+  clearPerf();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/async-independent", "warm-enter");
+  const definition = instrumentPageInteractions({
+    async onRetry() {
+      await pending;
+      runPageInteractionDelegation(this, () => this.onV2LoadMore());
+    },
+    onV2LoadMore() {},
+    onTabTap() {},
+  });
+  Object.assign(page, definition);
+
+  const retry = page.onRetry();
+  page.onTabTap();
+  const beforeRelease = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(beforeRelease.interactions.length, 2);
+  assert.deepEqual(beforeRelease.interactions.map((item) => item.handler), ["onRetry", "onTabTap"]);
+
+  release();
+  await retry;
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions.length, 2);
+  assert.deepEqual(record.interactions.map((item) => item.handler), ["onRetry", "onTabTap"]);
   tracker.disconnect();
   delete globalThis.getCurrentPages;
 });
@@ -534,6 +579,43 @@ test("navigation interactions are adopted by the destination tracker", () => {
   assert.ok(destinationRecord.interactions[0].resultVisibleAt);
   sourceTracker.disconnect();
   destinationTracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("navigation handoff rollback restores a failed source interaction", () => {
+  clearPerf();
+  const source = {
+    route: "pages/test/rollback-source",
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [source];
+  const sourceTracker = new PagePerformanceTracker(source, source.route, "warm-enter");
+  const definition = instrumentPageInteractions({
+    onOpenDestination() {
+      return handoffPageInteraction("/pages/test/rollback-destination");
+    },
+  });
+  Object.assign(source, definition);
+
+  const handoff = source.onOpenDestination();
+  const retired = getPerf().pagePerformance.find((item) => item.navigationId === sourceTracker.navigationId);
+  assert.deepEqual(retired.interactions, []);
+  handoff?.rollback();
+  const restored = getPerf().pagePerformance.find((item) => item.navigationId === sourceTracker.navigationId);
+  assert.equal(restored.interactions.length, 1);
+  assert.equal(restored.interactions[0].status, "failed");
+
+  const destination = new PagePerformanceTracker(
+    { route: "pages/test/rollback-destination", __performanceVisible: true },
+    "pages/test/rollback-destination",
+    "in-page-navigation",
+  );
+  const destinationRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === destination.navigationId,
+  );
+  assert.equal(destinationRecord.interactions, undefined);
+  sourceTracker.disconnect();
+  destination.disconnect();
   delete globalThis.getCurrentPages;
 });
 

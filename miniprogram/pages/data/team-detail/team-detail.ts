@@ -138,8 +138,11 @@ PerformancePage({
   },
 
   onBackToTeams() {
-    handoffPageInteraction(routes.dataTeams);
-    wx.redirectTo({ url: routes.dataTeams });
+    const handoff = handoffPageInteraction(routes.dataTeams);
+    wx.redirectTo({
+      url: routes.dataTeams,
+      fail: () => handoff?.rollback(),
+    });
   }
 });
 

@@ -33,7 +33,10 @@ import {
   isViewerEntryAuthorizationError,
   type PageRequestTrace,
 } from "../../../services/graphql.service";
-import { getCurrentPagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  getCurrentPagePerformanceTracker,
+  runPageInteractionDelegation,
+} from "../../../utils/page-performance";
 
 type LeagueView = "season" | "gameweek";
 type LeagueEmptyState = "" | "entry" | "tournaments" | "view";
@@ -2440,7 +2443,7 @@ PerformancePage({
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         if (surface === "season" && retry?.operation === "loadMore") {
-          void this.onV2LoadMore();
+          void runPageInteractionDelegation(this, () => this.onV2LoadMore());
           return;
         }
         if (surface === "season" && retry?.phaseId) {
@@ -2467,7 +2470,7 @@ PerformancePage({
       this.retryOperation === "loadMore" &&
       this.data.activeView === "season"
     ) {
-      void this.onV2LoadMore();
+      void runPageInteractionDelegation(this, () => this.onV2LoadMore());
       return;
     }
     if (
@@ -2580,10 +2583,11 @@ PerformancePage({
       return;
     }
     if (this.data.v2State !== "NOT_STARTED") {
-      this.onRetry();
+      void runPageInteractionDelegation(this, () => this.onRetry());
       return;
     }
-    void this.onOpenWebsite();
+    void runPageInteractionDelegation(this, () => this.onOpenWebsite());
+    return;
   },
 
   async onOpenWebsite() {

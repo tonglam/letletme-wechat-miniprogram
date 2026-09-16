@@ -41,6 +41,7 @@ import {
   currentMyFplEntryId,
   waitForAuthoritativeFollow,
 } from "../../../utils/follow";
+import { runPageInteractionDelegation } from "../../../utils/page-performance";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
@@ -515,7 +516,7 @@ PerformancePage({
   },
 
   onSearchSubmit(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
-    this.onSearchDraft(event);
+    runPageInteractionDelegation(this, () => this.onSearchDraft(event));
   },
 
   onResetSearch() {

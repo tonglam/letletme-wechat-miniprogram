@@ -7,7 +7,10 @@ import {
 } from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
-import { handoffPageInteraction } from "../../../utils/page-performance";
+import {
+  handoffPageInteraction,
+  runPageInteractionDelegation,
+} from "../../../utils/page-performance";
 import { formatRank } from "../../../utils/summary-format";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
@@ -99,6 +102,7 @@ PerformancePage({
 
   lookupRequestId: 0,
   redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  redirectHandoff: null as ReturnType<typeof handoffPageInteraction>,
   pageVisible: true,
 
   async onShow() {
@@ -121,6 +125,8 @@ PerformancePage({
   cancelRedirectTimer() {
     if (this.redirectTimer) clearTimeout(this.redirectTimer);
     this.redirectTimer = undefined;
+    this.redirectHandoff?.rollback();
+    this.redirectHandoff = null;
   },
 
   syncCurrentEntry() {
@@ -153,7 +159,7 @@ PerformancePage({
   },
 
   onEntryConfirm() {
-    this.onLookupEntry();
+    runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
   async onLookupEntry() {
@@ -309,7 +315,7 @@ PerformancePage({
 
   onRetryLookup() {
     if (this.data.loading) return;
-    return this.onLookupEntry();
+    return runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
   onSetMyEntry() {
@@ -331,11 +337,25 @@ PerformancePage({
     this.cancelRedirectTimer();
     // Keep the follow action attached to the Home content that will confirm
     // the new team after the short transition delay.
-    handoffPageInteraction(routes.home);
+    this.redirectHandoff = handoffPageInteraction(routes.home);
     this.redirectTimer = setTimeout(() => {
       this.redirectTimer = undefined;
-      if (!this.pageVisible) return;
-      wx.reLaunch({ url: routes.home });
+      const handoff = this.redirectHandoff;
+      if (!this.pageVisible) {
+        handoff?.rollback();
+        this.redirectHandoff = null;
+        return;
+      }
+      wx.reLaunch({
+        url: routes.home,
+        success: () => {
+          if (this.redirectHandoff === handoff) this.redirectHandoff = null;
+        },
+        fail: () => {
+          handoff?.rollback();
+          if (this.redirectHandoff === handoff) this.redirectHandoff = null;
+        },
+      });
     }, 800);
   },
 
