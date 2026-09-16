@@ -146,7 +146,7 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadData("refresh", true);
+    return this.loadData("refresh", true);
   },
 
   onPullDownRefresh() {

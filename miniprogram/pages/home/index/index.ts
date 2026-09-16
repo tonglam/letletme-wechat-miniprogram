@@ -526,7 +526,12 @@ Page(instrumentPageInteractions({
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
-        wx.nextTick(() => tracker.observePrimary("#perf-primary-home-content", { errorVisible: false }));
+        const primarySelector = this.data.error
+          ? "#perf-primary-home-error"
+          : "#perf-primary-home-content";
+        wx.nextTick(() => tracker.observePrimary(primarySelector, {
+          errorVisible: primarySelector === "#perf-primary-home-error",
+        }));
         recordHomeFixtureTiming({
           surface: "home-fixtures",
           trigger: "onShow",

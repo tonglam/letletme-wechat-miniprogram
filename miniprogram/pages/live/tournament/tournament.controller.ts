@@ -5115,4 +5115,9 @@ PerformancePage({
   },
 }, {
   explicitInteractionHandlers: ["onOpenTournamentDetail"],
+  primaryError: (data) => {
+    const value = data as Partial<LiveTournamentData> | undefined;
+    return !value?.hasData
+      && Boolean(value?.error || value?.tournamentListError);
+  },
 });
