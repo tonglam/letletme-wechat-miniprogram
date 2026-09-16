@@ -15,7 +15,10 @@ import {
 } from "../../../utils/fixture-run";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
-import { getCurrentPagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
+} from "../../../utils/page-performance";
 
 type FixturesErrorWorkload = "home" | "fixtures" | "player-stats";
 
@@ -286,8 +289,9 @@ PerformancePage({
         displayHorizon: this.data.horizon,
         displayWindowLabel: `GW${startEvent} 起 ${this.data.horizon} 轮`,
       });
-      this.rebuild();
-      getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+      this.rebuild(() => {
+        getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+      });
     } else if (!this.teams.length) {
       this.fixtures = [];
       this.setData({ runs: [], runCards: [], glanceCards: [] });
@@ -301,7 +305,8 @@ PerformancePage({
       callerSurface: "explore-fixtures",
       trigger: forceRefresh ? "refresh" : "load"
     }),
-    lifecycleRevision?: number
+    lifecycleRevision?: number,
+    interactionHandler?: "onGwChange" | "onHorizonChange",
   ) {
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
@@ -316,6 +321,9 @@ PerformancePage({
     const startEvent = this.data.startEvent;
     const horizon = this.data.horizon;
     const windowKey = `${season || "unknown"}:${startEvent}:${horizon}`;
+    const interaction = interactionHandler
+      ? getPageInteractionToken(this, interactionHandler)
+      : null;
     // Keep any complete window as the last-good view while a different target
     // window is loading.  A failed 8-round request must not turn a usable
     // 5-round page into an empty screen or relabel the old cards as new data.
@@ -359,11 +367,16 @@ PerformancePage({
         displayHorizon: horizon,
         displayWindowLabel: `GW${startEvent} 起 ${horizon} 轮`,
       });
-      this.rebuild();
-      // The first successful matrix commit is the default-content boundary.
-      // Mark it here as well as on cached context refreshes so cold entries
-      // expose a real stage timestamp to the performance report.
-      getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+      this.rebuild(() => {
+        // The first successful matrix commit is the default-content boundary.
+        // Mark it here as well as on cached context refreshes so cold entries
+        // expose a real stage timestamp to the performance report.
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        tracker?.observeInteractionVisible("#perf-primary-content", {
+          interactionId: interaction?.interactionId,
+        });
+      });
       // Composition settled (plan §9): window and duration only — team
       // names never enter a record.
       recordExploreVisit({
@@ -384,21 +397,34 @@ PerformancePage({
         error: hadLastGood
           ? `目标 ${this.data.targetWindowLabel || `GW${startEvent} 起 ${horizon} 轮`} 加载失败，当前显示 ${this.data.displayWindowLabel || "上次成功结果"}`
           : error instanceof Error ? error.message : "赛程加载失败"
+      }, () => {
+        if (!interaction) return;
+        getCurrentPagePerformanceTracker()?.observeInteractionVisible(
+          hadLastGood ? "#perf-fixture-stale-error" : "#perf-fixture-error",
+          { errorVisible: true, interactionId: interaction.interactionId },
+        );
       });
     }
   },
 
-  rebuild() {
+  rebuild(callback?: () => void) {
     if (!this.teams.length) {
-      this.setData({ runs: [] });
-      this.setData({ runCards: [], glanceCards: [] });
+      this.setData(
+        { runs: [], runCards: [], glanceCards: [] },
+        callback,
+      );
       return;
     }
     const startEvent = this.data.displayStartEvent || this.data.startEvent;
     const horizon = this.data.displayHorizon || this.data.horizon;
     const runs = buildFixtureRuns(this.fixtures, this.teams, startEvent, horizon);
-    this.setData({ runs });
-    this.applyView();
+    const { runCards, glanceCards } = buildFixturesView(
+      runs,
+      startEvent,
+      horizon,
+      this.data.sortOrder,
+    );
+    this.setData({ runs, runCards, glanceCards }, callback);
   },
 
   applyView() {
@@ -433,18 +459,18 @@ PerformancePage({
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.selectedWindowByUser = startEvent !== currentGw;
     this.setData({ startEvent });
-    void this.load(false, capturePageRequestTrace({
+    return this.load(false, capturePageRequestTrace({
       callerSurface: "explore-fixtures",
       trigger: "tab"
-    }));
+    }), undefined, "onGwChange");
   },
 
   onHorizonChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { horizon: number }>) {
     this.setData({ horizon: normalizeHorizon(Number(event.currentTarget.dataset.horizon)) });
-    void this.load(false, capturePageRequestTrace({
+    return this.load(false, capturePageRequestTrace({
       callerSurface: "explore-fixtures",
       trigger: "tab"
-    }));
+    }), undefined, "onHorizonChange");
   },
 
   onRetry() {
@@ -472,4 +498,6 @@ PerformancePage({
       }
     }
   }
+}, {
+  explicitInteractionHandlers: ["onGwChange", "onHorizonChange"],
 });

@@ -1,4 +1,8 @@
 import { getMiniProgramEnv } from "../../../config/env";
+import {
+  beginPageInteraction,
+  handoffPageInteraction,
+} from "../../../utils/page-performance";
 
 interface NavAction {
   name: string;
@@ -171,7 +175,7 @@ Component({
 
     onTapTab(event: WechatMiniprogram.TouchEvent) {
       const name = String(event.currentTarget.dataset.name || "");
-      this.applyTabChange(name);
+      this.applyTabChange(name, "bottomNavBar.onTapTab");
     },
 
     setActiveFromRoute() {
@@ -180,10 +184,10 @@ Component({
     },
 
     onChange(event: WechatMiniprogram.CustomEvent) {
-      this.applyTabChange(String(event.detail));
+      this.applyTabChange(String(event.detail), "bottomNavBar.onChange");
     },
 
-    applyTabChange(name: string) {
+    applyTabChange(name: string, handler = "bottomNavBar.onTapTab") {
       this.setData({ navName: name });
 
       const menu = MENU_MAP[name];
@@ -204,7 +208,12 @@ Component({
           if (url && getCurrentRoute() !== url) {
             this.clearEdgeReveal();
             this.setData({ edgeVisible: false });
-            wx.redirectTo({ url });
+            const interaction = beginPageInteraction(handler, `tab:${name}`);
+            const handoff = handoffPageInteraction(url, interaction);
+            wx.redirectTo({
+              url,
+              fail: () => handoff?.rollback(),
+            });
           }
         }
       }
@@ -223,7 +232,15 @@ Component({
       if (url && getCurrentRoute() !== url) {
         // Keep the sheet open until this page unloads so the electric edge
         // does not flash back during redirect.
-        wx.redirectTo({ url });
+        const interaction = beginPageInteraction(
+          "bottomNavBar.onSelect",
+          `menu:${detail.name}`,
+        );
+        const handoff = handoffPageInteraction(url, interaction);
+        wx.redirectTo({
+          url,
+          fail: () => handoff?.rollback(),
+        });
         return;
       }
       this.setData({ show: false });

@@ -604,6 +604,12 @@ test("navigation handoff rollback restores a failed source interaction", () => {
   const restored = getPerf().pagePerformance.find((item) => item.navigationId === sourceTracker.navigationId);
   assert.equal(restored.interactions.length, 1);
   assert.equal(restored.interactions[0].status, "failed");
+  sourceTracker.completeInteraction(restored.interactions[0].interactionId, "completed", true, 999);
+  assert.equal(
+    restored.interactions[0].status,
+    "failed",
+    "a late viewport callback cannot turn a rejected navigation into a success",
+  );
 
   const destination = new PagePerformanceTracker(
     { route: "pages/test/rollback-destination", __performanceVisible: true },
@@ -616,6 +622,59 @@ test("navigation handoff rollback restores a failed source interaction", () => {
   assert.equal(destinationRecord.interactions, undefined);
   sourceTracker.disconnect();
   destination.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("concurrent navigation handoffs are adopted independently", () => {
+  clearPerf();
+  const source = {
+    route: "pages/test/queue-source",
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [source];
+  const sourceTracker = new PagePerformanceTracker(source, source.route, "warm-enter");
+  const first = sourceTracker.beginInteraction("onFirstDestination", "button:first");
+  const second = sourceTracker.beginInteraction("onSecondDestination", "button:second");
+  handoffPageInteraction("/pages/test/queue-destination", first);
+  handoffPageInteraction("/pages/test/queue-destination", second);
+
+  const destinationOne = {
+    route: "pages/test/queue-destination",
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [destinationOne];
+  const firstDestinationTracker = new PagePerformanceTracker(
+    destinationOne,
+    destinationOne.route,
+    "in-page-navigation",
+  );
+  const firstRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === firstDestinationTracker.navigationId,
+  );
+  assert.equal(firstRecord.interactions[0].interactionId, first.interactionId);
+
+  const destinationTwo = {
+    route: "pages/test/queue-destination",
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [destinationTwo];
+  const secondDestinationTracker = new PagePerformanceTracker(
+    destinationTwo,
+    destinationTwo.route,
+    "in-page-navigation",
+  );
+  const secondRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === secondDestinationTracker.navigationId,
+  );
+  assert.equal(secondRecord.interactions[0].interactionId, second.interactionId);
+  const sourceRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === sourceTracker.navigationId,
+  );
+  assert.deepEqual(sourceRecord.interactions, []);
+
+  sourceTracker.disconnect();
+  firstDestinationTracker.disconnect();
+  secondDestinationTracker.disconnect();
   delete globalThis.getCurrentPages;
 });
 

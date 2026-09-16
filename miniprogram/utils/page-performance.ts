@@ -50,7 +50,10 @@ let interactionSequence = 0;
 let activeTracker: PagePerformanceTracker | undefined;
 let coldLaunchClaimed = false;
 let appWasBackgrounded = false;
-let pendingNavigationInteraction: NavigationInteraction | undefined;
+// A destination tracker may be created after more than one redirect has been
+// dispatched (for example two rapid tab taps). Keep each handoff independent
+// so a later action cannot overwrite the earlier source record or rollback.
+const pendingNavigationInteractions: NavigationInteraction[] = [];
 
 function normalizeRoute(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -189,8 +192,13 @@ export function getCurrentPageInteractionToken(): PageInteractionToken | null {
  */
 export function handoffPageInteraction(
   targetRoute?: string,
+  sourceToken?: PageInteractionToken | null,
 ): PageInteractionHandoff | null {
-  const token = getCurrentPageInteractionToken();
+  // `null` is an explicit "no source action" value for component-owned
+  // handlers. Existing page callers omit the argument and continue to use the
+  // visible page's most recent pending token.
+  const token =
+    sourceToken === undefined ? getCurrentPageInteractionToken() : sourceToken;
   if (!token) return null;
   const interaction = token.tracker.takeInteractionForNavigation(token.interactionId);
   if (!interaction) return null;
@@ -198,11 +206,12 @@ export function handoffPageInteraction(
     ...interaction,
     targetRoute: normalizeRoute(targetRoute),
   };
-  pendingNavigationInteraction = pending;
+  pendingNavigationInteractions.push(pending);
   return {
     rollback: () => {
-      if (pendingNavigationInteraction !== pending) return;
-      pendingNavigationInteraction = undefined;
+      const index = pendingNavigationInteractions.indexOf(pending);
+      if (index < 0) return;
+      pendingNavigationInteractions.splice(index, 1);
       pending.sourceTracker.restoreInteractionFromNavigation(pending);
     },
   };
@@ -571,6 +580,10 @@ export class PagePerformanceTracker {
       (item) => item.interactionId === interactionId,
     );
     if (!interaction) return;
+    // A rejected navigation restores the source interaction as terminally
+    // failed. A previously scheduled viewport observer may still fire on the
+    // source page; it must not turn that failure back into a successful tap.
+    if (interaction.status === "failed" && status !== "failed") return;
     interaction.handlerCompletedAt ??= timestamp;
     interaction.status = status;
     if (visible === true) {
@@ -842,11 +855,13 @@ export class PagePerformanceTracker {
   }
 
   private adoptPendingNavigationInteraction(): void {
-    const pending = pendingNavigationInteraction;
-    if (!pending) return;
     const route = normalizeRoute(this.route);
-    if (pending.targetRoute && route && pending.targetRoute !== route) return;
-    pendingNavigationInteraction = undefined;
+    const pendingIndex = pendingNavigationInteractions.findIndex(
+      (candidate) =>
+        !candidate.targetRoute || !route || candidate.targetRoute === route,
+    );
+    if (pendingIndex < 0) return;
+    const [pending] = pendingNavigationInteractions.splice(pendingIndex, 1);
     const previous = this.record.interactions ?? [];
     if (previous.some((interaction) => interaction.interactionId === pending.interactionId)) {
       return;

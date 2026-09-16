@@ -11,6 +11,8 @@ globalThis.Component = (definition) => {
 
 await import("../miniprogram/components/navigation/bottomNavBar/bottomNavBar.ts");
 const navbar = capturedComponent;
+const { clearPerf, getPerf } = await import("../miniprogram/utils/perf.ts");
+const { PagePerformanceTracker } = await import("../miniprogram/utils/page-performance.ts");
 
 function navbarContext(route, activeName) {
   globalThis.getApp = () => ({ globalData: { entryId: 1 } });
@@ -66,6 +68,58 @@ test("single-destination groups still navigate from foreign sections", () => {
   const { context, redirects } = navbarContext("pages/live/entry/entry", "live");
   navbar.methods.onChange.call(context, { detail: "me" });
   assert.deepEqual(redirects, ["/pages/account/index/index"]);
+});
+
+test("bottom-nav redirects create an interaction and roll back on API failure", () => {
+  clearPerf();
+  const previousWx = globalThis.wx;
+  const previousPages = globalThis.getCurrentPages;
+  const storage = new Map();
+  let redirectOptions;
+  const page = {
+    route: "pages/live/entry/entry",
+    __performanceVisible: true,
+  };
+  globalThis.wx = {
+    getPerformance: () => ({ now: () => Date.now() }),
+    getStorageSync: (key) => storage.get(key),
+    setStorage: ({ key, data, success }) => {
+      storage.set(key, data);
+      success?.({});
+    },
+    removeStorageSync: (key) => storage.delete(key),
+    redirectTo: (options) => {
+      redirectOptions = options;
+    },
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, page.route, "warm-enter");
+  const context = {
+    ...navbar.methods,
+    properties: { active: "live" },
+    data: { ...navbar.data, activeName: "live" },
+    setData(patch) {
+      this.data = { ...this.data, ...patch };
+    },
+  };
+
+  try {
+    navbar.methods.onChange.call(context, { detail: "me" });
+    assert.equal(redirectOptions.url, "/pages/account/index/index");
+    let record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+    assert.deepEqual(record.interactions, [], "the source action is held for the destination tracker");
+
+    redirectOptions.fail?.({ errMsg: "navigateTo:fail" });
+    record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+    assert.equal(record.interactions.length, 1);
+    assert.equal(record.interactions[0].handler, "bottomNavBar.onChange");
+    assert.equal(record.interactions[0].status, "failed");
+  } finally {
+    tracker.disconnect();
+    clearPerf();
+    globalThis.wx = previousWx;
+    globalThis.getCurrentPages = previousPages;
+  }
 });
 
 test("selecting a menu destination does not flash the electric edge before redirect", () => {

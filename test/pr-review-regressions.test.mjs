@@ -140,7 +140,7 @@ test("empty fixture directories clear previously composed cards", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(
     fixtures,
-    /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/,
+    /(?:else )?if \(!this\.teams\.length\) \{[\s\S]*?this\.setData\(\s*\{ runs: \[\], runCards: \[\], glanceCards: \[\],?\s*\}\)/,
   );
 });
 
@@ -489,7 +489,7 @@ test("fixture windows honor event and season cache identity on open and resume",
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(
     fixtures,
-    /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/,
+    /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\(\) =>/,
   );
   assert.match(
     fixtures,
