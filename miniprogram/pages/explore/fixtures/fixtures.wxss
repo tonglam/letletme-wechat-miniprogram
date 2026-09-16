@@ -5,6 +5,13 @@
   gap: 16rpx;
 }
 
+.fixture-refreshing {
+  padding-top: 0;
+  padding-bottom: 0;
+  color: var(--muted-ink);
+  font-size: 22rpx;
+}
+
 .mode-tabs {
   display: flex;
   gap: 8rpx;

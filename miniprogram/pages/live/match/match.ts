@@ -1260,7 +1260,7 @@ Page(instrumentPageInteractions({
       },
       () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
       },
     );
     this.syncDisplayState();
@@ -1519,7 +1519,9 @@ Page(instrumentPageInteractions({
       return;
     }
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasData),
+      }));
     }
     this.armKickoffTransition(this.coreMatches);
     if (
@@ -1780,7 +1782,7 @@ Page(instrumentPageInteractions({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
             },
           );
           this.liveRefresh?.sync();
@@ -1839,7 +1841,7 @@ Page(instrumentPageInteractions({
           this.liveRefresh?.stop();
           this.setData(noScheduleState(), () => {
             navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           });
           this.syncDisplayState();
           return false;
@@ -1902,7 +1904,7 @@ Page(instrumentPageInteractions({
           },
           () => {
             navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           },
         );
         this.liveRefresh?.sync();

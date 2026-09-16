@@ -44,12 +44,13 @@ export function consumeAppBackgroundResume(): boolean {
   return true;
 }
 
-function hasVisibleError(data: object | undefined): boolean {
-  if (!data) return false;
-  return Object.entries(data as Record<string, unknown>).some(([key, value]) => {
-    if (!/error/i.test(key) || /workload|retryable/i.test(key)) return false;
-    return typeof value === "string" ? value.length > 0 : value === true;
-  });
+/**
+ * The owner of a rendered surface must tell the tracker whether that exact
+ * surface is showing an error. Page data also contains independent errors for
+ * hidden tabs and optional modules, so scanning every key is ambiguous.
+ */
+export interface PagePerformanceObservationOptions {
+  errorVisible?: boolean;
 }
 
 function resolveTrigger(
@@ -71,6 +72,26 @@ function resolveTrigger(
 
 function setActiveTracker(tracker: PagePerformanceTracker | undefined): void {
   activeTracker = tracker;
+}
+
+function scheduleInteractionVisibility(
+  token: PageInteractionToken | null,
+  page: PageOwner,
+): void {
+  if (!token) return;
+  const observe = () => {
+    const data = page.data as Record<string, unknown> | undefined;
+    token.tracker.observeInteractionVisible(undefined, {
+      // Ordinary pages reserve `error` for their primary surface. P0 pages
+      // pass a more specific state to their explicit observers.
+      errorVisible: typeof data?.error === "string" && data.error.length > 0,
+    });
+  };
+  if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
+    wx.nextTick(observe);
+  } else {
+    observe();
+  }
 }
 
 export interface ActivePagePerformanceTrace {
@@ -196,9 +217,10 @@ const PAGE_LIFECYCLE_HANDLERS = new Set([
 /**
  * Wrap page event methods without changing lifecycle methods.  P0 pages that
  * own a route-specific tracker can use this helper directly; PerformancePage
- * uses it for ordinary pages.  A resolved handler records its execution
- * boundary, while visibility is completed by an explicit page marker, keeping
- * setData/handler return time separate from pixels visible in the viewport.
+ * uses it for ordinary pages. A resolved handler records its execution
+ * boundary, then observes the primary result boundary on the following render
+ * tick. Route-specific pages can replace that default with an on-demand
+ * observer for drawers and other secondary surfaces.
  */
 export function instrumentPageInteractions<
   TData extends WechatMiniprogram.Page.DataOption,
@@ -233,11 +255,15 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       }
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
         void Promise.resolve(result).then(
-          () => token?.tracker.markInteractionHandlerCompleted(token.interactionId),
+          () => {
+            token?.tracker.markInteractionHandlerCompleted(token.interactionId);
+            scheduleInteractionVisibility(token, this);
+          },
           () => token?.tracker.completeInteraction(token.interactionId, "failed"),
         );
       } else {
         token?.tracker.markInteractionHandlerCompleted(token.interactionId);
+        scheduleInteractionVisibility(token, this);
       }
       return result;
     };
@@ -251,6 +277,7 @@ export class PagePerformanceTracker {
   readonly trigger: PagePerformanceRecord["trigger"];
   private observer?: WechatMiniprogram.IntersectionObserver;
   private interactionObservers = new Set<WechatMiniprogram.IntersectionObserver>();
+  private primarySelector = "#perf-primary-content";
   private visibleRecorded = false;
   private disconnected = false;
   private secondaryCompletionExpected = false;
@@ -301,13 +328,7 @@ export class PagePerformanceTracker {
     const previous = this.record[field];
     this.record[field] =
       previous === undefined ? timestamp : Math.max(previous, timestamp);
-    if (field === "errorVisibleAt" || field === "softFailureAt") {
-      if (field === "softFailureAt") {
-        this.record.errorVisibleAt = Math.max(
-          this.record.errorVisibleAt ?? timestamp,
-          timestamp,
-        );
-      }
+    if (field === "errorVisibleAt") {
       this.completePendingInteractions("failed", timestamp, false);
     }
     const finalCompletion = field === "secondaryCompleteAt" || field === "softFailureAt";
@@ -427,7 +448,11 @@ export class PagePerformanceTracker {
     this.flush();
   }
 
-  observePrimary(selector = "#perf-primary-content"): void {
+  observePrimary(
+    selector = this.primarySelector,
+    options: PagePerformanceObservationOptions = {},
+  ): void {
+    this.primarySelector = selector;
     if (this.disconnected || this.visibleRecorded) return;
     this.pendingSetDataAt = monotonicNow();
     this.observer?.disconnect();
@@ -440,14 +465,14 @@ export class PagePerformanceTracker {
         if (this.disconnected || this.visibleRecorded || entry.intersectionRatio <= 0) return;
         this.visibleRecorded = true;
         const visibleAt = monotonicNow();
-        if (hasVisibleError(this.page.data)) {
+        if (options.errorVisible === true) {
           this.mark("errorVisibleAt");
         }
         if (this.record.primarySetDataAt === undefined) {
           this.record.primarySetDataAt = this.pendingSetDataAt;
         }
         this.record.primaryViewportVisibleAt = visibleAt;
-        if (!hasVisibleError(this.page.data)) {
+        if (options.errorVisible !== true) {
           this.completePendingInteractions("completed", visibleAt, true);
         }
         this.updateCompleteAt();
@@ -465,21 +490,28 @@ export class PagePerformanceTracker {
    * the viewport. The result is kept on the pending interaction so route-level
    * default/on-demand stage timestamps remain independent.
    */
-  observeInteractionVisible(selector: string): void {
-    this.observeMarkerVisible(selector);
+  observeInteractionVisible(
+    selector = this.primarySelector,
+    options: PagePerformanceObservationOptions = {},
+  ): void {
+    this.observeMarkerVisible(selector, undefined, options);
   }
 
   /**
    * Observe an optional module and record its page-level visibility marker as
    * well as completing the pending interaction that opened it.
    */
-  observeOnDemandVisible(selector: string): void {
-    this.observeMarkerVisible(selector, "onDemandVisibleAt");
+  observeOnDemandVisible(
+    selector: string,
+    options: PagePerformanceObservationOptions = {},
+  ): void {
+    this.observeMarkerVisible(selector, "onDemandVisibleAt", options);
   }
 
   private observeMarkerVisible(
     selector: string,
     marker?: "onDemandVisibleAt",
+    options: PagePerformanceObservationOptions = {},
   ): void {
     if (this.disconnected) return;
     const observer = this.page.createIntersectionObserver?.({ nativeMode: true });
@@ -494,7 +526,7 @@ export class PagePerformanceTracker {
       (entry: WechatMiniprogram.IntersectionObserverObserveCallbackResult) => {
         if (this.disconnected || entry.intersectionRatio <= 0) return;
         cleanup();
-        if (hasVisibleError(this.page.data)) {
+        if (options.errorVisible === true) {
           this.mark("errorVisibleAt");
           return;
         }

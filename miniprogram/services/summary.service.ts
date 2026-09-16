@@ -439,7 +439,10 @@ export async function getEntryTeamStatsHistory(entry: number, forceRefresh = fal
 }
 
 export async function getEntryTeamStatsTransfers(entry: number, forceRefresh = false, trace?: PageRequestTrace): Promise<EntryGameweekTransfers[]> {
-  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { authMode: "public", cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
+  // Keep the bearer until the coordinated GraphQL/Web public-authorisation
+  // rollout is deployed.  The history is public FPL data, but the current
+  // production roots still enforce session auth.
+  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { authMode: "session", cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
   return data.entryTransferHistory || [];
 }
 

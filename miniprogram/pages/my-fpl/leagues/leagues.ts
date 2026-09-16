@@ -1394,7 +1394,7 @@ PerformancePage({
               const tracker = getCurrentPagePerformanceTracker();
               tracker?.mark("defaultContentAt");
               if (retrySurface || trace?.trigger === "tab") {
-                wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
+                wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
               }
             });
             const auxiliaryResults = await Promise.all(
@@ -1538,7 +1538,7 @@ PerformancePage({
         const tracker = getCurrentPagePerformanceTracker();
         tracker?.mark("defaultContentAt");
         if (retrySurface || trace?.trigger === "tab") {
-          wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
+          wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
         }
         tracker?.mark("secondaryCompleteAt");
       });
@@ -1727,7 +1727,7 @@ PerformancePage({
       }, () => {
         const tracker = getCurrentPagePerformanceTracker();
         tracker?.mark("defaultContentAt");
-        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content"));
+        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
       });
       const auxiliaryResults = await Promise.all(settledRequests.slice(1));
       const sections = [primarySection.value];

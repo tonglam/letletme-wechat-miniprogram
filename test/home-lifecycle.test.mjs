@@ -220,7 +220,7 @@ test("home first viewport order matches the web: deadline, personal desk, GW sta
   );
   assert.match(
     page,
-    /observePrimary\("#perf-primary-home-content"\)/,
+    /observePrimary\("#perf-primary-home-content"(?:,\s*\{[^}]*\})?\)/,
     "home viewport timing must observe the visible deadline card, not the below-fold fixture desk",
   );
   // Two market cards mirror the web HomePriceChangeCarousel + HomeMarketCarousel,

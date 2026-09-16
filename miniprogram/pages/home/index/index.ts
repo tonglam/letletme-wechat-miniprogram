@@ -525,7 +525,7 @@ Page(instrumentPageInteractions({
         this._loadedContextRevision = context.contextRevision;
         void this.loadPage();
       } else {
-        wx.nextTick(() => tracker.observePrimary("#perf-primary-home-content"));
+        wx.nextTick(() => tracker.observePrimary("#perf-primary-home-content", { errorVisible: false }));
         recordHomeFixtureTiming({
           surface: "home-fixtures",
           trigger: "onShow",
@@ -766,7 +766,7 @@ Page(instrumentPageInteractions({
           // its data-commit boundary separate from the viewport observation so
           // route-to-default and route-to-visible can be reported independently.
           tracker?.mark("defaultContentAt");
-          wx.nextTick(() => tracker?.observePrimary("#perf-primary-home-content"));
+          wx.nextTick(() => tracker?.observePrimary("#perf-primary-home-content", { errorVisible: false }));
           const fixtureSetDataCallbackAt = Date.now();
           recordRenderCommit({
             surface: "home-fixtures",
@@ -892,7 +892,9 @@ Page(instrumentPageInteractions({
         : ""
     }, () => {
       tracker?.mark("primarySetDataAt");
-      wx.nextTick(() => tracker?.observePrimary(primarySelector));
+      wx.nextTick(() => tracker?.observePrimary(primarySelector, {
+        errorVisible: primarySelector === "#perf-primary-home-error",
+      }));
     });
   },
 

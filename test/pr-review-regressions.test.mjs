@@ -547,9 +547,11 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(service, /cachePolicy: "fixtures",[\s\S]*season,/);
   assert.doesNotMatch(service, /season:unknown/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
+  assert.match(fixtures, /refreshing: hadLastGood/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
   assert.match(fixtures, /this\.loadedSeason = season/);
+  assert.match(source("miniprogram/pages/explore/fixtures/fixtures.wxml"), /wx:if="\{\{refreshing\}\}"/);
 });
 
 test("initial league payloads use named session cache policies", () => {

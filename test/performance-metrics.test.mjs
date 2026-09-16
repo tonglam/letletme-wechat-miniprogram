@@ -161,12 +161,60 @@ test("an error surface records error visibility without successful completion", 
     createIntersectionObserver() { return observer; }
   };
   const tracker = new PagePerformanceTracker(page, "pages/test/error", "warm-enter");
-  tracker.observePrimary();
+  tracker.observePrimary("#perf-primary-content", { errorVisible: true });
   callback({ intersectionRatio: 1 });
   const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
   assert.ok(record.errorVisibleAt);
   assert.ok(record.primaryViewportVisibleAt);
   assert.equal(record.completeAt, undefined);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("primary visibility uses the rendered surface state, not hidden secondary errors", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const page = {
+    data: { error: "", transfersError: "转会暂不可用" },
+    __performanceVisible: true,
+    createIntersectionObserver() { return observer; }
+  };
+  const tracker = new PagePerformanceTracker(page, "pages/test/secondary-error", "warm-enter");
+  tracker.observePrimary("#perf-primary-content");
+  callback({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.errorVisibleAt, undefined);
+  assert.ok(record.completeAt);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("soft timeout stays separate from a later successful primary viewport", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const page = {
+    data: { error: "" },
+    __performanceVisible: true,
+    createIntersectionObserver() { return observer; }
+  };
+  const tracker = new PagePerformanceTracker(page, "pages/test/late-success", "warm-enter");
+  tracker.mark("softFailureAt");
+  tracker.observePrimary("#perf-primary-content");
+  callback({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.softFailureAt);
+  assert.equal(record.errorVisibleAt, undefined);
+  assert.equal(record.completeAt, record.primaryViewportVisibleAt);
   tracker.disconnect();
   delete globalThis.getCurrentPages;
 });
@@ -234,6 +282,33 @@ test("page interaction instrumentation records the actual handler and preserves 
   assert.equal(record.interactions[0].handler, "onTap");
   assert.ok(record.interactions[0].handlerCompletedAt >= record.interactions[0].startedAt);
   tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("automatic interaction instrumentation observes the primary result viewport", () => {
+  clearPerf();
+  let callback;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {}
+  };
+  const previousNextTick = globalThis.wx.nextTick;
+  globalThis.wx.nextTick = (fn) => fn();
+  const page = {
+    data: { error: "" },
+    __performanceVisible: true,
+    createIntersectionObserver() { return observer; }
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/auto-interaction", "warm-enter");
+  const definition = instrumentPageInteractions({ onSortChange() { return undefined; } });
+  definition.onSortChange.call(page);
+  callback({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.interactions[0].resultVisibleAt);
+  tracker.disconnect();
+  globalThis.wx.nextTick = previousNextTick;
   delete globalThis.getCurrentPages;
 });
 

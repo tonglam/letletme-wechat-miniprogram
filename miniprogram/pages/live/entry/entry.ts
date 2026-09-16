@@ -429,7 +429,7 @@ Page(instrumentPageInteractions({
       this.liveRefresh?.stop();
       this.setData(noLiveEventState(), () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
       });
     }
     this.syncDisplayState();
@@ -645,7 +645,9 @@ Page(instrumentPageInteractions({
       resumed &&
       (this.data.hasData || this.data.noPicks || this.data.emptyState)
     ) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasData && !this.data.emptyState && !this.data.noPicks),
+      }));
     }
     if (
       resumed &&
@@ -806,7 +808,7 @@ Page(instrumentPageInteractions({
       },
       () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
       },
     );
     this.syncDisplayState();
@@ -1008,7 +1010,7 @@ Page(instrumentPageInteractions({
       this.setData(
         { loading: false, error: "", emptyState: "entry", noPicks: false },
         () => {
-          wx.nextTick(() => this.perfTracker?.observePrimary());
+          wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
         },
       );
       this.syncDisplayState();
@@ -1024,7 +1026,7 @@ Page(instrumentPageInteractions({
     if (!eventId) {
       this.liveRefresh?.stop();
       this.setData(noLiveEventState(), () => {
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
       });
       this.syncDisplayState();
       return Promise.resolve();
@@ -1211,7 +1213,9 @@ Page(instrumentPageInteractions({
             () => {
               navigationTracker?.mark("primarySetDataAt");
               navigationTracker?.mark("defaultContentAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", {
+                errorVisible: Boolean(this.data.error && !this.data.hasData && !this.data.emptyState && !this.data.noPicks),
+              }));
             },
           );
           this.loadTransfersAfterLive = false;
@@ -1312,7 +1316,7 @@ Page(instrumentPageInteractions({
             () => {
               navigationTracker?.mark("primarySetDataAt");
               navigationTracker?.mark("defaultContentAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
             },
           );
           if (hasOfficialHeadline || hasRefreshDeadline(scoreNextRefreshAt)) {
@@ -1471,7 +1475,7 @@ Page(instrumentPageInteractions({
           () => {
             navigationTracker?.mark("primarySetDataAt");
             navigationTracker?.mark("defaultContentAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           },
         );
         this.liveRefresh?.sync();
@@ -1516,7 +1520,7 @@ Page(instrumentPageInteractions({
           });
         }
         this.loadTransfersAfterLive = false;
-        wx.nextTick(() => navigationTracker?.observePrimary());
+        wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
         this.syncDisplayState();
       } finally {
         if (this.pageVisible && requestId === this.liveRequestId) {
@@ -1746,7 +1750,7 @@ Page(instrumentPageInteractions({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
     }, () => {
-      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content"));
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
     });
   },
 
@@ -1763,7 +1767,7 @@ Page(instrumentPageInteractions({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
     }, () => {
-      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content"));
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
     });
   },
 

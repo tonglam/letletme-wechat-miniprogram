@@ -170,6 +170,7 @@ PerformancePage({
     displayHorizon: 5 as 3 | 5 | 8,
     displayWindowLabel: "",
     targetWindowLabel: "",
+    refreshing: false,
     sortOrder: "easiest" as FixtureRunSort,
     runs: [] as FixtureRun[],
     runCards: [] as FixtureRunCard[],
@@ -265,6 +266,7 @@ PerformancePage({
         displayHorizon: this.data.horizon,
         displayWindowLabel: "",
         targetWindowLabel: "",
+        refreshing: false,
         runs: [],
         runCards: [],
         glanceCards: [],
@@ -327,6 +329,9 @@ PerformancePage({
     }
     this.setData({
       loading: !hadLastGood,
+      // Keep the last-good matrix visible, but make the requested/displayed
+      // window difference explicit while the new target is in flight.
+      refreshing: hadLastGood,
       error: "",
       errorWorkload: season ? "fixtures" : "home",
       targetWindowLabel: `GW${startEvent} 起 ${horizon} 轮`,
@@ -343,6 +348,7 @@ PerformancePage({
       this.loadedWindowKey = windowKey;
       this.setData({
         loading: false,
+        refreshing: false,
         maxEvent: FALLBACK_MAX_EVENT,
         startEvent,
         displayStartEvent: startEvent,
@@ -369,6 +375,7 @@ PerformancePage({
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,
+        refreshing: false,
         errorWorkload: workloadForFixturesError(error, season),
         error: hadLastGood
           ? `目标 ${this.data.targetWindowLabel || `GW${startEvent} 起 ${horizon} 轮`} 加载失败，当前显示 ${this.data.displayWindowLabel || "上次成功结果"}`
@@ -452,6 +459,7 @@ PerformancePage({
       if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       this.setData({
         loading: false,
+        refreshing: false,
         error: error instanceof Error ? error.message : "赛季和比赛轮信息加载失败"
       });
     } finally {

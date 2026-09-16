@@ -608,7 +608,9 @@ Page(instrumentPageInteractions({
       await this.loadData(contextChanged || resumeTabForceRefresh, trace);
       if (this.tabForceRefreshPending || this.data.tabLoading) clearResumeTab();
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasTeamData && !this.data.supportAvailable),
+      }));
     }
     if (!primaryReloaded && resumeTab && resumeTab === this.data.activeTab && resumeTab !== "squad") {
       this.setData({ tabLoading: false });
@@ -651,7 +653,9 @@ Page(instrumentPageInteractions({
     tracker.mark("primarySetDataAt");
     wx.nextTick(() => {
       if (this.pageVisible && tracker === this.perfTracker) {
-        tracker.observePrimary();
+        tracker.observePrimary("#perf-primary-content", {
+          errorVisible: Boolean(this.data.error && !this.data.hasTeamData && !this.data.supportAvailable),
+        });
       }
     });
   },

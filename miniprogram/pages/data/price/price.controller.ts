@@ -792,7 +792,11 @@ Page(instrumentPageInteractions({
       resumeOwnershipIfNeeded();
       return;
     }
-    wx.nextTick(() => tracker.observePrimary(selector));
+    wx.nextTick(() => tracker.observePrimary(selector, {
+      errorVisible: selector === "#perf-primary-player"
+        ? Boolean(this.data.playersError && this.data.players.length === 0)
+        : Boolean(this.data.error && this.data.riseChanges.length === 0 && this.data.fallChanges.length === 0),
+    }));
   },
 
   onHide() {
@@ -862,7 +866,9 @@ Page(instrumentPageInteractions({
       const task = this.runPlayerRefresh(tracker).then(() => {
         tracker?.mark("primaryResponseAt");
         tracker?.mark("primarySetDataAt");
-        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player"));
+        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player", {
+          errorVisible: Boolean(this.data.playersError && this.data.players.length === 0),
+        }));
       });
       return task.finally(() => wx.stopPullDownRefresh());
     }
@@ -1037,7 +1043,7 @@ Page(instrumentPageInteractions({
         },
         () => {
           if (hasRows) {
-            wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
+            wx.nextTick(() => tracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           }
         },
       );
@@ -1057,14 +1063,14 @@ Page(instrumentPageInteractions({
       });
       tracker?.mark("primarySetDataAt");
       this.rebuildGlanceTiles();
-      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
+      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
     } catch (error) {
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({
         error: error instanceof Error ? error.message : "市场动态加载失败",
       });
       wx.nextTick(() =>
-        this.perfTracker?.observePrimary("#perf-primary-content"),
+        this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }),
       );
     } finally {
       if (

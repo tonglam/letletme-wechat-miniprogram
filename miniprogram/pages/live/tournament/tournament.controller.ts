@@ -3435,7 +3435,7 @@ PerformancePage({
       this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
     if (cached) {
       this.applyDetailDesk(cached);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content"));
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
       return;
     }
     // A pending request only dedupes a reopen of the SAME tournament; a
@@ -3464,13 +3464,15 @@ PerformancePage({
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content"));
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
     } catch (error) {
       if (requestId !== this.detailRequestId) return;
       if (!this.pageVisible || !this.data.detailOpen) return;
       this.setData({
         detailError:
           error instanceof Error ? error.message : "赛事详情加载失败",
+      }, () => {
+        wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: true }));
       });
     } finally {
       if (this.pageVisible && requestId === this.detailRequestId) {

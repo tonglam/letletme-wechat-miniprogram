@@ -9,6 +9,7 @@ type PageSetData = (data: object, callback?: () => void) => void;
 
 type InstrumentedPage = {
   route?: string;
+  data?: object;
   setData?: PageSetData;
   createIntersectionObserver?: (
     options: WechatMiniprogram.CreateIntersectionObserverOption
@@ -49,7 +50,12 @@ function schedulePrimaryObservation(
 ): void {
   const observe = () => {
     if (!page.__performanceVisible || page.__performanceGeneration !== generation) return;
-    page.__performanceTracker?.observePrimary();
+    const data = page.data as Record<string, unknown> | undefined;
+    page.__performanceTracker?.observePrimary("#perf-primary-content", {
+      // Ordinary pages reserve `error` for their rendered primary surface;
+      // secondary tab errors remain independent from this boundary.
+      errorVisible: typeof data?.error === "string" && data.error.length > 0,
+    });
   };
   if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
     wx.nextTick(observe);
