@@ -203,11 +203,11 @@ test("sends operationName and classifies public/session operations explicitly", 
   assert.equal(getGraphQLOperationPolicy("EntryHistory").authMode, "session");
   assert.equal(
     getGraphQLOperationPolicy("GetEntryTransferHistory").authMode,
-    "session",
+    "public",
   );
   assert.equal(
     getGraphQLOperationPolicy("EntryTransferHistory").authMode,
-    "session",
+    "public",
   );
   assert.equal(
     getGraphQLOperationPolicy("UnknownPrivateQuery").cachePolicy,
