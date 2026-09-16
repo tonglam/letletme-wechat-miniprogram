@@ -553,6 +553,60 @@ test("explicitly included WXML handlers are instrumented", () => {
   delete globalThis.getCurrentPages;
 });
 
+test("directly instrumented lifecycles invalidate hidden async actions", async () => {
+  clearPerf();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let tracker;
+  const page = {
+    route: "pages/test/direct-lifecycle",
+    data: {},
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [page];
+  const definition = instrumentPageInteractions({
+    onLoad() {
+      tracker = new PagePerformanceTracker(this, this.route, "warm-enter");
+    },
+    onHide() {
+      tracker?.disconnect();
+    },
+    async onAvailabilityExpand() {
+      await pending;
+    },
+  });
+  Object.assign(page, definition);
+
+  page.onLoad();
+  assert.equal(page.__performanceGeneration, 1);
+  const action = page.onAvailabilityExpand();
+  page.onHide();
+  assert.equal(page.__performanceGeneration, 2);
+
+  release();
+  await action;
+  await Promise.resolve();
+  const record = getPerf().pagePerformance.find(
+    (item) => item.navigationId === tracker.navigationId,
+  );
+  assert.equal(record.interactions[0].status, "failed");
+  assert.ok(record.interactions[0].errorVisibleAt);
+  delete globalThis.getCurrentPages;
+});
+
+test("disconnected trackers retain terminal stale-action failures", () => {
+  clearPerf();
+  const tracker = new PagePerformanceTracker({}, "pages/test/disconnected", "warm-enter");
+  const token = tracker.beginInteraction("onTap");
+  tracker.disconnect();
+  tracker.completeInteraction(token.interactionId, "failed", false, 123);
+  const record = getPerf().pagePerformance.find(
+    (item) => item.navigationId === tracker.navigationId,
+  );
+  assert.equal(record.interactions[0].status, "failed");
+  assert.equal(record.interactions[0].errorVisibleAt, 123);
+});
+
 test("navigation interactions are adopted by the destination tracker", () => {
   clearPerf();
   let destinationCallback;

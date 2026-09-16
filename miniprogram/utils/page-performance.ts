@@ -12,6 +12,9 @@ type PageOwner = {
   __performanceVisible?: boolean;
   /** Lifecycle generation owned by the page wrapper. */
   __performanceGeneration?: number;
+  /** Internal visibility state used by directly instrumented page lifecycles. */
+  __performanceLifecycleVisible?: boolean;
+  __performanceLifecycleInitialized?: boolean;
   __performanceTracker?: PagePerformanceTracker;
   __performanceInteractionTokens?: Record<string, PageInteractionToken>;
   /** Synchronous wrapper depth used to avoid double-counting delegated taps. */
@@ -97,6 +100,13 @@ export interface PagePerformanceInstrumentationOptions {
   includeInteractionHandlers?: readonly string[];
   /** Page-owned classifier for the primary rendered error surface. */
   primaryError?: (data: object | undefined) => boolean;
+  /**
+   * Directly instrumented pages own their tracker lifecycle. Keep this on by
+   * default so their hide/show boundaries advance the interaction generation;
+   * PerformancePage disables it because its outer lifecycle wrapper already
+   * owns the same state.
+   */
+  manageLifecycleGeneration?: boolean;
 }
 
 function defaultPrimaryError(data: object | undefined): boolean {
@@ -352,13 +362,47 @@ const PAGE_LIFECYCLE_HANDLERS = new Set([
   "onShareTimeline",
 ]);
 
+type ManagedLifecycle = "onLoad" | "onShow" | "onHide" | "onUnload";
+
+function advanceManagedLifecycle(
+  page: PageOwner,
+  lifecycle: ManagedLifecycle,
+): void {
+  let generation = page.__performanceGeneration ?? 0;
+  if (lifecycle === "onLoad") {
+    generation += 1;
+    page.__performanceLifecycleInitialized = true;
+    page.__performanceLifecycleVisible = true;
+  } else if (lifecycle === "onShow") {
+    if (!page.__performanceLifecycleInitialized) {
+      generation += 1;
+      page.__performanceLifecycleInitialized = true;
+    } else if (page.__performanceLifecycleVisible === false) {
+      // The hide boundary already invalidated the previous visit. Advance
+      // again for the new visible visit so a tracker created by onShow owns a
+      // distinct generation from every pending hidden work item.
+      generation += 1;
+    }
+    page.__performanceLifecycleVisible = true;
+  } else {
+    // Invalidate pending work before the page-owned onHide/onUnload handler
+    // gets a chance to disconnect its route-specific tracker.
+    generation += 1;
+    page.__performanceLifecycleInitialized = true;
+    page.__performanceLifecycleVisible = false;
+  }
+  page.__performanceGeneration = generation;
+}
+
 /**
- * Wrap page event methods without changing lifecycle methods.  P0 pages that
- * own a route-specific tracker can use this helper directly; PerformancePage
- * uses it for ordinary pages. A resolved handler records its execution
- * boundary, then observes the primary result boundary on the following render
- * tick. Route-specific pages can replace that default with an on-demand
- * observer for drawers and other secondary surfaces.
+ * Wrap page event methods and, for directly instrumented pages, advance the
+ * lifecycle generation around hide/show boundaries. P0 pages that own a
+ * route-specific tracker can use this helper directly; PerformancePage
+ * disables the lifecycle part because its outer wrapper owns that state. A
+ * resolved handler records its execution boundary, then observes the primary
+ * result boundary on the following render tick. Route-specific pages can
+ * replace that default with an on-demand observer for drawers and other
+ * secondary surfaces.
  */
 export function instrumentPageInteractions<
   TData extends WechatMiniprogram.Page.DataOption,
@@ -379,6 +423,20 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
     options.includeInteractionHandlers ?? [],
   );
   const primaryError = options.primaryError ?? defaultPrimaryError;
+  if (options.manageLifecycleGeneration !== false) {
+    for (const lifecycle of ["onLoad", "onShow", "onHide", "onUnload"] as const) {
+      const value = definition[lifecycle];
+      if (typeof value !== "function") continue;
+      const handler = value as (...args: unknown[]) => unknown;
+      (instrumented as Record<string, unknown>)[lifecycle] = function (
+        this: PageOwner,
+        ...args: unknown[]
+      ): unknown {
+        advanceManagedLifecycle(this, lifecycle);
+        return handler.apply(this, args);
+      };
+    }
+  }
   for (const [name, value] of Object.entries(definition)) {
     if (
       PAGE_LIFECYCLE_HANDLERS.has(name) ||
@@ -615,7 +673,11 @@ export class PagePerformanceTracker {
     visible?: boolean,
     timestamp = monotonicNow(),
   ): void {
-    if (this.disconnected) return;
+    // A lifecycle mismatch is detected after onHide has disconnected the
+    // source tracker. Preserve that terminal failure in the already-flushed
+    // source record; successful/visible updates remain blocked after
+    // disconnect so hidden work cannot revive a stale page.
+    if (this.disconnected && status !== "failed") return;
     const interaction = this.record.interactions?.find(
       (item) => item.interactionId === interactionId,
     );

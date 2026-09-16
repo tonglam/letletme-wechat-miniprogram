@@ -920,7 +920,7 @@ PerformancePage({
     const option =
       this.data.teamOptions[selectedTeamIndex] || this.data.teamOptions[0];
     this.setData({ selectedTeamIndex, teamFilter: option.value });
-    void this.scheduleSearch("");
+    return this.scheduleSearch("");
   },
 
   onPositionFilterChange(event: WechatMiniprogram.PickerChange) {
@@ -931,7 +931,7 @@ PerformancePage({
       this.data.positionOptions[selectedPositionIndex] ||
       this.data.positionOptions[0];
     this.setData({ selectedPositionIndex, positionFilter: option.value });
-    void this.scheduleSearch("");
+    return this.scheduleSearch("");
   },
 
   onSortChange(event: WechatMiniprogram.PickerChange) {
@@ -947,7 +947,7 @@ PerformancePage({
       sortDir,
       sortBy: resolvePlayerPickerSort(sortField, sortDir),
     });
-    void this.scheduleSearch(this.data.activeKeyword);
+    return this.scheduleSearch(this.data.activeKeyword);
   },
 
   onToggleSortDir() {
@@ -956,7 +956,7 @@ PerformancePage({
       sortDir,
       sortBy: resolvePlayerPickerSort(this.data.sortField, sortDir),
     });
-    void this.scheduleSearch(this.data.activeKeyword);
+    return this.scheduleSearch(this.data.activeKeyword);
   },
 
   onMaxPriceChange(event: WechatMiniprogram.PickerChange) {
@@ -970,7 +970,7 @@ PerformancePage({
       selectedMaxPriceIndex,
       maxPrice: option.value === ALL_VALUE ? null : Number(option.value),
     });
-    void this.scheduleSearch("");
+    return this.scheduleSearch("");
   },
 
   onOwnBandChange(event: WechatMiniprogram.PickerChange) {
@@ -981,7 +981,7 @@ PerformancePage({
       this.data.ownBandOptions[selectedOwnBandIndex] ||
       this.data.ownBandOptions[0];
     this.setData({ selectedOwnBandIndex, ownBand: option.value });
-    void this.scheduleSearch("");
+    return this.scheduleSearch("");
   },
 
   onResetFilters() {
@@ -1002,7 +1002,7 @@ PerformancePage({
       selectedOwnBandIndex: 0,
       ownBand: ALL_VALUE,
     });
-    this.startSearch("");
+    return this.startSearch("");
   },
 
   async fetchPage(
@@ -1156,11 +1156,11 @@ PerformancePage({
     const keyword = String(
       event.detail.keyword || this.data.keyword || "",
     ).trim();
-    this.startSearch(keyword);
+    return this.startSearch(keyword);
   },
 
   onResetSearch() {
-    this.startSearch("");
+    return this.startSearch("");
   },
 
   onOpenPlayer(event: WechatMiniprogram.CustomEvent<{ player: PlayerOption }>) {
@@ -1288,13 +1288,12 @@ PerformancePage({
       this.activeSearchSnapshot ||
       this.loadedSearchSnapshot;
     if (snapshot) {
-      void this.resumeSearchSnapshot(snapshot, true);
-      return;
+      return this.resumeSearchSnapshot(snapshot, true);
     }
-    void this.startSearch(this.data.keyword, true);
+    return this.startSearch(this.data.keyword, true);
   },
 
   onRetryLoadMore() {
-    this.loadMore();
+    return this.loadMore();
   },
 });

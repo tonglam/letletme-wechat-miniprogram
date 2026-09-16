@@ -54,3 +54,34 @@ test("interaction handoff and rebind keep lifecycle and handler boundaries", () 
   assert.match(page, /originatingToken\.lifecycleGeneration !== undefined[\s\S]*currentGeneration !== undefined/);
   assert.match(page, /delete nextTokens\[name\]/);
 });
+
+test("direct page lifecycles own generations and deferred surfaces", () => {
+  const pagePerformance = source("miniprogram/utils/page-performance.ts");
+  const performancePage = source("miniprogram/utils/performance-page.ts");
+  const home = source("miniprogram/pages/home/index/index.ts");
+  const homeWxml = source("miniprogram/pages/home/index/index.wxml");
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  const searchWxml = source("miniprogram/pages/entry/search/search.wxml");
+
+  assert.match(pagePerformance, /manageLifecycleGeneration\?: boolean/);
+  assert.match(pagePerformance, /advanceManagedLifecycle\(this, lifecycle\)/);
+  assert.match(pagePerformance, /this\.disconnected && status !== "failed"/);
+  assert.match(performancePage, /manageLifecycleGeneration: false/);
+  assert.match(home, /explicitInteractionHandlers: \["onDreamPlayerTap", "onSelectPriceTab", "onRetryPredictions"\]/);
+  assert.match(home, /observePriceTabResult\(interactionId, "likely"\)/);
+  assert.match(homeWxml, /id="perf-home-price-desk"/);
+  for (const handler of [
+    "onTeamFilterChange",
+    "onPositionFilterChange",
+    "onSortChange",
+    "onToggleSortDir",
+    "onMaxPriceChange",
+    "onOwnBandChange",
+  ]) {
+    assert.match(players, new RegExp(`${handler}[\\s\\S]*return this\\.scheduleSearch`));
+  }
+  assert.match(search, /explicitInteractionHandlers: \[[\s\S]*"onLookupEntry"[\s\S]*"onSelectSearchHit"/);
+  assert.match(search, /observeLookupResult\(\)/);
+  assert.match(searchWxml, /id="perf-entry-search-result"/);
+});

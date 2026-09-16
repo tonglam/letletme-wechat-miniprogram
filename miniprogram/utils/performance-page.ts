@@ -20,6 +20,8 @@ type InstrumentedPage = {
   __performanceSetDataWrapped?: boolean;
   __performanceVisible?: boolean;
   __performanceGeneration?: number;
+  __performanceLifecycleVisible?: boolean;
+  __performanceLifecycleInitialized?: boolean;
   __performancePendingLifecycles?: Record<number, number>;
   __performancePrimaryError?: (data: object | undefined) => boolean;
 };
@@ -138,7 +140,13 @@ export function PerformancePage(
 ): void {
   const definition = instrumentPageInteractions(
     options as Record<string, unknown>,
-    instrumentationOptions,
+    {
+      ...(instrumentationOptions || {}),
+      // This wrapper owns the generic page lifecycle generation below. Direct
+      // instrumented pages get the generation wrapper from
+      // instrumentPageInteractions instead.
+      manageLifecycleGeneration: false,
+    },
   );
   const primaryError =
     instrumentationOptions.primaryError ?? ((data: object | undefined) => {

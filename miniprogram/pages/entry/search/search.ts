@@ -8,6 +8,7 @@ import {
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import {
+  getCurrentPageInteractionToken,
   handoffPageInteraction,
   runPageInteractionDelegation,
 } from "../../../utils/page-performance";
@@ -144,6 +145,24 @@ PerformancePage({
     });
   },
 
+  /**
+   * Entry lookup results render below the always-visible form. Bind the
+   * explicit lookup action to that result/error region so the form cannot
+   * satisfy the interaction observer before the requested data is visible.
+   */
+  observeLookupResult() {
+    const interaction = getCurrentPageInteractionToken();
+    const tracker = interaction?.tracker;
+    if (!tracker) return;
+    wx.nextTick(() => {
+      if (!this.pageVisible) return;
+      tracker.observeInteractionVisible("#perf-entry-search-result", {
+        errorVisible: Boolean(this.data.error),
+        interactionId: interaction.interactionId,
+      });
+    });
+  },
+
   onManualEntryInput(event: WechatMiniprogram.Input) {
     this.applyManualEntry(String(event.detail.value || ""));
   },
@@ -164,7 +183,7 @@ PerformancePage({
   },
 
   onEntryConfirm() {
-    runPageInteractionDelegation(this, () => this.onLookupEntry());
+    return runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
   async onLookupEntry() {
@@ -179,7 +198,7 @@ PerformancePage({
         error: "请输入参赛 ID，或至少 2 个字符的球队名 / 经理名",
         errorCode: "INVALID_ID",
         canRetryLookup: false
-      });
+      }, () => this.observeLookupResult());
       return;
     }
     await this.lookupByName(keyword);
@@ -228,7 +247,10 @@ PerformancePage({
       });
     } finally {
       if (requestId === this.lookupRequestId) {
-        this.setData({ loading: false, buttonText: "查找球队" });
+        this.setData(
+          { loading: false, buttonText: "查找球队" },
+          () => this.observeLookupResult(),
+        );
       }
     }
   },
@@ -283,7 +305,10 @@ PerformancePage({
       });
     } finally {
       if (requestId === this.lookupRequestId) {
-        this.setData({ loading: false, buttonText: "查找球队" });
+        this.setData(
+          { loading: false, buttonText: "查找球队" },
+          () => this.observeLookupResult(),
+        );
       }
     }
   },
@@ -291,6 +316,7 @@ PerformancePage({
   onSelectSearchHit(event: WechatMiniprogram.TouchEvent) {
     const entryId = Number(event.currentTarget.dataset.entryId);
     if (!Number.isInteger(entryId) || entryId <= 0) {
+      this.observeLookupResult();
       return;
     }
     const hit = this.data.searchHits.find((item) => item.entryId === entryId);
@@ -315,11 +341,14 @@ PerformancePage({
             entryId
           )
         : {})
-    });
+    }, () => this.observeLookupResult());
   },
 
   onRetryLookup() {
-    if (this.data.loading) return;
+    if (this.data.loading) {
+      this.observeLookupResult();
+      return;
+    }
     return runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
@@ -405,6 +434,13 @@ PerformancePage({
   onGoAccountLink() {
     navigateTo(routes.accountLink);
   }
+}, {
+  explicitInteractionHandlers: [
+    "onEntryConfirm",
+    "onLookupEntry",
+    "onRetryLookup",
+    "onSelectSearchHit",
+  ],
 });
 
 function mapPreviewData(entry: EntryInfo, fallbackEntryId: number): Partial<EntrySearchData> {

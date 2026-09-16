@@ -125,7 +125,7 @@
       </view>
     </view>
 
-    <view class="section card transfer-desk">
+    <view id="perf-home-price-desk" class="section card transfer-desk">
       <view class="transfer-head">
         <view>
         <view class="section-title">{{priceTab === 'today' ? '身价变化' : '涨跌趋势'}}</view>

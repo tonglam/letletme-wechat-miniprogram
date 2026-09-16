@@ -454,6 +454,7 @@ Page(instrumentPageInteractions({
   // projection is kept so onReset can restore it when a provisional snapshot
   // expires or is withdrawn.
   _priceLivePoller: null as PriceChangeLivePoller | null,
+  _predictionTask: null as Promise<void> | null,
   _durablePredictions: null as {
     rises: HomeMarketMover[];
     falls: HomeMarketMover[];
@@ -1286,15 +1287,38 @@ Page(instrumentPageInteractions({
 
   onSelectPriceTab(event: WechatMiniprogram.TouchEvent) {
     const tab = String(event.currentTarget.dataset.tab || "");
-    if ((tab !== "today" && tab !== "likely") || tab === this.data.priceTab) return;
+    const interactionId = getPageInteractionToken(this, "onSelectPriceTab")?.interactionId;
+    if (tab !== "today" && tab !== "likely") {
+      this.observePriceTabResult(interactionId, this.data.priceTab);
+      return;
+    }
+    if (tab === this.data.priceTab) {
+      this.observePriceTabResult(interactionId, tab);
+      return;
+    }
     this.setData({ priceTab: tab });
     // The prediction board stays lazy: first activation of the trends view.
     if (tab === "likely" && !this.data.predictionLoaded && !this.data.predictionLoading) {
-      void this.loadPricePredictions();
+      return this.loadPricePredictions().finally(() => {
+        this.observePriceTabResult(interactionId, tab);
+      });
     }
+    this.observePriceTabResult(interactionId, tab);
   },
 
-  async loadPricePredictions(forceRefresh = false) {
+  loadPricePredictions(forceRefresh = false): Promise<void> {
+    if (this._predictionTask) {
+      return this._predictionTask;
+    }
+    const task = this.loadPricePredictionsTask(forceRefresh);
+    const trackedTask = task.finally(() => {
+      if (this._predictionTask === trackedTask) this._predictionTask = null;
+    });
+    this._predictionTask = trackedTask;
+    return trackedTask;
+  },
+
+  async loadPricePredictionsTask(forceRefresh = false) {
     const requestId = ++this._priceRequestId;
     const hadRows =
       this.data.predictedAllRisers.length > 0 || this.data.predictedAllFallers.length > 0;
@@ -1370,8 +1394,27 @@ Page(instrumentPageInteractions({
     }
   },
 
+  observePriceTabResult(interactionId?: string, expectedTab?: "today" | "likely") {
+    const tracker = this._perfTracker;
+    if (!tracker) return;
+    wx.nextTick(() => {
+      if (
+        !this._pageVisible
+        || tracker !== this._perfTracker
+        || (expectedTab && this.data.priceTab !== expectedTab)
+      ) return;
+      tracker.observeInteractionVisible("#perf-home-price-desk", {
+        errorVisible: this.data.priceTab === "likely" && Boolean(this.data.predictionError),
+        interactionId,
+      });
+    });
+  },
+
   onRetryPredictions() {
-    void this.loadPricePredictions(true);
+    const interactionId = getPageInteractionToken(this, "onRetryPredictions")?.interactionId;
+    return this.loadPricePredictions(true).finally(() => {
+      this.observePriceTabResult(interactionId, "likely");
+    });
   },
 
   onOpenPricePredictions() {
@@ -1775,7 +1818,7 @@ Page(instrumentPageInteractions({
     this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
   }
 }, {
-  explicitInteractionHandlers: ["onDreamPlayerTap"],
+  explicitInteractionHandlers: ["onDreamPlayerTap", "onSelectPriceTab", "onRetryPredictions"],
 }));
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
