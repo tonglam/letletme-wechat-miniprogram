@@ -82,6 +82,7 @@ import {
   getCurrentPagePerformanceTracker,
   getPageInteractionToken,
   handoffPageInteraction,
+  type PageInteractionToken,
   type PagePerformanceTracker,
 } from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
@@ -2595,12 +2596,41 @@ PerformancePage({
     }
   },
 
-  async loadCompareSquads() {
+  async loadCompareSquads(interactionToken?: PageInteractionToken | null) {
+    const interactionId = interactionToken?.interactionId;
+    const interactionTracker =
+      interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+    const failInteraction = () => {
+      if (interactionId) {
+        interactionTracker?.completeInteraction(interactionId, "failed");
+      }
+    };
+    const observeCompareSheet = () => {
+      if (!interactionId || !interactionTracker) return;
+      const observe = () => interactionTracker.observeOnDemandVisible(
+        "#perf-compare-content",
+        {
+          errorVisible: false,
+          interactionId,
+        },
+      );
+      if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
+        wx.nextTick(observe);
+      } else {
+        observe();
+      }
+    };
     const page = this.boardPage;
     const scope = this.currentBoardScope();
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
-    if (comparedEntryIds.length !== 2) return;
-    if (!page || !scope) return;
+    if (comparedEntryIds.length !== 2) {
+      failInteraction();
+      return;
+    }
+    if (!page || !scope) {
+      failInteraction();
+      return;
+    }
     const scoreCoreRevision = page.head.publication?.revisions.scoreCore;
     if (!scoreCoreRevision) {
       this.setData({
@@ -2608,6 +2638,7 @@ PerformancePage({
         compareError: "当前榜单版本暂不可用",
         compareOpen: false,
       });
+      failInteraction();
       return;
     }
     const requestId = this.compareRequestId + 1;
@@ -2640,6 +2671,7 @@ PerformancePage({
         this.data.compareIds[0] !== comparedEntryIds[0] ||
         this.data.compareIds[1] !== comparedEntryIds[1]
       ) {
+        failInteraction();
         return;
       }
       const normalized = rows.map(normalizeRow);
@@ -2650,13 +2682,17 @@ PerformancePage({
       if (!compareSelection.compareLeft || !compareSelection.compareRight) {
         throw new Error("阵容对比响应不完整，请稍后重试");
       }
-      this.setData({ ...compareSelection, compareOpen: true });
+      this.setData({ ...compareSelection, compareOpen: true }, observeCompareSheet);
     } catch (error) {
-      if (requestId !== this.compareRequestId) return;
+      if (requestId !== this.compareRequestId) {
+        failInteraction();
+        return;
+      }
       const message =
         error instanceof Error ? error.message : "阵容对比加载失败";
       this.setData({ compareError: message, compareOpen: false });
       wx.showToast({ title: "阵容对比加载失败，已保留选择", icon: "none" });
+      failInteraction();
       if (hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE")) {
         void this.loadRows({
           background: this.data.hasData,
@@ -4309,8 +4345,15 @@ PerformancePage({
   },
 
   onOpenCompareSheet() {
-    if (this.data.compareIds.length !== 2) return;
-    void this.loadCompareSquads();
+    const interactionToken = getPageInteractionToken(this, "onOpenCompareSheet");
+    if (this.data.compareIds.length !== 2) {
+      interactionToken?.tracker.completeInteraction(
+        interactionToken.interactionId,
+        "failed",
+      );
+      return;
+    }
+    return this.loadCompareSquads(interactionToken);
   },
 
   toggleCompareEntry(entry: number) {
@@ -5111,7 +5154,7 @@ PerformancePage({
     this.reloadBoardControls();
   },
 }, {
-  explicitInteractionHandlers: ["onOpenTournamentDetail"],
+  explicitInteractionHandlers: ["onOpenTournamentDetail", "onOpenCompareSheet"],
   primaryError: (data) => {
     const value = data as Partial<LiveTournamentData> | undefined;
     return !value?.hasData

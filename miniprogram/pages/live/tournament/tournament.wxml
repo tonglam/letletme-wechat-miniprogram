@@ -369,7 +369,7 @@
     </block>
   </block>
 
-  <view wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
+  <view id="perf-compare-content" wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
     <view class="cmp-mask" bindtap="onCloseCompare"></view>
     <view class="cmp-sheet">
       <view class="cmp-head">

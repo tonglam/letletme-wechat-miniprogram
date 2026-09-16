@@ -1724,7 +1724,7 @@ Page(instrumentPageInteractions({
       "pages/live/entry/entry",
       "refresh",
     );
-    void this.runForcedRefresh(this.perfTracker);
+    return this.runForcedRefresh(this.perfTracker);
   },
 
   onEntryLookupAction() {

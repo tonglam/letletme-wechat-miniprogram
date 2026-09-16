@@ -2115,7 +2115,7 @@ Page(instrumentPageInteractions({
       "pages/live/match/match",
       "refresh",
     );
-    void this.runForcedRefresh(this.perfTracker, false);
+    return this.runForcedRefresh(this.perfTracker, false);
   },
 
   onCopyMatchShare(

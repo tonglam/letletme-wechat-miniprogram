@@ -123,3 +123,18 @@ test("deferred retry and section actions return their owned work", () => {
   assert.match(gameweek, /onRefreshTap\(\) \{\s*return this\.refreshData\(\);/);
   assert.match(gameweek, /onRetry\(\) \{\s*return this\.loadData\(\);/);
 });
+
+test("live retries and compare actions wait for their result surfaces", () => {
+  const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
+  const liveMatch = source("miniprogram/pages/live/match/match.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const tournamentWxml = source("miniprogram/pages/live/tournament/tournament.wxml");
+
+  assert.match(liveEntry, /onRetry\(\) \{[\s\S]*return this\.runForcedRefresh\(this\.perfTracker\);/);
+  assert.match(liveMatch, /onRetry\(\) \{[\s\S]*return this\.runForcedRefresh\(this\.perfTracker, false\);/);
+  assert.match(tournament, /async loadCompareSquads\(interactionToken\?: PageInteractionToken \| null\)/);
+  assert.match(tournament, /observeOnDemandVisible\(\s*"#perf-compare-content"/);
+  assert.match(tournament, /onOpenCompareSheet\(\) \{[\s\S]*return this\.loadCompareSquads\(interactionToken\);/);
+  assert.match(tournament, /explicitInteractionHandlers: \["onOpenTournamentDetail", "onOpenCompareSheet"\]/);
+  assert.match(tournamentWxml, /id="perf-compare-content"/);
+});
