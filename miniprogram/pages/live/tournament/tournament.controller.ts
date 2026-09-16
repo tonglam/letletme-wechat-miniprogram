@@ -78,7 +78,10 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
-import { getCurrentPagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
+} from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
 import {
   exportTournamentBoardShareImage,
@@ -3425,6 +3428,7 @@ PerformancePage({
   },
 
   async onOpenTournamentDetail() {
+    const interactionId = getPageInteractionToken(this, "onOpenTournamentDetail")?.interactionId;
     const selected = this.data.selectedTournament;
     const entryId = this.data.entryId;
     if (!selected || !entryId) return;
@@ -3435,7 +3439,10 @@ PerformancePage({
       this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
     if (cached) {
       this.applyDetailDesk(cached);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
       return;
     }
     // A pending request only dedupes a reopen of the SAME tournament; a
@@ -3464,7 +3471,10 @@ PerformancePage({
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     } catch (error) {
       if (requestId !== this.detailRequestId) return;
       if (!this.pageVisible || !this.data.detailOpen) return;
@@ -3472,7 +3482,10 @@ PerformancePage({
         detailError:
           error instanceof Error ? error.message : "赛事详情加载失败",
       }, () => {
-        wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: true }));
+        wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
+          errorVisible: true,
+          interactionId,
+        }));
       });
     } finally {
       if (this.pageVisible && requestId === this.detailRequestId) {
@@ -4988,4 +5001,6 @@ PerformancePage({
     });
     this.reloadBoardControls();
   },
+}, {
+  explicitInteractionHandlers: ["onOpenTournamentDetail"],
 });

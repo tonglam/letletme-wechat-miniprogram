@@ -467,6 +467,11 @@ function catalogRevisionForEvent(
   return latest?.eventId === eventId ? (latest.revision ?? null) : null;
 }
 
+function isPrimaryLeaguesError(data: object | undefined): boolean {
+  const value = data as Partial<LeaguesData> | undefined;
+  return typeof value?.v2Error === "string" && value.v2Error.length > 0;
+}
+
 PerformancePage({
   data: {
     v2Scope: "ACCESSIBLE" as MyTournamentReviewScope,
@@ -2589,4 +2594,6 @@ PerformancePage({
   onGoLive() {
     switchToLive();
   },
+}, {
+  primaryError: isPrimaryLeaguesError,
 });

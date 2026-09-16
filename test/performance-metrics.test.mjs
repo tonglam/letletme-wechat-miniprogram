@@ -19,6 +19,7 @@ const {
   getActivePagePerformanceTrace,
   getCurrentPagePerformanceTrace,
   getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
   instrumentPageInteractions,
 } = await import("../miniprogram/utils/page-performance.ts");
 const { observeSoftTimeout } = await import("../miniprogram/utils/page-request.ts");
@@ -309,6 +310,115 @@ test("automatic interaction instrumentation observes the primary result viewport
   assert.ok(record.interactions[0].resultVisibleAt);
   tracker.disconnect();
   globalThis.wx.nextTick = previousNextTick;
+  delete globalThis.getCurrentPages;
+});
+
+test("explicit interaction handlers defer completion to their owned result surface", () => {
+  clearPerf();
+  const callbacks = [];
+  const page = {
+    data: {},
+    __performanceVisible: true,
+    createIntersectionObserver() {
+      return {
+        relativeToViewport() { return this; },
+        observe(_selector, next) { callbacks.push(next); },
+        disconnect() {},
+      };
+    },
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/explicit-boundary", "warm-enter");
+  const definition = instrumentPageInteractions(
+    { onOpenDrawer() { return undefined; } },
+    { explicitInteractionHandlers: ["onOpenDrawer"] },
+  );
+
+  definition.onOpenDrawer.call(page);
+  assert.equal(callbacks.length, 0, "the generic primary observer must not claim the drawer action");
+  const token = getPageInteractionToken(page, "onOpenDrawer");
+  assert.ok(token);
+  tracker.observeOnDemandVisible("#drawer", {
+    errorVisible: false,
+    interactionId: token.interactionId,
+  });
+  assert.equal(callbacks.length, 1);
+  callbacks[0]({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.ok(record.interactions[0].resultVisibleAt);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("viewport callbacks retain the interaction that registered them", () => {
+  clearPerf();
+  const callbacks = new Map();
+  const page = {
+    __performanceVisible: true,
+    createIntersectionObserver() {
+      return {
+        relativeToViewport() { return this; },
+        observe(selector, next) { callbacks.set(selector, next); },
+        disconnect() {},
+      };
+    },
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/concurrent-actions", "warm-enter");
+  const first = tracker.beginInteraction("onTab", "tab:first");
+  const second = tracker.beginInteraction("onTab", "tab:second");
+  tracker.markInteractionHandlerCompleted(first.interactionId);
+  tracker.markInteractionHandlerCompleted(second.interactionId);
+  tracker.observeInteractionVisible("#first", { interactionId: first.interactionId });
+  tracker.observeInteractionVisible("#second", { interactionId: second.interactionId });
+
+  callbacks.get("#second")({ intersectionRatio: 1 });
+  callbacks.get("#first")({ intersectionRatio: 1 });
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  const interactions = new Map(record.interactions.map((item) => [item.interactionId, item]));
+  assert.ok(interactions.get(first.interactionId).resultVisibleAt);
+  assert.ok(interactions.get(second.interactionId).resultVisibleAt);
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("instrumented handlers rebind an interaction when the page replaces its tracker", () => {
+  clearPerf();
+  let callback;
+  let replacement;
+  let originalStartedAt;
+  const observer = {
+    relativeToViewport() { return this; },
+    observe(_selector, next) { callback = next; },
+    disconnect() {},
+  };
+  const page = {
+    route: "pages/test/rebind",
+    __performanceVisible: true,
+    createIntersectionObserver() { return observer; },
+  };
+  globalThis.getCurrentPages = () => [page];
+  const original = new PagePerformanceTracker(page, page.route, "warm-enter");
+  const definition = instrumentPageInteractions({
+    onGwChange() {
+      originalStartedAt = getPageInteractionToken(this, "onGwChange")?.startedAt;
+      original.disconnect();
+      replacement = new PagePerformanceTracker(this, this.route, "refresh");
+    },
+  });
+
+  definition.onGwChange.call(page);
+  assert.ok(replacement);
+  const token = getPageInteractionToken(page, "onGwChange");
+  assert.ok(token);
+  assert.equal(token.tracker, replacement);
+  const replacementRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === replacement.navigationId,
+  );
+  assert.equal(replacementRecord.interactions[0].startedAt, originalStartedAt);
+  callback({ intersectionRatio: 1 });
+  assert.ok(replacementRecord.interactions[0].resultVisibleAt);
+  replacement.disconnect();
   delete globalThis.getCurrentPages;
 });
 

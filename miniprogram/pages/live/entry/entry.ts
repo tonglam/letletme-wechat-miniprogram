@@ -63,6 +63,7 @@ import {
 import {
   PagePerformanceTracker,
   consumeAppBackgroundResume,
+  getPageInteractionToken,
   instrumentPageInteractions,
 } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
@@ -1744,17 +1745,22 @@ Page(instrumentPageInteractions({
   onOpenPlayer(
     event: WechatMiniprogram.CustomEvent<{ player: LivePlayerRow }>,
   ) {
+    const interactionId = getPageInteractionToken(this, "onOpenPlayer")?.interactionId;
     const player = event.detail.player;
     if (!player) return;
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
     }, () => {
-      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     });
   },
 
   onPitchPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
+    const interactionId = getPageInteractionToken(this, "onPitchPlayerTap")?.interactionId;
     const playerId = String(event.detail?.playerId || "");
     if (!playerId) return;
     const player = findLivePlayerForPitch(
@@ -1767,7 +1773,10 @@ Page(instrumentPageInteractions({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
     }, () => {
-      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", { errorVisible: false }));
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     });
   },
 
@@ -1882,6 +1891,8 @@ Page(instrumentPageInteractions({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
+}, {
+  explicitInteractionHandlers: ["onOpenPlayer", "onPitchPlayerTap"],
 }));
 
 function emptyLiveOverlayState(): {

@@ -11,6 +11,7 @@ type PageOwner = {
   pageActive?: boolean;
   __performanceVisible?: boolean;
   __performanceTracker?: PagePerformanceTracker;
+  __performanceInteractionTokens?: Record<string, PageInteractionToken>;
   createIntersectionObserver?: (
     options: WechatMiniprogram.CreateIntersectionObserverOption
   ) => WechatMiniprogram.IntersectionObserver;
@@ -51,6 +52,20 @@ export function consumeAppBackgroundResume(): boolean {
  */
 export interface PagePerformanceObservationOptions {
   errorVisible?: boolean;
+  /** Bind this viewport marker to the interaction that scheduled it. */
+  interactionId?: string;
+}
+
+export interface PagePerformanceInstrumentationOptions {
+  /** Handlers that own an explicit result/on-demand viewport boundary. */
+  explicitInteractionHandlers?: readonly string[];
+  /** Page-owned classifier for the primary rendered error surface. */
+  primaryError?: (data: object | undefined) => boolean;
+}
+
+function defaultPrimaryError(data: object | undefined): boolean {
+  const value = data as Record<string, unknown> | undefined;
+  return typeof value?.error === "string" && value.error.length > 0;
 }
 
 function resolveTrigger(
@@ -77,14 +92,13 @@ function setActiveTracker(tracker: PagePerformanceTracker | undefined): void {
 function scheduleInteractionVisibility(
   token: PageInteractionToken | null,
   page: PageOwner,
+  primaryError: (data: object | undefined) => boolean = defaultPrimaryError,
 ): void {
   if (!token) return;
   const observe = () => {
-    const data = page.data as Record<string, unknown> | undefined;
     token.tracker.observeInteractionVisible(undefined, {
-      // Ordinary pages reserve `error` for their primary surface. P0 pages
-      // pass a more specific state to their explicit observers.
-      errorVisible: typeof data?.error === "string" && data.error.length > 0,
+      errorVisible: primaryError(page.data),
+      interactionId: token.interactionId,
     });
   };
   if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
@@ -105,6 +119,15 @@ export interface PageInteractionToken {
   interactionId: string;
   startedAt: number;
   tracker: PagePerformanceTracker;
+}
+
+/** Return the token created by the generic wrapper for a handler in progress. */
+export function getPageInteractionToken(
+  page: unknown,
+  handler: string,
+): PageInteractionToken | null {
+  const owner = page as PageOwner | null | undefined;
+  return owner?.__performanceInteractionTokens?.[handler] ?? null;
 }
 
 export function getActivePagePerformanceTrace(): ActivePagePerformanceTrace | null {
@@ -227,11 +250,17 @@ export function instrumentPageInteractions<
   TCustom extends WechatMiniprogram.Page.CustomOption,
 >(
   definition: WechatMiniprogram.Page.Options<TData, TCustom>,
+  options?: PagePerformanceInstrumentationOptions,
 ): WechatMiniprogram.Page.Options<TData, TCustom>;
 export function instrumentPageInteractions<T extends Record<string, unknown>>(
   definition: T,
+  options: PagePerformanceInstrumentationOptions = {},
 ): T {
   const instrumented = { ...definition } as T;
+  const explicitInteractionHandlers = new Set(
+    options.explicitInteractionHandlers ?? [],
+  );
+  const primaryError = options.primaryError ?? defaultPrimaryError;
   for (const [name, value] of Object.entries(definition)) {
     if (
       PAGE_LIFECYCLE_HANDLERS.has(name) ||
@@ -245,25 +274,51 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       this: PageOwner,
       ...args: unknown[]
     ): unknown {
-      const token = beginPageInteraction(name, name);
+      let token = beginPageInteraction(name, name);
+      if (token) {
+        this.__performanceInteractionTokens = {
+          ...(this.__performanceInteractionTokens ?? {}),
+          [name]: token,
+        };
+      }
+      const explicitBoundary = explicitInteractionHandlers.has(name);
+      const rebindToCurrentTracker = () => {
+        if (!token) return;
+        const currentTracker =
+          this.__performanceTracker ?? getCurrentPagePerformanceTracker();
+        if (currentTracker && currentTracker !== token.tracker) {
+          token = currentTracker.rebindInteraction(token);
+          this.__performanceInteractionTokens = {
+            ...(this.__performanceInteractionTokens ?? {}),
+            [name]: token,
+          };
+        }
+      };
+      const settleHandler = () => {
+        rebindToCurrentTracker();
+        token?.tracker.markInteractionHandlerCompleted(token.interactionId);
+        if (!explicitBoundary) {
+          scheduleInteractionVisibility(token, this, primaryError);
+        }
+      };
       let result: unknown;
       try {
         result = handler.apply(this, args);
       } catch (error) {
+        rebindToCurrentTracker();
         token?.tracker.completeInteraction(token.interactionId, "failed", false);
         throw error;
       }
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
         void Promise.resolve(result).then(
+          settleHandler,
           () => {
-            token?.tracker.markInteractionHandlerCompleted(token.interactionId);
-            scheduleInteractionVisibility(token, this);
+            rebindToCurrentTracker();
+            token?.tracker.completeInteraction(token.interactionId, "failed");
           },
-          () => token?.tracker.completeInteraction(token.interactionId, "failed"),
         );
       } else {
-        token?.tracker.markInteractionHandlerCompleted(token.interactionId);
-        scheduleInteractionVisibility(token, this);
+        settleHandler();
       }
       return result;
     };
@@ -322,6 +377,8 @@ export class PagePerformanceTracker {
       | "onDemandVisibleAt"
       | "errorVisibleAt"
       | "softFailureAt"
+    ,
+    interactionId?: string,
   ): void {
     if (this.disconnected) return;
     const timestamp = monotonicNow();
@@ -329,7 +386,7 @@ export class PagePerformanceTracker {
     this.record[field] =
       previous === undefined ? timestamp : Math.max(previous, timestamp);
     if (field === "errorVisibleAt") {
-      this.completePendingInteractions("failed", timestamp, false);
+      this.completePendingInteractions("failed", timestamp, false, interactionId);
     }
     const finalCompletion = field === "secondaryCompleteAt" || field === "softFailureAt";
     if (finalCompletion) this.secondaryCompletionExpected = false;
@@ -418,15 +475,24 @@ export class PagePerformanceTracker {
     status: "completed" | "failed",
     timestamp: number,
     visible: boolean,
+    interactionId?: string,
   ): void {
-    const pending = [...(this.record.interactions ?? [])]
-      .reverse()
-      .find(
-        (interaction) =>
-          interaction.status !== "failed" &&
-          interaction.resultVisibleAt === undefined &&
-          interaction.errorVisibleAt === undefined,
-      );
+    const pending = interactionId
+      ? this.record.interactions?.find(
+          (interaction) =>
+            interaction.interactionId === interactionId &&
+            interaction.status !== "failed" &&
+            interaction.resultVisibleAt === undefined &&
+            interaction.errorVisibleAt === undefined,
+        )
+      : [...(this.record.interactions ?? [])]
+          .reverse()
+          .find(
+            (interaction) =>
+              interaction.status !== "failed" &&
+              interaction.resultVisibleAt === undefined &&
+              interaction.errorVisibleAt === undefined,
+          );
     if (pending) {
       this.completeInteraction(pending.interactionId, status, visible, timestamp);
     }
@@ -494,7 +560,7 @@ export class PagePerformanceTracker {
     selector = this.primarySelector,
     options: PagePerformanceObservationOptions = {},
   ): void {
-    this.observeMarkerVisible(selector, undefined, options);
+    this.observeMarkerVisible(selector, undefined, options, options.interactionId);
   }
 
   /**
@@ -505,15 +571,23 @@ export class PagePerformanceTracker {
     selector: string,
     options: PagePerformanceObservationOptions = {},
   ): void {
-    this.observeMarkerVisible(selector, "onDemandVisibleAt", options);
+    this.observeMarkerVisible(
+      selector,
+      "onDemandVisibleAt",
+      options,
+      options.interactionId,
+    );
   }
 
   private observeMarkerVisible(
     selector: string,
     marker?: "onDemandVisibleAt",
     options: PagePerformanceObservationOptions = {},
+    interactionId?: string,
   ): void {
     if (this.disconnected) return;
+    const boundInteractionId =
+      interactionId ?? options.interactionId ?? this.findPendingInteractionId();
     const observer = this.page.createIntersectionObserver?.({ nativeMode: true });
     if (!observer) return;
     this.interactionObservers.add(observer);
@@ -527,12 +601,65 @@ export class PagePerformanceTracker {
         if (this.disconnected || entry.intersectionRatio <= 0) return;
         cleanup();
         if (options.errorVisible === true) {
-          this.mark("errorVisibleAt");
+          this.mark("errorVisibleAt", boundInteractionId);
           return;
         }
         if (marker) this.mark(marker);
-        this.completePendingInteractions("completed", monotonicNow(), true);
+        const visibleAt = monotonicNow();
+        if (boundInteractionId) {
+          this.completeInteraction(boundInteractionId, "completed", true, visibleAt);
+        } else {
+          this.completePendingInteractions("completed", visibleAt, true);
+        }
       },
+    );
+  }
+
+  private findPendingInteractionId(): string | undefined {
+    return [...(this.record.interactions ?? [])]
+      .reverse()
+      .find(
+        (interaction) =>
+          interaction.status !== "failed" &&
+          interaction.resultVisibleAt === undefined &&
+          interaction.errorVisibleAt === undefined,
+      )?.interactionId;
+  }
+
+  /**
+   * Move an interaction to a replacement tracker while preserving the event
+   * start time. Route-specific handlers may replace their tracker synchronously
+   * (for example when changing GW); the wrapper must keep that action alive.
+   */
+  rebindInteraction(token: PageInteractionToken): PageInteractionToken {
+    if (this.disconnected || token.tracker === this) return token;
+    const source = token.tracker.readInteraction(token.interactionId);
+    if (!source) return token;
+    interactionSequence += 1;
+    const interactionId = `${this.navigationId}:action:${interactionSequence.toString(36)}`;
+    const interaction: PageInteractionRecord = {
+      interactionId,
+      handler: source.handler,
+      ...(source.target ? { target: source.target } : {}),
+      startedAt: token.startedAt,
+      status: "started",
+    };
+    const previous = this.record.interactions ?? [];
+    this.record.interactions = [...previous, interaction].slice(-32);
+    this.flush();
+    return {
+      ...token,
+      interactionId,
+      navigationId: this.navigationId,
+      tracker: this,
+    };
+  }
+
+  private readInteraction(interactionId: string): PageInteractionRecord | null {
+    return (
+      this.record.interactions?.find(
+        (interaction) => interaction.interactionId === interactionId,
+      ) ?? null
     );
   }
 

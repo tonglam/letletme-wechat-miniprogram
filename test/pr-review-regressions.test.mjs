@@ -94,6 +94,12 @@ test("initial request failures do not also claim an empty list", () => {
   assert.match(leagues, /暂无可复盘赛事/);
 });
 
+test("My FPL Leagues owns the primary error classifier used by performance tracking", () => {
+  const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(page, /function isPrimaryLeaguesError\([\s\S]*v2Error/);
+  assert.match(page, /primaryError:\s*isPrimaryLeaguesError/);
+});
+
 test("failed event metadata is represented as unavailable, not offseason", () => {
   const service = source("miniprogram/services/my-fpl.service.ts");
   assert.match(service, /eventContextAvailable = false/);
