@@ -2851,7 +2851,10 @@ PerformancePage({
     if (!batch.tracker) return;
     if (status === "failed") {
       for (const interactionId of batch.interactionIds) {
-        batch.tracker.completeInteraction(interactionId, "failed", false);
+        // Cancellation or supersession has no rendered error surface. Leave
+        // errorVisibleAt unset; only the committed error observer owns that
+        // marker.
+        batch.tracker.completeInteraction(interactionId, "failed");
       }
       return;
     }

@@ -80,6 +80,7 @@ test("tournament detail sheet drops stale responses from a previous selection", 
   assert.match(controller, /detailInteractionBatches: new Map/);
   assert.match(controller, /registerDetailInteraction\(this\.detailRequestId, interactionId\)/);
   assert.match(controller, /settleDetailInteractions\(requestId, "completed", false\)/);
+  assert.match(controller, /batch\.tracker\.completeInteraction\(interactionId, "failed"\)/);
   assert.match(controller, /onCommitted: \(\) =>[\s\S]*mark\("defaultContentAt"\)/);
 });
 

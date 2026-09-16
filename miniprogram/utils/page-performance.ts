@@ -535,7 +535,11 @@ export class PagePerformanceTracker {
     const timestamp = monotonicNow();
     const previous = this.record[field];
     this.record[field] =
-      previous === undefined ? timestamp : Math.max(previous, timestamp);
+      field === "defaultContentAt"
+        ? (previous ?? timestamp)
+        : previous === undefined
+          ? timestamp
+          : Math.max(previous, timestamp);
     if (field === "errorVisibleAt") {
       this.completePendingInteractions("failed", timestamp, false, interactionId);
     }

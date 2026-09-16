@@ -254,6 +254,27 @@ test("interaction completion preserves the handler boundary", () => {
   tracker.disconnect();
 });
 
+test("default content keeps the first committed timestamp", () => {
+  clearPerf();
+  let now = 100;
+  globalThis.wx.getPerformance = () => ({ now: () => (now += 10) });
+  const tracker = new PagePerformanceTracker(
+    {},
+    "pages/test/default-first",
+    "warm-enter",
+  );
+  tracker.mark("defaultContentAt");
+  const first = getPerf().pagePerformance.find(
+    (item) => item.navigationId === tracker.navigationId,
+  ).defaultContentAt;
+  tracker.mark("defaultContentAt");
+  const second = getPerf().pagePerformance.find(
+    (item) => item.navigationId === tracker.navigationId,
+  ).defaultContentAt;
+  assert.equal(second, first);
+  tracker.disconnect();
+});
+
 test("default commits do not close an interaction before its viewport marker", () => {
   clearPerf();
   let callback;
