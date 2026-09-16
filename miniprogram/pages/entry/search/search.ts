@@ -103,6 +103,7 @@ PerformancePage({
   lookupRequestId: 0,
   redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   redirectHandoff: null as ReturnType<typeof handoffPageInteraction>,
+  redirectDispatched: false,
   pageVisible: true,
 
   async onShow() {
@@ -125,8 +126,12 @@ PerformancePage({
   cancelRedirectTimer() {
     if (this.redirectTimer) clearTimeout(this.redirectTimer);
     this.redirectTimer = undefined;
-    this.redirectHandoff?.rollback();
+    // Once reLaunch has been dispatched, the source page may hide before the
+    // destination adopts the handoff. Only cancel before dispatch; a rejected
+    // API call owns rollback through its fail callback.
+    if (!this.redirectDispatched) this.redirectHandoff?.rollback();
     this.redirectHandoff = null;
+    this.redirectDispatched = false;
   },
 
   syncCurrentEntry() {
@@ -338,22 +343,31 @@ PerformancePage({
     // Keep the follow action attached to the Home content that will confirm
     // the new team after the short transition delay.
     this.redirectHandoff = handoffPageInteraction(routes.home);
+    this.redirectDispatched = false;
     this.redirectTimer = setTimeout(() => {
       this.redirectTimer = undefined;
       const handoff = this.redirectHandoff;
       if (!this.pageVisible) {
         handoff?.rollback();
         this.redirectHandoff = null;
+        this.redirectDispatched = false;
         return;
       }
+      this.redirectDispatched = true;
       wx.reLaunch({
         url: routes.home,
         success: () => {
-          if (this.redirectHandoff === handoff) this.redirectHandoff = null;
+          if (this.redirectHandoff === handoff) {
+            this.redirectHandoff = null;
+            this.redirectDispatched = false;
+          }
         },
         fail: () => {
           handoff?.rollback();
-          if (this.redirectHandoff === handoff) this.redirectHandoff = null;
+          if (this.redirectHandoff === handoff) {
+            this.redirectHandoff = null;
+            this.redirectDispatched = false;
+          }
         },
       });
     }, 800);

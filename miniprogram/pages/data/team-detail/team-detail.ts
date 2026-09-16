@@ -130,7 +130,10 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadData("refresh", true);
+    // Return the deferred load so the interaction wrapper observes the
+    // resulting success or error surface instead of sampling the cleared
+    // primary content on the next tick.
+    return this.loadData("refresh", true);
   },
 
   onPullDownRefresh() {

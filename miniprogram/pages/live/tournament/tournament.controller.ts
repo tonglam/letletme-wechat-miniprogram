@@ -82,6 +82,7 @@ import {
   getCurrentPagePerformanceTracker,
   getPageInteractionToken,
   handoffPageInteraction,
+  type PagePerformanceTracker,
 } from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
 import {
@@ -145,6 +146,11 @@ type SortKey =
   | "teamValue"
   | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
+
+type DetailInteractionBatch = {
+  tracker: PagePerformanceTracker | null;
+  interactionIds: Set<string>;
+};
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
@@ -1337,6 +1343,7 @@ PerformancePage({
   detailDeskKey: "",
   detailRequestId: 0,
   detailRequestKey: "",
+  detailInteractionBatches: new Map<number, DetailInteractionBatch>(),
   detailParticipants: [] as TournamentParticipantRow[],
   detailRosterVisible: TOURNAMENT_ROSTER_PREVIEW,
 
@@ -2309,8 +2316,8 @@ PerformancePage({
   applyBoardPage(
     page: LiveBoardPage,
     reset: boolean,
-    options: { lastGood?: boolean } = {},
-  ) {
+    options: { lastGood?: boolean; onCommitted?: () => void } = {},
+  ): boolean {
     const complete = isCompleteLiveBoardPage(page, { firstPage: reset });
     if (
       !complete &&
@@ -2325,7 +2332,7 @@ PerformancePage({
         errorSuffix: "当前显示上次成功结果",
       });
       this.syncDisplayState();
-      return;
+      return false;
     }
     const scoreCoreRevision =
       page.head.publication?.revisions.scoreCore || null;
@@ -2481,8 +2488,11 @@ PerformancePage({
             compareRightPickCount: 0,
           }
         : {}),
+    }, () => {
+      options.onCommitted?.();
     });
     this.commitBoardControls();
+    return true;
   },
 
   async loadSelectionIndex() {
@@ -2748,8 +2758,10 @@ PerformancePage({
         });
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(variables.entryId)) return;
-        this.applyBoardPage(result.page, true);
-        getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+        this.applyBoardPage(result.page, true, {
+          onCommitted: () =>
+            getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+        });
         const writeScope = this.currentBoardScope();
         if (
           writeScope &&
@@ -2820,6 +2832,44 @@ PerformancePage({
     }
   },
 
+  registerDetailInteraction(requestId: number, interactionId?: string) {
+    if (!interactionId) return;
+    const batch = this.detailInteractionBatches.get(requestId);
+    if (!batch) return;
+    batch.tracker ??= getCurrentPagePerformanceTracker();
+    batch.interactionIds.add(interactionId);
+  },
+
+  settleDetailInteractions(
+    requestId: number,
+    status: "completed" | "failed",
+    errorVisible = false,
+  ) {
+    const batch = this.detailInteractionBatches.get(requestId);
+    if (!batch) return;
+    this.detailInteractionBatches.delete(requestId);
+    if (!batch.tracker) return;
+    if (status === "failed") {
+      for (const interactionId of batch.interactionIds) {
+        batch.tracker.completeInteraction(interactionId, "failed", false);
+      }
+      return;
+    }
+    const observe = () => {
+      for (const interactionId of batch.interactionIds) {
+        batch.tracker.observeOnDemandVisible("#perf-on-demand-content", {
+          errorVisible,
+          interactionId,
+        });
+      }
+    };
+    if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
+      wx.nextTick(observe);
+    } else {
+      observe();
+    }
+  },
+
   clearH2HState() {
     this.clearH2HTimers();
     this.h2hMatchupsResumePending = false;
@@ -2832,6 +2882,7 @@ PerformancePage({
     this.h2hActiveEventId = 0;
     this.detailDesk = null;
     this.detailDeskKey = "";
+    this.settleDetailInteractions(this.detailRequestId, "failed");
     this.detailRequestId += 1;
     this.detailRequestKey = "";
     // A superseded detail request skips clearing detailLoading in its finally
@@ -2926,8 +2977,10 @@ PerformancePage({
       );
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
-      this.applyH2HBoard(board);
-      getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+      this.applyH2HBoard(board, {
+        onCommitted: () =>
+          getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+      });
     } catch (error) {
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       this.setData({
@@ -2990,7 +3043,10 @@ PerformancePage({
       );
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
-      this.applyH2HBoard(board);
+      this.applyH2HBoard(board, {
+        onCommitted: () =>
+          getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+      });
     } catch (error) {
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       this.setData({
@@ -3038,7 +3094,10 @@ PerformancePage({
     }, SETUP_POLL_MS);
   },
 
-  applyH2HBoard(board: H2HBoard) {
+  applyH2HBoard(
+    board: H2HBoard,
+    options: { onCommitted?: () => void } = {},
+  ): boolean {
     if (
       (board.availability !== "READY" ||
         board.delivery.state === "UNAVAILABLE") &&
@@ -3050,7 +3109,7 @@ PerformancePage({
         errorSuffix: "当前显示上次成功结果",
       });
       this.syncDisplayState();
-      return;
+      return false;
     }
     const entryId = this.data.entryId;
     const previousBoardSnapshot = this.h2hBoardSnapshot;
@@ -3126,6 +3185,8 @@ PerformancePage({
       scoreStatusText: `H2H ${h2hScoreStateText(board.availability, board.delivery.state)}`,
       scoreNextRefreshAt: board.times?.nextRefreshAt || "",
       lastUpdated: exactUpdatedTime(board.times?.contentUpdatedAt),
+    }, () => {
+      options.onCommitted?.();
     });
     const head = leagueHeadFromH2HBoard(
       board,
@@ -3135,6 +3196,7 @@ PerformancePage({
     if (head) this.h2hHead = head;
     this.scheduleH2HRefresh(board.eventId);
     this.syncDisplayState();
+    return true;
   },
 
   probeH2HHead(eventId: number): Promise<void> {
@@ -3429,10 +3491,23 @@ PerformancePage({
   },
 
   async onOpenTournamentDetail() {
-    const interactionId = getPageInteractionToken(this, "onOpenTournamentDetail")?.interactionId;
+    const interactionToken = getPageInteractionToken(
+      this,
+      "onOpenTournamentDetail",
+    );
+    const interactionId = interactionToken?.interactionId;
     const selected = this.data.selectedTournament;
     const entryId = this.data.entryId;
-    if (!selected || !entryId) return;
+    if (!selected || !entryId) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return;
+    }
     const tournamentId = Number(selected.id);
     const key = String(tournamentId);
     this.setData({ detailOpen: true, detailError: "" });
@@ -3440,18 +3515,34 @@ PerformancePage({
       this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
     if (cached) {
       this.applyDetailDesk(cached);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
-        errorVisible: false,
-        interactionId,
-      }));
+      const tracker =
+        interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+      if (interactionId) {
+        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", {
+          errorVisible: false,
+          interactionId,
+        }));
+      }
       return;
     }
     // A pending request only dedupes a reopen of the SAME tournament; a
     // different selection supersedes it (its late response is dropped by the
     // generation check below) and must start its own load.
-    if (this.data.detailLoading && this.detailRequestKey === key) return;
+    if (this.data.detailLoading && this.detailRequestKey === key) {
+      this.registerDetailInteraction(this.detailRequestId, interactionId);
+      return;
+    }
+    if (this.data.detailLoading && this.detailRequestKey !== key) {
+      this.settleDetailInteractions(this.detailRequestId, "failed");
+    }
     const requestId = ++this.detailRequestId;
     this.detailRequestKey = key;
+    const tracker =
+      interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+    this.detailInteractionBatches.set(requestId, {
+      tracker,
+      interactionIds: new Set(interactionId ? [interactionId] : []),
+    });
     this.setData({ detailLoading: true });
     try {
       const desk = await getTournamentDetailDesk(
@@ -3466,27 +3557,33 @@ PerformancePage({
       );
       // Stale responses must not commit under the currently displayed
       // tournament (sheet reopened for another selection mid-request).
-      if (requestId !== this.detailRequestId) return;
-      if (!this.pageVisible || !this.data.detailOpen) return;
+      if (requestId !== this.detailRequestId) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
+      if (!this.pageVisible || !this.data.detailOpen) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
       if (!desk) throw new Error("赛事详情暂时不可用，请稍后重试");
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
-      wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
-        errorVisible: false,
-        interactionId,
-      }));
+      this.settleDetailInteractions(requestId, "completed", false);
     } catch (error) {
-      if (requestId !== this.detailRequestId) return;
-      if (!this.pageVisible || !this.data.detailOpen) return;
+      if (requestId !== this.detailRequestId) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
+      if (!this.pageVisible || !this.data.detailOpen) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
       this.setData({
         detailError:
           error instanceof Error ? error.message : "赛事详情加载失败",
       }, () => {
-        wx.nextTick(() => getCurrentPagePerformanceTracker()?.observeOnDemandVisible("#perf-on-demand-content", {
-          errorVisible: true,
-          interactionId,
-        }));
+        this.settleDetailInteractions(requestId, "completed", true);
       });
     } finally {
       if (this.pageVisible && requestId === this.detailRequestId) {
@@ -3496,6 +3593,9 @@ PerformancePage({
   },
 
   onCloseTournamentDetail() {
+    this.settleDetailInteractions(this.detailRequestId, "failed");
+    this.detailRequestId += 1;
+    this.detailRequestKey = "";
     this.setData({ detailOpen: false, detailError: "" });
   },
 

@@ -844,6 +844,14 @@ test("account and entry search refresh viewer authority before snapshots", () =>
   );
 });
 
+test("entry redirect keeps the navigation handoff after reLaunch dispatch", () => {
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  assert.match(search, /redirectDispatched: false/);
+  assert.match(search, /if \(!this\.redirectDispatched\) this\.redirectHandoff\?\.rollback\(\)/);
+  assert.match(search, /this\.redirectDispatched = true;[\s\S]*wx\.reLaunch/);
+  assert.match(search, /fail: \(\) => \{[\s\S]*handoff\?\.rollback\(\)/);
+});
+
 test("personal recovery avoids duplicate follow writes and restarts live viewers", () => {
   const auth = source("miniprogram/services/auth.service.ts");
   assert.match(

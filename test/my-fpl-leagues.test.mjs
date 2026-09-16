@@ -164,3 +164,13 @@ test("nested retry state is initialized on the page instance", async () => {
     /async onLoad\(\) \{[\s\S]*this\.retryBySurface = \{[\s\S]*gameweek: null,[\s\S]*season: null/,
   );
 });
+
+test("review view actions bind their interaction to the selected surface", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(page, /async onViewTap\(event: WechatMiniprogram\.TouchEvent\)/);
+  assert.match(page, /getPageInteractionToken\(this, "onViewTap"\)/);
+  assert.match(page, /loadSeasonPhase\(phase\.phaseId, interactionId\)/);
+  assert.match(page, /onPhaseTap\(event: WechatMiniprogram\.TouchEvent\)/);
+  assert.match(page, /loadSeasonPhase\(phaseId, interactionId\)/);
+  assert.match(page, /explicitInteractionHandlers: \[[\s\S]*"onViewTap"[\s\S]*"onPhaseTap"/);
+});

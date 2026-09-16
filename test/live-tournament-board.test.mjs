@@ -65,15 +65,22 @@ test("tournament detail sheet drops stale responses from a previous selection", 
 
   // A pending request only dedupes a reopen of the same tournament; a
   // different selection starts its own load and supersedes the old one.
-  assert.match(controller, /detailLoading && this\.detailRequestKey === key\) return;/);
+  assert.match(controller, /detailLoading && this\.detailRequestKey === key\) \{/);
   assert.match(controller, /const requestId = \+\+this\.detailRequestId;/);
   assert.match(controller, /this\.detailRequestKey = key;/);
   // Late responses from a superseded request never commit, and never clear
   // the newer request's loading flag.
-  assert.match(controller, /if \(requestId !== this\.detailRequestId\) return;/);
+  assert.match(controller, /if \(requestId !== this\.detailRequestId\) \{/);
   assert.match(controller, /this\.pageVisible && requestId === this\.detailRequestId/);
   // Switching modes/tournaments invalidates a pending detail request.
   assert.match(controller, /this\.detailRequestId \+= 1;/);
+  // Every reopen shares the pending result and completion is tied to the
+  // committed setData callback, so no action is left without a terminal
+  // visibility/error marker.
+  assert.match(controller, /detailInteractionBatches: new Map/);
+  assert.match(controller, /registerDetailInteraction\(this\.detailRequestId, interactionId\)/);
+  assert.match(controller, /settleDetailInteractions\(requestId, "completed", false\)/);
+  assert.match(controller, /onCommitted: \(\) =>[\s\S]*mark\("defaultContentAt"\)/);
 });
 
 test("clearH2HState resets detailLoading when invalidating a pending detail request", () => {
