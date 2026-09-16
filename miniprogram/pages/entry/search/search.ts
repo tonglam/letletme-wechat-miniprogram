@@ -9,8 +9,10 @@ import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import {
   getCurrentPageInteractionToken,
+  getPageInteractionToken,
   handoffPageInteraction,
   runPageInteractionDelegation,
+  type PageInteractionToken,
 } from "../../../utils/page-performance";
 import { formatRank } from "../../../utils/summary-format";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
@@ -59,6 +61,11 @@ interface EntrySearchData {
   searchHits: EntryNameHit[];
 }
 
+interface LookupInteractionState {
+  requestId: number;
+  token: PageInteractionToken | null;
+}
+
 function emptyEntryPreviewData(): Pick<
   EntrySearchData,
   | "hasPreview"
@@ -102,6 +109,7 @@ PerformancePage({
   } as EntrySearchData,
 
   lookupRequestId: 0,
+  lookupInteraction: null as LookupInteractionState | null,
   redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   redirectHandoff: null as ReturnType<typeof handoffPageInteraction>,
   redirectDispatched: false,
@@ -163,11 +171,41 @@ PerformancePage({
     });
   },
 
+  getLookupInteractionToken(): PageInteractionToken | null {
+    for (const handler of ["onEntryConfirm", "onRetryLookup", "onLookupEntry"]) {
+      const token = getPageInteractionToken(this, handler);
+      if (token?.tracker.hasPendingInteraction(token.interactionId)) return token;
+    }
+    return null;
+  },
+
+  failLookupInteraction(requestId?: number): void {
+    const current = this.lookupInteraction;
+    if (!current || (requestId !== undefined && current.requestId !== requestId)) return;
+    if (current.token?.tracker.hasPendingInteraction(current.token.interactionId)) {
+      // Superseded work is not a visible lookup error. Leaving visibility
+      // undefined keeps the action terminal without inflating error latency.
+      current.token.tracker.completeInteraction(current.token.interactionId, "failed");
+    }
+    this.lookupInteraction = null;
+  },
+
+  beginLookupRequest(token?: PageInteractionToken | null): number {
+    this.failLookupInteraction();
+    const requestId = ++this.lookupRequestId;
+    this.lookupInteraction = {
+      requestId,
+      token: token === undefined ? this.getLookupInteractionToken() : token,
+    };
+    return requestId;
+  },
+
   onManualEntryInput(event: WechatMiniprogram.Input) {
     this.applyManualEntry(String(event.detail.value || ""));
   },
 
   applyManualEntry(raw: string) {
+    this.failLookupInteraction();
     this.lookupRequestId += 1;
     this.setData({
       manualEntryId: extractEntryId(raw),
@@ -187,10 +225,11 @@ PerformancePage({
   },
 
   async onLookupEntry() {
+    const requestId = this.beginLookupRequest();
     const keyword = extractEntryId(this.data.manualEntryId);
     const entryId = parseExactEntryId(keyword);
     if (entryId !== null) {
-      await this.lookupByEntryId(entryId);
+      await this.lookupByEntryId(entryId, requestId);
       return;
     }
     if (keyword.length < 2) {
@@ -201,11 +240,11 @@ PerformancePage({
       }, () => this.observeLookupResult());
       return;
     }
-    await this.lookupByName(keyword);
+    await this.lookupByName(keyword, requestId);
   },
 
-  async lookupByEntryId(entryId: number) {
-    const requestId = ++this.lookupRequestId;
+  async lookupByEntryId(entryId: number, requestId?: number) {
+    if (requestId === undefined) requestId = this.beginLookupRequest();
     const preservePreview = hasMatchingEntryPreview(
       this.data.hasPreview,
       this.data.previewEntryId,
@@ -225,6 +264,7 @@ PerformancePage({
     try {
       const entry = await getEntryInfo(entryId, true);
       if (requestId !== this.lookupRequestId || Number(this.data.manualEntryId) !== entryId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       const persistence = entryPersistencePresentation(entry.persistenceState);
@@ -236,6 +276,7 @@ PerformancePage({
       wx.showToast({ title: "已找到球队", icon: "success" });
     } catch (error) {
       if (requestId !== this.lookupRequestId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       const retryable = error instanceof EntryLookupError ? error.retryable : true;
@@ -255,8 +296,8 @@ PerformancePage({
     }
   },
 
-  async lookupByName(keyword: string) {
-    const requestId = ++this.lookupRequestId;
+  async lookupByName(keyword: string, requestId?: number) {
+    if (requestId === undefined) requestId = this.beginLookupRequest();
     this.setData({
       loading: true,
       buttonText: "查找中...",
@@ -270,6 +311,7 @@ PerformancePage({
     try {
       const hits = await searchEntries(keyword, 10);
       if (requestId !== this.lookupRequestId || extractEntryId(this.data.manualEntryId) !== keyword) {
+        this.failLookupInteraction(requestId);
         return;
       }
       if (hits.length === 0) {
@@ -296,6 +338,7 @@ PerformancePage({
       });
     } catch (error) {
       if (requestId !== this.lookupRequestId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       this.setData({
@@ -320,6 +363,7 @@ PerformancePage({
       return;
     }
     const hit = this.data.searchHits.find((item) => item.entryId === entryId);
+    this.failLookupInteraction();
     this.lookupRequestId += 1;
     this.setData({
       manualEntryId: String(entryId),

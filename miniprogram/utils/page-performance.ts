@@ -98,6 +98,8 @@ export interface PagePerformanceInstrumentationOptions {
    * account-link actions and list pagination callbacks).
    */
   includeInteractionHandlers?: readonly string[];
+  /** Handlers to skip even when they otherwise match the automatic rule. */
+  excludeInteractionHandlers?: readonly string[];
   /** Page-owned classifier for the primary rendered error surface. */
   primaryError?: (data: object | undefined) => boolean;
   /**
@@ -112,6 +114,16 @@ export interface PagePerformanceInstrumentationOptions {
 function defaultPrimaryError(data: object | undefined): boolean {
   const value = data as Record<string, unknown> | undefined;
   return typeof value?.error === "string" && value.error.length > 0;
+}
+
+/**
+ * Input events fire once per keystroke and are not discrete user actions.
+ * Their automatic records would evict the taps and buttons that the action
+ * trace is intended to measure. Pages can still instrument a discrete
+ * handler explicitly through a different name.
+ */
+function isHighFrequencyInputHandler(name: string): boolean {
+  return name === "onInput" || /(?:Input|Draft)$/.test(name);
 }
 
 function resolveTrigger(
@@ -422,6 +434,9 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
   const includedInteractionHandlers = new Set(
     options.includeInteractionHandlers ?? [],
   );
+  const excludedInteractionHandlers = new Set(
+    options.excludeInteractionHandlers ?? [],
+  );
   const primaryError = options.primaryError ?? defaultPrimaryError;
   if (options.manageLifecycleGeneration !== false) {
     for (const lifecycle of ["onLoad", "onShow", "onHide", "onUnload"] as const) {
@@ -440,6 +455,8 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
   for (const [name, value] of Object.entries(definition)) {
     if (
       PAGE_LIFECYCLE_HANDLERS.has(name) ||
+      excludedInteractionHandlers.has(name) ||
+      isHighFrequencyInputHandler(name) ||
       (name !== "loadMore" && !/^on[A-Z]/.test(name) && !includedInteractionHandlers.has(name)) ||
       typeof value !== "function"
     ) {
@@ -490,7 +507,6 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
           originatingToken.tracker.completeInteraction(
             originatingToken.interactionId,
             "failed",
-            false,
           );
           if (
             this.__performanceInteractionTokens?.[name]?.interactionId

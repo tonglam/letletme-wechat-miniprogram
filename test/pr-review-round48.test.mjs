@@ -85,3 +85,21 @@ test("direct page lifecycles own generations and deferred surfaces", () => {
   assert.match(search, /observeLookupResult\(\)/);
   assert.match(searchWxml, /id="perf-entry-search-result"/);
 });
+
+test("latest performance findings keep stale actions and optional content out of primary results", () => {
+  const pagePerformance = source("miniprogram/utils/page-performance.ts");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  const liveEntry = source("miniprogram/pages/live/entry/entry.ts");
+  const players = source("miniprogram/pages/data/players/players.ts");
+
+  assert.match(pagePerformance, /excludeInteractionHandlers\?: readonly string\[\]/);
+  assert.match(pagePerformance, /isHighFrequencyInputHandler\(name\)/);
+  assert.match(pagePerformance, /originatingToken\.tracker\.completeInteraction\([\s\S]*?"failed",?\s*\);/);
+  assert.match(search, /lookupInteraction/);
+  assert.match(search, /failLookupInteraction\(requestId\);\s*return;/);
+  assert.match(search, /this\.failLookupInteraction\(\);\s*this\.lookupRequestId \+= 1/);
+  assert.match(liveEntry, /navigationTracker\?\.expectSecondaryCompletion\(\)/);
+  assert.match(players, /primaryError: \(data\) =>/);
+  assert.match(players, /Array\.isArray\(value\.players\)/);
+  assert.match(players, /value\.players\.length === 0/);
+});

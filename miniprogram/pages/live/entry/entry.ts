@@ -1480,6 +1480,7 @@ Page(instrumentPageInteractions({
         this.liveRefresh?.sync();
         if (this.pageVisible && requestId === this.liveRequestId && includeTransfersForRequest) {
           this.loadTransfersAfterLive = false;
+          navigationTracker?.expectSecondaryCompletion();
           const transfersRequest = this.loadTransfers(
             entryId,
             eventId,

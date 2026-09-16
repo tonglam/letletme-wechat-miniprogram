@@ -553,6 +553,33 @@ test("explicitly included WXML handlers are instrumented", () => {
   delete globalThis.getCurrentPages;
 });
 
+test("high-frequency input handlers do not evict discrete action samples", () => {
+  clearPerf();
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/input-actions", "warm-enter");
+  const definition = instrumentPageInteractions({
+    onManualEntryInput() {},
+    onKeywordDraft() {},
+    onInput() {},
+    onSortChange() {},
+    onTap() {},
+  });
+  definition.onManualEntryInput.call(page);
+  definition.onKeywordDraft.call(page);
+  definition.onInput.call(page);
+  definition.onSortChange.call(page);
+  definition.onTap.call(page);
+
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.deepEqual(
+    record.interactions.map((item) => item.handler),
+    ["onSortChange", "onTap"],
+  );
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
 test("directly instrumented lifecycles invalidate hidden async actions", async () => {
   clearPerf();
   let release;
@@ -590,7 +617,8 @@ test("directly instrumented lifecycles invalidate hidden async actions", async (
     (item) => item.navigationId === tracker.navigationId,
   );
   assert.equal(record.interactions[0].status, "failed");
-  assert.ok(record.interactions[0].errorVisibleAt);
+  assert.equal(record.interactions[0].resultVisibleAt, undefined);
+  assert.equal(record.interactions[0].errorVisibleAt, undefined);
   delete globalThis.getCurrentPages;
 });
 

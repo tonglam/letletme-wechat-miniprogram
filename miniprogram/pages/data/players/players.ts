@@ -1296,4 +1296,13 @@ PerformancePage({
   onRetryLoadMore() {
     return this.loadMore();
   },
+}, {
+  primaryError: (data) => {
+    const value = data as Record<string, unknown> | undefined;
+    return Boolean(
+      value?.error &&
+      Array.isArray(value.players) &&
+      value.players.length === 0,
+    );
+  },
 });
