@@ -446,32 +446,49 @@ PerformancePage({
     }, 800);
   },
 
-  onUnbind() {
+  onUnbind(): Promise<void> {
     const entryId = this.data.currentEntryId;
-    wx.showModal({
-      title: "取消查看？",
-      content: `将取消小程序球队 #${entryId}。如已关联网页账户，网页球队仍可继续显示。`,
-      confirmText: "取消查看",
-      confirmColor: "#c9183f",
-      success: ({ confirm }) => {
-        if (!confirm) return;
-        const sync = saveMiniProgramFollowEntry(null);
-        this.setData({
-          hasEntry: false,
-          currentEntryId: 0,
-          hasPreview: false,
-          isCurrentEntry: false,
-          searchHits: []
-        });
-        wx.showToast({ title: "已取消查看", icon: "success" });
-        void sync.then((synced) => {
-          if (!synced) {
-            wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
-          } else {
-            this.syncCurrentEntry();
+    return new Promise<void>((resolve) => {
+      wx.showModal({
+        title: "取消查看？",
+        content: `将取消小程序球队 #${entryId}。如已关联网页账户，网页球队仍可继续显示。`,
+        confirmText: "取消查看",
+        confirmColor: "#c9183f",
+        success: ({ confirm }) => {
+          if (!confirm) {
+            resolve();
+            return;
           }
-        });
-      }
+          let sync: ReturnType<typeof saveMiniProgramFollowEntry>;
+          try {
+            sync = saveMiniProgramFollowEntry(null);
+          } catch {
+            resolve();
+            return;
+          }
+          this.setData({
+            hasEntry: false,
+            currentEntryId: 0,
+            hasPreview: false,
+            isCurrentEntry: false,
+            searchHits: []
+          });
+          wx.showToast({ title: "已取消查看", icon: "success" });
+          void Promise.resolve(sync).then(
+            (synced) => {
+              if (!synced) {
+                wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
+              } else {
+                this.syncCurrentEntry();
+              }
+            },
+            () => {
+              wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
+            },
+          ).finally(resolve);
+        },
+        fail: () => resolve(),
+      });
     });
   },
 

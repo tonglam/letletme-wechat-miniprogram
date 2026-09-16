@@ -488,7 +488,7 @@ PerformancePage({
   },
 
   onRetry() {
-    void this.runForcedRefresh();
+    return this.runForcedRefresh();
   },
 
   async runForcedRefresh() {

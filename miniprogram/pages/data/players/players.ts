@@ -1233,7 +1233,7 @@ PerformancePage({
   },
 
   onCompareRetry() {
-    void this.loadCompare(true);
+    return this.loadCompare(true);
   },
 
   async loadCompare(forceRefresh = false): Promise<void> {

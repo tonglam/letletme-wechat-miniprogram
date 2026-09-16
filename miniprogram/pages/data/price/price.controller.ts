@@ -879,20 +879,19 @@ Page(instrumentPageInteractions({
   onRetry() {
     if (this.data.activeMode === "player") {
       this.startDailyRefreshTrace();
-      void this.runPlayerRefresh(this.perfTracker);
-      return;
+      return this.runPlayerRefresh(this.perfTracker);
     }
     this.startDailyRefreshTrace();
-    this.loadDailyChanges();
+    return this.loadDailyChanges();
   },
 
   onRetryDaily() {
     this.startDailyRefreshTrace();
-    void this.loadDailyChanges(true, false);
+    return this.loadDailyChanges(true, false);
   },
 
   onRetryPulse() {
-    void this.loadMarketPulse(true);
+    return this.loadMarketPulse(true);
   },
 
   onModeChange(
@@ -1526,7 +1525,7 @@ Page(instrumentPageInteractions({
   },
 
   onRetryPlayers() {
-    void this.runPlayerRefresh(this.perfTracker);
+    return this.runPlayerRefresh(this.perfTracker);
   },
 
   onClearPlayerFilters() {

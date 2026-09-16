@@ -103,3 +103,23 @@ test("latest performance findings keep stale actions and optional content out of
   assert.match(players, /Array\.isArray\(value\.players\)/);
   assert.match(players, /value\.players\.length === 0/);
 });
+
+test("deferred retry and section actions return their owned work", () => {
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  const price = source("miniprogram/pages/data/price/price.controller.ts");
+  const players = source("miniprogram/pages/data/players/players.ts");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  const gameweek = source("miniprogram/pages/summary/gameweek/gameweek.ts");
+
+  assert.match(fixtures, /onRetry\(\) \{\s*return this\.runForcedRefresh\(\);/);
+  assert.match(price, /onRetryDaily\(\) \{[\s\S]*return this\.loadDailyChanges\(true, false\);/);
+  assert.match(price, /onRetryPulse\(\) \{\s*return this\.loadMarketPulse\(true\);/);
+  assert.match(price, /onRetryPlayers\(\) \{\s*return this\.runPlayerRefresh\(this\.perfTracker\);/);
+  assert.match(players, /onCompareRetry\(\) \{\s*return this\.loadCompare\(true\);/);
+  assert.match(search, /onUnbind\(\): Promise<void> \{[\s\S]*return new Promise<void>/);
+  assert.match(gameweek, /function gameweekPrimaryError\(data: object \| undefined\)/);
+  assert.match(gameweek, /primaryError: gameweekPrimaryError/);
+  assert.match(gameweek, /onGwChange\([\s\S]*return this\.loadData\(\);/);
+  assert.match(gameweek, /onRefreshTap\(\) \{\s*return this\.refreshData\(\);/);
+  assert.match(gameweek, /onRetry\(\) \{\s*return this\.loadData\(\);/);
+});
