@@ -215,7 +215,7 @@ function lastGoodPriceChangeBoardRead(): PriceChangeBoardRead | null {
 
 export async function getPriceChangeBoard(
   forceRefresh = false,
-  trace?: PageRequestTrace,
+  trace?: PageRequestTrace | null,
 ): Promise<PriceChangeBoardRead> {
   try {
     const read = await graphqlRead<PriceChangeBoardResponse>(
@@ -411,7 +411,7 @@ async function getSquadStartPrices(input: {
   eventId: number;
   season: string;
   forceRefresh: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<Record<string, number>> {
   const uniqueIds = Array.from(new Set(input.playerIds))
     .filter((id) => Number.isSafeInteger(id) && id > 0);
@@ -467,7 +467,7 @@ export async function getPriceChangePersonalContext(input: {
   season: string;
   entryId: number | null;
   forceRefresh?: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<PriceChangePersonalContext> {
   const viewerEntryId = currentMyFplEntryId();
   if (!viewerEntryId || input.entryId !== viewerEntryId) {

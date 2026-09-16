@@ -7,6 +7,7 @@ import {
   unlinkMiniProgramWebAccount,
 } from '../../../services/auth.service';
 import { switchToHome } from '../../../utils/navigation';
+import { getPageInteractionToken } from '../../../utils/page-performance';
 
 PerformancePage({
   data: {
@@ -62,6 +63,7 @@ PerformancePage({
   },
 
   async confirm() {
+    const interaction = getPageInteractionToken(this, "confirm");
     if (!this.data.email || !this.data.code) {
       this.setData({ error: '请输入邮箱和验证码' });
       return;
@@ -71,7 +73,7 @@ PerformancePage({
       const session = await confirmMiniProgramEmailLink(this.data.email, this.data.code);
       const synced = session.profile.effectiveEntrySource === 'WEB';
       wx.showToast({ title: synced ? '已关联并同步球队' : '网页账户已关联', icon: 'success' });
-      switchToHome();
+      switchToHome(interaction);
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '验证失败' });
     } finally {

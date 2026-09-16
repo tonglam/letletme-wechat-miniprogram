@@ -1,5 +1,8 @@
 import { routes } from "../config/routes";
-import { handoffPageInteraction } from "./page-performance";
+import {
+  handoffPageInteraction,
+  type PageInteractionToken,
+} from "./page-performance";
 
 function encodeQuery(query: Record<string, string | number | undefined>): string {
   const parts = Object.keys(query)
@@ -48,8 +51,8 @@ export function goToLiveEntry(entryId?: number): void {
   navigateTo(routes.liveEntry, { entry: entryId });
 }
 
-export function switchToHome(): void {
-  const handoff = handoffPageInteraction(routes.home);
+export function switchToHome(sourceToken?: PageInteractionToken | null): void {
+  const handoff = handoffPageInteraction(routes.home, sourceToken);
   wx.redirectTo({
     url: routes.home,
     fail: () => handoff?.rollback(),

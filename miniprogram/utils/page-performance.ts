@@ -10,6 +10,8 @@ type PageOwner = {
   pageVisible?: boolean;
   pageActive?: boolean;
   __performanceVisible?: boolean;
+  /** Lifecycle generation owned by the page wrapper. */
+  __performanceGeneration?: number;
   __performanceTracker?: PagePerformanceTracker;
   __performanceInteractionTokens?: Record<string, PageInteractionToken>;
   /** Synchronous wrapper depth used to avoid double-counting delegated taps. */
@@ -26,6 +28,7 @@ type NavigationInteraction = {
   handler: string;
   target?: string;
   startedAt: number;
+  handlerCompletedAt?: number;
   targetRoute?: string;
   sourceTracker: PagePerformanceTracker;
 };
@@ -151,6 +154,8 @@ export interface PageInteractionToken {
   navigationId: string;
   interactionId: string;
   startedAt: number;
+  /** Generation of the page lifecycle that started this interaction. */
+  lifecycleGeneration?: number;
   tracker: PagePerformanceTracker;
 }
 
@@ -412,6 +417,34 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       const explicitBoundary = explicitInteractionHandlers.has(name);
       const rebindToCurrentTracker = () => {
         if (!token) return;
+        const originatingToken = token;
+        const currentGeneration = this.__performanceGeneration;
+        // A promise may settle after this page instance was hidden and shown
+        // again. The new tracker belongs to a different lifecycle and must
+        // never inherit an interaction that started in the previous visit.
+        // Route-specific tracker replacements that do not advance the page
+        // generation remain eligible for the synchronous rebind below.
+        if (
+          originatingToken.lifecycleGeneration !== undefined
+          && currentGeneration !== undefined
+          && originatingToken.lifecycleGeneration !== currentGeneration
+        ) {
+          originatingToken.tracker.completeInteraction(
+            originatingToken.interactionId,
+            "failed",
+            false,
+          );
+          if (
+            this.__performanceInteractionTokens?.[name]?.interactionId
+            === originatingToken.interactionId
+          ) {
+            const nextTokens = { ...this.__performanceInteractionTokens };
+            delete nextTokens[name];
+            this.__performanceInteractionTokens = nextTokens;
+          }
+          token = null;
+          return;
+        }
         const currentTracker =
           this.__performanceTracker ?? getCurrentPagePerformanceTracker();
         if (currentTracker && currentTracker !== token.tracker) {
@@ -480,6 +513,7 @@ export class PagePerformanceTracker {
   readonly navigationId: string;
   readonly route: string;
   readonly trigger: PagePerformanceRecord["trigger"];
+  readonly lifecycleGeneration?: number;
   private observer?: WechatMiniprogram.IntersectionObserver;
   private interactionObservers = new Set<WechatMiniprogram.IntersectionObserver>();
   private primarySelector = "#perf-primary-content";
@@ -498,6 +532,7 @@ export class PagePerformanceTracker {
     sequence += 1;
     this.route = route;
     this.trigger = options.triggerResolved ? trigger : resolveTrigger(trigger);
+    this.lifecycleGeneration = page.__performanceGeneration;
     this.navigationId = `${route}:${Date.now().toString(36)}:${sequence.toString(36)}`;
     // Keep the tracker discoverable from the active Mini page. PerformancePage
     // owns the generic lifecycle tracker, while P0 pages may replace it with a
@@ -569,6 +604,7 @@ export class PagePerformanceTracker {
       navigationId: this.navigationId,
       interactionId: interaction.interactionId,
       startedAt,
+      lifecycleGeneration: this.lifecycleGeneration,
       tracker: this,
     };
   }
@@ -671,6 +707,7 @@ export class PagePerformanceTracker {
   }
 
   hasPendingInteraction(interactionId: string): boolean {
+    if (this.disconnected) return false;
     const interaction = this.record.interactions?.find(
       (item) => item.interactionId === interactionId,
     );
@@ -815,7 +852,14 @@ export class PagePerformanceTracker {
       handler: source.handler,
       ...(source.target ? { target: source.target } : {}),
       startedAt: token.startedAt,
-      status: "started",
+      ...(source.handlerCompletedAt !== undefined
+        ? { handlerCompletedAt: source.handlerCompletedAt }
+        : {}),
+      status: source.status === "failed"
+        ? "failed"
+        : source.handlerCompletedAt !== undefined
+          ? "completed"
+          : "started",
     };
     const previous = this.record.interactions ?? [];
     this.record.interactions = [...previous, interaction].slice(-32);
@@ -824,6 +868,7 @@ export class PagePerformanceTracker {
       ...token,
       interactionId,
       navigationId: this.navigationId,
+      lifecycleGeneration: this.lifecycleGeneration,
       tracker: this,
     };
   }
@@ -839,6 +884,7 @@ export class PagePerformanceTracker {
       handler: interaction.handler,
       ...(interaction.target ? { target: interaction.target } : {}),
       startedAt: interaction.startedAt,
+      handlerCompletedAt: interaction.handlerCompletedAt ?? monotonicNow(),
       sourceTracker: this,
     };
   }
@@ -850,7 +896,7 @@ export class PagePerformanceTracker {
       handler: interaction.handler,
       ...(interaction.target ? { target: interaction.target } : {}),
       startedAt: interaction.startedAt,
-      handlerCompletedAt: monotonicNow(),
+      handlerCompletedAt: interaction.handlerCompletedAt ?? monotonicNow(),
       status: "failed",
     };
     const previous = this.record.interactions ?? [];
@@ -877,7 +923,12 @@ export class PagePerformanceTracker {
         handler: pending.handler,
         ...(pending.target ? { target: pending.target } : {}),
         startedAt: pending.startedAt,
-        status: "started" as const,
+        ...(pending.handlerCompletedAt !== undefined
+          ? { handlerCompletedAt: pending.handlerCompletedAt }
+          : {}),
+        status: pending.handlerCompletedAt !== undefined
+          ? "completed" as const
+          : "started" as const,
       },
     ].slice(-32);
     this.flush();
