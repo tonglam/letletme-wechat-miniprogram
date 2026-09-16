@@ -138,3 +138,18 @@ test("live retries and compare actions wait for their result surfaces", () => {
   assert.match(tournament, /explicitInteractionHandlers: \["onOpenTournamentDetail", "onOpenCompareSheet"\]/);
   assert.match(tournamentWxml, /id="perf-compare-content"/);
 });
+
+test("team actions wait for their owned work and setup polls stay untraced", () => {
+  const team = source("miniprogram/pages/my-fpl/team/team.controller.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  const detailService = source("miniprogram/services/tournament-detail.service.ts");
+
+  assert.match(team, /onGwChange\([\s\S]*return this\.loadData\(true\);/);
+  assert.match(team, /onTabTap\([\s\S]*return this\.loadTab\(tab, false\);/);
+  assert.match(team, /onRetry\(\)[\s\S]*return this\.recoverContext\("pull-refresh"\)/);
+  assert.match(team, /onRetry\(\)[\s\S]*return this\.runForcedRefresh\(/);
+  assert.match(team, /onRetry\(\)[\s\S]*return this\.loadTab\(this\.data\.activeTab, true\);/);
+  assert.match(tournament, /loadH2HDesk\(\{ background: true, trace: null \}\)/);
+  assert.match(tournament, /trace\?: PageRequestTrace \| null/);
+  assert.match(detailService, /trace\?: PageRequestTrace \| null/);
+});

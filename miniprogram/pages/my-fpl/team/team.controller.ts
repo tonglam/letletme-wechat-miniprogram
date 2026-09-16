@@ -1141,7 +1141,7 @@ Page(instrumentPageInteractions({
       playerDetailOpen: false,
       playerDetail: null,
     });
-    this.loadData(true);
+    return this.loadData(true);
   },
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
@@ -1149,7 +1149,7 @@ Page(instrumentPageInteractions({
       event.currentTarget.dataset.tab || "squad",
     ) as EntrySummaryTab;
     this.setActiveTab(tab);
-    void this.loadTab(tab, false);
+    return this.loadTab(tab, false);
   },
 
   onTransferFilterTap(event: WechatMiniprogram.TouchEvent) {
@@ -1444,12 +1444,11 @@ Page(instrumentPageInteractions({
     // without setting contextUnavailable. Explicit retry must force context
     // recovery instead of replaying the GW0 empty state for the backoff window.
     if (this.contextUnavailable || this.data.maxGw <= 0) {
-      void this.recoverContext("pull-refresh");
-      return;
+      return this.recoverContext("pull-refresh");
     }
     if (this.data.error) {
       if (this.perfTracker) {
-        void this.runForcedRefresh(
+        return this.runForcedRefresh(
           this.perfTracker,
           capturePageRequestTrace({
             callerSurface: "my-fpl-team-primary",
@@ -1462,7 +1461,7 @@ Page(instrumentPageInteractions({
     }
     if (this.data.activeTab === "squad") {
       if (this.perfTracker) {
-        void this.runForcedRefresh(
+        return this.runForcedRefresh(
           this.perfTracker,
           capturePageRequestTrace({
             callerSurface: "my-fpl-team-primary",
@@ -1473,7 +1472,7 @@ Page(instrumentPageInteractions({
       }
       return;
     }
-    void this.loadTab(this.data.activeTab, true);
+    return this.loadTab(this.data.activeTab, true);
   },
 
   onEmptyAction() {
@@ -1482,10 +1481,9 @@ Page(instrumentPageInteractions({
       return;
     }
     if (this.contextUnavailable || this.data.maxGw <= 0) {
-      void this.recoverContext("pull-refresh");
-      return;
+      return this.recoverContext("pull-refresh");
     }
-    this.loadData(true);
+    return this.loadData(true);
   },
 }));
 

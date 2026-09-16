@@ -493,7 +493,7 @@ interface LiveTournamentLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
   propagateError?: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }
 
 interface BoardControlState {
@@ -3128,7 +3128,7 @@ PerformancePage({
     this.setupTimer = setTimeout(() => {
       this.setupTimer = undefined;
       if (!this.pageVisible || !this.data.setupActive) return;
-      void this.loadH2HDesk({ background: true });
+      void this.loadH2HDesk({ background: true, trace: null });
     }, SETUP_POLL_MS);
   },
 
