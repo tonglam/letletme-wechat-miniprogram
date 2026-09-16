@@ -9,6 +9,7 @@ import {
 } from "../../../utils/player-data-availability";
 import { routes } from "../../../config/routes";
 import { setPageTitle } from "../../../utils/navigation";
+import { handoffPageInteraction } from "../../../utils/page-performance";
 import { ensureAppContext } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -153,6 +154,7 @@ PerformancePage({
   },
 
   onBackToPlayers() {
+    handoffPageInteraction(routes.dataPlayers);
     wx.redirectTo({ url: routes.dataPlayers });
   }
 });

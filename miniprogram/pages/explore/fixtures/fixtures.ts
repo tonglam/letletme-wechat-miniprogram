@@ -328,7 +328,11 @@ PerformancePage({
       this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
     this.setData({
-      loading: !hadLastGood,
+      // Loading describes the requested window even when the retained matrix
+      // remains visible. The template keeps that matrix mounted whenever
+      // `refreshing` is true, so controls cannot appear settled above stale
+      // rows without an explicit update indicator.
+      loading: true,
       // Keep the last-good matrix visible, but make the requested/displayed
       // window difference explicit while the new target is in flight.
       refreshing: hadLastGood,

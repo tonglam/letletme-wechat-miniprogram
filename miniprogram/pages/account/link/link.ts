@@ -122,4 +122,6 @@ PerformancePage({
       this.setData({ error: error instanceof Error ? error.message : '退出失败，请重试' });
     }
   },
+}, {
+  includeInteractionHandlers: ["sendCode", "confirm", "unlinkWebAccount", "logout"],
 });

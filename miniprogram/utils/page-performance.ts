@@ -19,6 +19,14 @@ type PageOwner = {
   ) => WechatMiniprogram.IntersectionObserver;
 };
 
+type NavigationInteraction = {
+  interactionId: string;
+  handler: string;
+  target?: string;
+  startedAt: number;
+  targetRoute?: string;
+};
+
 function monotonicNow(): number {
   try {
     const performance = wx.getPerformance() as unknown as { now?: () => number };
@@ -34,6 +42,13 @@ let interactionSequence = 0;
 let activeTracker: PagePerformanceTracker | undefined;
 let coldLaunchClaimed = false;
 let appWasBackgrounded = false;
+let pendingNavigationInteraction: NavigationInteraction | undefined;
+
+function normalizeRoute(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const route = value.split("?")[0]?.replace(/^\/+/, "");
+  return route || undefined;
+}
 
 /** Called by the app lifecycle so page onShow can distinguish a real resume. */
 export function markAppBackgrounded(): void {
@@ -61,6 +76,11 @@ export interface PagePerformanceObservationOptions {
 export interface PagePerformanceInstrumentationOptions {
   /** Handlers that own an explicit result/on-demand viewport boundary. */
   explicitInteractionHandlers?: readonly string[];
+  /**
+   * WXML handlers whose names do not follow the onXxx convention (for example
+   * account-link actions and list pagination callbacks).
+   */
+  includeInteractionHandlers?: readonly string[];
   /** Page-owned classifier for the primary rendered error surface. */
   primaryError?: (data: object | undefined) => boolean;
 }
@@ -130,6 +150,43 @@ export function getPageInteractionToken(
 ): PageInteractionToken | null {
   const owner = page as PageOwner | null | undefined;
   return owner?.__performanceInteractionTokens?.[handler] ?? null;
+}
+
+/**
+ * Return the most recent unfinished interaction on the visible page. This is
+ * used by the navigation helpers to hand a user action to the destination
+ * page before the source page is hidden.
+ */
+export function getCurrentPageInteractionToken(): PageInteractionToken | null {
+  let page: PageOwner | undefined;
+  try {
+    const pages = getCurrentPages();
+    page = pages?.[pages.length - 1] as PageOwner | undefined;
+  } catch {
+    page = undefined;
+  }
+  if (!page) return null;
+  const tokens = Object.values(page.__performanceInteractionTokens ?? {})
+    .filter((token) => token.tracker.hasPendingInteraction(token.interactionId))
+    .sort((left, right) => right.startedAt - left.startedAt);
+  return tokens[0] ?? null;
+}
+
+/**
+ * Move the current user action to the route that a navigation helper is about
+ * to open. The destination tracker adopts the same interaction id and start
+ * time, so a source-page tap is measured until the destination content is
+ * actually visible. The source record is retired to avoid duplicate samples.
+ */
+export function handoffPageInteraction(targetRoute?: string): void {
+  const token = getCurrentPageInteractionToken();
+  if (!token) return;
+  const interaction = token.tracker.takeInteractionForNavigation(token.interactionId);
+  if (!interaction) return;
+  pendingNavigationInteraction = {
+    ...interaction,
+    targetRoute: normalizeRoute(targetRoute),
+  };
 }
 
 export function getActivePagePerformanceTrace(): ActivePagePerformanceTrace | null {
@@ -262,11 +319,14 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
   const explicitInteractionHandlers = new Set(
     options.explicitInteractionHandlers ?? [],
   );
+  const includedInteractionHandlers = new Set(
+    options.includeInteractionHandlers ?? [],
+  );
   const primaryError = options.primaryError ?? defaultPrimaryError;
   for (const [name, value] of Object.entries(definition)) {
     if (
       PAGE_LIFECYCLE_HANDLERS.has(name) ||
-      (name !== "loadMore" && !/^on[A-Z]/.test(name)) ||
+      (name !== "loadMore" && !/^on[A-Z]/.test(name) && !includedInteractionHandlers.has(name)) ||
       typeof value !== "function"
     ) {
       continue;
@@ -314,30 +374,52 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
         }
       };
       let result: unknown;
+      let depthReleased = false;
+      const releaseDepth = () => {
+        if (depthReleased) return;
+        depthReleased = true;
+        this.__performanceInteractionDepth = Math.max(
+          0,
+          (this.__performanceInteractionDepth ?? 1) - 1,
+        );
+      };
       try {
         try {
           result = handler.apply(this, args);
         } catch (error) {
           rebindToCurrentTracker();
           token?.tracker.completeInteraction(token.interactionId, "failed", false);
+          releaseDepth();
           throw error;
         }
-      } finally {
-        this.__performanceInteractionDepth = Math.max(
-          0,
-          (this.__performanceInteractionDepth ?? 1) - 1,
-        );
+      } catch (error) {
+        releaseDepth();
+        throw error;
       }
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
         void Promise.resolve(result).then(
-          settleHandler,
           () => {
-            rebindToCurrentTracker();
-            token?.tracker.completeInteraction(token.interactionId, "failed");
+            try {
+              settleHandler();
+            } finally {
+              releaseDepth();
+            }
+          },
+          () => {
+            try {
+              rebindToCurrentTracker();
+              token?.tracker.completeInteraction(token.interactionId, "failed");
+            } finally {
+              releaseDepth();
+            }
           },
         );
       } else {
-        settleHandler();
+        try {
+          settleHandler();
+        } finally {
+          releaseDepth();
+        }
       }
       return result;
     };
@@ -383,6 +465,7 @@ export class PagePerformanceTracker {
     };
     setActiveTracker(this);
     this.flush();
+    this.adoptPendingNavigationInteraction();
   }
 
   mark(
@@ -407,11 +490,11 @@ export class PagePerformanceTracker {
     if (field === "errorVisibleAt") {
       this.completePendingInteractions("failed", timestamp, false, interactionId);
     }
-    const finalCompletion = field === "secondaryCompleteAt" || field === "softFailureAt";
+    const finalCompletion = field === "secondaryCompleteAt";
     if (finalCompletion) this.secondaryCompletionExpected = false;
     this.updateCompleteAt();
     this.flush(finalCompletion);
-    if (field === "secondaryCompleteAt" || field === "softFailureAt") {
+    if (field === "secondaryCompleteAt") {
       this.finishRequestAttribution();
     }
   }
@@ -531,6 +614,18 @@ export class PagePerformanceTracker {
     this.record.operationCount += 1;
     if (network) this.record.networkOperationCount += 1;
     this.flush();
+  }
+
+  hasPendingInteraction(interactionId: string): boolean {
+    const interaction = this.record.interactions?.find(
+      (item) => item.interactionId === interactionId,
+    );
+    return Boolean(
+      interaction &&
+        interaction.status !== "failed" &&
+        interaction.resultVisibleAt === undefined &&
+        interaction.errorVisibleAt === undefined,
+    );
   }
 
   observePrimary(
@@ -677,6 +772,43 @@ export class PagePerformanceTracker {
       navigationId: this.navigationId,
       tracker: this,
     };
+  }
+
+  takeInteractionForNavigation(
+    interactionId: string,
+  ): NavigationInteraction | null {
+    const interaction = this.readInteraction(interactionId);
+    if (!interaction || !this.hasPendingInteraction(interactionId)) return null;
+    this.retireInteraction(interactionId);
+    return {
+      interactionId: interaction.interactionId,
+      handler: interaction.handler,
+      ...(interaction.target ? { target: interaction.target } : {}),
+      startedAt: interaction.startedAt,
+    };
+  }
+
+  private adoptPendingNavigationInteraction(): void {
+    const pending = pendingNavigationInteraction;
+    if (!pending) return;
+    const route = normalizeRoute(this.route);
+    if (pending.targetRoute && route && pending.targetRoute !== route) return;
+    pendingNavigationInteraction = undefined;
+    const previous = this.record.interactions ?? [];
+    if (previous.some((interaction) => interaction.interactionId === pending.interactionId)) {
+      return;
+    }
+    this.record.interactions = [
+      ...previous,
+      {
+        interactionId: pending.interactionId,
+        handler: pending.handler,
+        ...(pending.target ? { target: pending.target } : {}),
+        startedAt: pending.startedAt,
+        status: "started" as const,
+      },
+    ].slice(-32);
+    this.flush();
   }
 
   private readInteraction(interactionId: string): PageInteractionRecord | null {

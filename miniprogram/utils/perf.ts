@@ -342,7 +342,11 @@ export function recordPagePerformance(
     }
     data.pagePerformance.push({ ...record, ts: Date.now() });
   }
-  const completion = record.completeAt ?? record.errorVisibleAt ?? record.softFailureAt;
+  // A soft timeout is only a diagnostic/UI boundary. It must never emit a
+  // final route-ready sample because the request may still succeed and paint
+  // the intended content later. Final telemetry comes from actual content or
+  // error visibility.
+  const completion = record.completeAt ?? record.errorVisibleAt;
   if (
     options.routeReadyFinal === true &&
     completion !== undefined &&

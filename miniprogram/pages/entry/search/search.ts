@@ -7,6 +7,7 @@ import {
 } from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
+import { handoffPageInteraction } from "../../../utils/page-performance";
 import { formatRank } from "../../../utils/summary-format";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
@@ -328,6 +329,9 @@ PerformancePage({
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.
     this.cancelRedirectTimer();
+    // Keep the follow action attached to the Home content that will confirm
+    // the new team after the short transition delay.
+    handoffPageInteraction(routes.home);
     this.redirectTimer = setTimeout(() => {
       this.redirectTimer = undefined;
       if (!this.pageVisible) return;

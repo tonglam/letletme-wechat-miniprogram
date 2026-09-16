@@ -81,6 +81,7 @@ import type { PageRequestTrace } from "../../../services/graphql.service";
 import {
   getCurrentPagePerformanceTracker,
   getPageInteractionToken,
+  handoffPageInteraction,
 } from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
 import {
@@ -3618,6 +3619,7 @@ PerformancePage({
   ) {
     const entry = Number(event.currentTarget.dataset.entryId);
     if (!Number.isFinite(entry) || entry <= 0) return;
+    handoffPageInteraction(routes.liveEntry);
     wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
   },
   shouldAutoRefresh(): boolean {
@@ -4567,6 +4569,7 @@ PerformancePage({
       this.toggleCompareEntry(entry);
       return;
     }
+    handoffPageInteraction(routes.liveEntry);
     wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
   },
 

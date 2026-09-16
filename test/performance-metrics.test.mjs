@@ -19,6 +19,7 @@ const {
   getActivePagePerformanceTrace,
   getCurrentPagePerformanceTrace,
   getCurrentPagePerformanceTracker,
+  handoffPageInteraction,
   getPageInteractionToken,
   instrumentPageInteractions,
 } = await import("../miniprogram/utils/page-performance.ts");
@@ -447,6 +448,95 @@ test("nested delegated handlers share one interaction record", () => {
   delete globalThis.getCurrentPages;
 });
 
+test("async delegated handlers keep one interaction context through await", async () => {
+  clearPerf();
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/async-nested", "warm-enter");
+  const definition = instrumentPageInteractions({
+    async onRetry() {
+      await Promise.resolve();
+      this.onV2LoadMore();
+    },
+    onV2LoadMore() {},
+  });
+  Object.assign(page, definition);
+
+  await page.onRetry();
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions.length, 1);
+  assert.equal(record.interactions[0].handler, "onRetry");
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("explicitly included WXML handlers are instrumented", () => {
+  clearPerf();
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/included-handler", "warm-enter");
+  const definition = instrumentPageInteractions(
+    { sendCode() {} },
+    { includeInteractionHandlers: ["sendCode"] },
+  );
+  definition.sendCode.call(page);
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions.length, 1);
+  assert.equal(record.interactions[0].handler, "sendCode");
+  tracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("navigation interactions are adopted by the destination tracker", () => {
+  clearPerf();
+  let destinationCallback;
+  const source = {
+    route: "pages/test/source",
+    __performanceVisible: true,
+  };
+  globalThis.getCurrentPages = () => [source];
+  const sourceTracker = new PagePerformanceTracker(source, source.route, "warm-enter");
+  const definition = instrumentPageInteractions({
+    onOpenDestination() {
+      handoffPageInteraction("/pages/test/destination");
+    },
+  });
+  Object.assign(source, definition);
+  source.onOpenDestination();
+
+  const sourceRecord = getPerf().pagePerformance.find((item) => item.navigationId === sourceTracker.navigationId);
+  assert.deepEqual(sourceRecord.interactions, []);
+
+  const destination = {
+    route: "pages/test/destination",
+    __performanceVisible: true,
+    createIntersectionObserver() {
+      return {
+        relativeToViewport() { return this; },
+        observe(_selector, next) { destinationCallback = next; },
+        disconnect() {},
+      };
+    },
+  };
+  globalThis.getCurrentPages = () => [destination];
+  const destinationTracker = new PagePerformanceTracker(
+    destination,
+    destination.route,
+    "in-page-navigation",
+  );
+  const destinationRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === destinationTracker.navigationId,
+  );
+  assert.equal(destinationRecord.interactions.length, 1);
+  assert.equal(destinationRecord.interactions[0].handler, "onOpenDestination");
+  destinationTracker.observePrimary("#perf-primary-content", { errorVisible: false });
+  destinationCallback({ intersectionRatio: 1 });
+  assert.ok(destinationRecord.interactions[0].resultVisibleAt);
+  sourceTracker.disconnect();
+  destinationTracker.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
 test("API records retain redacted HTTP diagnostics for network failures", () => {
   clearPerf();
   recordApi("GetEntryTransferHistory", 42, false, {
@@ -543,7 +633,7 @@ test("page lifecycle preserves an already-resolved resume trigger", () => {
   tracker.disconnect();
 });
 
-test("in-page navigation route-ready telemetry has its own measurement kind", () => {
+test("in-page navigation route-ready telemetry waits for actual content after a soft timeout", () => {
   const previousRandom = Math.random;
   const previousWx = globalThis.wx;
   const telemetryKey = "client-telemetry:queue:v2";
@@ -556,14 +646,24 @@ test("in-page navigation route-ready telemetry has its own measurement kind", ()
   Math.random = () => 0;
   try {
     clearPerf();
+    let callback;
+    const observer = {
+      relativeToViewport() { return this; },
+      observe(_selector, next) { callback = next; },
+      disconnect() {},
+    };
     const tracker = new PagePerformanceTracker(
-      {},
+      { data: { error: "" }, __performanceVisible: true, createIntersectionObserver: () => observer },
       "pages/test/in-page",
       "in-page-navigation"
     );
     tracker.mark("softFailureAt");
+    assert.equal(storage.get(telemetryKey), undefined);
+    tracker.observePrimary("#perf-primary-content", { errorVisible: false });
+    callback({ intersectionRatio: 1 });
     const telemetry = storage.get(telemetryKey);
     assert.equal(telemetry.samples[0].measurementKind, "in_page_navigation");
+    assert.equal(telemetry.samples[0].result, "ok");
   } finally {
     Math.random = previousRandom;
     globalThis.wx = previousWx;

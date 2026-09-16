@@ -1710,4 +1710,6 @@ Page(instrumentPageInteractions({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
+}, {
+  includeInteractionHandlers: ["loadMorePlayers"],
 }));

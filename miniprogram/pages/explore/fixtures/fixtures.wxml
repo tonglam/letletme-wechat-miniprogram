@@ -27,8 +27,8 @@
     <text>正在更新 {{targetWindowLabel}} · 当前显示 {{displayWindowLabel}}</text>
   </view>
 
-  <app-loading wx:if="{{loading}}" text="加载赛程" />
-  <view wx:elif="{{error && !runCards.length}}" class="section">
+  <app-loading wx:if="{{loading && !refreshing}}" text="加载赛程" />
+  <view id="perf-primary-content" wx:elif="{{error && !runCards.length}}" class="section">
     <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
   </view>
   <block wx:else>

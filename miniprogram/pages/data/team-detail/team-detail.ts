@@ -3,6 +3,7 @@ import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
 import { routes } from "../../../config/routes";
 import { setPageTitle } from "../../../utils/navigation";
+import { handoffPageInteraction } from "../../../utils/page-performance";
 import { ensureAppContext } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -137,6 +138,7 @@ PerformancePage({
   },
 
   onBackToTeams() {
+    handoffPageInteraction(routes.dataTeams);
     wx.redirectTo({ url: routes.dataTeams });
   }
 });

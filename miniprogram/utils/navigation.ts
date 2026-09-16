@@ -1,4 +1,5 @@
 import { routes } from "../config/routes";
+import { handoffPageInteraction } from "./page-performance";
 
 function encodeQuery(query: Record<string, string | number | undefined>): string {
   const parts = Object.keys(query)
@@ -15,7 +16,9 @@ export function setPageTitle(title: string): void {
 }
 
 export function navigateTo(path: string, query: Record<string, string | number | undefined> = {}): void {
-  wx.navigateTo({ url: `${path}${encodeQuery(query)}` });
+  const url = `${path}${encodeQuery(query)}`;
+  handoffPageInteraction(url);
+  wx.navigateTo({ url });
 }
 
 export function goToEntrySearch(): void {
@@ -43,9 +46,11 @@ export function goToLiveEntry(entryId?: number): void {
 }
 
 export function switchToHome(): void {
+  handoffPageInteraction(routes.home);
   wx.redirectTo({ url: routes.home });
 }
 
 export function switchToLive(): void {
+  handoffPageInteraction(routes.liveIndex);
   wx.redirectTo({ url: routes.liveIndex });
 }
