@@ -1408,11 +1408,6 @@ Page(instrumentPageInteractions({
         );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
         const includeTransfersForRequest = this.loadTransfersAfterLive;
-        if (includeTransfersForRequest) {
-          // The squad/score is the primary task. Transfer history is a default
-          // secondary module and must not hold the route action open.
-          navigationTracker?.expectSecondaryCompletion();
-        }
         this.setData(
           {
             hasData: true,

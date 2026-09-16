@@ -58,6 +58,7 @@ import {
 import {
   PagePerformanceTracker,
   consumeAppBackgroundResume,
+  getPageInteractionToken,
   instrumentPageInteractions,
 } from "../../../utils/page-performance";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -1435,9 +1436,15 @@ Page(instrumentPageInteractions({
    */
   openPlayerSheet(player: LivePlayerRow) {
     const requestId = ++this._playerSheetRequestId;
+    const interactionId = getPageInteractionToken(this, "onDreamPlayerTap")?.interactionId;
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player)
+    }, () => {
+      wx.nextTick(() => this._perfTracker?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     });
     const element = Number(player.element);
     const eventId = this._statsEvent || this.data.dreamTeamEvent;
@@ -1762,6 +1769,8 @@ Page(instrumentPageInteractions({
   onRetryFixtures() {
     this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
   }
+}, {
+  explicitInteractionHandlers: ["onDreamPlayerTap"],
 }));
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];

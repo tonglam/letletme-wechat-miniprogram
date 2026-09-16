@@ -2294,7 +2294,7 @@ PerformancePage({
     });
     this.seasonSectionPages = {};
     this.seasonSectionContext = null;
-    void this.loadReview(
+    return this.loadReview(
       selected.tournamentId,
       eventId,
       false,
@@ -2373,10 +2373,9 @@ PerformancePage({
       // own error and retry state.
       const retry = this.retryBySurface[nextView];
       if (nextView === "season" && retry?.phaseId) {
-        void this.loadSeasonPhase(retry.phaseId);
-        return;
+        return this.loadSeasonPhase(retry.phaseId);
       }
-      void this.loadReview(
+      return this.loadReview(
         selected.tournamentId,
         this.data.v2Event,
         false,
@@ -2389,7 +2388,6 @@ PerformancePage({
         phase?.phaseId ?? this.data.v2SelectedPhaseId,
         nextView,
       );
-      return;
     }
     if (
       nextView === "season" &&
@@ -2397,15 +2395,16 @@ PerformancePage({
       (!this.data.v2SeasonSection ||
         this.seasonSectionContext?.phaseId !== phase.phaseId)
     ) {
-      void this.loadSeasonPhase(phase.phaseId);
+      return this.loadSeasonPhase(phase.phaseId);
     }
+    return undefined;
   },
 
   onPhaseTap(event: WechatMiniprogram.TouchEvent) {
     const phaseId = String(event.currentTarget.dataset.phaseId || "");
     if (!phaseId || this.data.activeView !== "season") return;
     if (phaseId === this.data.v2SelectedPhaseId) return;
-    void this.loadSeasonPhase(phaseId);
+    return this.loadSeasonPhase(phaseId);
   },
 
   onV2ScopeTap() {

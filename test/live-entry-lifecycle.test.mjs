@@ -37,7 +37,7 @@ test("V2 pending/unavailable preserves same-event data and controls polling", ()
   assert.match(page, /LIVE_POINTS_UNAVAILABLE_ERROR/);
   assert.match(page, /this\.liveSnapshot\?\.nextRefreshAt/);
   assert.doesNotMatch(page, /Promise\.all\(\[request, transfersRequest\]\)/);
-  assert.match(page, /expectSecondaryCompletion\(\)/);
+  assert.doesNotMatch(page, /expectSecondaryCompletion\(\)/);
   assert.match(
     page,
     /const transfersRequest = this\.loadTransfers\([\s\S]*transfersRequest\.finally\([\s\S]*secondaryCompleteAt/,

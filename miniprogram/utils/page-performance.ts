@@ -12,6 +12,8 @@ type PageOwner = {
   __performanceVisible?: boolean;
   __performanceTracker?: PagePerformanceTracker;
   __performanceInteractionTokens?: Record<string, PageInteractionToken>;
+  /** Synchronous wrapper depth used to avoid double-counting delegated taps. */
+  __performanceInteractionDepth?: number;
   createIntersectionObserver?: (
     options: WechatMiniprogram.CreateIntersectionObserverOption
   ) => WechatMiniprogram.IntersectionObserver;
@@ -274,6 +276,16 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       this: PageOwner,
       ...args: unknown[]
     ): unknown {
+      // Page handlers sometimes delegate to another on* handler (for example
+      // an empty-state action calling the shared retry method). Both methods
+      // are wrapped in this loop, but the delegation is still one user event.
+      // Bypass the nested wrapper for the synchronous call stack so it cannot
+      // create a second interaction record or visibility observer.
+      if ((this.__performanceInteractionDepth ?? 0) > 0) {
+        return handler.apply(this, args);
+      }
+      this.__performanceInteractionDepth =
+        (this.__performanceInteractionDepth ?? 0) + 1;
       let token = beginPageInteraction(name, name);
       if (token) {
         this.__performanceInteractionTokens = {
@@ -303,11 +315,18 @@ export function instrumentPageInteractions<T extends Record<string, unknown>>(
       };
       let result: unknown;
       try {
-        result = handler.apply(this, args);
-      } catch (error) {
-        rebindToCurrentTracker();
-        token?.tracker.completeInteraction(token.interactionId, "failed", false);
-        throw error;
+        try {
+          result = handler.apply(this, args);
+        } catch (error) {
+          rebindToCurrentTracker();
+          token?.tracker.completeInteraction(token.interactionId, "failed", false);
+          throw error;
+        }
+      } finally {
+        this.__performanceInteractionDepth = Math.max(
+          0,
+          (this.__performanceInteractionDepth ?? 1) - 1,
+        );
       }
       if (result && typeof (result as PromiseLike<unknown>).then === "function") {
         void Promise.resolve(result).then(
@@ -633,8 +652,13 @@ export class PagePerformanceTracker {
    */
   rebindInteraction(token: PageInteractionToken): PageInteractionToken {
     if (this.disconnected || token.tracker === this) return token;
-    const source = token.tracker.readInteraction(token.interactionId);
+    const sourceTracker = token.tracker;
+    const source = sourceTracker.readInteraction(token.interactionId);
     if (!source) return token;
+    // The source tracker may already be disconnected when a route-specific
+    // handler creates its replacement. Remove the copied interaction there so
+    // the persisted page record contains one action, owned by the replacement.
+    sourceTracker.retireInteraction(token.interactionId);
     interactionSequence += 1;
     const interactionId = `${this.navigationId}:action:${interactionSequence.toString(36)}`;
     const interaction: PageInteractionRecord = {
@@ -661,6 +685,17 @@ export class PagePerformanceTracker {
         (interaction) => interaction.interactionId === interactionId,
       ) ?? null
     );
+  }
+
+  private retireInteraction(interactionId: string): void {
+    const previous = this.record.interactions;
+    if (!previous?.some((interaction) => interaction.interactionId === interactionId)) {
+      return;
+    }
+    this.record.interactions = previous.filter(
+      (interaction) => interaction.interactionId !== interactionId,
+    );
+    this.flush();
   }
 
   disconnect(): void {

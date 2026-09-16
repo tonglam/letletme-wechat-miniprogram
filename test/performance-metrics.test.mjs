@@ -416,9 +416,34 @@ test("instrumented handlers rebind an interaction when the page replaces its tra
     (item) => item.navigationId === replacement.navigationId,
   );
   assert.equal(replacementRecord.interactions[0].startedAt, originalStartedAt);
+  const originalRecord = getPerf().pagePerformance.find(
+    (item) => item.navigationId === original.navigationId,
+  );
+  assert.deepEqual(originalRecord.interactions, []);
   callback({ intersectionRatio: 1 });
   assert.ok(replacementRecord.interactions[0].resultVisibleAt);
   replacement.disconnect();
+  delete globalThis.getCurrentPages;
+});
+
+test("nested delegated handlers share one interaction record", () => {
+  clearPerf();
+  const page = { __performanceVisible: true };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, "pages/test/nested-actions", "warm-enter");
+  const definition = instrumentPageInteractions({
+    onEmptyAction() {
+      this.onRetry();
+    },
+    onRetry() {},
+  });
+  Object.assign(page, definition);
+
+  page.onEmptyAction();
+  const record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+  assert.equal(record.interactions.length, 1);
+  assert.equal(record.interactions[0].handler, "onEmptyAction");
+  tracker.disconnect();
   delete globalThis.getCurrentPages;
 });
 
