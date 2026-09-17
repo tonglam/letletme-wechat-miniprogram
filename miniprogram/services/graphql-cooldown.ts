@@ -1,6 +1,9 @@
 import { storageKeys } from "../config/storage-keys";
 
 export const DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS = 15;
+export const DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS = 30;
+/** Keep persisted dependency state bounded while allowing multi-day server waits. */
+export const MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 export const MIN_GRAPHQL_RETRY_AFTER_SECONDS = 1;
 export const MAX_GRAPHQL_RETRY_AFTER_SECONDS = 120;
 export const GRAPHQL_COOLDOWN_READY_MESSAGE = "请求冷却已结束，可以重试";
@@ -43,6 +46,7 @@ export interface GraphQLCooldownState {
   cooldownUntil?: number;
   remainingSeconds: number;
   workload?: GraphQLWorkload;
+  reason?: "rate_limit" | "dependency";
 }
 
 type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
@@ -50,6 +54,9 @@ type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
 let cooldownNoticeActiveUntil = 0;
 let cooldownRuntime: unknown;
 let cooldownUntilMemory = 0;
+let dependencyCooldownUntilMemory = 0;
+let corruptedDependencyCooldownValue: number | null = null;
+let corruptedDependencyCooldownUntil = 0;
 let workloadCooldownMemory = new Map<GraphQLWorkload, number>();
 let corruptedWorkloadCooldowns = new Map<
   GraphQLWorkload,
@@ -63,6 +70,9 @@ function ensureCooldownRuntime(): void {
   if (cooldownRuntime === wx) return;
   cooldownRuntime = wx;
   cooldownUntilMemory = 0;
+  dependencyCooldownUntilMemory = 0;
+  corruptedDependencyCooldownValue = null;
+  corruptedDependencyCooldownUntil = 0;
   workloadCooldownMemory = new Map<GraphQLWorkload, number>();
   corruptedWorkloadCooldowns = new Map();
   corruptedStoredCooldownValue = null;
@@ -107,11 +117,150 @@ export function parseRetryAfterSeconds(
   return DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS;
 }
 
+/**
+ * Parse a dependency Retry-After without the rate-limit ceiling. An upstream
+ * outage may explicitly ask clients to wait longer than 120 seconds; cutting
+ * that value short would recreate the request storm this cooldown prevents.
+ */
+export function parseDependencyRetryAfterSeconds(
+  value: unknown,
+  now = Date.now(),
+): number {
+  const normalized = String(value ?? "").trim();
+  if (/^\d+$/.test(normalized)) {
+    const seconds = Number(normalized);
+    if (Number.isFinite(seconds)) return Math.max(1, Math.ceil(seconds));
+  }
+  if (isHttpDate(normalized)) {
+    const retryAt = Date.parse(normalized);
+    if (Number.isFinite(retryAt)) {
+      return Math.max(1, Math.ceil((retryAt - now) / 1000));
+    }
+  }
+  return DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS;
+}
+
+export interface GraphQLDependencyCooldownState {
+  active: boolean;
+  cooldownUntil?: number;
+  remainingSeconds: number;
+}
+
+function readStoredDependencyCooldown(now: number): number {
+  let stored = 0;
+  let storageReadSucceeded = false;
+  try {
+    const value = Number(
+      wx.getStorageSync(storageKeys.graphqlDependencyCooldownUntil),
+    );
+    stored = Number.isFinite(value) ? value : 0;
+    storageReadSucceeded = true;
+  } catch {}
+
+  const maximumUntil = now + MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1000;
+  if (!storageReadSucceeded && corruptedDependencyCooldownValue !== null) {
+    return corruptedDependencyCooldownUntil;
+  }
+  if (
+    storageReadSucceeded &&
+    stored > maximumUntil &&
+    corruptedDependencyCooldownValue !== stored
+  ) {
+    // Preserve a bounded quarantine window when storage contains an
+    // accidentally enormous or manually edited timestamp. A legitimate
+    // server delay may still exceed the 120-second rate-limit ceiling, but a
+    // persisted value cannot block this client for years.
+    corruptedDependencyCooldownValue = stored;
+    corruptedDependencyCooldownUntil = maximumUntil;
+    try {
+      wx.setStorageSync(
+        storageKeys.graphqlDependencyCooldownUntil,
+        maximumUntil,
+      );
+    } catch {}
+  }
+  if (corruptedDependencyCooldownValue === stored) {
+    return corruptedDependencyCooldownUntil;
+  }
+  if (storageReadSucceeded) {
+    corruptedDependencyCooldownValue = null;
+    corruptedDependencyCooldownUntil = 0;
+  }
+  return stored > 0 ? stored : 0;
+}
+
+export function getGraphQLDependencyCooldownState(
+  now = Date.now(),
+): GraphQLDependencyCooldownState {
+  ensureCooldownRuntime();
+  const stored = readStoredDependencyCooldown(now);
+  const cooldownUntil = Math.max(dependencyCooldownUntilMemory, stored);
+  if (!Number.isFinite(cooldownUntil) || cooldownUntil <= now) {
+    dependencyCooldownUntilMemory = 0;
+    if (stored > 0) {
+      try {
+        wx.removeStorageSync(storageKeys.graphqlDependencyCooldownUntil);
+      } catch {}
+    }
+    return { active: false, remainingSeconds: 0 };
+  }
+  dependencyCooldownUntilMemory = cooldownUntil;
+  if (stored !== cooldownUntil) {
+    try {
+      wx.setStorageSync(
+        storageKeys.graphqlDependencyCooldownUntil,
+        cooldownUntil,
+      );
+    } catch {}
+  }
+  return {
+    active: true,
+    cooldownUntil,
+    remainingSeconds: Math.max(1, Math.ceil((cooldownUntil - now) / 1000)),
+  };
+}
+
+export function persistGraphQLDependencyCooldown(
+  retryAfterSeconds: number,
+  now = Date.now(),
+): GraphQLDependencyCooldownState {
+  ensureCooldownRuntime();
+  const seconds = Number.isFinite(retryAfterSeconds)
+    ? Math.min(
+        MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS,
+        Math.max(1, Math.ceil(retryAfterSeconds)),
+      )
+    : DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS;
+  const requestedUntil = now + seconds * 1000;
+  const stored = readStoredDependencyCooldown(now);
+  dependencyCooldownUntilMemory = Math.max(
+    dependencyCooldownUntilMemory,
+    stored,
+    requestedUntil,
+  );
+  try {
+    wx.setStorageSync(
+      storageKeys.graphqlDependencyCooldownUntil,
+      dependencyCooldownUntilMemory,
+    );
+  } catch {}
+  const dependencyState = getGraphQLDependencyCooldownState(now);
+  // The shared UI subscription must observe dependency outages as well as
+  // 429s, otherwise retry buttons remain enabled while graphqlRead rejects
+  // every tap locally until this deadline.
+  notifyGraphQLCooldown(getGraphQLCooldownState(now));
+  return dependencyState;
+}
+
+export function graphQLDependencyCooldownMessage(
+  state: GraphQLDependencyCooldownState,
+): string {
+  return `服务暂时不可用，请在 ${Math.max(1, state.remainingSeconds)} 秒后重试`;
+}
+
 export function isGraphQLCooldownMessage(value: unknown): boolean {
   const message = String(value ?? "").trim();
-  return /^请求较多，(?:当前显示上次成功数据；\d+ 秒后可刷新|请在 \d+ 秒后刷新)$/.test(
-    message,
-  );
+  return /^(?:请求较多，(?:当前显示上次成功数据；\d+ 秒后可刷新|请在 \d+ 秒后刷新)|服务暂时不可用，请在 \d+ 秒后重试)$/.test(message);
 }
 
 export function persistGraphQLCooldown(
@@ -222,6 +371,7 @@ export function getGraphQLCooldownState(
   workload?: GraphQLWorkload,
 ): GraphQLCooldownState {
   ensureCooldownRuntime();
+  const dependency = getGraphQLDependencyCooldownState(now);
   const workloadUntil = workload ? readWorkloadCooldown(workload, now) : 0;
   let stored = 0;
   let storageReadSucceeded = false;
@@ -275,16 +425,23 @@ export function getGraphQLCooldownState(
     }
   }
 
-  const cooldownUntil = Math.max(workloadUntil, globalUntil);
+  const dependencyUntil = dependency.active ? dependency.cooldownUntil ?? 0 : 0;
+  const cooldownUntil = Math.max(workloadUntil, globalUntil, dependencyUntil);
   if (cooldownUntil <= now) return { active: false, remainingSeconds: 0 };
 
+  const dependencyDominates = dependencyUntil >= Math.max(workloadUntil, globalUntil);
   const activeWorkload =
-    workload && workloadUntil >= globalUntil ? workload : undefined;
+    !dependencyDominates && workload && workloadUntil >= globalUntil
+      ? workload
+      : undefined;
   return {
     active: true,
     cooldownUntil,
-    remainingSeconds: clampRetryAfterSeconds((cooldownUntil - now) / 1000),
+    remainingSeconds: dependencyDominates
+      ? Math.max(1, Math.ceil((cooldownUntil - now) / 1000))
+      : clampRetryAfterSeconds((cooldownUntil - now) / 1000),
     ...(activeWorkload ? { workload: activeWorkload } : {}),
+    reason: dependencyDominates ? "dependency" : "rate_limit",
   };
 }
 
@@ -303,6 +460,9 @@ export function graphQLCooldownMessage(
   state: GraphQLCooldownState,
   stale: boolean,
 ): string {
+  if (state.reason === "dependency") {
+    return `服务暂时不可用，请在 ${Math.max(1, state.remainingSeconds)} 秒后重试`;
+  }
   const seconds = Math.max(1, state.remainingSeconds);
   return stale
     ? `请求较多，当前显示上次成功数据；${seconds} 秒后可刷新`

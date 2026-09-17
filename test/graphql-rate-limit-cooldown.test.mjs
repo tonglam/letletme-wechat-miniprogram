@@ -8,8 +8,11 @@ import {
   isViewerEntryAuthorizationError,
 } from "../miniprogram/services/graphql.service.ts";
 import {
+  getGraphQLDependencyCooldownState,
   getGraphQLCooldownState,
   isGraphQLCooldownMessage,
+  MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS,
+  parseDependencyRetryAfterSeconds,
   parseRetryAfterSeconds,
   persistGraphQLCooldown,
   subscribeGraphQLCooldown,
@@ -79,6 +82,10 @@ test("Retry-After accepts seconds and HTTP-date and clamps invalid values", () =
   assert.equal(isGraphQLCooldownMessage("请求较多，请在 20 秒后刷新"), true);
   assert.equal(
     isGraphQLCooldownMessage("请求较多，当前显示上次成功数据；20 秒后可刷新"),
+    true,
+  );
+  assert.equal(
+    isGraphQLCooldownMessage("服务暂时不可用，请在 30 秒后重试"),
     true,
   );
   assert.equal(isGraphQLCooldownMessage("网络超时，请稍后重试"), false);
@@ -334,6 +341,71 @@ test("429 persists one global cooldown, exposes request metadata, and never auto
     runtime.requests.length,
     1,
     "onShow/retry/pull-refresh equivalents cannot bypass the cooldown",
+  );
+});
+
+test("503 persists a distinct dependency cooldown and never looks like rate limiting", async () => {
+  const runtime = installRuntime((request) =>
+    request.success({
+      statusCode: 503,
+      header: {
+        "Retry-After": "300",
+        "X-Request-Id": "req-dependency-unavailable",
+      },
+      data: { errors: [{ message: "dependency unavailable" }] },
+    }),
+  );
+
+  assert.equal(parseDependencyRetryAfterSeconds("300", Date.now()), 300);
+  await assert.rejects(
+    graphqlRead(
+      "query DependencyUnavailable { value }",
+      {},
+      { ...policy, forceRefresh: true },
+    ),
+    (error) => {
+      assert.ok(error instanceof GraphQLTransportError);
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.code, "DEPENDENCY_UNAVAILABLE");
+      assert.equal(error.retryAfterSeconds, 300);
+      assert.equal(error.requestId, "req-dependency-unavailable");
+      return true;
+    },
+  );
+  assert.equal(runtime.requests.length, 1);
+  assert.equal(getGraphQLCooldownState().active, true);
+  assert.equal(getGraphQLCooldownState().reason, "dependency");
+  assert.equal(getGraphQLCooldownState().remainingSeconds >= 299, true);
+  assert.equal(getGraphQLDependencyCooldownState().active, true);
+
+  await assert.rejects(
+    graphqlRead(
+      "query DependencyUnavailableSecondAttempt { value }",
+      {},
+      { ...policy, forceRefresh: true },
+    ),
+    (error) =>
+      error instanceof GraphQLTransportError &&
+      error.statusCode === 503 &&
+      error.code === "DEPENDENCY_UNAVAILABLE",
+  );
+  assert.equal(runtime.requests.length, 1);
+});
+
+test("corrupt persisted dependency cooldowns are quarantined to a bounded window", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  const corrupted = now + 365 * 24 * 60 * 60 * 1000;
+  runtime.storage.set("graphql-dependency-cooldown-until", corrupted);
+
+  const state = getGraphQLDependencyCooldownState(now);
+  assert.equal(
+    state.cooldownUntil,
+    now + MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1000,
+  );
+  assert.equal(
+    runtime.storage.get("graphql-dependency-cooldown-until"),
+    now + MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1000,
   );
 });
 

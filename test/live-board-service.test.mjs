@@ -482,7 +482,7 @@ test("a failed last-good write cannot authorize pruning another scope", () => {
   );
 });
 
-test("one transient failure retries once after a 400-800ms jitter", async () => {
+test("one transient failure retries once after the bounded 30s service backoff", async () => {
   const delays = [];
   let attempt = 0;
   installRuntime((options) => {
@@ -504,7 +504,37 @@ test("one transient failure retries once after a 400-800ms jitter", async () => 
 
   assert.equal(result.page.rows.length, 1);
   assert.equal(requests.length, 2);
-  assert.deepEqual(delays, [600]);
+  assert.deepEqual(delays, [30_000]);
+});
+
+test("caps an excessive dependency Retry-After before scheduling the live retry", async () => {
+  const delays = [];
+  let attempt = 0;
+  installRuntime((options) => {
+    attempt += 1;
+    if (attempt === 1) {
+      options.success({
+        statusCode: 503,
+        header: { "retry-after": "999999999" },
+        data: { errors: [{ message: "dependency unavailable" }] },
+      });
+      return;
+    }
+    graphQLSuccess()(options);
+  });
+
+  await assert.rejects(
+    getEntryLiveCompetitionBoardPage(
+      { entryId: 123, tournamentId: 7, eventId: 1 },
+      { sleepImpl: async (milliseconds) => void delays.push(milliseconds) },
+    ),
+    (error) => error?.code === "DEPENDENCY_UNAVAILABLE",
+  );
+
+  assert.equal(delays.length, 1);
+  assert.ok(delays[0] <= 7 * 24 * 60 * 60 * 1_000);
+  assert.ok(delays[0] >= 7 * 24 * 60 * 60 * 1_000 - 1_000);
+  assert.equal(requests.length, 1);
 });
 
 test("auth, business, and 429 failures do not auto-retry or use fallback", async () => {

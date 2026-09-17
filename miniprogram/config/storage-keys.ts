@@ -21,6 +21,7 @@ export const storageKeys = {
   pendingEntryChoice: "pending-entry-choice-v1",
   deviceId: "mini-program-device-id",
   graphqlCooldownUntil: "graphql-cooldown-until",
+  graphqlDependencyCooldownUntil: "graphql-dependency-cooldown-until",
   graphqlCooldownWorkloads: "graphql-cooldown-workloads-v1",
   pendingBugReportDraft: "pending-bug-report-draft",
   diagnosticDisclosure: "auth-diagnostic-disclosure-v1",
