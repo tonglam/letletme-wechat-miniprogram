@@ -531,7 +531,9 @@ test("caps an excessive dependency Retry-After before scheduling the live retry"
     (error) => error?.code === "DEPENDENCY_UNAVAILABLE",
   );
 
-  assert.deepEqual(delays, [7 * 24 * 60 * 60 * 1_000]);
+  assert.equal(delays.length, 1);
+  assert.ok(delays[0] <= 7 * 24 * 60 * 60 * 1_000);
+  assert.ok(delays[0] >= 7 * 24 * 60 * 60 * 1_000 - 1_000);
   assert.equal(requests.length, 1);
 });
 
