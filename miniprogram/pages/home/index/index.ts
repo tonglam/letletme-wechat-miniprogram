@@ -1815,7 +1815,7 @@ Page(instrumentPageInteractions({
   },
 
   onRetryFixtures() {
-    this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
+    return this.loadFixtureGw(this.data.selectedFixtureGw || this.data.nextGw, true);
   }
 }, {
   explicitInteractionHandlers: ["onDreamPlayerTap", "onSelectPriceTab", "onRetryPredictions"],

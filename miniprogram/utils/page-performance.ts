@@ -816,6 +816,13 @@ export class PagePerformanceTracker {
         const visibleAt = monotonicNow();
         if (options.errorVisible === true) {
           this.mark("errorVisibleAt");
+          // A caller may defer the route-ready boundary while an independent
+          // default surface settles. If that surface resolves to a visible
+          // primary error, finalize the same boundary as an error rather than
+          // leaving the interaction without a terminal route sample.
+          if (this.secondaryCompletionExpected) {
+            this.mark("secondaryCompleteAt");
+          }
         }
         if (this.record.primarySetDataAt === undefined) {
           this.record.primarySetDataAt = this.pendingSetDataAt;

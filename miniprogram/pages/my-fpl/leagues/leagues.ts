@@ -977,8 +977,12 @@ PerformancePage({
       if (!append && selected && eventId) {
         // The default surface is Season. Let the catalog and picker render as
         // soon as they are authoritative, then load only that visible surface;
-        // Gameweek is fetched when the user opens its tab.
-        void this.loadReview(
+        // Gameweek is fetched when the user opens its tab. Keep the route
+        // ready boundary open until the default review has a visible success
+        // or error surface; otherwise the catalog header is measured as a
+        // successful route while the actual Season review is still pending.
+        getCurrentPagePerformanceTracker()?.expectSecondaryCompletion();
+        await this.loadReview(
           selected.tournamentId,
           eventId,
           forceRefresh,

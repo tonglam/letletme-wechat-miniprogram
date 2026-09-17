@@ -153,3 +153,23 @@ test("team actions wait for their owned work and setup polls stay untraced", () 
   assert.match(tournament, /trace\?: PageRequestTrace \| null/);
   assert.match(detailService, /trace\?: PageRequestTrace \| null/);
 });
+
+test("default league review and deferred errors own the route-ready boundary", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const pagePerformance = source("miniprogram/utils/page-performance.ts");
+  assert.match(
+    leagues,
+    /expectSecondaryCompletion\(\);[\s\S]*await this\.loadReview\(/,
+  );
+  assert.match(
+    pagePerformance,
+    /if \(options\.errorVisible === true\) \{[\s\S]*if \(this\.secondaryCompletionExpected\) \{[\s\S]*mark\("secondaryCompleteAt"\)/,
+  );
+});
+
+test("home and live tournament retry handlers return their owned requests", () => {
+  const home = source("miniprogram/pages/home/index/index.ts");
+  const tournament = source("miniprogram/pages/live/tournament/tournament.controller.ts");
+  assert.match(home, /onRetryFixtures\(\) \{\s*return this\.loadFixtureGw\(/);
+  assert.match(tournament, /onRetry\(\) \{[\s\S]*return this\.retryWithContext\(\)[\s\S]*return this\.loadTournaments\(true\)[\s\S]*return this\.loadH2HDesk\([\s\S]*return this\.loadRows\(/);
+});

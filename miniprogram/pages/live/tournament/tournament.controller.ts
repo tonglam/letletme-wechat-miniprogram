@@ -4725,21 +4725,18 @@ PerformancePage({
   onRetry() {
     if (this.data.event === 0) {
       if (this.retryWithContext) {
-        this.retryWithContext();
+        return this.retryWithContext();
       } else {
-        this.loadTournaments(true);
+        return this.loadTournaments(true);
       }
-      return;
     }
     if (this.data.tournamentListError || this.data.tournaments.length === 0) {
-      this.loadTournaments(true);
-      return;
+      return this.loadTournaments(true);
     }
     if (this.data.h2hActive || this.data.setupActive) {
-      void this.loadH2HDesk({ forceRefresh: true });
-      return;
+      return this.loadH2HDesk({ forceRefresh: true });
     }
-    this.loadRows({ forceRefresh: true });
+    return this.loadRows({ forceRefresh: true });
   },
 
   async collectBoardShareRows(): Promise<DisplayTournamentRow[]> {
