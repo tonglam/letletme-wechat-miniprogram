@@ -1,5 +1,8 @@
 import { getMiniProgramEnv } from "../config/env";
-import { GRAPHQL_WORKLOADS } from "../services/graphql-cooldown";
+import {
+  GRAPHQL_WORKLOADS,
+  MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS,
+} from "../services/graphql-cooldown";
 
 const GRAPHQL_RATE_LIMIT_POLICIES = new Set([
   "graphql-v2",
@@ -60,7 +63,7 @@ export function recordBugReportDiagnostic(entry: BugReportDiagnostic): void {
       typeof retryAfterSeconds === "number" &&
       Number.isSafeInteger(retryAfterSeconds) &&
       retryAfterSeconds >= 0 &&
-      retryAfterSeconds <= 120
+      retryAfterSeconds <= MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS
         ? retryAfterSeconds
         : undefined,
     rateLimitPolicy: allowedEnum(

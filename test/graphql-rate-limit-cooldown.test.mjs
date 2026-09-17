@@ -11,6 +11,7 @@ import {
   getGraphQLDependencyCooldownState,
   getGraphQLCooldownState,
   isGraphQLCooldownMessage,
+  MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS,
   parseDependencyRetryAfterSeconds,
   parseRetryAfterSeconds,
   persistGraphQLCooldown,
@@ -383,6 +384,23 @@ test("503 persists a distinct dependency cooldown and never looks like rate limi
       error.code === "DEPENDENCY_UNAVAILABLE",
   );
   assert.equal(runtime.requests.length, 1);
+});
+
+test("corrupt persisted dependency cooldowns are quarantined to a bounded window", () => {
+  const runtime = installRuntime(() => undefined);
+  const now = Date.parse("2026-08-20T00:00:00.000Z");
+  const corrupted = now + 365 * 24 * 60 * 60 * 1000;
+  runtime.storage.set("graphql-dependency-cooldown-until", corrupted);
+
+  const state = getGraphQLDependencyCooldownState(now);
+  assert.equal(
+    state.cooldownUntil,
+    now + MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1000,
+  );
+  assert.equal(
+    runtime.storage.get("graphql-dependency-cooldown-until"),
+    now + MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1000,
+  );
 });
 
 test("workload-scoped 429 cools only the affected Mini workload", async () => {

@@ -37,7 +37,7 @@ test("bug report diagnostics retain bounded 429 metadata without identity secret
     requestId: "request-1",
     code: "RATE_LIMITED",
     status: 429,
-    retryAfterSeconds: 15,
+    retryAfterSeconds: 300,
     rateLimitPolicy: "graphql-v4",
     rateLimitScope: "workload",
     workload: "player-stats",
@@ -56,7 +56,7 @@ test("bug report diagnostics retain bounded 429 metadata without identity secret
   assert.equal(valid.at, "2026-08-20T00:00:00.000Z");
   assert.equal(valid.operation, "PlayersForPicker");
   assert.equal(valid.status, 429);
-  assert.equal(valid.retryAfterSeconds, 15);
+  assert.equal(valid.retryAfterSeconds, 300);
   assert.equal(valid.rateLimitPolicy, "graphql-v4");
   assert.equal(valid.rateLimitScope, "workload");
   assert.equal(valid.workload, "player-stats");
