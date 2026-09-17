@@ -16,7 +16,10 @@ import {
   type GraphQLReadMeta,
   type PageRequestTrace,
 } from "./graphql.service";
-import { MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS } from "./graphql-cooldown";
+import {
+  getGraphQLDependencyCooldownState,
+  MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS,
+} from "./graphql-cooldown";
 import {
   mapTournamentLiveRows,
   type TournamentLiveGraphQLRow,
@@ -788,10 +791,31 @@ function shouldRetry(error: unknown): boolean {
 }
 
 function retryDelayMs(attempt: number, error?: unknown): number {
-  const serverDelay =
+  const dependencyDeadline =
     error instanceof GraphQLTransportError &&
-    typeof error.retryAfterSeconds === "number" &&
-    Number.isFinite(error.retryAfterSeconds)
+    (error.statusCode === 502 ||
+      error.statusCode === 503 ||
+      error.statusCode === 504)
+      ? getGraphQLDependencyCooldownState().cooldownUntil
+      : undefined;
+  const effectiveRetryAt = Math.max(
+    error instanceof GraphQLTransportError &&
+      typeof error.retryAt === "number" &&
+      Number.isFinite(error.retryAt)
+      ? error.retryAt
+      : 0,
+    dependencyDeadline ?? 0,
+  );
+  const now = Date.now();
+  const serverDelay =
+    effectiveRetryAt > now
+      ? Math.min(
+          MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1_000,
+          effectiveRetryAt - now,
+        )
+      : error instanceof GraphQLTransportError &&
+          typeof error.retryAfterSeconds === "number" &&
+          Number.isFinite(error.retryAfterSeconds)
       ? Math.min(
           MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1_000,
           Math.max(0, error.retryAfterSeconds * 1_000),

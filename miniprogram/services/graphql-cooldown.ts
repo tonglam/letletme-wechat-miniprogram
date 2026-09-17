@@ -260,9 +260,7 @@ export function graphQLDependencyCooldownMessage(
 
 export function isGraphQLCooldownMessage(value: unknown): boolean {
   const message = String(value ?? "").trim();
-  return /^请求较多，(?:当前显示上次成功数据；\d+ 秒后可刷新|请在 \d+ 秒后刷新)$/.test(
-    message,
-  );
+  return /^(?:请求较多，(?:当前显示上次成功数据；\d+ 秒后可刷新|请在 \d+ 秒后刷新)|服务暂时不可用，请在 \d+ 秒后重试)$/.test(message);
 }
 
 export function persistGraphQLCooldown(

@@ -84,6 +84,10 @@ test("Retry-After accepts seconds and HTTP-date and clamps invalid values", () =
     isGraphQLCooldownMessage("请求较多，当前显示上次成功数据；20 秒后可刷新"),
     true,
   );
+  assert.equal(
+    isGraphQLCooldownMessage("服务暂时不可用，请在 30 秒后重试"),
+    true,
+  );
   assert.equal(isGraphQLCooldownMessage("网络超时，请稍后重试"), false);
 });
 
