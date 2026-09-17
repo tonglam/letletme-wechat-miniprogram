@@ -46,6 +46,7 @@ export interface GraphQLCooldownState {
   cooldownUntil?: number;
   remainingSeconds: number;
   workload?: GraphQLWorkload;
+  reason?: "rate_limit" | "dependency";
 }
 
 type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
@@ -243,7 +244,12 @@ export function persistGraphQLDependencyCooldown(
       dependencyCooldownUntilMemory,
     );
   } catch {}
-  return getGraphQLDependencyCooldownState(now);
+  const dependencyState = getGraphQLDependencyCooldownState(now);
+  // The shared UI subscription must observe dependency outages as well as
+  // 429s, otherwise retry buttons remain enabled while graphqlRead rejects
+  // every tap locally until this deadline.
+  notifyGraphQLCooldown(getGraphQLCooldownState(now));
+  return dependencyState;
 }
 
 export function graphQLDependencyCooldownMessage(
@@ -367,6 +373,7 @@ export function getGraphQLCooldownState(
   workload?: GraphQLWorkload,
 ): GraphQLCooldownState {
   ensureCooldownRuntime();
+  const dependency = getGraphQLDependencyCooldownState(now);
   const workloadUntil = workload ? readWorkloadCooldown(workload, now) : 0;
   let stored = 0;
   let storageReadSucceeded = false;
@@ -420,16 +427,23 @@ export function getGraphQLCooldownState(
     }
   }
 
-  const cooldownUntil = Math.max(workloadUntil, globalUntil);
+  const dependencyUntil = dependency.active ? dependency.cooldownUntil ?? 0 : 0;
+  const cooldownUntil = Math.max(workloadUntil, globalUntil, dependencyUntil);
   if (cooldownUntil <= now) return { active: false, remainingSeconds: 0 };
 
+  const dependencyDominates = dependencyUntil >= Math.max(workloadUntil, globalUntil);
   const activeWorkload =
-    workload && workloadUntil >= globalUntil ? workload : undefined;
+    !dependencyDominates && workload && workloadUntil >= globalUntil
+      ? workload
+      : undefined;
   return {
     active: true,
     cooldownUntil,
-    remainingSeconds: clampRetryAfterSeconds((cooldownUntil - now) / 1000),
+    remainingSeconds: dependencyDominates
+      ? Math.max(1, Math.ceil((cooldownUntil - now) / 1000))
+      : clampRetryAfterSeconds((cooldownUntil - now) / 1000),
     ...(activeWorkload ? { workload: activeWorkload } : {}),
+    reason: dependencyDominates ? "dependency" : "rate_limit",
   };
 }
 
@@ -448,6 +462,9 @@ export function graphQLCooldownMessage(
   state: GraphQLCooldownState,
   stale: boolean,
 ): string {
+  if (state.reason === "dependency") {
+    return `服务暂时不可用，请在 ${Math.max(1, state.remainingSeconds)} 秒后重试`;
+  }
   const seconds = Math.max(1, state.remainingSeconds);
   return stale
     ? `请求较多，当前显示上次成功数据；${seconds} 秒后可刷新`

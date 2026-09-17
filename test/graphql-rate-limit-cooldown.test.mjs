@@ -369,7 +369,9 @@ test("503 persists a distinct dependency cooldown and never looks like rate limi
     },
   );
   assert.equal(runtime.requests.length, 1);
-  assert.equal(getGraphQLCooldownState().active, false);
+  assert.equal(getGraphQLCooldownState().active, true);
+  assert.equal(getGraphQLCooldownState().reason, "dependency");
+  assert.equal(getGraphQLCooldownState().remainingSeconds >= 299, true);
   assert.equal(getGraphQLDependencyCooldownState().active, true);
 
   await assert.rejects(
