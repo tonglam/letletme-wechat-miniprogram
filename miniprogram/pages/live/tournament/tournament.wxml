@@ -369,7 +369,7 @@
     </block>
   </block>
 
-  <view wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
+  <view id="perf-compare-content" wx:if="{{compareOpen && compareLeft && compareRight}}" class="cmp-root">
     <view class="cmp-mask" bindtap="onCloseCompare"></view>
     <view class="cmp-sheet">
       <view class="cmp-head">
@@ -594,7 +594,7 @@
       </view>
     </view>
   </view>
-  <view wx:if="{{detailOpen}}" class="flt-root">
+  <view id="perf-on-demand-content" wx:if="{{detailOpen}}" class="flt-root">
     <view class="flt-mask" bindtap="onCloseTournamentDetail"></view>
     <view class="flt-sheet">
       <view class="flt-head">

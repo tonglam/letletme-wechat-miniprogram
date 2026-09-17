@@ -9,6 +9,7 @@
     "gw-picker": "../../../components/gw-picker/gw-picker",
     "evidence-source": "../../../components/evidence-source/evidence-source",
     "squad-pitch": "../../../components/squad-pitch/squad-pitch",
-    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet"
+    "player-live-sheet": "../../../components/player-live-sheet/player-live-sheet",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

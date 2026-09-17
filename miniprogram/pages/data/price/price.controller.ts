@@ -25,7 +25,10 @@ import {
   getAppContextSnapshot,
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import { copyShareText } from "../../../utils/live-share";
 import { miniLogger } from "../../../utils/logger";
 import { formatPriceMovementShareText } from "../../../utils/explore-share";
@@ -587,7 +590,7 @@ function ownershipDateOptions(latestDate: string | null | undefined): string[] {
 const initialChangeDate = formatPricePickerDate();
 const initialDailyEmptyState = getDailyPriceEmptyState(initialChangeDate);
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     activeMode: "daily",
     loading: false,
@@ -789,7 +792,11 @@ Page({
       resumeOwnershipIfNeeded();
       return;
     }
-    wx.nextTick(() => tracker.observePrimary(selector));
+    wx.nextTick(() => tracker.observePrimary(selector, {
+      errorVisible: selector === "#perf-primary-player"
+        ? Boolean(this.data.playersError && this.data.players.length === 0)
+        : Boolean(this.data.error && this.data.riseChanges.length === 0 && this.data.fallChanges.length === 0),
+    }));
   },
 
   onHide() {
@@ -859,7 +866,9 @@ Page({
       const task = this.runPlayerRefresh(tracker).then(() => {
         tracker?.mark("primaryResponseAt");
         tracker?.mark("primarySetDataAt");
-        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player"));
+        wx.nextTick(() => tracker?.observePrimary("#perf-primary-player", {
+          errorVisible: Boolean(this.data.playersError && this.data.players.length === 0),
+        }));
       });
       return task.finally(() => wx.stopPullDownRefresh());
     }
@@ -870,20 +879,19 @@ Page({
   onRetry() {
     if (this.data.activeMode === "player") {
       this.startDailyRefreshTrace();
-      void this.runPlayerRefresh(this.perfTracker);
-      return;
+      return this.runPlayerRefresh(this.perfTracker);
     }
     this.startDailyRefreshTrace();
-    this.loadDailyChanges();
+    return this.loadDailyChanges();
   },
 
   onRetryDaily() {
     this.startDailyRefreshTrace();
-    void this.loadDailyChanges(true, false);
+    return this.loadDailyChanges(true, false);
   },
 
   onRetryPulse() {
-    void this.loadMarketPulse(true);
+    return this.loadMarketPulse(true);
   },
 
   onModeChange(
@@ -1034,7 +1042,7 @@ Page({
         },
         () => {
           if (hasRows) {
-            wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
+            wx.nextTick(() => tracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           }
         },
       );
@@ -1054,14 +1062,14 @@ Page({
       });
       tracker?.mark("primarySetDataAt");
       this.rebuildGlanceTiles();
-      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content"));
+      wx.nextTick(() => tracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
     } catch (error) {
       if (!this.pageActive || !isCurrentRevision(this.dailyRequestOwner, "daily", revision)) return;
       this.setData({
         error: error instanceof Error ? error.message : "市场动态加载失败",
       });
       wx.nextTick(() =>
-        this.perfTracker?.observePrimary("#perf-primary-content"),
+        this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }),
       );
     } finally {
       if (
@@ -1517,7 +1525,7 @@ Page({
   },
 
   onRetryPlayers() {
-    void this.runPlayerRefresh(this.perfTracker);
+    return this.runPlayerRefresh(this.perfTracker);
   },
 
   onClearPlayerFilters() {
@@ -1701,4 +1709,6 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}, {
+  includeInteractionHandlers: ["loadMorePlayers"],
+}));

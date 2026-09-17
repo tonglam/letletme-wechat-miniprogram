@@ -8,6 +8,7 @@
     "data-status": "../../../components/data-status/data-status",
     "filter-bar": "../../../components/filter-bar/filter-bar",
     "gw-picker": "../../../components/gw-picker/gw-picker",
-    "mini-chart": "../../../components/mini-chart/mini-chart"
+    "mini-chart": "../../../components/mini-chart/mini-chart",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

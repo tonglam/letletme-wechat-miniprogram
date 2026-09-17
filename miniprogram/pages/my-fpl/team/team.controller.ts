@@ -57,7 +57,10 @@ import {
   getAppContextSnapshot,
   shouldRefreshAppContext,
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import {
   capturePageRequestTrace,
   isViewerEntryAuthorizationError,
@@ -300,7 +303,7 @@ interface EntrySummaryData {
   pastSeasonHasSelected: boolean;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     error: "",
@@ -605,7 +608,9 @@ Page({
       await this.loadData(contextChanged || resumeTabForceRefresh, trace);
       if (this.tabForceRefreshPending || this.data.tabLoading) clearResumeTab();
     } else if (this.data.hasTeamData || Boolean(this.data.emptyState) || Boolean(this.data.error)) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasTeamData && !this.data.supportAvailable),
+      }));
     }
     if (!primaryReloaded && resumeTab && resumeTab === this.data.activeTab && resumeTab !== "squad") {
       this.setData({ tabLoading: false });
@@ -648,7 +653,9 @@ Page({
     tracker.mark("primarySetDataAt");
     wx.nextTick(() => {
       if (this.pageVisible && tracker === this.perfTracker) {
-        tracker.observePrimary();
+        tracker.observePrimary("#perf-primary-content", {
+          errorVisible: Boolean(this.data.error && !this.data.hasTeamData && !this.data.supportAvailable),
+        });
       }
     });
   },
@@ -1134,7 +1141,7 @@ Page({
       playerDetailOpen: false,
       playerDetail: null,
     });
-    this.loadData(true);
+    return this.loadData(true);
   },
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
@@ -1142,7 +1149,7 @@ Page({
       event.currentTarget.dataset.tab || "squad",
     ) as EntrySummaryTab;
     this.setActiveTab(tab);
-    void this.loadTab(tab, false);
+    return this.loadTab(tab, false);
   },
 
   onTransferFilterTap(event: WechatMiniprogram.TouchEvent) {
@@ -1437,12 +1444,11 @@ Page({
     // without setting contextUnavailable. Explicit retry must force context
     // recovery instead of replaying the GW0 empty state for the backoff window.
     if (this.contextUnavailable || this.data.maxGw <= 0) {
-      void this.recoverContext("pull-refresh");
-      return;
+      return this.recoverContext("pull-refresh");
     }
     if (this.data.error) {
       if (this.perfTracker) {
-        void this.runForcedRefresh(
+        return this.runForcedRefresh(
           this.perfTracker,
           capturePageRequestTrace({
             callerSurface: "my-fpl-team-primary",
@@ -1455,7 +1461,7 @@ Page({
     }
     if (this.data.activeTab === "squad") {
       if (this.perfTracker) {
-        void this.runForcedRefresh(
+        return this.runForcedRefresh(
           this.perfTracker,
           capturePageRequestTrace({
             callerSurface: "my-fpl-team-primary",
@@ -1466,7 +1472,7 @@ Page({
       }
       return;
     }
-    void this.loadTab(this.data.activeTab, true);
+    return this.loadTab(this.data.activeTab, true);
   },
 
   onEmptyAction() {
@@ -1475,12 +1481,11 @@ Page({
       return;
     }
     if (this.contextUnavailable || this.data.maxGw <= 0) {
-      void this.recoverContext("pull-refresh");
-      return;
+      return this.recoverContext("pull-refresh");
     }
-    this.loadData(true);
+    return this.loadData(true);
   },
-});
+}));
 
 function emptySeasonChartState() {
   return {

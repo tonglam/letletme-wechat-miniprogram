@@ -48,15 +48,19 @@ test("logical and network calls share page attribution without sensitive inputs"
   const query = "query TelemetryProbe { value }";
   await graphqlRead(query, {}, { authMode: "public", cachePolicy: "reporting", trace });
   await graphqlRead(query, {}, { authMode: "public", cachePolicy: "reporting", trace });
+  await graphqlRead(query, { scope: "other" }, { authMode: "public", cachePolicy: "reporting", trace });
 
   const perf = getPerf();
   const page = perf.pagePerformance.find((item) => item.navigationId === navigationId);
-  assert.equal(page.operationCount, 2);
-  assert.equal(page.networkOperationCount, 1);
-  assert.deepEqual(perf.apiRecords.map((item) => item.source), ["network", "memory"]);
+  assert.equal(page.operationCount, 3);
+  assert.equal(page.networkOperationCount, 2);
+  assert.deepEqual(perf.apiRecords.map((item) => item.source), ["network", "memory", "network"]);
   assert.equal(perf.apiRecords[0].requestId, "req-page-trace-1");
   assert.equal(perf.apiRecords[0].callerSurface, "test-surface");
   assert.equal(perf.apiRecords[0].contextRevision, 9);
+  assert.equal(typeof perf.apiRecords[0].requestFingerprint, "string");
+  assert.equal(perf.apiRecords[0].requestFingerprint, perf.apiRecords[1].requestFingerprint);
+  assert.notEqual(perf.apiRecords[0].requestFingerprint, perf.apiRecords[2].requestFingerprint);
   const serialized = JSON.stringify(perf.apiRecords);
   assert.doesNotMatch(serialized, /token|entryId|variables|Authorization/);
 });
@@ -102,4 +106,31 @@ test("captured trace remains bound when a chained request starts after navigatio
   assert.equal(replacementRecord.networkOperationCount, 0);
   assert.equal(perf.apiRecords[0].callerSurface, "origin-chain");
   replacement.disconnect();
+});
+
+test("visible page keeps same-page action attribution after active slot is released", async () => {
+  clearPerf();
+  const previousPages = globalThis.getCurrentPages;
+  const page = {};
+  const tracker = new PagePerformanceTracker(page, "pages/test/same-page", "warm-enter");
+  page.__performanceTracker = tracker;
+  page.__performanceVisible = true;
+  globalThis.getCurrentPages = () => [page];
+  tracker.disconnect();
+
+  try {
+    await graphqlRead(
+      "query SamePageTelemetryProbe { samePageValue }",
+      {},
+      { authMode: "public", cachePolicy: "reporting" },
+    );
+    const perf = getPerf();
+    const record = perf.pagePerformance.find(
+      (item) => item.navigationId === tracker.navigationId,
+    );
+    assert.equal(record.operationCount, 1);
+    assert.equal(perf.apiRecords[0].callerSurface, "pages/test/same-page");
+  } finally {
+    globalThis.getCurrentPages = previousPages;
+  }
 });

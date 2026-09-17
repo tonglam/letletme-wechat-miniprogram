@@ -7,6 +7,7 @@ import {
   unlinkMiniProgramWebAccount,
 } from '../../../services/auth.service';
 import { switchToHome } from '../../../utils/navigation';
+import { getPageInteractionToken } from '../../../utils/page-performance';
 
 PerformancePage({
   data: {
@@ -62,6 +63,7 @@ PerformancePage({
   },
 
   async confirm() {
+    const interaction = getPageInteractionToken(this, "confirm");
     if (!this.data.email || !this.data.code) {
       this.setData({ error: '请输入邮箱和验证码' });
       return;
@@ -71,7 +73,7 @@ PerformancePage({
       const session = await confirmMiniProgramEmailLink(this.data.email, this.data.code);
       const synced = session.profile.effectiveEntrySource === 'WEB';
       wx.showToast({ title: synced ? '已关联并同步球队' : '网页账户已关联', icon: 'success' });
-      switchToHome();
+      switchToHome(interaction);
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '验证失败' });
     } finally {
@@ -80,29 +82,36 @@ PerformancePage({
   },
 
   unlinkWebAccount() {
-    wx.showModal({
-      title: '解除网页关联？',
-      content: '只会解除网页版账户关系。小程序账户、当前设备会话和小程序球队都会保留。',
-      confirmText: '解除关联',
-      confirmColor: '#c9183f',
-      success: async ({ confirm }) => {
-        if (!confirm) return;
-        this.setData({ unlinking: true, error: '' });
-        try {
-          await unlinkMiniProgramWebAccount();
-          this.setData({
-            accountLinked: false,
-            accountEmail: '',
-            email: '',
-            code: ''
-          });
-          wx.showToast({ title: '已解除网页关联', icon: 'success' });
-        } catch (error) {
-          this.setData({ error: error instanceof Error ? error.message : '解除关联失败' });
-        } finally {
-          this.setData({ unlinking: false });
-        }
-      }
+    return new Promise<void>((resolve, reject) => {
+      wx.showModal({
+        title: '解除网页关联？',
+        content: '只会解除网页版账户关系。小程序账户、当前设备会话和小程序球队都会保留。',
+        confirmText: '解除关联',
+        confirmColor: '#c9183f',
+        success: async ({ confirm }) => {
+          if (!confirm) {
+            resolve();
+            return;
+          }
+          this.setData({ unlinking: true, error: '' });
+          try {
+            await unlinkMiniProgramWebAccount();
+            this.setData({
+              accountLinked: false,
+              accountEmail: '',
+              email: '',
+              code: ''
+            });
+            wx.showToast({ title: '已解除网页关联', icon: 'success' });
+          } catch (error) {
+            this.setData({ error: error instanceof Error ? error.message : '解除关联失败' });
+          } finally {
+            this.setData({ unlinking: false });
+            resolve();
+          }
+        },
+        fail: reject,
+      });
     });
   },
 
@@ -122,4 +131,6 @@ PerformancePage({
       this.setData({ error: error instanceof Error ? error.message : '退出失败，请重试' });
     }
   },
+}, {
+  includeInteractionHandlers: ["sendCode", "confirm", "unlinkWebAccount", "logout"],
 });

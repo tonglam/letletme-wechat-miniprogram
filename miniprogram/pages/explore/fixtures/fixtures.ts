@@ -15,6 +15,10 @@ import {
 } from "../../../utils/fixture-run";
 import { durationBucket, recordExploreVisit } from "../../../utils/perf";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
+import {
+  getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
+} from "../../../utils/page-performance";
 
 type FixturesErrorWorkload = "home" | "fixtures" | "player-stats";
 
@@ -28,6 +32,18 @@ function workloadForFixturesError(
       : undefined;
   if (workload === "player-stats") return "player-stats";
   return season ? "fixtures" : "home";
+}
+
+function isPrimaryFixturesError(data: object | undefined): boolean {
+  const value = data as {
+    error?: unknown;
+    runCards?: unknown;
+  } | undefined;
+  return (
+    typeof value?.error === "string" &&
+    value.error.length > 0 &&
+    (!Array.isArray(value.runCards) || value.runCards.length === 0)
+  );
 }
 
 const FALLBACK_MAX_EVENT = 38;
@@ -165,6 +181,11 @@ PerformancePage({
     startEvent: 1,
     maxEvent: FALLBACK_MAX_EVENT,
     horizon: 5 as 3 | 5 | 8,
+    displayStartEvent: 1,
+    displayHorizon: 5 as 3 | 5 | 8,
+    displayWindowLabel: "",
+    targetWindowLabel: "",
+    refreshing: false,
     sortOrder: "easiest" as FixtureRunSort,
     runs: [] as FixtureRun[],
     runCards: [] as FixtureRunCard[],
@@ -253,7 +274,18 @@ PerformancePage({
       this.teams = [];
       this.loadedWindowKey = "";
       this.selectedWindowByUser = false;
-      this.setData({ startEvent: gw, maxEvent: FALLBACK_MAX_EVENT, runs: [], runCards: [], glanceCards: [] });
+      this.setData({
+        startEvent: gw,
+        maxEvent: FALLBACK_MAX_EVENT,
+        displayStartEvent: gw,
+        displayHorizon: this.data.horizon,
+        displayWindowLabel: "",
+        targetWindowLabel: "",
+        refreshing: false,
+        runs: [],
+        runCards: [],
+        glanceCards: [],
+      });
       return true;
     }
     // Keep an explicitly selected historical window across same-season
@@ -264,8 +296,15 @@ PerformancePage({
     this.setData({ startEvent });
     const windowKey = `${season || "unknown"}:${startEvent}:${this.data.horizon}`;
     if (this.teams.length && this.loadedWindowKey === windowKey) {
-      this.rebuild();
-    } else {
+      this.setData({
+        displayStartEvent: startEvent,
+        displayHorizon: this.data.horizon,
+        displayWindowLabel: `GW${startEvent} 起 ${this.data.horizon} 轮`,
+      });
+      this.rebuild(() => {
+        getCurrentPagePerformanceTracker()?.mark("defaultContentAt");
+      });
+    } else if (!this.teams.length) {
       this.fixtures = [];
       this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
@@ -278,7 +317,8 @@ PerformancePage({
       callerSurface: "explore-fixtures",
       trigger: forceRefresh ? "refresh" : "load"
     }),
-    lifecycleRevision?: number
+    lifecycleRevision?: number,
+    interactionHandler?: "onGwChange" | "onHorizonChange",
   ) {
     const ownerRevision = lifecycleRevision ?? this.lifecycleRevision;
     const requestId = ++this.requestId;
@@ -287,34 +327,79 @@ PerformancePage({
       && ownerRevision === this.lifecycleRevision
       && requestId === this.requestId
     );
-    if (!isActiveRequest()) return;
+    const interaction = interactionHandler
+      ? getPageInteractionToken(this, interactionHandler)
+      : null;
+    const failSupersededInteraction = () => {
+      if (interaction && interaction.tracker.hasPendingInteraction(interaction.interactionId)) {
+        interaction.tracker.completeInteraction(interaction.interactionId, "failed");
+      }
+    };
+    if (!isActiveRequest()) {
+      failSupersededInteraction();
+      return;
+    }
     const loadStart = Date.now();
     const season = getApp<IAppOption>().globalData.season;
     const startEvent = this.data.startEvent;
     const horizon = this.data.horizon;
     const windowKey = `${season || "unknown"}:${startEvent}:${horizon}`;
-    const hadLastGood = this.teams.length > 0 && this.loadedWindowKey === windowKey;
+    // Keep any complete window as the last-good view while a different target
+    // window is loading.  A failed 8-round request must not turn a usable
+    // 5-round page into an empty screen or relabel the old cards as new data.
+    const hadLastGood =
+      this.teams.length > 0 &&
+      this.loadedWindowKey.length > 0 &&
+      this.loadedSeason === season;
     if (!hadLastGood) {
       this.fixtures = [];
       this.setData({ runs: [], runCards: [], glanceCards: [] });
     }
     this.setData({
-      loading: !hadLastGood,
+      // Loading describes the requested window even when the retained matrix
+      // remains visible. The template keeps that matrix mounted whenever
+      // `refreshing` is true, so controls cannot appear settled above stale
+      // rows without an explicit update indicator.
+      loading: true,
+      // Keep the last-good matrix visible, but make the requested/displayed
+      // window difference explicit while the new target is in flight.
+      refreshing: hadLastGood,
       error: "",
       errorWorkload: season ? "fixtures" : "home",
+      targetWindowLabel: `GW${startEvent} 起 ${horizon} 轮`,
     });
     try {
       const [fixtures, teams] = await Promise.all([
         getFixtureWindow(startEvent, horizon, season, forceRefresh, trace),
         getTeamList(season, forceRefresh, trace)
       ]);
-      if (!isActiveRequest()) return;
+      if (!isActiveRequest()) {
+        failSupersededInteraction();
+        return;
+      }
       this.fixtures = fixtures;
       this.teams = teams;
       this.loadedSeason = season;
       this.loadedWindowKey = windowKey;
-      this.setData({ loading: false, maxEvent: FALLBACK_MAX_EVENT, startEvent });
-      this.rebuild();
+      this.setData({
+        loading: false,
+        refreshing: false,
+        maxEvent: FALLBACK_MAX_EVENT,
+        startEvent,
+        displayStartEvent: startEvent,
+        displayHorizon: horizon,
+        displayWindowLabel: `GW${startEvent} 起 ${horizon} 轮`,
+      });
+      this.rebuild(() => {
+        // The first successful matrix commit is the default-content boundary.
+        // Mark it here as well as on cached context refreshes so cold entries
+        // expose a real stage timestamp to the performance report.
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        tracker?.observeInteractionVisible("#perf-primary-content", {
+          interactionId: interaction?.interactionId,
+        });
+      });
       // Composition settled (plan §9): window and duration only — team
       // names never enter a record.
       recordExploreVisit({
@@ -326,34 +411,53 @@ PerformancePage({
         durationBucket: durationBucket(Date.now() - loadStart)
       });
     } catch (error) {
-      if (!isActiveRequest()) return;
+      if (!isActiveRequest()) {
+        failSupersededInteraction();
+        return;
+      }
       // Last-good retention: a failed refresh keeps the previous cards.
       this.setData({
         loading: false,
+        refreshing: false,
         errorWorkload: workloadForFixturesError(error, season),
         error: hadLastGood
-          ? "刷新失败，当前显示上次成功结果"
+          ? `目标 ${this.data.targetWindowLabel || `GW${startEvent} 起 ${horizon} 轮`} 加载失败，当前显示 ${this.data.displayWindowLabel || "上次成功结果"}`
           : error instanceof Error ? error.message : "赛程加载失败"
+      }, () => {
+        if (!interaction) return;
+        getCurrentPagePerformanceTracker()?.observeInteractionVisible(
+          hadLastGood ? "#perf-fixture-stale-error" : "#perf-fixture-error",
+          { errorVisible: true, interactionId: interaction.interactionId },
+        );
       });
     }
   },
 
-  rebuild() {
+  rebuild(callback?: () => void) {
     if (!this.teams.length) {
-      this.setData({ runs: [] });
-      this.setData({ runCards: [], glanceCards: [] });
+      this.setData(
+        { runs: [], runCards: [], glanceCards: [] },
+        callback,
+      );
       return;
     }
-    const runs = buildFixtureRuns(this.fixtures, this.teams, this.data.startEvent, this.data.horizon);
-    this.setData({ runs });
-    this.applyView();
+    const startEvent = this.data.displayStartEvent || this.data.startEvent;
+    const horizon = this.data.displayHorizon || this.data.horizon;
+    const runs = buildFixtureRuns(this.fixtures, this.teams, startEvent, horizon);
+    const { runCards, glanceCards } = buildFixturesView(
+      runs,
+      startEvent,
+      horizon,
+      this.data.sortOrder,
+    );
+    this.setData({ runs, runCards, glanceCards }, callback);
   },
 
   applyView() {
     const { runCards, glanceCards } = buildFixturesView(
       this.data.runs,
-      this.data.startEvent,
-      this.data.horizon,
+      this.data.displayStartEvent || this.data.startEvent,
+      this.data.displayHorizon || this.data.horizon,
       this.data.sortOrder
     );
     this.setData({ runCards, glanceCards });
@@ -381,22 +485,22 @@ PerformancePage({
     const currentGw = Math.max(1, Number(getApp<IAppOption>().globalData.gw) || 1);
     this.selectedWindowByUser = startEvent !== currentGw;
     this.setData({ startEvent });
-    void this.load(false, capturePageRequestTrace({
+    return this.load(false, capturePageRequestTrace({
       callerSurface: "explore-fixtures",
       trigger: "tab"
-    }));
+    }), undefined, "onGwChange");
   },
 
   onHorizonChange(event: WechatMiniprogram.BaseEvent<WechatMiniprogram.IAnyObject, { horizon: number }>) {
     this.setData({ horizon: normalizeHorizon(Number(event.currentTarget.dataset.horizon)) });
-    void this.load(false, capturePageRequestTrace({
+    return this.load(false, capturePageRequestTrace({
       callerSurface: "explore-fixtures",
       trigger: "tab"
-    }));
+    }), undefined, "onHorizonChange");
   },
 
   onRetry() {
-    void this.runForcedRefresh();
+    return this.runForcedRefresh();
   },
 
   async runForcedRefresh() {
@@ -411,6 +515,7 @@ PerformancePage({
       if (!this.pageVisible || lifecycleRevision !== this.lifecycleRevision) return;
       this.setData({
         loading: false,
+        refreshing: false,
         error: error instanceof Error ? error.message : "赛季和比赛轮信息加载失败"
       });
     } finally {
@@ -419,4 +524,7 @@ PerformancePage({
       }
     }
   }
+}, {
+  explicitInteractionHandlers: ["onGwChange", "onHorizonChange"],
+  primaryError: isPrimaryFixturesError,
 });

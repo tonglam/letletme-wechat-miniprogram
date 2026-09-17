@@ -24,7 +24,11 @@ export interface ApiRecord {
   forceReason?: string;
   contextRevision?: number;
   cacheVariantHash?: string;
+  /** Stable redacted hash of the full operation + variables + audience. */
+  requestFingerprint?: string;
   requestId?: string;
+  statusCode?: number;
+  code?: string;
   ts: number;
 }
 
@@ -38,6 +42,7 @@ export interface ApiRecordDetails {
   forceReason?: string;
   contextRevision?: number;
   cacheVariantHash?: string;
+  requestFingerprint?: string;
   requestId?: string;
   statusCode?: number;
   code?: string;
@@ -53,13 +58,37 @@ export interface PagePerformanceRecord {
   primaryResponseAt?: number;
   primarySetDataAt?: number;
   primaryViewportVisibleAt?: number;
+  /** First complete default-content commit, before optional follow-up work. */
+  defaultContentAt?: number;
   secondaryCompleteAt?: number;
+  /** Optional/deep content became visible for the current interaction. */
+  onDemandVisibleAt?: number;
+  /** Error state became visible; kept separate from a soft timeout boundary. */
+  errorVisibleAt?: number;
   /** Final user-visible completion boundary. Never precedes primary visible. */
   completeAt?: number;
   softFailureAt?: number;
+  interactions?: PageInteractionRecord[];
   operationCount: number;
   networkOperationCount: number;
   ts: number;
+}
+
+/**
+ * A user event starts inside the page handler, after DevTools has dispatched
+ * the event.  The record is intentionally kept beside the navigation trace so
+ * a cross-page action can be joined to the destination page's marker without
+ * using CLI/query/screenshot wall time as UX latency.
+ */
+export interface PageInteractionRecord {
+  interactionId: string;
+  handler: string;
+  target?: string;
+  startedAt: number;
+  handlerCompletedAt?: number;
+  resultVisibleAt?: number;
+  errorVisibleAt?: number;
+  status: "started" | "completed" | "failed";
 }
 
 export interface LiveTransitionRecord {
@@ -261,7 +290,10 @@ export function recordApi(
     forceReason: details.forceReason,
     contextRevision: details.contextRevision,
     cacheVariantHash: details.cacheVariantHash,
+    requestFingerprint: details.requestFingerprint,
     requestId: details.requestId,
+    statusCode: details.statusCode,
+    code: details.code,
     ts: Date.now()
   });
   const authRequest = name.startsWith("auth:");
@@ -296,6 +328,7 @@ export function recordPagePerformance(
     const previous = data.pagePerformance[existing];
     data.pagePerformance[existing] = {
       ...record,
+      interactions: record.interactions ?? previous.interactions,
       operationCount: Math.max(record.operationCount, previous.operationCount),
       networkOperationCount: Math.max(
         record.networkOperationCount,
@@ -309,7 +342,11 @@ export function recordPagePerformance(
     }
     data.pagePerformance.push({ ...record, ts: Date.now() });
   }
-  const completion = record.completeAt ?? record.softFailureAt;
+  // A soft timeout is only a diagnostic/UI boundary. It must never emit a
+  // final route-ready sample because the request may still succeed and paint
+  // the intended content later. Final telemetry comes from actual content or
+  // error visibility.
+  const completion = record.completeAt ?? record.errorVisibleAt;
   if (
     options.routeReadyFinal === true &&
     completion !== undefined &&

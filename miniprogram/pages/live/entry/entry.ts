@@ -63,6 +63,9 @@ import {
 import {
   PagePerformanceTracker,
   consumeAppBackgroundResume,
+  getPageInteractionToken,
+  instrumentPageInteractions,
+  runPageInteractionDelegation,
 } from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import type { PageRequestTrace } from "../../../services/graphql.service";
@@ -256,7 +259,7 @@ function formatTime(date: Date): string {
   return `${hours}:${minutes}`;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     refreshing: false,
@@ -428,7 +431,7 @@ Page({
       this.liveRefresh?.stop();
       this.setData(noLiveEventState(), () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
       });
     }
     this.syncDisplayState();
@@ -439,7 +442,9 @@ Page({
     this.liveRefresh = createLiveRefreshController({
       isEligible: () => this.shouldAutoRefresh(),
       getAcceptedSnapshot: () => this.liveSnapshot,
-      probe: () => getLiveSnapshot(),
+      // Automatic publication probes must not inherit the completed page
+      // navigation trace; only an explicit user refresh owns that trace.
+      probe: () => getLiveSnapshot(undefined, null),
       getNextRefreshAt: () =>
         firstRefreshDeadline(
           this.data.scoreNextRefreshAt,
@@ -644,7 +649,9 @@ Page({
       resumed &&
       (this.data.hasData || this.data.noPicks || this.data.emptyState)
     ) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasData && !this.data.emptyState && !this.data.noPicks),
+      }));
     }
     if (
       resumed &&
@@ -805,7 +812,7 @@ Page({
       },
       () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
       },
     );
     this.syncDisplayState();
@@ -1007,7 +1014,7 @@ Page({
       this.setData(
         { loading: false, error: "", emptyState: "entry", noPicks: false },
         () => {
-          wx.nextTick(() => this.perfTracker?.observePrimary());
+          wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
         },
       );
       this.syncDisplayState();
@@ -1023,7 +1030,7 @@ Page({
     if (!eventId) {
       this.liveRefresh?.stop();
       this.setData(noLiveEventState(), () => {
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
       });
       this.syncDisplayState();
       return Promise.resolve();
@@ -1209,7 +1216,10 @@ Page({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              navigationTracker?.mark("defaultContentAt");
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", {
+                errorVisible: Boolean(this.data.error && !this.data.hasData && !this.data.emptyState && !this.data.noPicks),
+              }));
             },
           );
           this.loadTransfersAfterLive = false;
@@ -1309,7 +1319,8 @@ Page({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              navigationTracker?.mark("defaultContentAt");
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
             },
           );
           if (hasOfficialHeadline || hasRefreshDeadline(scoreNextRefreshAt)) {
@@ -1399,6 +1410,7 @@ Page({
           priorSnapshotNextRefreshAt,
         );
         this.cachedLiveStoredAt = liveResult.servedStoredAt;
+        const includeTransfersForRequest = this.loadTransfersAfterLive;
         this.setData(
           {
             hasData: true,
@@ -1461,22 +1473,30 @@ Page({
           },
           () => {
             navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            navigationTracker?.mark("defaultContentAt");
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           },
         );
         this.liveRefresh?.sync();
-        if (
-          this.pageVisible &&
-          requestId === this.liveRequestId &&
-          this.loadTransfersAfterLive
-        ) {
+        if (this.pageVisible && requestId === this.liveRequestId && includeTransfersForRequest) {
           this.loadTransfersAfterLive = false;
-          await this.loadTransfers(
+          navigationTracker?.expectSecondaryCompletion();
+          const transfersRequest = this.loadTransfers(
             entryId,
             eventId,
             options.forceRefresh === true,
             requestTrace,
           );
+          void transfersRequest.finally(() => {
+            if (
+              navigationTracker &&
+              this.pageVisible &&
+              this.perfTracker === navigationTracker &&
+              requestId === this.liveRequestId
+            ) {
+              navigationTracker.mark("secondaryCompleteAt");
+            }
+          });
         }
         this.syncDisplayState();
       } catch (error) {
@@ -1500,7 +1520,7 @@ Page({
           });
         }
         this.loadTransfersAfterLive = false;
-        wx.nextTick(() => navigationTracker?.observePrimary());
+        wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
         this.syncDisplayState();
       } finally {
         if (this.pageVisible && requestId === this.liveRequestId) {
@@ -1704,16 +1724,15 @@ Page({
       "pages/live/entry/entry",
       "refresh",
     );
-    void this.runForcedRefresh(this.perfTracker);
+    return this.runForcedRefresh(this.perfTracker);
   },
 
   onEntryLookupAction() {
     if (this.data.entryLookupRetryable) {
-      this.onRetry();
-      return;
+      return runPageInteractionDelegation(this, () => this.onRetry());
     }
     if (isDeterministicEntryIdentityFailure(this.data.entryLookupStatus)) {
-      this.onChooseEntry();
+      return runPageInteractionDelegation(this, () => this.onChooseEntry());
     }
   },
 
@@ -1724,15 +1743,22 @@ Page({
   onOpenPlayer(
     event: WechatMiniprogram.CustomEvent<{ player: LivePlayerRow }>,
   ) {
+    const interactionId = getPageInteractionToken(this, "onOpenPlayer")?.interactionId;
     const player = event.detail.player;
     if (!player) return;
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
+    }, () => {
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     });
   },
 
   onPitchPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
+    const interactionId = getPageInteractionToken(this, "onPitchPlayerTap")?.interactionId;
     const playerId = String(event.detail?.playerId || "");
     if (!playerId) return;
     const player = findLivePlayerForPitch(
@@ -1744,6 +1770,11 @@ Page({
     this.setData({
       playerDetailOpen: true,
       playerDetail: buildPlayerLiveDetail(player),
+    }, () => {
+      wx.nextTick(() => this.perfTracker?.observeOnDemandVisible("#perf-on-demand-content", {
+        errorVisible: false,
+        interactionId,
+      }));
     });
   },
 
@@ -1858,7 +1889,9 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}, {
+  explicitInteractionHandlers: ["onOpenPlayer", "onPitchPlayerTap"],
+}));
 
 function emptyLiveOverlayState(): {
   playerDetailOpen: false;

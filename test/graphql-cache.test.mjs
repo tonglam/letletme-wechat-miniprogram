@@ -18,6 +18,9 @@ import {
 import {
   buildFixtureWindowRequest,
   CORE_EVENT_FIXTURE_SCHEDULE_QUERY,
+  FIXTURE_WINDOW_MAX_ROOT_FIELDS,
+  mergeFixtureWindowResponses,
+  splitFixtureWindowEvents,
 } from "../miniprogram/services/fixture.service.ts";
 import {
   LIVE_MATCHES_QUERY,
@@ -62,6 +65,56 @@ test("fixture windows use one production-compatible aliased request", () => {
   );
   assert.match(request.query, /fragment FixtureWindowFields on Fixture/);
   assert.doesNotMatch(request.query, /fixtures\(limit:/);
+});
+
+test("eight-round fixture windows split at the GraphQL root-field budget", () => {
+  const batches = splitFixtureWindowEvents([31, 32, 33, 34, 35, 36, 37, 38]);
+  assert.equal(FIXTURE_WINDOW_MAX_ROOT_FIELDS, 5);
+  assert.deepEqual(batches, [
+    [31, 32, 33, 34, 35],
+    [36, 37, 38],
+  ]);
+  for (const batch of batches) {
+    assert.ok(batch.length <= FIXTURE_WINDOW_MAX_ROOT_FIELDS);
+    assert.equal(
+      (buildFixtureWindowRequest(batch).query.match(/eventFixtures\(eventId:/g) || []).length,
+      batch.length,
+    );
+  }
+});
+
+test("fixture window merge preserves event order and rejects partial batches", () => {
+  const fixture = (id) => ({
+    id,
+    code: id,
+    kickoffTime: null,
+    finished: false,
+    started: false,
+    minutes: 0,
+    homeTeam: { id: id + 100, name: `Home ${id}`, shortName: `H${id}` },
+    awayTeam: { id: id + 200, name: `Away ${id}`, shortName: `A${id}` },
+    homeScore: null,
+    awayScore: null,
+    homeTeamDifficulty: 2,
+    awayTeamDifficulty: 4,
+  });
+  const batches = [[31, 32], [33]];
+  const merged = mergeFixtureWindowResponses(batches, [
+    { event0: [fixture(1)], event1: [fixture(2)] },
+    { event0: [fixture(3)] },
+  ]);
+  assert.deepEqual(
+    merged.map((item) => [item.event, item.id]),
+    [[31, 1], [32, 2], [33, 3]],
+  );
+  assert.throws(
+    () => mergeFixtureWindowResponses(batches, [{ event0: [fixture(1)] }, { event0: [fixture(3)] }]),
+    /GW32赛程数据不完整/,
+  );
+  assert.throws(
+    () => mergeFixtureWindowResponses(batches, [{ event0: "bad", event1: [] }, { event0: [] }]),
+    /GW31赛程数据格式异常/,
+  );
 });
 
 test("core event fixture schedule is a named public fixture operation", () => {
@@ -148,6 +201,14 @@ test("sends operationName and classifies public/session operations explicitly", 
     "session",
   );
   assert.equal(getGraphQLOperationPolicy("EntryHistory").authMode, "session");
+  assert.equal(
+    getGraphQLOperationPolicy("GetEntryTransferHistory").authMode,
+    "public",
+  );
+  assert.equal(
+    getGraphQLOperationPolicy("EntryTransferHistory").authMode,
+    "public",
+  );
   assert.equal(
     getGraphQLOperationPolicy("UnknownPrivateQuery").cachePolicy,
     "network-only",

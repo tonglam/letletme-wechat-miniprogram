@@ -89,6 +89,14 @@ interface GameweekSummaryData {
   playerDetail: PlayerLiveDetailView | null;
 }
 
+function gameweekPrimaryError(data: object | undefined): boolean {
+  const value = data as Record<string, unknown> | undefined;
+  if (typeof value?.error === "string" && value.error.length > 0) return true;
+  const errorKey = `${String(value?.activeTab || "summary")}Error`;
+  const sectionError = value?.[errorKey];
+  return typeof sectionError === "string" && sectionError.length > 0;
+}
+
 PerformancePage({
   data: {
     loading: false,
@@ -351,7 +359,7 @@ PerformancePage({
       shareText: ""
     });
     setPageTitle(`GW${next} 总结`);
-    this.loadData();
+    return this.loadData();
   },
 
   onTabTap(event: WechatMiniprogram.TouchEvent) {
@@ -374,11 +382,11 @@ PerformancePage({
   },
 
   onRefreshTap() {
-    this.refreshData();
+    return this.refreshData();
   },
 
   onRetry() {
-    this.loadData();
+    return this.loadData();
   },
 
   onDreamPlayerTap(event: WechatMiniprogram.CustomEvent<{ playerId: string }>) {
@@ -474,6 +482,8 @@ PerformancePage({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   }
+}, {
+  primaryError: gameweekPrimaryError,
 });
 
 function mapGameweekData(

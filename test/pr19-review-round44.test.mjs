@@ -14,6 +14,7 @@ test("team detail Retry forces the cached team read", () => {
   const page = read("miniprogram/pages/data/team-detail/team-detail.ts");
   const service = read("miniprogram/services/team.service.ts");
   assert.match(page, /getTeamSummary\(this\.data\.teamId, season, forceRefresh, trace\)/);
+  assert.match(page, /onRetry\(\)[\s\S]*return this\.loadData\("refresh", true\)/);
   assert.match(service, /cachePolicy: "team-directory"[\s\S]*forceRefresh/);
 });
 

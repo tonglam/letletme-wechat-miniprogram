@@ -5,6 +5,7 @@
     "app-loading": "../../../components/app-loading/app-loading",
     "app-empty-state": "../../../components/app-empty-state/app-empty-state",
     "app-error-state": "../../../components/app-error-state/app-error-state",
-    "entry-card": "../../../components/entry-card/entry-card"
+    "entry-card": "../../../components/entry-card/entry-card",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   }
 }

@@ -15,7 +15,10 @@ import {
   getAppContextSnapshot,
   shouldRefreshAppContext,
 } from "../../../services/app-context.service";
-import { PagePerformanceTracker } from "../../../utils/page-performance";
+import {
+  PagePerformanceTracker,
+  instrumentPageInteractions,
+} from "../../../utils/page-performance";
 import { observeSoftTimeout } from "../../../utils/page-request";
 import {
   canReplaceLiveMatchdayLkg,
@@ -829,7 +832,7 @@ export function contextDeadlineTargetAt(
   return deadline <= now ? now + 30_000 : deadline;
 }
 
-Page({
+Page(instrumentPageInteractions({
   data: {
     loading: false,
     refreshing: false,
@@ -994,7 +997,7 @@ Page({
         const head = await getLiveMatchdayHead(
           this.currentEventId,
           true,
-          undefined,
+          null,
           this.loadedSeason,
         );
         if (!head) {
@@ -1007,7 +1010,7 @@ Page({
           const liveResult = await getLiveMatchByStatusSnapshot(
             "all",
             true,
-            undefined,
+            null,
             this.currentEventId,
             this.loadedSeason,
           );
@@ -1257,7 +1260,7 @@ Page({
       },
       () => {
         this.perfTracker?.mark("primarySetDataAt");
-        wx.nextTick(() => this.perfTracker?.observePrimary());
+        wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", { errorVisible: true }));
       },
     );
     this.syncDisplayState();
@@ -1516,7 +1519,9 @@ Page({
       return;
     }
     if (resumed && (this.data.hasData || Boolean(this.data.error))) {
-      wx.nextTick(() => this.perfTracker?.observePrimary());
+      wx.nextTick(() => this.perfTracker?.observePrimary("#perf-primary-content", {
+        errorVisible: Boolean(this.data.error && !this.data.hasData),
+      }));
     }
     this.armKickoffTransition(this.coreMatches);
     if (
@@ -1777,7 +1782,7 @@ Page({
             },
             () => {
               navigationTracker?.mark("primarySetDataAt");
-              wx.nextTick(() => navigationTracker?.observePrimary());
+              wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
             },
           );
           this.liveRefresh?.sync();
@@ -1836,7 +1841,7 @@ Page({
           this.liveRefresh?.stop();
           this.setData(noScheduleState(), () => {
             navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           });
           this.syncDisplayState();
           return false;
@@ -1899,7 +1904,7 @@ Page({
           },
           () => {
             navigationTracker?.mark("primarySetDataAt");
-            wx.nextTick(() => navigationTracker?.observePrimary());
+            wx.nextTick(() => navigationTracker?.observePrimary("#perf-primary-content", { errorVisible: false }));
           },
         );
         this.liveRefresh?.sync();
@@ -2110,7 +2115,7 @@ Page({
       "pages/live/match/match",
       "refresh",
     );
-    void this.runForcedRefresh(this.perfTracker, false);
+    return this.runForcedRefresh(this.perfTracker, false);
   },
 
   onCopyMatchShare(
@@ -2214,4 +2219,4 @@ Page({
   onCloseShareSheet() {
     this.setData({ shareSheetOpen: false });
   },
-});
+}));

@@ -45,6 +45,27 @@ interface FixtureWindowResponse {
   [alias: string]: FixturePayload[];
 }
 
+/**
+ * The GraphQL gateway limits one operation to five root fields.  Keep the
+ * client-side window API at the requested 3/5/8 rounds while sending
+ * production-compatible batches for the eight-round view.
+ */
+export const FIXTURE_WINDOW_MAX_ROOT_FIELDS = 5;
+
+export function splitFixtureWindowEvents(
+  events: readonly number[],
+  maxRootFields = FIXTURE_WINDOW_MAX_ROOT_FIELDS,
+): number[][] {
+  if (!Number.isSafeInteger(maxRootFields) || maxRootFields <= 0) {
+    throw new Error("赛程请求批大小无效");
+  }
+  const batches: number[][] = [];
+  for (let index = 0; index < events.length; index += maxRootFields) {
+    batches.push(Array.from(events.slice(index, index + maxRootFields)));
+  }
+  return batches;
+}
+
 export function buildFixtureWindowRequest(events: number[]): {
   query: string;
   variables: Record<string, number>;
@@ -105,6 +126,37 @@ function mapFixturePayload(fixture: FixturePayload, event: number): Fixture {
   };
 }
 
+/**
+ * Validate and merge each aliased batch without converting a missing alias
+ * into an empty gameweek.  Keeping this pure makes the partial-response and
+ * ordering contract testable without mocking wx.request.
+ */
+export function mergeFixtureWindowResponses(
+  batches: readonly (readonly number[])[],
+  responses: readonly FixtureWindowResponse[],
+): Fixture[] {
+  if (responses.length !== batches.length) {
+    throw new Error("赛程批次响应不完整，请稍后重试");
+  }
+  return batches.flatMap((batch, batchIndex) => {
+    const data = responses[batchIndex] as unknown as Record<string, unknown> | undefined;
+    if (!data || typeof data !== "object") {
+      throw new Error("赛程批次响应格式异常，请稍后重试");
+    }
+    return batch.flatMap((event, eventIndex) => {
+      const alias = `event${eventIndex}`;
+      if (!Object.prototype.hasOwnProperty.call(data, alias)) {
+        throw new Error(`GW${event}赛程数据不完整，请稍后重试`);
+      }
+      const payload = data[alias];
+      if (!Array.isArray(payload)) {
+        throw new Error(`GW${event}赛程数据格式异常，请稍后重试`);
+      }
+      return payload.map((fixture) => mapFixturePayload(fixture as FixturePayload, event));
+    });
+  });
+}
+
 export async function getCoreEventFixtureSchedule(
   event: number | undefined,
   season: string | undefined,
@@ -155,15 +207,22 @@ export async function getFixtureWindow(
 ): Promise<Fixture[]> {
   if (!season) throw new Error("赛季信息暂时不可用，请稍后重试");
   const events = fixtureWindowEvents(startEvent, horizon);
-  const request = buildFixtureWindowRequest(events);
-  const data = await graphqlRequest<FixtureWindowResponse>(request.query, request.variables, {
-    cachePolicy: "fixtures",
-    season,
-    forceRefresh,
-    trace
-  });
-
-  return events.flatMap((event, index) =>
-    (data[`event${index}`] || []).map((fixture) => mapFixturePayload(fixture, event))
+  const batches = splitFixtureWindowEvents(events);
+  const responses = await Promise.all(
+    batches.map(async (batch) => {
+      const request = buildFixtureWindowRequest(batch);
+      return graphqlRequest<FixtureWindowResponse>(
+        request.query,
+        request.variables,
+        {
+          cachePolicy: "fixtures",
+          season,
+          forceRefresh,
+          trace,
+        },
+      );
+    }),
   );
+
+  return mergeFixtureWindowResponses(batches, responses);
 }

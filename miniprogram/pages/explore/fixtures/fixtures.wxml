@@ -23,12 +23,18 @@
     </view>
   </view>
 
-  <app-loading wx:if="{{loading}}" text="加载赛程" />
-  <view wx:elif="{{error && !runCards.length}}" class="section">
-    <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
+  <view wx:if="{{refreshing}}" class="section fixture-refreshing" aria-live="polite">
+    <text>正在更新 {{targetWindowLabel}} · 当前显示 {{displayWindowLabel}}</text>
+  </view>
+
+  <app-loading wx:if="{{loading && !refreshing}}" text="加载赛程" />
+  <view id="perf-primary-content" wx:elif="{{error && !runCards.length}}" class="section">
+    <view id="perf-fixture-error">
+      <app-error-state message="{{error}}" workload="{{errorWorkload}}" bind:retry="onRetry" />
+    </view>
   </view>
   <block wx:else>
-    <data-status wx:if="{{error}}" status="stale" message="{{error}}" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
+    <data-status id="perf-fixture-stale-error" wx:if="{{error}}" status="stale" message="{{error}}" workload="{{errorWorkload}}" transient="{{true}}" showRetry="{{true}}" bind:retry="onRetry" />
     <view wx:if="{{glanceCards.length}}" class="section glance-grid">
       <view
         wx:for="{{glanceCards}}"

@@ -44,7 +44,7 @@ test("price warm resume only refetches an interrupted stage", () => {
   assert.match(onShow, /if \(resumeStage === "daily"\)[\s\S]*loadDailyChanges\(resumeStageForceRefresh\)/);
   assert.match(onShow, /if \(resumeStage === "player"\)[\s\S]*ensurePlayerModeReady\(\)/);
   assert.match(onShow, /if \(resumeStage === "history"[\s\S]*loadSelectedPlayerHistory/);
-  assert.match(onShow, /wx\.nextTick\(\(\) => tracker\.observePrimary\(selector\)\)/);
+  assert.match(onShow, /wx\.nextTick\(\(\) => tracker\.observePrimary\(selector,/);
 });
 
 test("price date changes and retries create an isolated refresh trace", () => {

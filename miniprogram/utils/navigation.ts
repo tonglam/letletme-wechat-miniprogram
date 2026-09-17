@@ -1,4 +1,8 @@
 import { routes } from "../config/routes";
+import {
+  handoffPageInteraction,
+  type PageInteractionToken,
+} from "./page-performance";
 
 function encodeQuery(query: Record<string, string | number | undefined>): string {
   const parts = Object.keys(query)
@@ -15,7 +19,12 @@ export function setPageTitle(title: string): void {
 }
 
 export function navigateTo(path: string, query: Record<string, string | number | undefined> = {}): void {
-  wx.navigateTo({ url: `${path}${encodeQuery(query)}` });
+  const url = `${path}${encodeQuery(query)}`;
+  const handoff = handoffPageInteraction(url);
+  wx.navigateTo({
+    url,
+    fail: () => handoff?.rollback(),
+  });
 }
 
 export function goToEntrySearch(): void {
@@ -42,10 +51,18 @@ export function goToLiveEntry(entryId?: number): void {
   navigateTo(routes.liveEntry, { entry: entryId });
 }
 
-export function switchToHome(): void {
-  wx.redirectTo({ url: routes.home });
+export function switchToHome(sourceToken?: PageInteractionToken | null): void {
+  const handoff = handoffPageInteraction(routes.home, sourceToken);
+  wx.redirectTo({
+    url: routes.home,
+    fail: () => handoff?.rollback(),
+  });
 }
 
 export function switchToLive(): void {
-  wx.redirectTo({ url: routes.liveIndex });
+  const handoff = handoffPageInteraction(routes.liveIndex);
+  wx.redirectTo({
+    url: routes.liveIndex,
+    fail: () => handoff?.rollback(),
+  });
 }

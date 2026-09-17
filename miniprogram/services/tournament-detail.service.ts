@@ -172,7 +172,7 @@ export async function getTournamentDetailDesk(
   entryId: number,
   eventId: number | null = null,
   forceRefresh = false,
-  trace?: PageRequestTrace,
+  trace?: PageRequestTrace | null,
 ): Promise<TournamentDetailDesk | null> {
   const data = await graphqlRequest<{
     tournamentDetailDesk: TournamentDetailDesk | null;
@@ -188,7 +188,7 @@ export async function getTournamentOfficialH2H(
   tournamentId: number,
   eventId: number,
   forceRefresh = false,
-  trace?: PageRequestTrace,
+  trace?: PageRequestTrace | null,
 ): Promise<H2HBoard> {
   const data = await graphqlRequest<{
     tournamentOfficialH2H: H2HBoard;
@@ -205,7 +205,7 @@ export async function getTournamentOfficialH2HHistory(
   eventId: number,
   limit = 100,
   forceRefresh = false,
-  trace?: PageRequestTrace,
+  trace?: PageRequestTrace | null,
 ): Promise<TournamentOfficialH2HHistory> {
   const data = await graphqlRequest<{
     tournamentOfficialH2HHistory: TournamentOfficialH2HHistory;

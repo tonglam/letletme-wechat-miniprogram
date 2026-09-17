@@ -213,6 +213,16 @@ test("home first viewport order matches the web: deadline, personal desk, GW sta
       fixtures > market,
     "web order: deadline, personal desk, GW stats, dream team, transfer desk, fixtures last",
   );
+  assert.match(
+    template,
+    /id="perf-primary-home-content" class="deadline-card scoreboard section"/,
+    "the first loaded business card is the home viewport measurement anchor",
+  );
+  assert.match(
+    page,
+    /const primarySelector = this\.data\.error[\s\S]*#perf-primary-home-error[\s\S]*#perf-primary-home-content[\s\S]*observePrimary\(primarySelector/,
+    "home viewport timing must observe the visible deadline card or its primary error",
+  );
   // Two market cards mirror the web HomePriceChangeCarousel + HomeMarketCarousel,
   // stacked price-first per the page owner's direction (身价变化 above 持有率变化).
   assert.match(template, /持有率变化/);

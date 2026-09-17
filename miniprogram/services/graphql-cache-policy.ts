@@ -106,8 +106,11 @@ const OPERATION_POLICIES: Record<string, GraphQLOperationPolicy> = {
   EntryLeagues: { authMode: "session", cachePolicy: "reporting" },
   EntryHistory: { authMode: "session", cachePolicy: "reporting" },
   EntryEventResult: { authMode: "session", cachePolicy: "reporting" },
-  GetEntryTransferHistory: { authMode: "session", cachePolicy: "reporting" },
-  EntryTransferHistory: { authMode: "session", cachePolicy: "reporting" },
+  // Official FPL transfer history is public data.  Keep it on the public
+  // proxy/cache lane so anonymous and authenticated viewers share the same
+  // response while private entry fields remain session-scoped below.
+  GetEntryTransferHistory: { authMode: "public", cachePolicy: "reporting" },
+  EntryTransferHistory: { authMode: "public", cachePolicy: "reporting" },
   EntryTournaments: { authMode: "session", cachePolicy: "reporting" },
   TournamentSummary: { authMode: "session", cachePolicy: "reporting" },
   TournamentSelectionStats: { authMode: "session", cachePolicy: "reporting" },

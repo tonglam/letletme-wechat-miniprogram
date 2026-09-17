@@ -33,6 +33,11 @@ import {
   isViewerEntryAuthorizationError,
   type PageRequestTrace,
 } from "../../../services/graphql.service";
+import {
+  getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
+  runPageInteractionDelegation,
+} from "../../../utils/page-performance";
 
 type LeagueView = "season" | "gameweek";
 type LeagueEmptyState = "" | "entry" | "tournaments" | "view";
@@ -69,6 +74,7 @@ interface LeaguesData {
   v2SelectedPhaseId: string | null;
   v2SeasonSection: MyTournamentSeasonSection | null;
   v2Loading: boolean;
+  v2LoadingSurface: ReviewSurface | null;
   v2LoadingMore: boolean;
   v2CatalogLoadingMore: boolean;
   v2HasNextPage: boolean;
@@ -465,6 +471,11 @@ function catalogRevisionForEvent(
   return latest?.eventId === eventId ? (latest.revision ?? null) : null;
 }
 
+function isPrimaryLeaguesError(data: object | undefined): boolean {
+  const value = data as Partial<LeaguesData> | undefined;
+  return typeof value?.v2Error === "string" && value.v2Error.length > 0;
+}
+
 PerformancePage({
   data: {
     v2Scope: "ACCESSIBLE" as MyTournamentReviewScope,
@@ -483,6 +494,7 @@ PerformancePage({
     v2SelectedPhaseId: null,
     v2SeasonSection: null,
     v2Loading: true,
+    v2LoadingSurface: null,
     v2LoadingMore: false,
     v2CatalogLoadingMore: false,
     v2HasNextPage: false,
@@ -588,6 +600,7 @@ PerformancePage({
     this.viewRequestId += 1;
     this.setData({
       v2Loading: false,
+      v2LoadingSurface: null,
       v2LoadingMore: false,
       v2CatalogLoadingMore: false,
     });
@@ -718,6 +731,7 @@ PerformancePage({
     this.retryAfter = null;
     this.setData({
       v2Loading: !append,
+      v2LoadingSurface: null,
       v2LoadingMore: false,
       v2CatalogLoadingMore: append,
       v2Error: "",
@@ -961,6 +975,13 @@ PerformancePage({
         this.seasonSectionContext = null;
       }
       if (!append && selected && eventId) {
+        // The default surface is Season. Let the catalog and picker render as
+        // soon as they are authoritative, then load only that visible surface;
+        // Gameweek is fetched when the user opens its tab. Keep the route
+        // ready boundary open until the default review has a visible success
+        // or error surface; otherwise the catalog header is measured as a
+        // successful route while the actual Season review is still pending.
+        getCurrentPagePerformanceTracker()?.expectSecondaryCompletion();
         await this.loadReview(
           selected.tournamentId,
           eventId,
@@ -968,6 +989,8 @@ PerformancePage({
           trace,
           null,
           catalogRevisionForEvent(selected, eventId),
+          null,
+          "season",
         );
       }
     } catch (error) {
@@ -1025,6 +1048,7 @@ PerformancePage({
     catalogRevisionOverride?: string | null,
     preferredPhaseId?: string | null,
     retrySurface?: ReviewSurface,
+    interactionId?: string,
   ) {
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
@@ -1053,6 +1077,10 @@ PerformancePage({
           expectedSeason) &&
       (currentMyFplEntryId() || 0) === expectedEntryId;
     const settleStale = () => {
+      const tracker = getCurrentPagePerformanceTracker();
+      if (interactionId && tracker?.hasPendingInteraction(interactionId)) {
+        tracker.completeInteraction(interactionId, "failed", false);
+      }
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
       const currentSeason = String(
@@ -1086,6 +1114,8 @@ PerformancePage({
     const fetchGameweek =
       !retrySurface || retrySurface === "gameweek" || Boolean(after);
     const fetchSeason = !after && (!retrySurface || retrySurface === "season");
+    const finalizeRoute =
+      !retrySurface && !after && trace?.trigger !== "tab";
     this.retryOperation = "review";
     this.retryScope = null;
     if (!retrySurface || retrySurface === "season") this.retryPhaseId = null;
@@ -1100,6 +1130,9 @@ PerformancePage({
       // Keep the already rendered page mounted while fetching a continuation;
       // the inline loading state belongs to the load-more control.
       v2Loading: !after,
+      v2LoadingSurface: !after
+        ? (retrySurface ?? this.data.activeView)
+        : this.data.v2LoadingSurface,
       v2LoadingMore: Boolean(after),
       v2Error: "",
       v2GameweekError: fetchGameweek ? "" : this.data.v2GameweekError,
@@ -1117,6 +1150,13 @@ PerformancePage({
             v2Loading: false,
             v2LoadingMore: false,
             v2Error: "球队绑定已更新，正在重新加载赛事复盘",
+          }, () => {
+            this.observeReviewInteraction(
+              interactionId,
+              "primary",
+              true,
+              finalizeRoute,
+            );
           });
           void this.loadCatalog(true, trace);
         } else {
@@ -1126,6 +1166,13 @@ PerformancePage({
             v2Loading: false,
             v2LoadingMore: false,
             v2Error: "球队状态尚未同步，请稍后重试",
+          }, () => {
+            this.observeReviewInteraction(
+              interactionId,
+              "primary",
+              true,
+              finalizeRoute,
+            );
           });
         }
       } catch {
@@ -1135,6 +1182,13 @@ PerformancePage({
           v2Loading: false,
           v2LoadingMore: false,
           v2Error: "球队状态尚未同步，请稍后重试",
+        }, () => {
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       }
       return true;
@@ -1194,6 +1248,8 @@ PerformancePage({
           null,
           null,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1220,6 +1276,8 @@ PerformancePage({
           null,
           observedRevision,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1377,6 +1435,35 @@ PerformancePage({
                 this.data.activeView === "season"
                   ? sectionPageInfo(section).hasNextPage
                   : payloadHasNext(nextGameweek?.payload),
+            }, () => {
+              if (!active()) {
+                settleStale();
+                return;
+              }
+              const tracker = getCurrentPagePerformanceTracker();
+              tracker?.mark("defaultContentAt");
+              const surface = this.data.activeView;
+              if (retrySurface || trace?.trigger === "tab") {
+                wx.nextTick(() => {
+                  this.observeReviewInteraction(
+                    interactionId,
+                    surface,
+                    surface === "gameweek"
+                      ? Boolean(gameweekMessage)
+                      : Boolean(seasonMessage),
+                    finalizeRoute,
+                  );
+                });
+              } else {
+                this.observeReviewInteraction(
+                  interactionId,
+                  surface,
+                  surface === "gameweek"
+                    ? Boolean(gameweekMessage)
+                    : Boolean(seasonMessage),
+                  finalizeRoute,
+                );
+              }
             });
             const auxiliaryResults = await Promise.all(
               settledRequests.slice(1),
@@ -1449,6 +1536,8 @@ PerformancePage({
           null,
           null,
           phase?.phaseId ?? this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1515,6 +1604,34 @@ PerformancePage({
             ? sectionPageInfo(section).hasNextPage
             : payloadHasNext(nextGameweek?.payload),
         emptyState: "",
+      }, () => {
+        if (!active()) {
+          settleStale();
+          return;
+        }
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        const surface = this.data.activeView;
+        if (retrySurface || trace?.trigger === "tab") {
+          wx.nextTick(() => {
+            this.observeReviewInteraction(
+              interactionId,
+              surface,
+              surface === "gameweek"
+                ? Boolean(gameweekSurfaceMessage)
+                : Boolean(seasonSurfaceMessage),
+            );
+          });
+        } else {
+          this.observeReviewInteraction(
+            interactionId,
+            surface,
+            surface === "gameweek"
+              ? Boolean(gameweekSurfaceMessage)
+              : Boolean(seasonSurfaceMessage),
+            finalizeRoute,
+          );
+        }
       });
       if (partialError && isClientUpgradeRequired(partialError))
         promptForUpgrade();
@@ -1535,6 +1652,8 @@ PerformancePage({
           null,
           null,
           this.data.v2SelectedPhaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1545,6 +1664,13 @@ PerformancePage({
           v2LoadingMore: false,
           v2UpgradeRequired: true,
           v2Error: "赛事复盘需要升级小程序后继续",
+        }, () => {
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       } else {
         this.retryOperation = "review";
@@ -1556,20 +1682,45 @@ PerformancePage({
           v2StatusText: stateText("UNAVAILABLE"),
           v2Error:
             error instanceof Error ? error.message : "赛事复盘暂时不可用",
+        }, () => {
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       }
     }
   },
 
-  async loadSeasonPhase(phaseId: string) {
+  async loadSeasonPhase(phaseId: string, interactionId?: string) {
     const selected = this.data.v2SelectedTournament;
     const season = this.data.v2Season;
     const eventId = this.data.v2Event;
-    if (!selected || !season || !eventId) return;
+    if (!selected || !season || !eventId) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return;
+    }
     const phase = season.phases.find(
       (candidate) => candidate.phaseId === phaseId,
     );
-    if (!phase) return;
+    if (!phase) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return;
+    }
     const requestId = ++this.viewRequestId;
     const expectedEntryId = this.data.entryId || currentMyFplEntryId() || 0;
     const expectedSeason =
@@ -1587,6 +1738,10 @@ PerformancePage({
           expectedSeason) &&
       (currentMyFplEntryId() || 0) === expectedEntryId;
     const settleStale = () => {
+      const tracker = getCurrentPagePerformanceTracker();
+      if (interactionId && tracker?.hasPendingInteraction(interactionId)) {
+        tracker.completeInteraction(interactionId, "failed", false);
+      }
       if (!this.pageVisible || requestId !== this.viewRequestId) return;
       this.setData({ v2Loading: false, v2LoadingMore: false });
       const currentSeason = String(
@@ -1626,6 +1781,7 @@ PerformancePage({
       v2StatusText: stateText(phase.state),
       v2SeasonSection: null,
       v2Loading: true,
+      v2LoadingSurface: "season",
       v2LoadingMore: false,
       v2HasNextPage: false,
       v2Error: "",
@@ -1634,7 +1790,9 @@ PerformancePage({
     if (phase.state !== "READY" || !phase.revision || !phase.semanticSha256) {
       this.seasonSectionPages = {};
       this.seasonSectionContext = null;
-      this.setData({ v2Loading: false });
+      this.setData({ v2Loading: false }, () => {
+        this.observeReviewInteraction(interactionId, "season", false);
+      });
       return;
     }
     try {
@@ -1697,6 +1855,12 @@ PerformancePage({
         v2StatusText: stateText(section.state),
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
         v2SeasonError: "",
+      }, () => {
+        const tracker = getCurrentPagePerformanceTracker();
+        tracker?.mark("defaultContentAt");
+        wx.nextTick(() =>
+          this.observeReviewInteraction(interactionId, "season", false),
+        );
       });
       const auxiliaryResults = await Promise.all(settledRequests.slice(1));
       const sections = [primarySection.value];
@@ -1727,6 +1891,8 @@ PerformancePage({
         v2StatusText: stateText(section?.state ?? phase.state),
         v2HasNextPage: sectionPageInfo(section).hasNextPage,
         v2SeasonError: "",
+      }, () => {
+        getCurrentPagePerformanceTracker()?.mark("secondaryCompleteAt");
       });
     } catch (error) {
       if (!active()) {
@@ -1752,6 +1918,8 @@ PerformancePage({
           null,
           null,
           phaseId,
+          undefined,
+          interactionId,
         );
         return;
       }
@@ -1764,6 +1932,8 @@ PerformancePage({
               v2Loading: false,
               v2LoadingMore: false,
               v2Error: "球队绑定已更新，正在重新加载赛事复盘",
+            }, () => {
+              this.observeReviewInteraction(interactionId, "primary", true);
             });
             void this.loadCatalog(true);
           } else {
@@ -1778,6 +1948,8 @@ PerformancePage({
               v2Loading: false,
               v2Error: "",
               v2SeasonError: "球队状态尚未同步，请稍后重试",
+            }, () => {
+              this.observeReviewInteraction(interactionId, "season", true);
             });
           }
         } catch {
@@ -1792,6 +1964,8 @@ PerformancePage({
             v2Loading: false,
             v2Error: "",
             v2SeasonError: "球队状态尚未同步，请稍后重试",
+          }, () => {
+            this.observeReviewInteraction(interactionId, "season", true);
           });
         }
         return;
@@ -1808,6 +1982,8 @@ PerformancePage({
           v2UpgradeRequired: true,
           v2Error: "",
           v2SeasonError: "赛事复盘需要升级小程序后继续",
+        }, () => {
+          this.observeReviewInteraction(interactionId, "season", true);
         });
       } else {
         this.retryOperation = "review";
@@ -1824,6 +2000,8 @@ PerformancePage({
           v2Error: "",
           v2SeasonError:
             error instanceof Error ? error.message : "赛事阶段暂时不可用",
+        }, () => {
+          this.observeReviewInteraction(interactionId, "season", true);
         });
       }
     }
@@ -2180,9 +2358,42 @@ PerformancePage({
     );
   },
 
-  selectTournament(index: number) {
+  observeReviewInteraction(
+    interactionId: string | undefined,
+    surface: ReviewSurface | "primary",
+    errorVisible: boolean,
+    finalizeRoute = false,
+  ) {
+    const selector = errorVisible
+      ? surface === "gameweek"
+        ? "#perf-review-gameweek-error"
+        : surface === "season"
+          ? "#perf-review-season-error"
+          : "#perf-primary-content"
+      : surface === "gameweek"
+        ? "#perf-review-gameweek"
+        : surface === "season"
+          ? "#perf-review-season"
+          : "#perf-primary-content";
+    getCurrentPagePerformanceTracker()?.observeOnDemandVisible(selector, {
+      errorVisible,
+      ...(interactionId ? { interactionId } : {}),
+      ...(finalizeRoute ? { finalizeRoute: true } : {}),
+    });
+  },
+
+  selectTournament(index: number, interactionId?: string): Promise<void> {
     const selected = catalogItems(this.data.v2Catalog)[index];
-    if (!selected) return;
+    if (!selected) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return Promise.resolve();
+    }
     const eventIds = eventIdsFromPhases(
       selected.phaseSummaries,
       selected.latestFinalizedEventId,
@@ -2196,7 +2407,18 @@ PerformancePage({
     this.retryBySurface.gameweek = null;
     this.retryBySurface.season = null;
     persistLastPick(this.data.entryId, selected.tournamentId);
-    this.setData({
+    const selectionRequestId = this.viewRequestId;
+    const selectionIsCurrent = () =>
+      this.viewRequestId === selectionRequestId &&
+      this.data.v2SelectedTournament?.tournamentId === selected.tournamentId;
+    const failSelectionInteraction = () => {
+      const tracker = getCurrentPagePerformanceTracker();
+      if (interactionId && tracker?.hasPendingInteraction(interactionId)) {
+        tracker.completeInteraction(interactionId, "failed", false);
+      }
+    };
+    const renderSelection = new Promise<void>((resolve) => {
+      this.setData({
       v2SelectedTournamentIndex: index,
       v2SelectedTournament: selected,
       v2EventIds: eventIds,
@@ -2217,31 +2439,66 @@ PerformancePage({
       v2GameweekError: "",
       v2SeasonError: "",
       emptyState: eventId ? "" : "view",
+      }, () => {
+        if (!selectionIsCurrent()) {
+          failSelectionInteraction();
+          resolve();
+          return;
+        }
+        if (!eventId) {
+          this.observeReviewInteraction(interactionId, "primary", false);
+        }
+        resolve();
+      });
     });
     if (eventId) {
-      void this.loadReview(
-        selected.tournamentId,
-        eventId,
-        false,
-        capturePageRequestTrace({
-          callerSurface: "my-fpl-leagues-v2.1",
-          trigger: "tab",
-        }),
-        null,
-        catalogRevisionForEvent(selected, eventId),
-      );
+      return renderSelection.then(() => {
+        if (!selectionIsCurrent()) {
+          failSelectionInteraction();
+          return;
+        }
+        return this.loadReview(
+          selected.tournamentId,
+          eventId,
+          false,
+          capturePageRequestTrace({
+            callerSurface: "my-fpl-leagues-v2.1",
+            trigger: "tab",
+          }),
+          null,
+          catalogRevisionForEvent(selected, eventId),
+          null,
+          undefined,
+          interactionId,
+        );
+      });
     }
+    return renderSelection;
   },
 
   onTournamentChange(event: WechatMiniprogram.PickerChange) {
-    this.selectTournament(Number(event.detail.value));
+    const interactionId = getPageInteractionToken(
+      this,
+      "onTournamentChange",
+    )?.interactionId;
+    return this.selectTournament(Number(event.detail.value), interactionId);
   },
 
   onGwChange(event: WechatMiniprogram.PickerChange) {
+    const interactionId = getPageInteractionToken(this, "onGwChange")?.interactionId;
     const index = Number(event.detail.value);
     const eventId = this.data.v2EventIds[index];
     const selected = this.data.v2SelectedTournament;
-    if (!selected || !eventId) return;
+    if (!selected || !eventId) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return Promise.resolve();
+    }
     this.setData({
       v2SelectedEventIndex: index,
       v2Event: eventId,
@@ -2256,7 +2513,7 @@ PerformancePage({
     });
     this.seasonSectionPages = {};
     this.seasonSectionContext = null;
-    void this.loadReview(
+    return this.loadReview(
       selected.tournamentId,
       eventId,
       false,
@@ -2266,10 +2523,14 @@ PerformancePage({
       }),
       null,
       catalogRevisionForEvent(selected, eventId),
+      null,
+      undefined,
+      interactionId,
     );
   },
 
-  onViewTap(event: WechatMiniprogram.TouchEvent) {
+  async onViewTap(event: WechatMiniprogram.TouchEvent) {
+    const interactionId = getPageInteractionToken(this, "onViewTap")?.interactionId;
     const nextView: LeagueView =
       event.currentTarget.dataset.view === "gameweek" ? "gameweek" : "season";
     const viewChanged = nextView !== this.data.activeView;
@@ -2304,7 +2565,7 @@ PerformancePage({
           ? (this.data.v2SeasonSection?.state ?? meta.state)
           : meta.state
         : meta.state;
-    this.setData({
+    await new Promise<void>((resolve) => this.setData({
       activeView: nextView,
       showSeason: nextView === "season",
       showGameweek: nextView === "gameweek",
@@ -2321,7 +2582,7 @@ PerformancePage({
           : payloadHasNext(this.data.v2Gameweek?.payload),
       v2Loading: viewChanged ? false : this.data.v2Loading,
       v2LoadingMore: viewChanged ? false : this.data.v2LoadingMore,
-    });
+    }, resolve));
     const nextViewPayloadMissing = nextView === "season" ? !season : !gameweek;
     if (
       viewChanged &&
@@ -2335,10 +2596,9 @@ PerformancePage({
       // own error and retry state.
       const retry = this.retryBySurface[nextView];
       if (nextView === "season" && retry?.phaseId) {
-        void this.loadSeasonPhase(retry.phaseId);
-        return;
+        return this.loadSeasonPhase(retry.phaseId, interactionId);
       }
-      void this.loadReview(
+      return this.loadReview(
         selected.tournamentId,
         this.data.v2Event,
         false,
@@ -2350,8 +2610,8 @@ PerformancePage({
         catalogRevisionForEvent(selected, this.data.v2Event),
         phase?.phaseId ?? this.data.v2SelectedPhaseId,
         nextView,
+        interactionId,
       );
-      return;
     }
     if (
       nextView === "season" &&
@@ -2359,15 +2619,39 @@ PerformancePage({
       (!this.data.v2SeasonSection ||
         this.seasonSectionContext?.phaseId !== phase.phaseId)
     ) {
-      void this.loadSeasonPhase(phase.phaseId);
+      return this.loadSeasonPhase(phase.phaseId, interactionId);
     }
+    this.observeReviewInteraction(
+      interactionId,
+      nextView,
+      nextView === "season"
+        ? Boolean(this.data.v2SeasonError)
+        : Boolean(this.data.v2GameweekError),
+    );
   },
 
   onPhaseTap(event: WechatMiniprogram.TouchEvent) {
+    const interactionId = getPageInteractionToken(this, "onPhaseTap")?.interactionId;
     const phaseId = String(event.currentTarget.dataset.phaseId || "");
-    if (!phaseId || this.data.activeView !== "season") return;
-    if (phaseId === this.data.v2SelectedPhaseId) return;
-    void this.loadSeasonPhase(phaseId);
+    if (!phaseId || this.data.activeView !== "season") {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return Promise.resolve();
+    }
+    if (phaseId === this.data.v2SelectedPhaseId) {
+      this.observeReviewInteraction(
+        interactionId,
+        "season",
+        Boolean(this.data.v2SeasonError),
+      );
+      return Promise.resolve();
+    }
+    return this.loadSeasonPhase(phaseId, interactionId);
   },
 
   onV2ScopeTap() {
@@ -2403,14 +2687,12 @@ PerformancePage({
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         if (surface === "season" && retry?.operation === "loadMore") {
-          void this.onV2LoadMore();
-          return;
+          return runPageInteractionDelegation(this, () => this.onV2LoadMore());
         }
         if (surface === "season" && retry?.phaseId) {
-          void this.loadSeasonPhase(retry.phaseId);
-          return;
+          return this.loadSeasonPhase(retry.phaseId);
         }
-        void this.loadReview(
+        return this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
           true,
@@ -2423,23 +2705,20 @@ PerformancePage({
           retry?.phaseId ?? null,
           surface,
         );
-        return;
       }
     }
     if (
       this.retryOperation === "loadMore" &&
       this.data.activeView === "season"
     ) {
-      void this.onV2LoadMore();
-      return;
+      return runPageInteractionDelegation(this, () => this.onV2LoadMore());
     }
     if (
       this.retryOperation === "review" &&
       this.data.activeView === "season" &&
       this.retryPhaseId
     ) {
-      void this.loadSeasonPhase(this.retryPhaseId);
-      return;
+      return this.loadSeasonPhase(this.retryPhaseId);
     }
     if (
       this.retryOperation === "review" ||
@@ -2448,7 +2727,7 @@ PerformancePage({
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         const retryAfter = this.retryAfter;
-        void this.loadReview(
+        return this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
           true,
@@ -2460,7 +2739,6 @@ PerformancePage({
           catalogRevisionForEvent(selected, this.data.v2Event),
           this.data.v2SelectedPhaseId,
         );
-        return;
       }
     }
     if (this.retryOperation === "catalog") {
@@ -2477,7 +2755,7 @@ PerformancePage({
       // snapshot. Never replay it across a season boundary discovered by the
       // explicit retry action.
       const retryAfter = seasonRolled ? null : this.retryAfter;
-      void this.loadCatalog(
+      return this.loadCatalog(
         true,
         capturePageRequestTrace({
           callerSurface: "my-fpl-leagues-v2.1",
@@ -2487,9 +2765,8 @@ PerformancePage({
         retryAfter,
         retryAfter !== null,
       );
-      return;
     }
-    void this.loadCatalog(
+    return this.loadCatalog(
       true,
       capturePageRequestTrace({
         callerSurface: "my-fpl-leagues-v2.1",
@@ -2543,10 +2820,11 @@ PerformancePage({
       return;
     }
     if (this.data.v2State !== "NOT_STARTED") {
-      this.onRetry();
+      void runPageInteractionDelegation(this, () => this.onRetry());
       return;
     }
-    void this.onOpenWebsite();
+    void runPageInteractionDelegation(this, () => this.onOpenWebsite());
+    return;
   },
 
   async onOpenWebsite() {
@@ -2556,4 +2834,12 @@ PerformancePage({
   onGoLive() {
     switchToLive();
   },
+}, {
+  explicitInteractionHandlers: [
+    "onTournamentChange",
+    "onGwChange",
+    "onViewTap",
+    "onPhaseTap",
+  ],
+  primaryError: isPrimaryLeaguesError,
 });

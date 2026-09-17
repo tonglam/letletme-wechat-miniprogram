@@ -49,49 +49,51 @@
     </button>
   </view>
 
-  <view wx:if="{{error}}" class="live-refresh-error section" role="alert">
-    <view>{{error}}<text wx:if="{{errorCode}}" class="status-code">（{{errorCode}}）</text></view>
-    <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重试查询</button>
-  </view>
-
-  <view wx:if="{{lookupNotice}}" class="section-notice section" role="status">
-    <view>{{lookupNotice}}</view>
-    <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重新保存</button>
-  </view>
-
-  <view wx:if="{{searchHits.length}}" class="card hits-card section">
-    <view class="field-label">匹配结果</view>
-    <view
-      wx:for="{{searchHits}}"
-      wx:key="entryId"
-      class="search-hit"
-      hover-class="hover-dim"
-      data-entry-id="{{item.entryId}}"
-      bindtap="onSelectSearchHit"
-    >
-      <view class="hit-main">
-        <view class="hit-name">{{item.entryName}}</view>
-        <view class="hit-meta">{{item.playerName}} #{{item.entryId}}</view>
-      </view>
-      <view class="hit-id">选这个</view>
+  <view wx:if="{{error || lookupNotice || searchHits.length || hasPreview}}" id="perf-entry-search-result">
+    <view wx:if="{{error}}" class="live-refresh-error section" role="alert">
+      <view>{{error}}<text wx:if="{{errorCode}}" class="status-code">（{{errorCode}}）</text></view>
+      <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重试查询</button>
     </view>
-  </view>
 
-  <view wx:if="{{hasPreview}}" class="card preview-card section">
-    <view class="preview-title">{{previewTitle}}</view>
-    <view class="preview-subtitle">{{previewSubtitle}}</view>
-    <view class="preview-stats">
-      <view class="preview-stat">
-        <view class="stat-value">{{previewTotalPoints}}</view>
-        <view class="stat-label">总分</view>
-      </view>
-      <view class="preview-stat">
-        <view class="stat-value">{{previewOverallRank}}</view>
-        <view class="stat-label">总排名</view>
+    <view wx:if="{{lookupNotice}}" class="section-notice section" role="status">
+      <view>{{lookupNotice}}</view>
+      <button wx:if="{{canRetryLookup}}" class="btn-secondary lookup-retry" bindtap="onRetryLookup">重新保存</button>
+    </view>
+
+    <view wx:if="{{searchHits.length}}" class="card hits-card section">
+      <view class="field-label">匹配结果</view>
+      <view
+        wx:for="{{searchHits}}"
+        wx:key="entryId"
+        class="search-hit"
+        hover-class="hover-dim"
+        data-entry-id="{{item.entryId}}"
+        bindtap="onSelectSearchHit"
+      >
+        <view class="hit-main">
+          <view class="hit-name">{{item.entryName}}</view>
+          <view class="hit-meta">{{item.playerName}} #{{item.entryId}}</view>
+        </view>
+        <view class="hit-id">选这个</view>
       </view>
     </view>
-    <button wx:if="{{!isCurrentEntry}}" class="btn-primary btn-block search-button" bindtap="onSetMyEntry">设为我的球队</button>
-    <view wx:else class="current-entry-hint">这已经是我的球队</view>
+
+    <view wx:if="{{hasPreview}}" class="card preview-card section">
+      <view class="preview-title">{{previewTitle}}</view>
+      <view class="preview-subtitle">{{previewSubtitle}}</view>
+      <view class="preview-stats">
+        <view class="preview-stat">
+          <view class="stat-value">{{previewTotalPoints}}</view>
+          <view class="stat-label">总分</view>
+        </view>
+        <view class="preview-stat">
+          <view class="stat-value">{{previewOverallRank}}</view>
+          <view class="stat-label">总排名</view>
+        </view>
+      </view>
+      <button wx:if="{{!isCurrentEntry}}" class="btn-primary btn-block search-button" bindtap="onSetMyEntry">设为我的球队</button>
+      <view wx:else class="current-entry-hint">这已经是我的球队</view>
+    </view>
   </view>
 
   <view class="sync-hint section action" hover-class="hover-dim" bindtap="onGoAccountLink">可选：关联网页账户后同步已验证球队</view>

@@ -51,7 +51,7 @@ test("My FPL Team owns independent primary and tab status surfaces", () => {
 test("My FPL no-entry state observes primary after its terminal commit", () => {
   const page = source("miniprogram/pages/my-fpl/team/team.controller.ts");
   assert.match(page, /if \(!this\.data\.entryId\)[\s\S]*this\.setData\([\s\S]*?\}, \(\) => \{[\s\S]*this\.markPrimaryCommit\(tracker\)/);
-  assert.match(page, /markPrimaryCommit\(tracker\?: PagePerformanceTracker\)[\s\S]*tracker\.mark\("primarySetDataAt"\)[\s\S]*tracker\.observePrimary\(\)/);
+  assert.match(page, /markPrimaryCommit\(tracker\?: PagePerformanceTracker\)[\s\S]*tracker\.mark\("primarySetDataAt"\)[\s\S]*tracker\.observePrimary\("#perf-primary-content"/);
 });
 
 test("My FPL warm resume observes retained terminal state without refetching", () => {

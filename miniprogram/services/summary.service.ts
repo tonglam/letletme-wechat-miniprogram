@@ -439,7 +439,9 @@ export async function getEntryTeamStatsHistory(entry: number, forceRefresh = fal
 }
 
 export async function getEntryTeamStatsTransfers(entry: number, forceRefresh = false, trace?: PageRequestTrace): Promise<EntryGameweekTransfers[]> {
-  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
+  // Official transfer history is public FPL data.  Use the public proxy and
+  // identity-independent cache while keeping private entry reads session-bound.
+  const data = await graphqlRequest<EntryTransferHistoryResponse>(ENTRY_TRANSFER_HISTORY, { entryId: entry }, { authMode: "public", cachePolicy: "reporting", cacheVariant: currentSeasonCacheVariant(), forceRefresh, trace });
   return data.entryTransferHistory || [];
 }
 

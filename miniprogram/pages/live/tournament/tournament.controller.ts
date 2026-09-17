@@ -78,6 +78,13 @@ import {
 } from "../../../services/app-context.service";
 import { capturePageRequestTrace } from "../../../services/graphql.service";
 import type { PageRequestTrace } from "../../../services/graphql.service";
+import {
+  getCurrentPagePerformanceTracker,
+  getPageInteractionToken,
+  handoffPageInteraction,
+  type PageInteractionToken,
+  type PagePerformanceTracker,
+} from "../../../utils/page-performance";
 import { formatAverageNumber, formatRank } from "../../../utils/summary-format";
 import {
   exportTournamentBoardShareImage,
@@ -140,6 +147,11 @@ type SortKey =
   | "teamValue"
   | "entryName";
 type LiveTournamentEmptyState = "" | "entry" | "tournaments" | "preseason";
+
+type DetailInteractionBatch = {
+  tracker: PagePerformanceTracker | null;
+  interactionIds: Set<string>;
+};
 
 const SELECTED_TOURNAMENT_ID_KEY = "live-tournamentId";
 const SELECTED_TOURNAMENT_NAME_KEY = "live-tournamentName";
@@ -481,7 +493,7 @@ interface LiveTournamentLoadOptions {
   background?: boolean;
   forceRefresh?: boolean;
   propagateError?: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }
 
 interface BoardControlState {
@@ -1332,6 +1344,7 @@ PerformancePage({
   detailDeskKey: "",
   detailRequestId: 0,
   detailRequestKey: "",
+  detailInteractionBatches: new Map<number, DetailInteractionBatch>(),
   detailParticipants: [] as TournamentParticipantRow[],
   detailRosterVisible: TOURNAMENT_ROSTER_PREVIEW,
 
@@ -1382,10 +1395,14 @@ PerformancePage({
     )
       return;
     this.loadedSeason = context.season || undefined;
+    // The live window is public and independent of the viewer binding. Start
+    // it while the authoritative identity is being refreshed so directory
+    // loading can begin as soon as the principal gate is ready.
+    const liveWindowPromise = getLiveSnapshot(undefined, trace).catch(() => null);
     await waitForAuthoritativeFollow();
     if (!this.pageVisible || this.startupGeneration !== startupGeneration)
       return;
-    const liveWindow = await getLiveSnapshot().catch(() => null);
+    const liveWindow = await liveWindowPromise;
     this.liveSnapshot = liveWindow;
     const currentGw =
       liveWindow &&
@@ -1427,10 +1444,9 @@ PerformancePage({
           },
           {
             expectedSeason: scope.season,
-            trace: capturePageRequestTrace({
-              callerSurface: "live-tournament-board-head",
-              trigger: "refresh",
-            }),
+            // This is an automatic revision probe, so keep it out of the
+            // completed navigation trace.
+            trace: null,
           },
         );
         return leagueHeadProbeSnapshot(head);
@@ -2300,8 +2316,8 @@ PerformancePage({
   applyBoardPage(
     page: LiveBoardPage,
     reset: boolean,
-    options: { lastGood?: boolean } = {},
-  ) {
+    options: { lastGood?: boolean; onCommitted?: () => void } = {},
+  ): boolean {
     const complete = isCompleteLiveBoardPage(page, { firstPage: reset });
     if (
       !complete &&
@@ -2316,7 +2332,7 @@ PerformancePage({
         errorSuffix: "当前显示上次成功结果",
       });
       this.syncDisplayState();
-      return;
+      return false;
     }
     const scoreCoreRevision =
       page.head.publication?.revisions.scoreCore || null;
@@ -2472,8 +2488,11 @@ PerformancePage({
             compareRightPickCount: 0,
           }
         : {}),
+    }, () => {
+      options.onCommitted?.();
     });
     this.commitBoardControls();
+    return true;
   },
 
   async loadSelectionIndex() {
@@ -2577,12 +2596,41 @@ PerformancePage({
     }
   },
 
-  async loadCompareSquads() {
+  async loadCompareSquads(interactionToken?: PageInteractionToken | null) {
+    const interactionId = interactionToken?.interactionId;
+    const interactionTracker =
+      interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+    const failInteraction = () => {
+      if (interactionId) {
+        interactionTracker?.completeInteraction(interactionId, "failed");
+      }
+    };
+    const observeCompareSheet = () => {
+      if (!interactionId || !interactionTracker) return;
+      const observe = () => interactionTracker.observeOnDemandVisible(
+        "#perf-compare-content",
+        {
+          errorVisible: false,
+          interactionId,
+        },
+      );
+      if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
+        wx.nextTick(observe);
+      } else {
+        observe();
+      }
+    };
     const page = this.boardPage;
     const scope = this.currentBoardScope();
     const comparedEntryIds = [...new Set(this.data.compareIds)].slice(0, 2);
-    if (comparedEntryIds.length !== 2) return;
-    if (!page || !scope) return;
+    if (comparedEntryIds.length !== 2) {
+      failInteraction();
+      return;
+    }
+    if (!page || !scope) {
+      failInteraction();
+      return;
+    }
     const scoreCoreRevision = page.head.publication?.revisions.scoreCore;
     if (!scoreCoreRevision) {
       this.setData({
@@ -2590,6 +2638,7 @@ PerformancePage({
         compareError: "当前榜单版本暂不可用",
         compareOpen: false,
       });
+      failInteraction();
       return;
     }
     const requestId = this.compareRequestId + 1;
@@ -2622,6 +2671,7 @@ PerformancePage({
         this.data.compareIds[0] !== comparedEntryIds[0] ||
         this.data.compareIds[1] !== comparedEntryIds[1]
       ) {
+        failInteraction();
         return;
       }
       const normalized = rows.map(normalizeRow);
@@ -2632,13 +2682,17 @@ PerformancePage({
       if (!compareSelection.compareLeft || !compareSelection.compareRight) {
         throw new Error("阵容对比响应不完整，请稍后重试");
       }
-      this.setData({ ...compareSelection, compareOpen: true });
+      this.setData({ ...compareSelection, compareOpen: true }, observeCompareSheet);
     } catch (error) {
-      if (requestId !== this.compareRequestId) return;
+      if (requestId !== this.compareRequestId) {
+        failInteraction();
+        return;
+      }
       const message =
         error instanceof Error ? error.message : "阵容对比加载失败";
       this.setData({ compareError: message, compareOpen: false });
       wx.showToast({ title: "阵容对比加载失败，已保留选择", icon: "none" });
+      failInteraction();
       if (hasLiveBoardErrorCode(error, "LIVE_SCORE_REVISION_GONE")) {
         void this.loadRows({
           background: this.data.hasData,
@@ -2739,7 +2793,10 @@ PerformancePage({
         });
         if (!this.pageVisible || requestId !== this.rowsRequestId) return;
         if (this.restartForPrincipalChange(variables.entryId)) return;
-        this.applyBoardPage(result.page, true);
+        this.applyBoardPage(result.page, true, {
+          onCommitted: () =>
+            getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+        });
         const writeScope = this.currentBoardScope();
         if (
           writeScope &&
@@ -2810,6 +2867,47 @@ PerformancePage({
     }
   },
 
+  registerDetailInteraction(requestId: number, interactionId?: string) {
+    if (!interactionId) return;
+    const batch = this.detailInteractionBatches.get(requestId);
+    if (!batch) return;
+    batch.tracker ??= getCurrentPagePerformanceTracker();
+    batch.interactionIds.add(interactionId);
+  },
+
+  settleDetailInteractions(
+    requestId: number,
+    status: "completed" | "failed",
+    errorVisible = false,
+  ) {
+    const batch = this.detailInteractionBatches.get(requestId);
+    if (!batch) return;
+    this.detailInteractionBatches.delete(requestId);
+    if (!batch.tracker) return;
+    if (status === "failed") {
+      for (const interactionId of batch.interactionIds) {
+        // Cancellation or supersession has no rendered error surface. Leave
+        // errorVisibleAt unset; only the committed error observer owns that
+        // marker.
+        batch.tracker.completeInteraction(interactionId, "failed");
+      }
+      return;
+    }
+    const observe = () => {
+      for (const interactionId of batch.interactionIds) {
+        batch.tracker.observeOnDemandVisible("#perf-on-demand-content", {
+          errorVisible,
+          interactionId,
+        });
+      }
+    };
+    if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
+      wx.nextTick(observe);
+    } else {
+      observe();
+    }
+  },
+
   clearH2HState() {
     this.clearH2HTimers();
     this.h2hMatchupsResumePending = false;
@@ -2822,6 +2920,7 @@ PerformancePage({
     this.h2hActiveEventId = 0;
     this.detailDesk = null;
     this.detailDeskKey = "";
+    this.settleDetailInteractions(this.detailRequestId, "failed");
     this.detailRequestId += 1;
     this.detailRequestKey = "";
     // A superseded detail request skips clearing detailLoading in its finally
@@ -2916,7 +3015,10 @@ PerformancePage({
       );
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
-      this.applyH2HBoard(board);
+      this.applyH2HBoard(board, {
+        onCommitted: () =>
+          getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+      });
     } catch (error) {
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       this.setData({
@@ -2979,7 +3081,10 @@ PerformancePage({
       );
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       if (this.restartForPrincipalChange(entryId)) return;
-      this.applyH2HBoard(board);
+      this.applyH2HBoard(board, {
+        onCommitted: () =>
+          getCurrentPagePerformanceTracker()?.mark("defaultContentAt"),
+      });
     } catch (error) {
       if (!this.pageVisible || requestId !== this.h2hRequestId) return;
       this.setData({
@@ -3023,11 +3128,14 @@ PerformancePage({
     this.setupTimer = setTimeout(() => {
       this.setupTimer = undefined;
       if (!this.pageVisible || !this.data.setupActive) return;
-      void this.loadH2HDesk({ background: true });
+      void this.loadH2HDesk({ background: true, trace: null });
     }, SETUP_POLL_MS);
   },
 
-  applyH2HBoard(board: H2HBoard) {
+  applyH2HBoard(
+    board: H2HBoard,
+    options: { onCommitted?: () => void } = {},
+  ): boolean {
     if (
       (board.availability !== "READY" ||
         board.delivery.state === "UNAVAILABLE") &&
@@ -3039,7 +3147,7 @@ PerformancePage({
         errorSuffix: "当前显示上次成功结果",
       });
       this.syncDisplayState();
-      return;
+      return false;
     }
     const entryId = this.data.entryId;
     const previousBoardSnapshot = this.h2hBoardSnapshot;
@@ -3115,6 +3223,8 @@ PerformancePage({
       scoreStatusText: `H2H ${h2hScoreStateText(board.availability, board.delivery.state)}`,
       scoreNextRefreshAt: board.times?.nextRefreshAt || "",
       lastUpdated: exactUpdatedTime(board.times?.contentUpdatedAt),
+    }, () => {
+      options.onCommitted?.();
     });
     const head = leagueHeadFromH2HBoard(
       board,
@@ -3124,6 +3234,7 @@ PerformancePage({
     if (head) this.h2hHead = head;
     this.scheduleH2HRefresh(board.eventId);
     this.syncDisplayState();
+    return true;
   },
 
   probeH2HHead(eventId: number): Promise<void> {
@@ -3148,10 +3259,8 @@ PerformancePage({
           {
             expectedSeason:
               this.loadedSeason || this.liveSnapshot?.season || undefined,
-            trace: capturePageRequestTrace({
-              callerSurface: "live-tournament-h2h-head",
-              trigger: "refresh",
-            }),
+            // H2H head checks are background polling, not user actions.
+            trace: null,
           },
         );
         if (
@@ -3418,9 +3527,23 @@ PerformancePage({
   },
 
   async onOpenTournamentDetail() {
+    const interactionToken = getPageInteractionToken(
+      this,
+      "onOpenTournamentDetail",
+    );
+    const interactionId = interactionToken?.interactionId;
     const selected = this.data.selectedTournament;
     const entryId = this.data.entryId;
-    if (!selected || !entryId) return;
+    if (!selected || !entryId) {
+      if (interactionId) {
+        getCurrentPagePerformanceTracker()?.completeInteraction(
+          interactionId,
+          "failed",
+          false,
+        );
+      }
+      return;
+    }
     const tournamentId = Number(selected.id);
     const key = String(tournamentId);
     this.setData({ detailOpen: true, detailError: "" });
@@ -3428,14 +3551,34 @@ PerformancePage({
       this.detailDesk && this.detailDeskKey === key ? this.detailDesk : null;
     if (cached) {
       this.applyDetailDesk(cached);
+      const tracker =
+        interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+      if (interactionId) {
+        wx.nextTick(() => tracker?.observeOnDemandVisible("#perf-on-demand-content", {
+          errorVisible: false,
+          interactionId,
+        }));
+      }
       return;
     }
     // A pending request only dedupes a reopen of the SAME tournament; a
     // different selection supersedes it (its late response is dropped by the
     // generation check below) and must start its own load.
-    if (this.data.detailLoading && this.detailRequestKey === key) return;
+    if (this.data.detailLoading && this.detailRequestKey === key) {
+      this.registerDetailInteraction(this.detailRequestId, interactionId);
+      return;
+    }
+    if (this.data.detailLoading && this.detailRequestKey !== key) {
+      this.settleDetailInteractions(this.detailRequestId, "failed");
+    }
     const requestId = ++this.detailRequestId;
     this.detailRequestKey = key;
+    const tracker =
+      interactionToken?.tracker ?? getCurrentPagePerformanceTracker();
+    this.detailInteractionBatches.set(requestId, {
+      tracker,
+      interactionIds: new Set(interactionId ? [interactionId] : []),
+    });
     this.setData({ detailLoading: true });
     try {
       const desk = await getTournamentDetailDesk(
@@ -3450,18 +3593,33 @@ PerformancePage({
       );
       // Stale responses must not commit under the currently displayed
       // tournament (sheet reopened for another selection mid-request).
-      if (requestId !== this.detailRequestId) return;
-      if (!this.pageVisible || !this.data.detailOpen) return;
+      if (requestId !== this.detailRequestId) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
+      if (!this.pageVisible || !this.data.detailOpen) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
       if (!desk) throw new Error("赛事详情暂时不可用，请稍后重试");
       this.detailDesk = desk;
       this.detailDeskKey = key;
       this.applyDetailDesk(desk);
+      this.settleDetailInteractions(requestId, "completed", false);
     } catch (error) {
-      if (requestId !== this.detailRequestId) return;
-      if (!this.pageVisible || !this.data.detailOpen) return;
+      if (requestId !== this.detailRequestId) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
+      if (!this.pageVisible || !this.data.detailOpen) {
+        this.settleDetailInteractions(requestId, "failed");
+        return;
+      }
       this.setData({
         detailError:
           error instanceof Error ? error.message : "赛事详情加载失败",
+      }, () => {
+        this.settleDetailInteractions(requestId, "completed", true);
       });
     } finally {
       if (this.pageVisible && requestId === this.detailRequestId) {
@@ -3471,6 +3629,9 @@ PerformancePage({
   },
 
   onCloseTournamentDetail() {
+    this.settleDetailInteractions(this.detailRequestId, "failed");
+    this.detailRequestId += 1;
+    this.detailRequestKey = "";
     this.setData({ detailOpen: false, detailError: "" });
   },
 
@@ -3594,7 +3755,11 @@ PerformancePage({
   ) {
     const entry = Number(event.currentTarget.dataset.entryId);
     if (!Number.isFinite(entry) || entry <= 0) return;
-    wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
+    const handoff = handoffPageInteraction(routes.liveEntry);
+    wx.navigateTo({
+      url: `${routes.liveEntry}?entry=${entry}`,
+      fail: () => handoff?.rollback(),
+    });
   },
   shouldAutoRefresh(): boolean {
     if (!this.data.selectedTournament) return false;
@@ -4180,8 +4345,15 @@ PerformancePage({
   },
 
   onOpenCompareSheet() {
-    if (this.data.compareIds.length !== 2) return;
-    void this.loadCompareSquads();
+    const interactionToken = getPageInteractionToken(this, "onOpenCompareSheet");
+    if (this.data.compareIds.length !== 2) {
+      interactionToken?.tracker.completeInteraction(
+        interactionToken.interactionId,
+        "failed",
+      );
+      return;
+    }
+    return this.loadCompareSquads(interactionToken);
   },
 
   toggleCompareEntry(entry: number) {
@@ -4543,27 +4715,28 @@ PerformancePage({
       this.toggleCompareEntry(entry);
       return;
     }
-    wx.navigateTo({ url: `${routes.liveEntry}?entry=${entry}` });
+    const handoff = handoffPageInteraction(routes.liveEntry);
+    wx.navigateTo({
+      url: `${routes.liveEntry}?entry=${entry}`,
+      fail: () => handoff?.rollback(),
+    });
   },
 
   onRetry() {
     if (this.data.event === 0) {
       if (this.retryWithContext) {
-        this.retryWithContext();
+        return this.retryWithContext();
       } else {
-        this.loadTournaments(true);
+        return this.loadTournaments(true);
       }
-      return;
     }
     if (this.data.tournamentListError || this.data.tournaments.length === 0) {
-      this.loadTournaments(true);
-      return;
+      return this.loadTournaments(true);
     }
     if (this.data.h2hActive || this.data.setupActive) {
-      void this.loadH2HDesk({ forceRefresh: true });
-      return;
+      return this.loadH2HDesk({ forceRefresh: true });
     }
-    this.loadRows({ forceRefresh: true });
+    return this.loadRows({ forceRefresh: true });
   },
 
   async collectBoardShareRows(): Promise<DisplayTournamentRow[]> {
@@ -4976,5 +5149,12 @@ PerformancePage({
       activeFilterCount: 0,
     });
     this.reloadBoardControls();
+  },
+}, {
+  explicitInteractionHandlers: ["onOpenTournamentDetail", "onOpenCompareSheet"],
+  primaryError: (data) => {
+    const value = data as Partial<LiveTournamentData> | undefined;
+    return !value?.hasData
+      && Boolean(value?.error || value?.tournamentListError);
   },
 });

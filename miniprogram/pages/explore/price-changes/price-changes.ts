@@ -41,6 +41,7 @@ import {
   currentMyFplEntryId,
   waitForAuthoritativeFollow,
 } from "../../../utils/follow";
+import { runPageInteractionDelegation } from "../../../utils/page-performance";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
@@ -293,7 +294,11 @@ PerformancePage({
     return this.loadData("refresh", true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData(trigger: PageRequestTrace["trigger"] = "load", forceRefresh = false) {
+  async loadData(
+    trigger: PageRequestTrace["trigger"] = "load",
+    forceRefresh = false,
+    traceOverride?: PageRequestTrace | null,
+  ) {
     const ownerRevision = this.lifecycleRevision;
     const requestId = ++this.requestId;
     const isActive = () => this.pageVisible
@@ -308,11 +313,13 @@ PerformancePage({
       error: "",
       ...(forceRefresh ? { noticeMessage: "" } : {}),
     });
-    const trace = capturePageRequestTrace({
-      callerSurface: "explore-price-changes",
-      trigger,
-      forceReason: forceRefresh ? "user-refresh" : undefined,
-    });
+    const trace = traceOverride === undefined
+      ? capturePageRequestTrace({
+        callerSurface: "explore-price-changes",
+        trigger,
+        forceReason: forceRefresh ? "user-refresh" : undefined,
+      })
+      : traceOverride;
 
     try {
       // The public board can load in parallel, but the personal context must
@@ -515,7 +522,7 @@ PerformancePage({
   },
 
   onSearchSubmit(event: WechatMiniprogram.CustomEvent<{ keyword: string }>) {
-    this.onSearchDraft(event);
+    runPageInteractionDelegation(this, () => this.onSearchDraft(event));
   },
 
   onResetSearch() {
@@ -622,7 +629,7 @@ PerformancePage({
   },
 
   onRetry() {
-    void this.loadData("refresh", true);
+    return this.loadData("refresh", true);
   },
 
   onShareAppMessage() {
@@ -642,7 +649,7 @@ PerformancePage({
     this.countdownTimer = setInterval(() => this.updateCountdown(), 1000);
     this.refreshTimer = setInterval(() => {
       if (this.pageVisible && !this.refreshPending && !this.data.loading && !this.data.refreshing) {
-        void this.loadData("refresh", true);
+        void this.loadData("refresh", true, null);
       }
     }, AUTO_REFRESH_MS);
   },

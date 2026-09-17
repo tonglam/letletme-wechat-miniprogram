@@ -15,7 +15,7 @@ test("disconnected page trackers are terminal for late callbacks", () => {
 test("Live Entry background timeout and error paths only use the captured tracker", () => {
   const entry = source("miniprogram/pages/live/entry/entry.ts");
   assert.match(entry, /observeSoftTimeout[\s\S]*?navigationTracker\?\.mark\("softFailureAt"\)/);
-  assert.match(entry, /catch \(error\)[\s\S]*?wx\.nextTick\(\(\) => navigationTracker\?\.observePrimary\(\)\)/);
+  assert.match(entry, /catch \(error\)[\s\S]*?wx\.nextTick\(\(\) => navigationTracker\?\.observePrimary\("#perf-primary-content"/);
 });
 
 test("Live Entry delayed transfer reads retain their originating trace", () => {
@@ -31,6 +31,6 @@ test("Price warm and refresh samples observe the active mode primary", () => {
   const template = source("miniprogram/pages/data/price/price.wxml");
   assert.match(template, /id="perf-primary-player"/);
   assert.match(page, /primarySelector\(\): string[\s\S]*?activeMode === "player"[\s\S]*?#perf-primary-player/);
-  assert.match(page, /onShow\(\)[\s\S]*?const selector = this\.primarySelector\(\)[\s\S]*?tracker\.observePrimary\(selector\)/);
-  assert.match(page, /onPullDownRefresh\(\)[\s\S]*?activeMode === "player"[\s\S]*?observePrimary\("#perf-primary-player"\)/);
+  assert.match(page, /onShow\(\)[\s\S]*?const selector = this\.primarySelector\(\)[\s\S]*?tracker\.observePrimary\(selector,/);
+  assert.match(page, /onPullDownRefresh\(\)[\s\S]*?activeMode === "player"[\s\S]*?observePrimary\("#perf-primary-player",/);
 });

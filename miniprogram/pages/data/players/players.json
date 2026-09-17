@@ -6,7 +6,8 @@
     "app-error-state": "../../../components/app-error-state/app-error-state",
     "data-status": "../../../components/data-status/data-status",
     "filter-bar": "../../../components/filter-bar/filter-bar",
-    "player-row": "../../../components/player-row/player-row"
+    "player-row": "../../../components/player-row/player-row",
+    "bottomNavBar": "../../../components/navigation/bottomNavBar/bottomNavBar"
   },
   "enablePullDownRefresh": true,
   "onReachBottomDistance": 120

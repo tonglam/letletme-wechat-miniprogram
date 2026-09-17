@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -11,6 +11,8 @@ globalThis.Component = (definition) => {
 
 await import("../miniprogram/components/navigation/bottomNavBar/bottomNavBar.ts");
 const navbar = capturedComponent;
+const { clearPerf, getPerf } = await import("../miniprogram/utils/perf.ts");
+const { PagePerformanceTracker } = await import("../miniprogram/utils/page-performance.ts");
 
 function navbarContext(route, activeName) {
   globalThis.getApp = () => ({ globalData: { entryId: 1 } });
@@ -66,6 +68,58 @@ test("single-destination groups still navigate from foreign sections", () => {
   const { context, redirects } = navbarContext("pages/live/entry/entry", "live");
   navbar.methods.onChange.call(context, { detail: "me" });
   assert.deepEqual(redirects, ["/pages/account/index/index"]);
+});
+
+test("bottom-nav redirects create an interaction and roll back on API failure", () => {
+  clearPerf();
+  const previousWx = globalThis.wx;
+  const previousPages = globalThis.getCurrentPages;
+  const storage = new Map();
+  let redirectOptions;
+  const page = {
+    route: "pages/live/entry/entry",
+    __performanceVisible: true,
+  };
+  globalThis.wx = {
+    getPerformance: () => ({ now: () => Date.now() }),
+    getStorageSync: (key) => storage.get(key),
+    setStorage: ({ key, data, success }) => {
+      storage.set(key, data);
+      success?.({});
+    },
+    removeStorageSync: (key) => storage.delete(key),
+    redirectTo: (options) => {
+      redirectOptions = options;
+    },
+  };
+  globalThis.getCurrentPages = () => [page];
+  const tracker = new PagePerformanceTracker(page, page.route, "warm-enter");
+  const context = {
+    ...navbar.methods,
+    properties: { active: "live" },
+    data: { ...navbar.data, activeName: "live" },
+    setData(patch) {
+      this.data = { ...this.data, ...patch };
+    },
+  };
+
+  try {
+    navbar.methods.onChange.call(context, { detail: "me" });
+    assert.equal(redirectOptions.url, "/pages/account/index/index");
+    let record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+    assert.deepEqual(record.interactions, [], "the source action is held for the destination tracker");
+
+    redirectOptions.fail?.({ errMsg: "navigateTo:fail" });
+    record = getPerf().pagePerformance.find((item) => item.navigationId === tracker.navigationId);
+    assert.equal(record.interactions.length, 1);
+    assert.equal(record.interactions[0].handler, "bottomNavBar.onChange");
+    assert.equal(record.interactions[0].status, "failed");
+  } finally {
+    tracker.disconnect();
+    clearPerf();
+    globalThis.wx = previousWx;
+    globalThis.getCurrentPages = previousPages;
+  }
 });
 
 test("selecting a menu destination does not flash the electric edge before redirect", () => {
@@ -148,6 +202,35 @@ test("a detached bottom nav ignores an already-queued edge reveal", () => {
   } finally {
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
+test("bottom navigation is locally registered only on pages that render it", () => {
+  const root = fileURLToPath(new URL("../miniprogram/", import.meta.url));
+  const app = JSON.parse(readFileSync(join(root, "app.json"), "utf8"));
+  assert.equal(app.usingComponents?.bottomNavBar, undefined);
+
+  const pageFiles = [];
+  const visit = (directory) => {
+    for (const name of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, name.name);
+      if (name.isDirectory()) visit(path);
+      else if (name.isFile() && name.name.endsWith(".wxml")) pageFiles.push(path);
+    }
+  };
+  visit(join(root, "pages"));
+  const bottomPages = pageFiles.filter((path) =>
+    readFileSync(path, "utf8").includes("<bottomNavBar"),
+  );
+  assert.equal(bottomPages.length, 19);
+  for (const wxmlPath of bottomPages) {
+    const jsonPath = wxmlPath.replace(/\.wxml$/, ".json");
+    const page = JSON.parse(readFileSync(jsonPath, "utf8"));
+    assert.equal(
+      page.usingComponents?.bottomNavBar,
+      "../../../components/navigation/bottomNavBar/bottomNavBar",
+      jsonPath,
+    );
   }
 });
 

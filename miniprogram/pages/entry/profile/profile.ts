@@ -173,7 +173,7 @@ PerformancePage({
   },
 
   onRetry() {
-    void this.loadAuthoritativeEntry("refresh", this.lifecycleRevision, true);
+    return this.loadAuthoritativeEntry("refresh", this.lifecycleRevision, true);
   },
 
   onLinkAccount() {

@@ -25,7 +25,11 @@ test("hidden Live Entry reads are invalidated before deferred transfers", () => 
   );
   assert.match(
     entry,
-    /await getLivePointsByEntrySnapshot[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.liveRequestId\) return[\s\S]*this\.pageVisible && requestId === this\.liveRequestId && this\.loadTransfersAfterLive/
+    /await getLivePointsByEntrySnapshot[\s\S]*if \(!this\.pageVisible \|\| requestId !== this\.liveRequestId\) return/
+  );
+  assert.match(
+    entry,
+    /const includeTransfersForRequest = this\.loadTransfersAfterLive[\s\S]*if \(this\.pageVisible && requestId === this\.liveRequestId && includeTransfersForRequest\)[\s\S]*const transfersRequest = this\.loadTransfers[\s\S]*transfersRequest\.finally/
   );
   assert.match(
     entry,

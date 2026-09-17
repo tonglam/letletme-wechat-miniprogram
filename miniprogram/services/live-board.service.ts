@@ -798,7 +798,7 @@ async function readWithOneTransientRetry<T>(
   query: string,
   variables: Record<string, unknown>,
   options: {
-    trace?: PageRequestTrace;
+    trace?: PageRequestTrace | null;
     random?: () => number;
     sleepImpl?: (milliseconds: number) => Promise<void>;
   } = {},
@@ -848,7 +848,7 @@ export async function getEntryLiveCompetitionBoardPage(
   variables: LiveBoardVariables,
   options: {
     expectedSeason?: string;
-    trace?: PageRequestTrace;
+    trace?: PageRequestTrace | null;
     random?: () => number;
     sleepImpl?: (milliseconds: number) => Promise<void>;
   } = {},
@@ -900,7 +900,7 @@ export async function getLeagueLiveHead(
   },
   options: {
     expectedSeason?: string;
-    trace?: PageRequestTrace;
+    trace?: PageRequestTrace | null;
     random?: () => number;
     sleepImpl?: (milliseconds: number) => Promise<void>;
   } = {},
@@ -1005,7 +1005,7 @@ export async function getTournamentSelectionIndex(options: {
   entryId: number;
   tournamentId: number;
   ref: { season: string; eventId: number; scoreCoreRevision: string };
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<LiveBoardSelectionIndex> {
   const startedAt = Date.now();
   const result = await readWithOneTransientRetry<{
@@ -1124,7 +1124,7 @@ export async function getTournamentEntrySquads(options: {
   tournamentId: number;
   comparedEntryIds: number[];
   ref: { season: string; eventId: number; scoreCoreRevision: string };
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<LiveTournamentRow[]> {
   const comparedEntryIds = [...new Set(options.comparedEntryIds)].filter(
     (value) => Number.isSafeInteger(value) && value > 0,

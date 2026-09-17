@@ -94,6 +94,12 @@ test("initial request failures do not also claim an empty list", () => {
   assert.match(leagues, /暂无可复盘赛事/);
 });
 
+test("My FPL Leagues owns the primary error classifier used by performance tracking", () => {
+  const page = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(page, /function isPrimaryLeaguesError\([\s\S]*v2Error/);
+  assert.match(page, /primaryError:\s*isPrimaryLeaguesError/);
+});
+
 test("failed event metadata is represented as unavailable, not offseason", () => {
   const service = source("miniprogram/services/my-fpl.service.ts");
   assert.match(service, /eventContextAvailable = false/);
@@ -134,7 +140,7 @@ test("empty fixture directories clear previously composed cards", () => {
   const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
   assert.match(
     fixtures,
-    /if \(!this\.teams\.length\) \{\s*this\.setData\(\{ runs: \[\] \}\)/,
+    /(?:else )?if \(!this\.teams\.length\) \{[\s\S]*?this\.setData\(\s*\{ runs: \[\], runCards: \[\], glanceCards: \[\],?\s*\}\)/,
   );
 });
 
@@ -483,7 +489,7 @@ test("fixture windows honor event and season cache identity on open and resume",
   assert.match(fixtures, /app\.initAppData\(forceRefresh\)/);
   assert.match(
     fixtures,
-    /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\)/,
+    /const startEvent = this\.selectedWindowByUser[\s\S]*this\.setData\(\{ startEvent \}\);[\s\S]*this\.rebuild\(\(\) =>/,
   );
   assert.match(
     fixtures,
@@ -547,9 +553,11 @@ test("fixture resume reloads instead of relabeling payload across seasons", () =
   assert.match(service, /cachePolicy: "fixtures",[\s\S]*season,/);
   assert.doesNotMatch(service, /season:unknown/);
   assert.match(fixtures, /error: hadLastGood\s*\?/);
+  assert.match(fixtures, /refreshing: hadLastGood/);
   assert.match(fixtures, /this\.loadedSeason !== season/);
   assert.match(fixtures, /this\.fixtures = \[\];\s*this\.teams = \[\]/);
   assert.match(fixtures, /this\.loadedSeason = season/);
+  assert.match(source("miniprogram/pages/explore/fixtures/fixtures.wxml"), /wx:if="\{\{refreshing\}\}"/);
 });
 
 test("initial league payloads use named session cache policies", () => {
@@ -834,6 +842,14 @@ test("account and entry search refresh viewer authority before snapshots", () =>
     search,
     /syncCurrentEntry\(\)[\s\S]*isCurrentEntry:[\s\S]*this\.data\.hasPreview[\s\S]*this\.data\.previewEntryId === entryId/,
   );
+});
+
+test("entry redirect keeps the navigation handoff after reLaunch dispatch", () => {
+  const search = source("miniprogram/pages/entry/search/search.ts");
+  assert.match(search, /redirectDispatched: false/);
+  assert.match(search, /if \(!this\.redirectDispatched\) this\.redirectHandoff\?\.rollback\(\)/);
+  assert.match(search, /this\.redirectDispatched = true;[\s\S]*wx\.reLaunch/);
+  assert.match(search, /fail: \(\) => \{[\s\S]*handoff\?\.rollback\(\)/);
 });
 
 test("personal recovery avoids duplicate follow writes and restarts live viewers", () => {

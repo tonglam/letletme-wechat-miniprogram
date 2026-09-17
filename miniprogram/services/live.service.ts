@@ -66,10 +66,12 @@ interface LiveSnapshotResponse {
 
 export async function getLiveSnapshot(
   expectedEventId?: number,
+  trace?: PageRequestTrace | null,
 ): Promise<LiveSnapshotStatus | null> {
   const data = await graphqlRequest<LiveSnapshotResponse>(
     LIVE_SNAPSHOT_QUERY,
     {},
+    { trace },
   );
   const context = data.liveContext;
   const anchorEventId =

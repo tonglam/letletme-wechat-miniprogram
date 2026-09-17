@@ -1,4 +1,8 @@
-import { PagePerformanceTracker } from "./page-performance";
+import {
+  PagePerformanceTracker,
+  type PagePerformanceInstrumentationOptions,
+  instrumentPageInteractions,
+} from "./page-performance";
 
 type Lifecycle = (this: InstrumentedPage, ...args: unknown[]) => unknown;
 
@@ -6,6 +10,7 @@ type PageSetData = (data: object, callback?: () => void) => void;
 
 type InstrumentedPage = {
   route?: string;
+  data?: object;
   setData?: PageSetData;
   createIntersectionObserver?: (
     options: WechatMiniprogram.CreateIntersectionObserverOption
@@ -15,7 +20,10 @@ type InstrumentedPage = {
   __performanceSetDataWrapped?: boolean;
   __performanceVisible?: boolean;
   __performanceGeneration?: number;
+  __performanceLifecycleVisible?: boolean;
+  __performanceLifecycleInitialized?: boolean;
   __performancePendingLifecycles?: Record<number, number>;
+  __performancePrimaryError?: (data: object | undefined) => boolean;
 };
 
 function hasPendingLifecycle(page: InstrumentedPage, generation?: number): boolean {
@@ -29,7 +37,10 @@ function beginLifecycle(page: InstrumentedPage, generation: number): void {
   page.__performancePendingLifecycles = pending;
 }
 
-function finishLifecycle(page: InstrumentedPage, generation: number): void {
+function finishLifecycle(
+  page: InstrumentedPage,
+  generation: number,
+): void {
   const pending = page.__performancePendingLifecycles;
   const count = pending?.[generation] ?? 0;
   if (count > 1) {
@@ -42,11 +53,17 @@ function finishLifecycle(page: InstrumentedPage, generation: number): void {
 
 function schedulePrimaryObservation(
   page: InstrumentedPage,
-  generation = page.__performanceGeneration
+  generation = page.__performanceGeneration,
+  primaryError = page.__performancePrimaryError ?? ((data) => {
+    const value = data as Record<string, unknown> | undefined;
+    return typeof value?.error === "string" && value.error.length > 0;
+  }),
 ): void {
   const observe = () => {
     if (!page.__performanceVisible || page.__performanceGeneration !== generation) return;
-    page.__performanceTracker?.observePrimary();
+    page.__performanceTracker?.observePrimary("#perf-primary-content", {
+      errorVisible: primaryError(page.data),
+    });
   };
   if (typeof wx !== "undefined" && typeof wx.nextTick === "function") {
     wx.nextTick(observe);
@@ -58,7 +75,7 @@ function schedulePrimaryObservation(
 function observeLifecycleSettlement(
   result: unknown,
   page: InstrumentedPage,
-  generation: number
+  generation: number,
 ): void {
   const settled = () => finishLifecycle(page, generation);
   void Promise.resolve(result).then(settled, settled);
@@ -86,7 +103,9 @@ function stopTracker(page: InstrumentedPage): void {
   page.__performanceTracker?.disconnect();
 }
 
-function wrapSetData(page: InstrumentedPage): void {
+function wrapSetData(
+  page: InstrumentedPage,
+): void {
   if (page.__performanceSetDataWrapped || typeof page.setData !== "function") return;
   page.__performanceSetDataWrapped = true;
   const original = page.setData.bind(page);
@@ -108,8 +127,32 @@ function wrapSetData(page: InstrumentedPage): void {
  * P0 pages keep their explicit stage markers; this wrapper covers pages whose
  * primary boundary is simply the first rendered data, empty, or error state.
  */
-export const PerformancePage = ((options: unknown): void => {
-  const definition = options as Record<string, unknown>;
+export function PerformancePage<
+  TData extends WechatMiniprogram.Page.DataOption,
+  TCustom extends WechatMiniprogram.Page.CustomOption,
+>(
+  options: WechatMiniprogram.Page.Options<TData, TCustom>,
+  instrumentationOptions?: PagePerformanceInstrumentationOptions,
+): void;
+export function PerformancePage(
+  options: unknown,
+  instrumentationOptions: PagePerformanceInstrumentationOptions = {},
+): void {
+  const definition = instrumentPageInteractions(
+    options as Record<string, unknown>,
+    {
+      ...(instrumentationOptions || {}),
+      // This wrapper owns the generic page lifecycle generation below. Direct
+      // instrumented pages get the generation wrapper from
+      // instrumentPageInteractions instead.
+      manageLifecycleGeneration: false,
+    },
+  );
+  const primaryError =
+    instrumentationOptions.primaryError ?? ((data: object | undefined) => {
+      const value = data as Record<string, unknown> | undefined;
+      return typeof value?.error === "string" && value.error.length > 0;
+    });
   const originalOnLoad = definition.onLoad as Lifecycle | undefined;
   const originalOnShow = definition.onShow as Lifecycle | undefined;
   const originalOnPullDownRefresh = definition.onPullDownRefresh as Lifecycle | undefined;
@@ -119,6 +162,7 @@ export const PerformancePage = ((options: unknown): void => {
   Page({
     ...definition,
     onLoad(this: InstrumentedPage, ...args: unknown[]) {
+      this.__performancePrimaryError = primaryError;
       wrapSetData(this);
       this.__performanceVisible = true;
       const generation = startTracker(this, "cold-launch");
@@ -128,6 +172,7 @@ export const PerformancePage = ((options: unknown): void => {
       return result;
     },
     onShow(this: InstrumentedPage, ...args: unknown[]) {
+      this.__performancePrimaryError = primaryError;
       this.__performanceVisible = true;
       let generation = this.__performanceGeneration ?? 0;
       if (this.__performanceShown) {
@@ -143,6 +188,7 @@ export const PerformancePage = ((options: unknown): void => {
       return result;
     },
     onPullDownRefresh(this: InstrumentedPage, ...args: unknown[]) {
+      this.__performancePrimaryError = primaryError;
       const generation = startTracker(this, "refresh");
       beginLifecycle(this, generation);
       const result = originalOnPullDownRefresh?.apply(this, args);
@@ -158,4 +204,4 @@ export const PerformancePage = ((options: unknown): void => {
       return originalOnUnload?.apply(this, args);
     }
   } as Parameters<typeof Page>[0]);
-}) as typeof Page;
+}

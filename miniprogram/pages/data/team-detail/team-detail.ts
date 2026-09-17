@@ -3,6 +3,7 @@ import { getTeamSummary } from "../../../services/team.service";
 import type { TeamSummary } from "../../../models/team";
 import { routes } from "../../../config/routes";
 import { setPageTitle } from "../../../utils/navigation";
+import { handoffPageInteraction } from "../../../utils/page-performance";
 import { ensureAppContext } from "../../../services/app-context.service";
 import {
   capturePageRequestTrace,
@@ -129,7 +130,10 @@ PerformancePage({
   },
 
   onRetry() {
-    this.loadData("refresh", true);
+    // Return the deferred load so the interaction wrapper observes the
+    // resulting success or error surface instead of sampling the cleared
+    // primary content on the next tick.
+    return this.loadData("refresh", true);
   },
 
   onPullDownRefresh() {
@@ -137,7 +141,11 @@ PerformancePage({
   },
 
   onBackToTeams() {
-    wx.redirectTo({ url: routes.dataTeams });
+    const handoff = handoffPageInteraction(routes.dataTeams);
+    wx.redirectTo({
+      url: routes.dataTeams,
+      fail: () => handoff?.rollback(),
+    });
   }
 });
 

@@ -46,6 +46,24 @@ test("My FPL uses the V2.1 settled tournament-review contract", async () => {
   assert.doesNotMatch(service, /GET_MY_FPL_COMPETITION|MyFplCompetition/);
 });
 
+test("the default review surface loads Season on demand after the catalog", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(
+    page,
+    /if \(!append && selected && eventId\) \{[\s\S]*void this\.loadReview\([\s\S]*catalogRevisionForEvent\(selected, eventId\),[\s\S]*null,[\s\S]*"season"/,
+  );
+});
+
+test("catalog and selected review keep separate loading surfaces", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const template = await read("miniprogram/pages/my-fpl/leagues/leagues.wxml");
+  assert.match(page, /v2LoadingSurface: ReviewSurface \| null/);
+  assert.match(page, /v2LoadingSurface: !after[\s\S]*retrySurface \?\? this\.data\.activeView/);
+  assert.match(template, /v2Loading && !v2SelectedTournament/);
+  assert.match(template, /v2LoadingSurface === 'season'/);
+  assert.match(template, /v2LoadingSurface === 'gameweek'/);
+});
+
 test("the Mini catalog is connection-shaped and supports a custom setup shell", async () => {
   const service = await read("miniprogram/services/tournament.service.ts");
   const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
@@ -145,4 +163,14 @@ test("nested retry state is initialized on the page instance", async () => {
     page,
     /async onLoad\(\) \{[\s\S]*this\.retryBySurface = \{[\s\S]*gameweek: null,[\s\S]*season: null/,
   );
+});
+
+test("review view actions bind their interaction to the selected surface", async () => {
+  const page = await read("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  assert.match(page, /async onViewTap\(event: WechatMiniprogram\.TouchEvent\)/);
+  assert.match(page, /getPageInteractionToken\(this, "onViewTap"\)/);
+  assert.match(page, /loadSeasonPhase\(phase\.phaseId, interactionId\)/);
+  assert.match(page, /onPhaseTap\(event: WechatMiniprogram\.TouchEvent\)/);
+  assert.match(page, /loadSeasonPhase\(phaseId, interactionId\)/);
+  assert.match(page, /explicitInteractionHandlers: \[[\s\S]*"onViewTap"[\s\S]*"onPhaseTap"/);
 });

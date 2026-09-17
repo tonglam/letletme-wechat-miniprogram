@@ -7,6 +7,12 @@ import {
 } from "../../../utils/entry-lookup-presentation";
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
+import {
+  getPageInteractionToken,
+  handoffPageInteraction,
+  runPageInteractionDelegation,
+  type PageInteractionToken,
+} from "../../../utils/page-performance";
 import { formatRank } from "../../../utils/summary-format";
 import { saveMiniProgramFollowEntry } from "../../../services/auth.service";
 import { waitForAuthoritativeFollow } from "../../../utils/follow";
@@ -54,6 +60,11 @@ interface EntrySearchData {
   searchHits: EntryNameHit[];
 }
 
+interface LookupInteractionState {
+  requestId: number;
+  token: PageInteractionToken | null;
+}
+
 function emptyEntryPreviewData(): Pick<
   EntrySearchData,
   | "hasPreview"
@@ -97,7 +108,10 @@ PerformancePage({
   } as EntrySearchData,
 
   lookupRequestId: 0,
+  lookupInteraction: null as LookupInteractionState | null,
   redirectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  redirectHandoff: null as ReturnType<typeof handoffPageInteraction>,
+  redirectDispatched: false,
   pageVisible: true,
 
   async onShow() {
@@ -120,6 +134,12 @@ PerformancePage({
   cancelRedirectTimer() {
     if (this.redirectTimer) clearTimeout(this.redirectTimer);
     this.redirectTimer = undefined;
+    // Once reLaunch has been dispatched, the source page may hide before the
+    // destination adopts the handoff. Only cancel before dispatch; a rejected
+    // API call owns rollback through its fail callback.
+    if (!this.redirectDispatched) this.redirectHandoff?.rollback();
+    this.redirectHandoff = null;
+    this.redirectDispatched = false;
   },
 
   syncCurrentEntry() {
@@ -132,11 +152,68 @@ PerformancePage({
     });
   },
 
+  /**
+   * Entry lookup results render below the always-visible form. Bind the
+   * explicit lookup action to that result/error region so the form cannot
+   * satisfy the interaction observer before the requested data is visible.
+   */
+  observeLookupResult(explicitToken?: PageInteractionToken | null) {
+    const lookup = this.lookupInteraction;
+    const interaction = explicitToken ?? lookup?.token ?? null;
+    const tracker = interaction?.tracker;
+    if (!tracker) return;
+    wx.nextTick(() => {
+      if (!this.pageVisible) return;
+      if (
+        !explicitToken &&
+        (!lookup ||
+          this.lookupInteraction?.requestId !== lookup.requestId ||
+          this.lookupInteraction?.token?.interactionId !== interaction.interactionId)
+      ) {
+        return;
+      }
+      tracker.observeInteractionVisible("#perf-entry-search-result", {
+        errorVisible: Boolean(this.data.error),
+        interactionId: interaction.interactionId,
+      });
+    });
+  },
+
+  getLookupInteractionToken(): PageInteractionToken | null {
+    for (const handler of ["onEntryConfirm", "onRetryLookup", "onLookupEntry"]) {
+      const token = getPageInteractionToken(this, handler);
+      if (token?.tracker.hasPendingInteraction(token.interactionId)) return token;
+    }
+    return null;
+  },
+
+  failLookupInteraction(requestId?: number): void {
+    const current = this.lookupInteraction;
+    if (!current || (requestId !== undefined && current.requestId !== requestId)) return;
+    if (current.token?.tracker.hasPendingInteraction(current.token.interactionId)) {
+      // Superseded work is not a visible lookup error. Leaving visibility
+      // undefined keeps the action terminal without inflating error latency.
+      current.token.tracker.completeInteraction(current.token.interactionId, "failed");
+    }
+    this.lookupInteraction = null;
+  },
+
+  beginLookupRequest(token?: PageInteractionToken | null): number {
+    this.failLookupInteraction();
+    const requestId = ++this.lookupRequestId;
+    this.lookupInteraction = {
+      requestId,
+      token: token === undefined ? this.getLookupInteractionToken() : token,
+    };
+    return requestId;
+  },
+
   onManualEntryInput(event: WechatMiniprogram.Input) {
     this.applyManualEntry(String(event.detail.value || ""));
   },
 
   applyManualEntry(raw: string) {
+    this.failLookupInteraction();
     this.lookupRequestId += 1;
     this.setData({
       manualEntryId: extractEntryId(raw),
@@ -152,14 +229,15 @@ PerformancePage({
   },
 
   onEntryConfirm() {
-    this.onLookupEntry();
+    return runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
   async onLookupEntry() {
+    const requestId = this.beginLookupRequest();
     const keyword = extractEntryId(this.data.manualEntryId);
     const entryId = parseExactEntryId(keyword);
     if (entryId !== null) {
-      await this.lookupByEntryId(entryId);
+      await this.lookupByEntryId(entryId, requestId);
       return;
     }
     if (keyword.length < 2) {
@@ -167,14 +245,14 @@ PerformancePage({
         error: "请输入参赛 ID，或至少 2 个字符的球队名 / 经理名",
         errorCode: "INVALID_ID",
         canRetryLookup: false
-      });
+      }, () => this.observeLookupResult());
       return;
     }
-    await this.lookupByName(keyword);
+    await this.lookupByName(keyword, requestId);
   },
 
-  async lookupByEntryId(entryId: number) {
-    const requestId = ++this.lookupRequestId;
+  async lookupByEntryId(entryId: number, requestId?: number) {
+    if (requestId === undefined) requestId = this.beginLookupRequest();
     const preservePreview = hasMatchingEntryPreview(
       this.data.hasPreview,
       this.data.previewEntryId,
@@ -194,6 +272,7 @@ PerformancePage({
     try {
       const entry = await getEntryInfo(entryId, true);
       if (requestId !== this.lookupRequestId || Number(this.data.manualEntryId) !== entryId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       const persistence = entryPersistencePresentation(entry.persistenceState);
@@ -205,6 +284,7 @@ PerformancePage({
       wx.showToast({ title: "已找到球队", icon: "success" });
     } catch (error) {
       if (requestId !== this.lookupRequestId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       const retryable = error instanceof EntryLookupError ? error.retryable : true;
@@ -216,13 +296,16 @@ PerformancePage({
       });
     } finally {
       if (requestId === this.lookupRequestId) {
-        this.setData({ loading: false, buttonText: "查找球队" });
+        this.setData(
+          { loading: false, buttonText: "查找球队" },
+          () => this.observeLookupResult(),
+        );
       }
     }
   },
 
-  async lookupByName(keyword: string) {
-    const requestId = ++this.lookupRequestId;
+  async lookupByName(keyword: string, requestId?: number) {
+    if (requestId === undefined) requestId = this.beginLookupRequest();
     this.setData({
       loading: true,
       buttonText: "查找中...",
@@ -236,6 +319,7 @@ PerformancePage({
     try {
       const hits = await searchEntries(keyword, 10);
       if (requestId !== this.lookupRequestId || extractEntryId(this.data.manualEntryId) !== keyword) {
+        this.failLookupInteraction(requestId);
         return;
       }
       if (hits.length === 0) {
@@ -262,6 +346,7 @@ PerformancePage({
       });
     } catch (error) {
       if (requestId !== this.lookupRequestId) {
+        this.failLookupInteraction(requestId);
         return;
       }
       this.setData({
@@ -271,17 +356,23 @@ PerformancePage({
       });
     } finally {
       if (requestId === this.lookupRequestId) {
-        this.setData({ loading: false, buttonText: "查找球队" });
+        this.setData(
+          { loading: false, buttonText: "查找球队" },
+          () => this.observeLookupResult(),
+        );
       }
     }
   },
 
   onSelectSearchHit(event: WechatMiniprogram.TouchEvent) {
+    const interaction = getPageInteractionToken(this, "onSelectSearchHit");
     const entryId = Number(event.currentTarget.dataset.entryId);
     if (!Number.isInteger(entryId) || entryId <= 0) {
+      this.observeLookupResult(interaction);
       return;
     }
     const hit = this.data.searchHits.find((item) => item.entryId === entryId);
+    this.failLookupInteraction();
     this.lookupRequestId += 1;
     this.setData({
       manualEntryId: String(entryId),
@@ -303,12 +394,15 @@ PerformancePage({
             entryId
           )
         : {})
-    });
+    }, () => this.observeLookupResult(interaction));
   },
 
   onRetryLookup() {
-    if (this.data.loading) return;
-    return this.onLookupEntry();
+    if (this.data.loading) {
+      this.observeLookupResult();
+      return;
+    }
+    return runPageInteractionDelegation(this, () => this.onLookupEntry());
   },
 
   onSetMyEntry() {
@@ -328,45 +422,95 @@ PerformancePage({
     // A fresh Home load renders the newly followed team right away — a plain
     // navigateBack could land on a page still inside its refresh throttle.
     this.cancelRedirectTimer();
+    // Keep the follow action attached to the Home content that will confirm
+    // the new team after the short transition delay.
+    this.redirectHandoff = handoffPageInteraction(routes.home);
+    this.redirectDispatched = false;
     this.redirectTimer = setTimeout(() => {
       this.redirectTimer = undefined;
-      if (!this.pageVisible) return;
-      wx.reLaunch({ url: routes.home });
+      const handoff = this.redirectHandoff;
+      if (!this.pageVisible) {
+        handoff?.rollback();
+        this.redirectHandoff = null;
+        this.redirectDispatched = false;
+        return;
+      }
+      this.redirectDispatched = true;
+      wx.reLaunch({
+        url: routes.home,
+        success: () => {
+          if (this.redirectHandoff === handoff) {
+            this.redirectHandoff = null;
+            this.redirectDispatched = false;
+          }
+        },
+        fail: () => {
+          handoff?.rollback();
+          if (this.redirectHandoff === handoff) {
+            this.redirectHandoff = null;
+            this.redirectDispatched = false;
+          }
+        },
+      });
     }, 800);
   },
 
-  onUnbind() {
+  onUnbind(): Promise<void> {
     const entryId = this.data.currentEntryId;
-    wx.showModal({
-      title: "取消查看？",
-      content: `将取消小程序球队 #${entryId}。如已关联网页账户，网页球队仍可继续显示。`,
-      confirmText: "取消查看",
-      confirmColor: "#c9183f",
-      success: ({ confirm }) => {
-        if (!confirm) return;
-        const sync = saveMiniProgramFollowEntry(null);
-        this.setData({
-          hasEntry: false,
-          currentEntryId: 0,
-          hasPreview: false,
-          isCurrentEntry: false,
-          searchHits: []
-        });
-        wx.showToast({ title: "已取消查看", icon: "success" });
-        void sync.then((synced) => {
-          if (!synced) {
-            wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
-          } else {
-            this.syncCurrentEntry();
+    return new Promise<void>((resolve) => {
+      wx.showModal({
+        title: "取消查看？",
+        content: `将取消小程序球队 #${entryId}。如已关联网页账户，网页球队仍可继续显示。`,
+        confirmText: "取消查看",
+        confirmColor: "#c9183f",
+        success: ({ confirm }) => {
+          if (!confirm) {
+            resolve();
+            return;
           }
-        });
-      }
+          let sync: ReturnType<typeof saveMiniProgramFollowEntry>;
+          try {
+            sync = saveMiniProgramFollowEntry(null);
+          } catch {
+            resolve();
+            return;
+          }
+          this.setData({
+            hasEntry: false,
+            currentEntryId: 0,
+            hasPreview: false,
+            isCurrentEntry: false,
+            searchHits: []
+          });
+          wx.showToast({ title: "已取消查看", icon: "success" });
+          void Promise.resolve(sync).then(
+            (synced) => {
+              if (!synced) {
+                wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
+              } else {
+                this.syncCurrentEntry();
+              }
+            },
+            () => {
+              wx.showToast({ title: "已取消，联网后自动同步", icon: "none" });
+            },
+          ).finally(resolve);
+        },
+        fail: () => resolve(),
+      });
     });
   },
 
   onGoAccountLink() {
     navigateTo(routes.accountLink);
   }
+}, {
+  explicitInteractionHandlers: [
+    "onEntryConfirm",
+    "onLookupEntry",
+    "onRetryLookup",
+    "onSelectSearchHit",
+  ],
 });
 
 function mapPreviewData(entry: EntryInfo, fallbackEntryId: number): Partial<EntrySearchData> {

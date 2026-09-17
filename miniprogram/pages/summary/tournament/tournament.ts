@@ -494,6 +494,8 @@ PerformancePage({
 
     this.loadTournaments(true);
   }
+}, {
+  includeInteractionHandlers: ["loadMoreRankings"],
 });
 
 function mapTournamentSummaryData(

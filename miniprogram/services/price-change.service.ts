@@ -215,7 +215,7 @@ function lastGoodPriceChangeBoardRead(): PriceChangeBoardRead | null {
 
 export async function getPriceChangeBoard(
   forceRefresh = false,
-  trace?: PageRequestTrace,
+  trace?: PageRequestTrace | null,
 ): Promise<PriceChangeBoardRead> {
   try {
     const read = await graphqlRead<PriceChangeBoardResponse>(
@@ -369,7 +369,12 @@ export async function getPriceChangeLiveCursor(): Promise<PriceChangeLiveCursor 
     const read = await graphqlRead<{ priceChangeLiveCursor: PriceChangeLiveCursor | null }>(
       PRICE_CHANGE_LIVE_CURSOR_QUERY,
       {},
-      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+      {
+        authMode: "public",
+        cachePolicy: "network-only",
+        forceRefresh: true,
+        trace: null,
+      },
     );
     if (read.errors.length > 0) return null;
     return read.data.priceChangeLiveCursor ?? null;
@@ -387,7 +392,12 @@ export async function getPriceChangeLiveBoard(
     const read = await graphqlRead<{ priceChangeLiveBoard: PriceChangeLiveBoard | null }>(
       PRICE_CHANGE_LIVE_BOARD_QUERY,
       { revision: revision || null, sourceHash: sourceHash || null },
-      { authMode: "public", cachePolicy: "network-only", forceRefresh: true },
+      {
+        authMode: "public",
+        cachePolicy: "network-only",
+        forceRefresh: true,
+        trace: null,
+      },
     );
     if (read.errors.length > 0) return null;
     return read.data.priceChangeLiveBoard ?? null;
@@ -401,7 +411,7 @@ async function getSquadStartPrices(input: {
   eventId: number;
   season: string;
   forceRefresh: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<Record<string, number>> {
   const uniqueIds = Array.from(new Set(input.playerIds))
     .filter((id) => Number.isSafeInteger(id) && id > 0);
@@ -457,7 +467,7 @@ export async function getPriceChangePersonalContext(input: {
   season: string;
   entryId: number | null;
   forceRefresh?: boolean;
-  trace?: PageRequestTrace;
+  trace?: PageRequestTrace | null;
 }): Promise<PriceChangePersonalContext> {
   const viewerEntryId = currentMyFplEntryId();
   if (!viewerEntryId || input.entryId !== viewerEntryId) {
