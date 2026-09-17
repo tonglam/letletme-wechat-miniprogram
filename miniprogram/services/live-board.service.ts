@@ -16,6 +16,7 @@ import {
   type GraphQLReadMeta,
   type PageRequestTrace,
 } from "./graphql.service";
+import { MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS } from "./graphql-cooldown";
 import {
   mapTournamentLiveRows,
   type TournamentLiveGraphQLRow,
@@ -791,7 +792,10 @@ function retryDelayMs(attempt: number, error?: unknown): number {
     error instanceof GraphQLTransportError &&
     typeof error.retryAfterSeconds === "number" &&
     Number.isFinite(error.retryAfterSeconds)
-      ? Math.max(0, error.retryAfterSeconds * 1_000)
+      ? Math.min(
+          MAX_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS * 1_000,
+          Math.max(0, error.retryAfterSeconds * 1_000),
+        )
       : 0;
   const exponentialDelay = Math.min(120_000, 30_000 * 2 ** attempt);
   // Retry-After is authoritative when present; otherwise use the bounded
