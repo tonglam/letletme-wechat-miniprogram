@@ -8,7 +8,6 @@ import {
 import { routes } from "../../../config/routes";
 import { navigateTo } from "../../../utils/navigation";
 import {
-  getCurrentPageInteractionToken,
   getPageInteractionToken,
   handoffPageInteraction,
   runPageInteractionDelegation,
@@ -158,12 +157,21 @@ PerformancePage({
    * explicit lookup action to that result/error region so the form cannot
    * satisfy the interaction observer before the requested data is visible.
    */
-  observeLookupResult() {
-    const interaction = getCurrentPageInteractionToken();
+  observeLookupResult(explicitToken?: PageInteractionToken | null) {
+    const lookup = this.lookupInteraction;
+    const interaction = explicitToken ?? lookup?.token ?? null;
     const tracker = interaction?.tracker;
     if (!tracker) return;
     wx.nextTick(() => {
       if (!this.pageVisible) return;
+      if (
+        !explicitToken &&
+        (!lookup ||
+          this.lookupInteraction?.requestId !== lookup.requestId ||
+          this.lookupInteraction?.token?.interactionId !== interaction.interactionId)
+      ) {
+        return;
+      }
       tracker.observeInteractionVisible("#perf-entry-search-result", {
         errorVisible: Boolean(this.data.error),
         interactionId: interaction.interactionId,
@@ -357,9 +365,10 @@ PerformancePage({
   },
 
   onSelectSearchHit(event: WechatMiniprogram.TouchEvent) {
+    const interaction = getPageInteractionToken(this, "onSelectSearchHit");
     const entryId = Number(event.currentTarget.dataset.entryId);
     if (!Number.isInteger(entryId) || entryId <= 0) {
-      this.observeLookupResult();
+      this.observeLookupResult(interaction);
       return;
     }
     const hit = this.data.searchHits.find((item) => item.entryId === entryId);
@@ -385,7 +394,7 @@ PerformancePage({
             entryId
           )
         : {})
-    }, () => this.observeLookupResult());
+    }, () => this.observeLookupResult(interaction));
   },
 
   onRetryLookup() {

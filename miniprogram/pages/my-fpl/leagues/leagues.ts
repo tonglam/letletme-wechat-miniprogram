@@ -1114,6 +1114,8 @@ PerformancePage({
     const fetchGameweek =
       !retrySurface || retrySurface === "gameweek" || Boolean(after);
     const fetchSeason = !after && (!retrySurface || retrySurface === "season");
+    const finalizeRoute =
+      !retrySurface && !after && trace?.trigger !== "tab";
     this.retryOperation = "review";
     this.retryScope = null;
     if (!retrySurface || retrySurface === "season") this.retryPhaseId = null;
@@ -1149,7 +1151,12 @@ PerformancePage({
             v2LoadingMore: false,
             v2Error: "球队绑定已更新，正在重新加载赛事复盘",
           }, () => {
-            this.observeReviewInteraction(interactionId, "primary", true);
+            this.observeReviewInteraction(
+              interactionId,
+              "primary",
+              true,
+              finalizeRoute,
+            );
           });
           void this.loadCatalog(true, trace);
         } else {
@@ -1160,7 +1167,12 @@ PerformancePage({
             v2LoadingMore: false,
             v2Error: "球队状态尚未同步，请稍后重试",
           }, () => {
-            this.observeReviewInteraction(interactionId, "primary", true);
+            this.observeReviewInteraction(
+              interactionId,
+              "primary",
+              true,
+              finalizeRoute,
+            );
           });
         }
       } catch {
@@ -1171,7 +1183,12 @@ PerformancePage({
           v2LoadingMore: false,
           v2Error: "球队状态尚未同步，请稍后重试",
         }, () => {
-          this.observeReviewInteraction(interactionId, "primary", true);
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       }
       return true;
@@ -1434,6 +1451,7 @@ PerformancePage({
                     surface === "gameweek"
                       ? Boolean(gameweekMessage)
                       : Boolean(seasonMessage),
+                    finalizeRoute,
                   );
                 });
               } else {
@@ -1443,6 +1461,7 @@ PerformancePage({
                   surface === "gameweek"
                     ? Boolean(gameweekMessage)
                     : Boolean(seasonMessage),
+                  finalizeRoute,
                 );
               }
             });
@@ -1610,9 +1629,9 @@ PerformancePage({
             surface === "gameweek"
               ? Boolean(gameweekSurfaceMessage)
               : Boolean(seasonSurfaceMessage),
+            finalizeRoute,
           );
         }
-        tracker?.mark("secondaryCompleteAt");
       });
       if (partialError && isClientUpgradeRequired(partialError))
         promptForUpgrade();
@@ -1646,7 +1665,12 @@ PerformancePage({
           v2UpgradeRequired: true,
           v2Error: "赛事复盘需要升级小程序后继续",
         }, () => {
-          this.observeReviewInteraction(interactionId, "primary", true);
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       } else {
         this.retryOperation = "review";
@@ -1659,7 +1683,12 @@ PerformancePage({
           v2Error:
             error instanceof Error ? error.message : "赛事复盘暂时不可用",
         }, () => {
-          this.observeReviewInteraction(interactionId, "primary", true);
+          this.observeReviewInteraction(
+            interactionId,
+            "primary",
+            true,
+            finalizeRoute,
+          );
         });
       }
     }
@@ -2333,6 +2362,7 @@ PerformancePage({
     interactionId: string | undefined,
     surface: ReviewSurface | "primary",
     errorVisible: boolean,
+    finalizeRoute = false,
   ) {
     const selector = errorVisible
       ? surface === "gameweek"
@@ -2348,6 +2378,7 @@ PerformancePage({
     getCurrentPagePerformanceTracker()?.observeOnDemandVisible(selector, {
       errorVisible,
       ...(interactionId ? { interactionId } : {}),
+      ...(finalizeRoute ? { finalizeRoute: true } : {}),
     });
   },
 
@@ -2656,14 +2687,12 @@ PerformancePage({
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         if (surface === "season" && retry?.operation === "loadMore") {
-          void runPageInteractionDelegation(this, () => this.onV2LoadMore());
-          return;
+          return runPageInteractionDelegation(this, () => this.onV2LoadMore());
         }
         if (surface === "season" && retry?.phaseId) {
-          void this.loadSeasonPhase(retry.phaseId);
-          return;
+          return this.loadSeasonPhase(retry.phaseId);
         }
-        void this.loadReview(
+        return this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
           true,
@@ -2676,23 +2705,20 @@ PerformancePage({
           retry?.phaseId ?? null,
           surface,
         );
-        return;
       }
     }
     if (
       this.retryOperation === "loadMore" &&
       this.data.activeView === "season"
     ) {
-      void runPageInteractionDelegation(this, () => this.onV2LoadMore());
-      return;
+      return runPageInteractionDelegation(this, () => this.onV2LoadMore());
     }
     if (
       this.retryOperation === "review" &&
       this.data.activeView === "season" &&
       this.retryPhaseId
     ) {
-      void this.loadSeasonPhase(this.retryPhaseId);
-      return;
+      return this.loadSeasonPhase(this.retryPhaseId);
     }
     if (
       this.retryOperation === "review" ||
@@ -2701,7 +2727,7 @@ PerformancePage({
       const selected = this.data.v2SelectedTournament;
       if (selected && this.data.v2Event) {
         const retryAfter = this.retryAfter;
-        void this.loadReview(
+        return this.loadReview(
           selected.tournamentId,
           this.data.v2Event,
           true,
@@ -2713,7 +2739,6 @@ PerformancePage({
           catalogRevisionForEvent(selected, this.data.v2Event),
           this.data.v2SelectedPhaseId,
         );
-        return;
       }
     }
     if (this.retryOperation === "catalog") {
@@ -2730,7 +2755,7 @@ PerformancePage({
       // snapshot. Never replay it across a season boundary discovered by the
       // explicit retry action.
       const retryAfter = seasonRolled ? null : this.retryAfter;
-      void this.loadCatalog(
+      return this.loadCatalog(
         true,
         capturePageRequestTrace({
           callerSurface: "my-fpl-leagues-v2.1",
@@ -2740,9 +2765,8 @@ PerformancePage({
         retryAfter,
         retryAfter !== null,
       );
-      return;
     }
-    void this.loadCatalog(
+    return this.loadCatalog(
       true,
       capturePageRequestTrace({
         callerSurface: "my-fpl-leagues-v2.1",

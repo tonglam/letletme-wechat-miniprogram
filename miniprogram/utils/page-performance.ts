@@ -88,6 +88,8 @@ export interface PagePerformanceObservationOptions {
   errorVisible?: boolean;
   /** Bind this viewport marker to the interaction that scheduled it. */
   interactionId?: string;
+  /** Finalize a deferred route boundary after this success/error is visible. */
+  finalizeRoute?: boolean;
 }
 
 export interface PagePerformanceInstrumentationOptions {
@@ -892,14 +894,17 @@ export class PagePerformanceTracker {
         cleanup();
         if (options.errorVisible === true) {
           this.mark("errorVisibleAt", boundInteractionId);
-          return;
-        }
-        if (marker) this.mark(marker);
-        const visibleAt = monotonicNow();
-        if (boundInteractionId) {
-          this.completeInteraction(boundInteractionId, "completed", true, visibleAt);
         } else {
-          this.completePendingInteractions("completed", visibleAt, true);
+          if (marker) this.mark(marker);
+          const visibleAt = monotonicNow();
+          if (boundInteractionId) {
+            this.completeInteraction(boundInteractionId, "completed", true, visibleAt);
+          } else {
+            this.completePendingInteractions("completed", visibleAt, true);
+          }
+        }
+        if (options.finalizeRoute === true) {
+          this.mark("secondaryCompleteAt");
         }
       },
     );
@@ -1054,6 +1059,15 @@ export class PagePerformanceTracker {
   private updateCompleteAt(): void {
     const primaryVisibleAt = this.record.primaryViewportVisibleAt;
     if (primaryVisibleAt === undefined) return;
+    // A primary header can become visible before an explicitly deferred
+    // default surface. Do not let that header create a successful completion;
+    // the selected surface must settle first.
+    if (
+      this.secondaryCompletionExpected &&
+      this.record.secondaryCompleteAt === undefined
+    ) {
+      return;
+    }
     // An error surface can be the first element in the viewport. Keep its
     // error boundary separate from successful route completion so an auth or
     // network error page never enters the success telemetry bucket. If a

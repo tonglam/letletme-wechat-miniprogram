@@ -173,3 +173,50 @@ test("home and live tournament retry handlers return their owned requests", () =
   assert.match(home, /onRetryFixtures\(\) \{\s*return this\.loadFixtureGw\(/);
   assert.match(tournament, /onRetry\(\) \{[\s\S]*return this\.retryWithContext\(\)[\s\S]*return this\.loadTournaments\(true\)[\s\S]*return this\.loadH2HDesk\([\s\S]*return this\.loadRows\(/);
 });
+
+test("league deferred completion waits for the selected surface and owns retries", () => {
+  const leagues = source("miniprogram/pages/my-fpl/leagues/leagues.ts");
+  const pagePerformance = source("miniprogram/utils/page-performance.ts");
+
+  assert.match(pagePerformance, /finalizeRoute\?: boolean/);
+  assert.match(
+    pagePerformance,
+    /secondaryCompletionExpected[\s\S]*secondaryCompleteAt[\s\S]*return;/,
+  );
+  assert.match(
+    leagues,
+    /const finalizeRoute = !retrySurface && !after && trace\?\.trigger !== "tab";/,
+  );
+  assert.match(
+    leagues,
+    /observeReviewInteraction\(\s*interactionId,\s*surface,[\s\S]*finalizeRoute/,
+  );
+  assert.doesNotMatch(
+    leagues,
+    /observeReviewInteraction\([\s\S]*\);\s*tracker\?\.mark\("secondaryCompleteAt"\)/,
+  );
+  assert.match(
+    leagues,
+    /onRetry\(event\?\:[\s\S]*return runPageInteractionDelegation\([\s\S]*return this\.loadSeasonPhase\([\s\S]*return this\.loadReview\([\s\S]*return this\.loadCatalog\(/,
+  );
+});
+
+test("retained fixture rows and explicit search tokens preserve result boundaries", () => {
+  const fixtures = source("miniprogram/pages/explore/fixtures/fixtures.ts");
+  const search = source("miniprogram/pages/entry/search/search.ts");
+
+  assert.match(
+    fixtures,
+    /function isPrimaryFixturesError\(data\: object \| undefined\)[\s\S]*runCards/,
+  );
+  assert.match(fixtures, /primaryError: isPrimaryFixturesError/);
+  assert.match(
+    search,
+    /observeLookupResult\(explicitToken\?\: PageInteractionToken \| null\)/,
+  );
+  assert.match(search, /const interaction = explicitToken \?\? lookup\?\.token/);
+  assert.match(
+    search,
+    /onSelectSearchHit[\s\S]*getPageInteractionToken\(this, "onSelectSearchHit"\)[\s\S]*observeLookupResult\(interaction\)/,
+  );
+});

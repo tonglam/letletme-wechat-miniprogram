@@ -34,6 +34,18 @@ function workloadForFixturesError(
   return season ? "fixtures" : "home";
 }
 
+function isPrimaryFixturesError(data: object | undefined): boolean {
+  const value = data as {
+    error?: unknown;
+    runCards?: unknown;
+  } | undefined;
+  return (
+    typeof value?.error === "string" &&
+    value.error.length > 0 &&
+    (!Array.isArray(value.runCards) || value.runCards.length === 0)
+  );
+}
+
 const FALLBACK_MAX_EVENT = 38;
 
 export interface FixtureRunCardCell {
@@ -514,4 +526,5 @@ PerformancePage({
   }
 }, {
   explicitInteractionHandlers: ["onGwChange", "onHorizonChange"],
+  primaryError: isPrimaryFixturesError,
 });
