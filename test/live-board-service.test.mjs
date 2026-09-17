@@ -482,7 +482,7 @@ test("a failed last-good write cannot authorize pruning another scope", () => {
   );
 });
 
-test("one transient failure retries once after a 400-800ms jitter", async () => {
+test("one transient failure retries once after the bounded 30s service backoff", async () => {
   const delays = [];
   let attempt = 0;
   installRuntime((options) => {
@@ -504,7 +504,7 @@ test("one transient failure retries once after a 400-800ms jitter", async () => 
 
   assert.equal(result.page.rows.length, 1);
   assert.equal(requests.length, 2);
-  assert.deepEqual(delays, [600]);
+  assert.deepEqual(delays, [30_000]);
 });
 
 test("auth, business, and 429 failures do not auto-retry or use fallback", async () => {

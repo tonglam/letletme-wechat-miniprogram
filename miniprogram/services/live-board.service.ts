@@ -786,8 +786,17 @@ function shouldRetry(error: unknown): boolean {
   );
 }
 
-function retryDelayMs(random: () => number): number {
-  return Math.min(800, Math.max(400, 400 + Math.floor(random() * 401)));
+function retryDelayMs(attempt: number, error?: unknown): number {
+  const serverDelay =
+    error instanceof GraphQLTransportError &&
+    typeof error.retryAfterSeconds === "number" &&
+    Number.isFinite(error.retryAfterSeconds)
+      ? Math.max(0, error.retryAfterSeconds * 1_000)
+      : 0;
+  const exponentialDelay = Math.min(120_000, 30_000 * 2 ** attempt);
+  // Retry-After is authoritative when present; otherwise use the bounded
+  // 30s -> 60s -> 120s service-failure backoff instead of a tight retry.
+  return serverDelay > 0 ? serverDelay : exponentialDelay;
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -803,7 +812,6 @@ async function readWithOneTransientRetry<T>(
     sleepImpl?: (milliseconds: number) => Promise<void>;
   } = {},
 ): Promise<{ data: T; meta: GraphQLReadMeta }> {
-  const random = options.random || Math.random;
   const sleepImpl = options.sleepImpl || sleep;
   let attempt = 0;
   for (;;) {
@@ -820,7 +828,7 @@ async function readWithOneTransientRetry<T>(
     } catch (error) {
       if (attempt >= 1 || !shouldRetry(error)) throw error;
       attempt += 1;
-      await sleepImpl(retryDelayMs(random));
+      await sleepImpl(retryDelayMs(attempt - 1, error));
     }
   }
 }

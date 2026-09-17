@@ -51,9 +51,13 @@ import { registerGraphQLInFlightClear } from "./graphql-session-hooks";
 import { recordBugReportDiagnostic } from "../utils/bug-report-diagnostics";
 import {
   GRAPHQL_WORKLOADS,
+  getGraphQLDependencyCooldownState,
   getGraphQLCooldownState,
+  graphQLDependencyCooldownMessage,
   graphQLCooldownMessage,
+  parseDependencyRetryAfterSeconds,
   parseRetryAfterSeconds,
+  persistGraphQLDependencyCooldown,
   persistGraphQLCooldown,
   showGraphQLCooldownNotice,
 } from "./graphql-cooldown";
@@ -125,6 +129,7 @@ export interface GraphQLReadMeta {
   requestId?: string;
   statusCode?: number;
   rateLimited?: boolean;
+  dependencyUnavailable?: boolean;
   cooldownUntil?: number;
   retryAfterSeconds?: number;
   rateLimitPolicy?: string;
@@ -447,6 +452,10 @@ export function isTransientGraphQLStatus(statusCode: number): boolean {
   );
 }
 
+function isDependencyUnavailableStatus(statusCode: number | undefined): boolean {
+  return statusCode === 502 || statusCode === 503 || statusCode === 504;
+}
+
 function isTransientFailure(error: unknown): boolean {
   return error instanceof GraphQLTransportError && error.transient;
 }
@@ -488,9 +497,14 @@ function toHttpError(
   now = Date.now(),
 ): GraphQLTransportError {
   const requestId = responseHeader(headers, "x-request-id");
+  const dependencyStatus = isDependencyUnavailableStatus(statusCode);
   const code =
     responseErrorCode(body) ||
-    (statusCode === 429 ? "RATE_LIMITED" : undefined);
+    (statusCode === 429
+      ? "RATE_LIMITED"
+      : dependencyStatus
+        ? "DEPENDENCY_UNAVAILABLE"
+        : undefined);
   const rateLimitPolicy = responseHeader(headers, "x-ratelimit-policy");
   const rateLimitScope = responseHeader(headers, "x-ratelimit-scope");
   const rawRateLimitWorkload = responseHeader(headers, "x-ratelimit-workload");
@@ -501,6 +515,31 @@ function toHttpError(
     )
       ? rawRateLimitWorkload
       : undefined;
+  if (dependencyStatus) {
+    const retryAfterSeconds = parseDependencyRetryAfterSeconds(
+      responseHeader(headers, "retry-after"),
+      now,
+    );
+    const state = persistGraphQLDependencyCooldown(retryAfterSeconds, now);
+    return new GraphQLTransportError(
+      code === "VIEWER_ENTRY_REQUIRED"
+        ? "请先选择我的球队"
+        : code === "CLIENT_UPGRADE_REQUIRED"
+          ? "当前版本不支持此功能，请升级小程序后继续"
+          : graphQLDependencyCooldownMessage(state),
+      true,
+      statusCode,
+      {
+        code,
+        retryAfterSeconds,
+        retryAt: state.cooldownUntil,
+        requestId,
+        rateLimitPolicy,
+        rateLimitScope,
+        rateLimitWorkload,
+      },
+    );
+  }
   if (statusCode === 429) {
     const retryAfterSeconds = parseRetryAfterSeconds(
       responseHeader(headers, "retry-after"),
@@ -538,6 +577,21 @@ function toHttpError(
     isTransientGraphQLStatus(statusCode),
     statusCode,
     { code, requestId, rateLimitPolicy, rateLimitScope, rateLimitWorkload },
+  );
+}
+
+function dependencyCooldownTransportError(
+  state: ReturnType<typeof getGraphQLDependencyCooldownState>,
+): GraphQLTransportError {
+  return new GraphQLTransportError(
+    graphQLDependencyCooldownMessage(state),
+    true,
+    503,
+    {
+      code: "DEPENDENCY_UNAVAILABLE",
+      retryAfterSeconds: state.remainingSeconds,
+      retryAt: state.cooldownUntil,
+    },
   );
 }
 
@@ -634,6 +688,10 @@ function makeRequest<T>(
   requestId?: string;
   statusCode: number;
 }> {
+  const dependencyCooldown = getGraphQLDependencyCooldownState(Date.now());
+  if (dependencyCooldown.active) {
+    return Promise.reject(dependencyCooldownTransportError(dependencyCooldown));
+  }
   const cooldown = getGraphQLCooldownState(Date.now(), workload);
   if (cooldown.active) {
     return Promise.reject(
@@ -1072,6 +1130,68 @@ export async function graphqlRead<T>(
     return joinInFlight(existingInFlight);
   }
 
+  const dependencyCooldown = getGraphQLDependencyCooldownState(now);
+  if (dependencyCooldown.active) {
+    const dependencyError =
+      dependencyCooldownTransportError(dependencyCooldown);
+    // A protected response must not be presented while the service cannot
+    // verify the current login and tournament relationship. Public cache
+    // entries remain safe to serve within their existing freshness bounds.
+    if (staleCandidate && policy.authMode === "public") {
+      recordServedFromCache(identity.requestKey, staleCandidate.storedAt);
+      recordRequest(
+        policy.operationName,
+        startedAt,
+        false,
+        "stale",
+        false,
+        staleCandidate.storedAt,
+        requestTrace,
+        cacheVariantHash,
+        undefined,
+        {
+          code: dependencyError.code,
+          status: dependencyError.statusCode,
+          retryAfterSeconds: dependencyError.retryAfterSeconds,
+        },
+      );
+      return {
+        data: staleCandidate.data as T,
+        errors: [],
+        meta: {
+          operationName: policy.operationName,
+          authMode: policy.authMode,
+          source: "stale",
+          stale: true,
+          storedAt: staleCandidate.storedAt,
+          cacheAgeMs: Math.max(0, now - staleCandidate.storedAt),
+          dependencyUnavailable: true,
+          cooldownUntil: dependencyCooldown.cooldownUntil,
+          retryAfterSeconds: dependencyCooldown.remainingSeconds,
+          statusCode: 503,
+          durationMs: Date.now() - startedAt,
+        },
+      };
+    }
+    recordRequest(
+      policy.operationName,
+      startedAt,
+      false,
+      "network",
+      false,
+      undefined,
+      requestTrace,
+      cacheVariantHash,
+      undefined,
+      {
+        code: dependencyError.code,
+        status: dependencyError.statusCode,
+        retryAfterSeconds: dependencyError.retryAfterSeconds,
+      },
+    );
+    throw dependencyError;
+  }
+
   const cooldown = getGraphQLCooldownState(now, policy.workload);
   if (cooldown.active) {
     if (staleCandidate) {
@@ -1334,7 +1454,15 @@ export async function graphqlRead<T>(
       if (error instanceof GraphQLInFlightJoin) {
         return joinInFlight(error.request as Promise<GraphQLReadResult<T>>);
       }
-      if (staleCandidate && isTransientFailure(error)) {
+      if (
+        staleCandidate &&
+        isTransientFailure(error) &&
+        !(
+          error instanceof GraphQLTransportError &&
+          isDependencyUnavailableStatus(error.statusCode) &&
+          policy.authMode !== "public"
+        )
+      ) {
         const transportError =
           error instanceof GraphQLTransportError ? error : undefined;
         const rateLimited = transportError?.statusCode === 429;
@@ -1378,10 +1506,21 @@ export async function graphqlRead<T>(
             cacheAgeMs: Math.max(0, Date.now() - staleCandidate.storedAt),
             requestId: transportError?.requestId,
             rateLimited,
-            cooldownUntil: rateLimited ? transportError?.retryAt : undefined,
-            retryAfterSeconds: rateLimited
-              ? transportError?.retryAfterSeconds
-              : undefined,
+            dependencyUnavailable:
+              transportError !== undefined &&
+              isDependencyUnavailableStatus(transportError.statusCode),
+            cooldownUntil:
+              rateLimited ||
+              (transportError !== undefined &&
+                isDependencyUnavailableStatus(transportError.statusCode))
+                ? transportError?.retryAt
+                : undefined,
+            retryAfterSeconds:
+              rateLimited ||
+              (transportError !== undefined &&
+                isDependencyUnavailableStatus(transportError.statusCode))
+                ? transportError?.retryAfterSeconds
+                : undefined,
             statusCode: transportError?.statusCode,
             rateLimitPolicy: transportError?.rateLimitPolicy,
             rateLimitScope: transportError?.rateLimitScope,

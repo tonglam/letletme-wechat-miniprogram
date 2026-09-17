@@ -1,6 +1,7 @@
 import { storageKeys } from "../config/storage-keys";
 
 export const DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS = 15;
+export const DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS = 30;
 export const MIN_GRAPHQL_RETRY_AFTER_SECONDS = 1;
 export const MAX_GRAPHQL_RETRY_AFTER_SECONDS = 120;
 export const GRAPHQL_COOLDOWN_READY_MESSAGE = "请求冷却已结束，可以重试";
@@ -50,6 +51,7 @@ type GraphQLCooldownListener = (state: GraphQLCooldownState) => void;
 let cooldownNoticeActiveUntil = 0;
 let cooldownRuntime: unknown;
 let cooldownUntilMemory = 0;
+let dependencyCooldownUntilMemory = 0;
 let workloadCooldownMemory = new Map<GraphQLWorkload, number>();
 let corruptedWorkloadCooldowns = new Map<
   GraphQLWorkload,
@@ -63,6 +65,7 @@ function ensureCooldownRuntime(): void {
   if (cooldownRuntime === wx) return;
   cooldownRuntime = wx;
   cooldownUntilMemory = 0;
+  dependencyCooldownUntilMemory = 0;
   workloadCooldownMemory = new Map<GraphQLWorkload, number>();
   corruptedWorkloadCooldowns = new Map();
   corruptedStoredCooldownValue = null;
@@ -105,6 +108,108 @@ export function parseRetryAfterSeconds(
   }
 
   return DEFAULT_GRAPHQL_RETRY_AFTER_SECONDS;
+}
+
+/**
+ * Parse a dependency Retry-After without the rate-limit ceiling. An upstream
+ * outage may explicitly ask clients to wait longer than 120 seconds; cutting
+ * that value short would recreate the request storm this cooldown prevents.
+ */
+export function parseDependencyRetryAfterSeconds(
+  value: unknown,
+  now = Date.now(),
+): number {
+  const normalized = String(value ?? "").trim();
+  if (/^\d+$/.test(normalized)) {
+    const seconds = Number(normalized);
+    if (Number.isFinite(seconds)) return Math.max(1, Math.ceil(seconds));
+  }
+  if (isHttpDate(normalized)) {
+    const retryAt = Date.parse(normalized);
+    if (Number.isFinite(retryAt)) {
+      return Math.max(1, Math.ceil((retryAt - now) / 1000));
+    }
+  }
+  return DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS;
+}
+
+export interface GraphQLDependencyCooldownState {
+  active: boolean;
+  cooldownUntil?: number;
+  remainingSeconds: number;
+}
+
+export function getGraphQLDependencyCooldownState(
+  now = Date.now(),
+): GraphQLDependencyCooldownState {
+  ensureCooldownRuntime();
+  let stored = 0;
+  try {
+    const value = Number(
+      wx.getStorageSync(storageKeys.graphqlDependencyCooldownUntil),
+    );
+    stored = Number.isFinite(value) ? value : 0;
+  } catch {}
+  const cooldownUntil = Math.max(dependencyCooldownUntilMemory, stored);
+  if (!Number.isFinite(cooldownUntil) || cooldownUntil <= now) {
+    dependencyCooldownUntilMemory = 0;
+    if (stored > 0) {
+      try {
+        wx.removeStorageSync(storageKeys.graphqlDependencyCooldownUntil);
+      } catch {}
+    }
+    return { active: false, remainingSeconds: 0 };
+  }
+  dependencyCooldownUntilMemory = cooldownUntil;
+  if (stored !== cooldownUntil) {
+    try {
+      wx.setStorageSync(
+        storageKeys.graphqlDependencyCooldownUntil,
+        cooldownUntil,
+      );
+    } catch {}
+  }
+  return {
+    active: true,
+    cooldownUntil,
+    remainingSeconds: Math.max(1, Math.ceil((cooldownUntil - now) / 1000)),
+  };
+}
+
+export function persistGraphQLDependencyCooldown(
+  retryAfterSeconds: number,
+  now = Date.now(),
+): GraphQLDependencyCooldownState {
+  ensureCooldownRuntime();
+  const seconds = Number.isFinite(retryAfterSeconds)
+    ? Math.max(1, Math.ceil(retryAfterSeconds))
+    : DEFAULT_GRAPHQL_DEPENDENCY_RETRY_AFTER_SECONDS;
+  const requestedUntil = now + seconds * 1000;
+  let stored = 0;
+  try {
+    const value = Number(
+      wx.getStorageSync(storageKeys.graphqlDependencyCooldownUntil),
+    );
+    stored = Number.isFinite(value) ? value : 0;
+  } catch {}
+  dependencyCooldownUntilMemory = Math.max(
+    dependencyCooldownUntilMemory,
+    stored,
+    requestedUntil,
+  );
+  try {
+    wx.setStorageSync(
+      storageKeys.graphqlDependencyCooldownUntil,
+      dependencyCooldownUntilMemory,
+    );
+  } catch {}
+  return getGraphQLDependencyCooldownState(now);
+}
+
+export function graphQLDependencyCooldownMessage(
+  state: GraphQLDependencyCooldownState,
+): string {
+  return `服务暂时不可用，请在 ${Math.max(1, state.remainingSeconds)} 秒后重试`;
 }
 
 export function isGraphQLCooldownMessage(value: unknown): boolean {
